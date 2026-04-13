@@ -1,1 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forward Business Report</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --navy: #1B2A4A;
+    --blue: #2E5090;
+    --light-blue: #D6E4F0;
+    --accent: #4472C4;
+    --orange: #ED7D31;
+    --green: #70AD47;
+    --red: #E74C3C;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-500: #6B7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --white: #FFFFFF;
+    --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  }
 
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.5;
+  }
+
+  .header {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+    color: white;
+    padding: 2rem 2rem 1.5rem;
+  }
+  .header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.025em; }
+  .header p { color: rgba(255,255,255,0.7); font-size: 0.875rem; margin-top: 0.25rem; }
+  .header .updated { font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 0.5rem; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .kpi-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--accent);
+  }
+  .kpi-card.orange { border-left-color: var(--orange); }
+  .kpi-card.green { border-left-color: var(--green); }
+  .kpi-card.red { border-left-color: var(--red); }
+  .kpi-label { font-size: 0.75rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  .kpi-value { font-size: 1.75rem; font-weight: 700; color: var(--gray-900); margin-top: 0.25rem; }
+  .kpi-sub { font-size: 0.75rem; color: var(--gray-500); margin-top: 0.25rem; }
+
+  .card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-header h2 { font-size: 1rem; font-weight: 600; color: var(--gray-900); }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+  .chart-container { position: relative; height: 280px; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .data-table thead th {
+    background: var(--navy);
+    color: white;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+  }
+  .data-table thead th.num { text-align: right; }
+  .data-table tbody td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .data-table tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .data-table tbody tr:nth-child(even) { background: var(--gray-50); }
+  .data-table tbody tr:hover { background: var(--light-blue); }
+  .data-table tbody tr.subtotal {
+    background: #E2EFDA !important;
+    font-weight: 700;
+  }
+  .data-table .program-name { font-weight: 500; }
+  .hs-badge {
+    display: inline-block;
+    background: #FF7A59;
+    color: white;
+    font-size: 0.55rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--gray-200);
+    border-radius: 3px;
+    overflow: hidden;
+    width: 100%;
+    min-width: 60px;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+  .progress-fill.blue { background: var(--accent); }
+  .progress-fill.orange { background: var(--orange); }
+  .progress-fill.green { background: var(--green); }
+  .progress-fill.red { background: var(--red); }
+
+  .tab-nav { display: flex; gap: 0; border-bottom: 2px solid var(--gray-200); padding: 0 1.25rem; }
+  .tab-btn {
+    padding: 0.75rem 1.25rem;
+    border: none;
+    background: none;
+    color: var(--gray-500);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+  .tab-btn:hover { color: var(--gray-700); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  .table-scroll { overflow-x: auto; max-height: 500px; overflow-y: auto; }
+
+  .goal-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .goal-item:last-child { border-bottom: none; }
+  .goal-season { font-weight: 600; min-width: 120px; font-size: 0.85rem; }
+  .goal-target { color: var(--gray-500); font-size: 0.8rem; flex: 1; }
+  .goal-status { font-weight: 700; font-size: 0.85rem; min-width: 60px; text-align: right; }
+
+  .loading { text-align: center; padding: 3rem; color: var(--gray-500); }
+  .loading .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--gray-200);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg { background: #FEF2F2; color: var(--red); padding: 1rem; border-radius: 8px; font-size: 0.85rem; }
+  .info-msg { background: #EFF6FF; color: var(--blue); padding: 1rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem; }
+
+  .source-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.6);
+  }
+  .source-toggle select {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  .source-toggle select option { color: #333; }
+
+  .fx-note { font-size: 0.7rem; color: var(--gray-500); margin-top: 0.5rem; padding: 0 1.25rem 1rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; max-width:1400px; margin:0 auto;">
+    <div>
+      <h1>Forward Business Report</h1>
+      <p id="subtitle">Seasonal Program Forecast</p>
+      <div class="updated" id="lastUpdated">Loading...</div>
+    </div>
+    <div class="source-toggle">
+      <label>Data source:</label>
+      <select id="dataSource" onchange="handleSourceChange()">
+        <option value="embedded">Embedded (default)</option>
+        <option value="hubspot">HubSpot (live)</option>
+        <option value="gsheet">Google Sheet (live)</option>
+      </select>
+      <span id="hubspotStatus" style="margin-left:0.5rem;"></span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div id="loadingState" class="loading" style="display:none;">
+    <div class="spinner"></div>
+    <p id="loadingText">Fetching data...</p>
+  </div>
+
+  <div id="errorState" style="display:none;"></div>
+
+  <div id="mainContent">
+    <div class="kpi-grid" id="kpiCards"></div>
+
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-header"><h2>Forecast vs Target by Season</h2></div>
+        <div class="card-body"><div class="chart-container"><canvas id="barChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Revenue Distribution</h2></div>
+        <div class="card-body"><div class="chart-container"><canvas id="doughnutChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Season Sales Goals</h2></div>
+      <div class="card-body" id="goalsSection"></div>
+    </div>
+
+    <div class="card">
+      <div class="tab-nav" id="tabNav"></div>
+      <div id="tabPanes"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════
+const HUBSPOT_API_URL = '/api/hubspot';
+const GSHEET_CSV_URL = '';
+const FX_RATE = 1.62;
+
+// ═══════════════════════════════════════════
+// DYNAMIC YEAR CALCULATION (mirrors serverless function)
+// ═══════════════════════════════════════════
+function getSeasonYears() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const baseYear = month >= 9 ? year + 1 : year;
+  return { summer: baseYear, fall: baseYear, spring: baseYear + 1 };
+}
+
+const YEARS = getSeasonYears();
+const SEASON_META = {
+  summer: { label: `Summer ${YEARS.summer}`, color: '#4472C4', goal: { pct: 0.55, deadline: 'end of April' } },
+  fall:   { label: `Fall ${YEARS.fall}`,     color: '#ED7D31', goal: { pct: 0.45, deadline: 'end of May' } },
+  spring: { label: `Spring ${YEARS.spring}`, color: '#70AD47', goal: { pct: 0.60, deadline: 'end of October' } },
+};
+
+// ═══════════════════════════════════════════
+// EMBEDDED FALLBACK DATA (current year, no prior years)
+// Programs are auto-generated from HubSpot pd_program options
+// ═══════════════════════════════════════════
+const EMBEDDED_DATA = {
+  seasons: {
+    summer: {
+      programs: [
+        { name: 'Bali Summer', price: 7950, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii Summer', price: 8950, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii 2 Week', price: 6500, maxPax: 36, targetPax: 24, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand Summer', price: 7950, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Costa Rica Summer', price: 7950, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia Summer', price: 7950, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'NZ & Fiji Summer', price: 7950, maxPax: 12, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand - High School', price: 6599, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Alaska - College', price: null, maxPax: 14, targetPax: 8, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Peru - High School', price: null, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Western USA - College', price: null, maxPax: 12, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Caribbean - College', price: null, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Ecuador/Galapagos - College', price: null, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Vietnam/Cambodia - College', price: null, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Fiji/Vanuatu - College', price: null, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+      ]
+    },
+    fall: {
+      programs: [
+        { name: 'Nepal & India', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Nepal & Tibet', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'New Zealand & Australia', price: 16500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'South America', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Southeast Asia', price: 15000, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia & Bali', price: 15500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Polynesian Journey', price: 15500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Central America', price: 15500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii Mini', price: 11500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia Mini', price: 11500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Costa Rica Mini', price: 10500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand Mini', price: 10500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Greece & Croatia Mini', price: 11500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+      ]
+    },
+    spring: {
+      programs: [
+        { name: 'Nepal & India', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Nepal & Tibet', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'New Zealand & Australia', price: 16500, maxPax: 12, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'South America', price: 15500, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Southeast Asia', price: 15000, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia & Bali', price: 15500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Polynesian Journey', price: 15500, maxPax: 13, targetPax: 13, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Central America', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Rewilding Semester', price: 15000, maxPax: 14, targetPax: 8, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii Mini', price: 11500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia Mini', price: 11500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Costa Rica Mini', price: 10500, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand Mini', price: 10500, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+      ]
+    }
+  }
+};
+
+// ═══════════════════════════════════════════
+// HUBSPOT DATA FETCHER
+// ═══════════════════════════════════════════
+async function fetchHubSpotData() {
+  const resp = await fetch(HUBSPOT_API_URL);
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `API returned ${resp.status}`);
+  }
+  const apiData = await resp.json();
+  return transformHubSpotData(apiData);
+}
+
+// Transform HubSpot API response into render-ready format
+function transformHubSpotData(apiData) {
+  const data = { seasons: {} };
+
+  Object.entries(apiData.seasons).forEach(([seasonKey, seasonData]) => {
+    data.seasons[seasonKey] = {
+      programs: seasonData.programs.map(p => ({
+        name: p.name,
+        price: p.price,
+        maxPax: p.maxPax || 0,
+        targetPax: p.targetPax || 0,
+        actualPax: p.actualPax || 0,
+        estFuture: 0,
+        forecastSales: p.forecastSales || 0,
+        totalDeals: p.totalDeals || 0,
+        _hubspot: true,
+      }))
+    };
+  });
+
+  return data;
+}
+
+// ═══════════════════════════════════════════
+// GOOGLE SHEETS PARSER
+// ═══════════════════════════════════════════
+async function fetchGoogleSheet(url) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('Could not fetch Google Sheet.');
+  const text = await resp.text();
+  return parseCSV(text);
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n').map(l => l.split(',').map(c => c.replace(/^"|"$/g, '').trim()));
+  const data = { seasons: { summer: { programs: [] }, fall: { programs: [] }, spring: { programs: [] } } };
+  let currentSeason = null;
+  for (let i = 0; i < lines.length; i++) {
+    const row = lines[i];
+    if (!row[0]) continue;
+    const title = row[0].trim();
+    if (title.includes('Subtotal') || title.includes('Totals')) continue;
+    if (title.includes('Fall')) { currentSeason = 'fall'; continue; }
+    if (title.includes('Spring')) { currentSeason = 'spring'; continue; }
+    if (title === 'Program Title' && !currentSeason) { currentSeason = 'summer'; continue; }
+    if (title === 'Program Title') continue;
+    if (currentSeason && title) {
+      const parseNum = s => { if (!s) return null; const n = parseFloat(s.replace(/[$,]/g, '')); return isNaN(n) ? null : n; };
+      const prog = {
+        name: title, price: parseNum(row[1]), maxPax: parseNum(row[2]) || 0,
+        targetPax: parseNum(row[4]) || 0, actualPax: parseNum(row[6]) || 0,
+        estFuture: parseNum(row[7]) || 0, forecastSales: parseNum(row[9]) || 0,
+      };
+      if (data.seasons[currentSeason]) data.seasons[currentSeason].programs.push(prog);
+    }
+  }
+  return data;
+}
+
+// ═══════════════════════════════════════════
+// COMPUTATION
+// ═══════════════════════════════════════════
+function computeSeasonTotals(programs) {
+  const t = { maxPax: 0, targetPax: 0, actualPax: 0, forecastPax: 0, forecastSales: 0, targetSales: 0, maxSales: 0 };
+  programs.forEach(p => {
+    t.maxPax += p.maxPax || 0;
+    t.targetPax += p.targetPax || 0;
+    t.actualPax += p.actualPax || 0;
+    t.forecastPax += (p.actualPax || 0) + (p.estFuture || 0);
+    t.forecastSales += p.forecastSales || 0;
+    t.targetSales += (p.price && p.targetPax) ? p.price * p.targetPax : 0;
+    t.maxSales += (p.price && p.maxPax) ? p.price * p.maxPax : 0;
+  });
+  t.pctTargetSold = t.targetPax > 0 ? t.actualPax / t.targetPax : 0;
+  t.pctForecastVsTarget = t.targetPax > 0 ? t.forecastPax / t.targetPax : 0;
+  return t;
+}
+
+// ═══════════════════════════════════════════
+// FORMATTING
+// ═══════════════════════════════════════════
+const fmtUSD = n => n == null ? '—' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const fmtPct = n => n == null ? '—' : (n * 100).toFixed(1) + '%';
+const fmtNum = n => n == null ? '—' : n.toLocaleString('en-US');
+
+// ═══════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════
+let chartInstances = {};
+const SEASON_KEYS = ['summer', 'fall', 'spring'];
+
+function render(data) {
+  // Update subtitle with dynamic years
+  document.getElementById('subtitle').textContent =
+    `${YEARS.summer}–${YEARS.spring} Seasonal Program Forecast`;
+  document.getElementById('lastUpdated').textContent =
+    'Last updated: ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const totals = {};
+  let grandTotals = { maxPax: 0, targetPax: 0, actualPax: 0, forecastPax: 0, forecastSales: 0, targetSales: 0 };
+
+  SEASON_KEYS.forEach(key => {
+    const programs = (data.seasons[key] && data.seasons[key].programs) || [];
+    totals[key] = computeSeasonTotals(programs);
+    grandTotals.maxPax += totals[key].maxPax;
+    grandTotals.targetPax += totals[key].targetPax;
+    grandTotals.actualPax += totals[key].actualPax;
+    grandTotals.forecastPax += totals[key].forecastPax;
+    grandTotals.forecastSales += totals[key].forecastSales;
+    grandTotals.targetSales += totals[key].targetSales;
+  });
+
+  grandTotals.pctTargetSold = grandTotals.targetPax > 0 ? grandTotals.actualPax / grandTotals.targetPax : 0;
+  grandTotals.pctForecastVsTarget = grandTotals.targetPax > 0 ? grandTotals.forecastPax / grandTotals.targetPax : 0;
+
+  // KPI Cards
+  const totalPrograms = SEASON_KEYS.reduce((s, k) => s + ((data.seasons[k] && data.seasons[k].programs) || []).length, 0);
+  document.getElementById('kpiCards').innerHTML = `
+    <div class="kpi-card">
+      <div class="kpi-label">Total Forecast Sales</div>
+      <div class="kpi-value">${fmtUSD(grandTotals.forecastSales)}</div>
+      <div class="kpi-sub">NZD ${fmtUSD(Math.round(grandTotals.forecastSales * FX_RATE))}</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">Target Sales</div>
+      <div class="kpi-value">${fmtUSD(grandTotals.targetSales)}</div>
+      <div class="kpi-sub">${fmtNum(grandTotals.targetPax)} target pax</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">% of Target Sold</div>
+      <div class="kpi-value">${fmtPct(grandTotals.pctTargetSold)}</div>
+      <div class="kpi-sub">${fmtNum(grandTotals.actualPax)} actual / ${fmtNum(grandTotals.targetPax)} target</div>
+    </div>
+    <div class="kpi-card ${grandTotals.pctForecastVsTarget >= 0.5 ? 'green' : 'red'}">
+      <div class="kpi-label">Forecast vs Target</div>
+      <div class="kpi-value">${fmtPct(grandTotals.pctForecastVsTarget)}</div>
+      <div class="kpi-sub">${fmtNum(grandTotals.forecastPax)} forecast pax</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Programs</div>
+      <div class="kpi-value">${totalPrograms}</div>
+      <div class="kpi-sub">${fmtNum(grandTotals.maxPax)} max capacity</div>
+    </div>
+  `;
+
+  // Goals
+  document.getElementById('goalsSection').innerHTML = SEASON_KEYS.map(key => {
+    const meta = SEASON_META[key];
+    const t = totals[key];
+    const goalPct = meta.goal.pct;
+    const currentPct = t.pctTargetSold;
+    const progressColor = currentPct >= goalPct ? 'green' : (currentPct >= goalPct * 0.5 ? 'orange' : 'red');
+    return `<div class="goal-item">
+      <span class="goal-season" style="color:${meta.color}">${meta.label}</span>
+      <span class="goal-target">${(goalPct*100).toFixed(0)}% of target sold by ${meta.goal.deadline}</span>
+      <div style="flex:1;max-width:200px;">
+        <div class="progress-bar"><div class="progress-fill ${progressColor}" style="width:${Math.min(currentPct/goalPct*100,100)}%"></div></div>
+      </div>
+      <span class="goal-status" style="color:${currentPct >= goalPct ? 'var(--green)' : 'var(--red)'}">${fmtPct(currentPct)}</span>
+    </div>`;
+  }).join('');
+
+  // Dynamic tabs — built from SEASON_KEYS + SEASON_META
+  const tabNav = document.getElementById('tabNav');
+  const tabPanes = document.getElementById('tabPanes');
+  tabNav.innerHTML = SEASON_KEYS.map((key, i) =>
+    `<button class="tab-btn ${i === 0 ? 'active' : ''}" onclick="switchTab('${key}')">${SEASON_META[key].label}</button>`
+  ).join('');
+  tabPanes.innerHTML = SEASON_KEYS.map((key, i) =>
+    `<div class="tab-pane ${i === 0 ? 'active' : ''}" id="tab-${key}"></div>`
+  ).join('');
+
+  // Season tables
+  SEASON_KEYS.forEach(key => {
+    const meta = SEASON_META[key];
+    const programs = (data.seasons[key] && data.seasons[key].programs) || [];
+    const t = totals[key];
+
+    const rows = programs.map(p => {
+      const forecastPax = (p.actualPax || 0) + (p.estFuture || 0);
+      const pctSold = p.targetPax > 0 ? p.actualPax / p.targetPax : null;
+      const pctForecast = p.targetPax > 0 ? forecastPax / p.targetPax : null;
+      const maxSales = p.price && p.maxPax ? p.price * p.maxPax : null;
+      const targetSales = p.price && p.targetPax ? p.price * p.targetPax : null;
+      const hsBadge = p._hubspot ? '<span class="hs-badge">HS</span>' : '';
+      return `<tr>
+        <td class="program-name">${p.name}${hsBadge}</td>
+        <td class="num">${p.price ? fmtUSD(p.price) : '—'}</td>
+        <td class="num">${fmtNum(p.maxPax)}</td>
+        <td class="num">${maxSales ? fmtUSD(maxSales) : '—'}</td>
+        <td class="num">${fmtNum(p.targetPax)}</td>
+        <td class="num">${targetSales ? fmtUSD(targetSales) : '—'}</td>
+        <td class="num">${fmtNum(p.actualPax)}</td>
+        <td class="num">${fmtNum(p.estFuture || 0)}</td>
+        <td class="num">${fmtNum(forecastPax)}</td>
+        <td class="num">${fmtUSD(p.forecastSales)}</td>
+        <td class="num">${pctSold != null ? fmtPct(pctSold) : '—'}</td>
+        <td class="num">${pctForecast != null ? fmtPct(pctForecast) : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById(`tab-${key}`).innerHTML = `
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>Program</th><th class="num">Price</th><th class="num">Max Pax</th><th class="num">Max Sales</th>
+            <th class="num">Target Pax</th><th class="num">Target Sales</th><th class="num">Actual Pax</th>
+            <th class="num">Est. Future</th><th class="num">Forecast Pax</th><th class="num">Forecast Sales</th>
+            <th class="num">% Sold</th><th class="num">% Forecast</th>
+          </tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="subtotal">
+              <td>Subtotal ${meta.label}</td>
+              <td></td>
+              <td class="num">${fmtNum(t.maxPax)}</td>
+              <td class="num">${fmtUSD(t.maxSales)}</td>
+              <td class="num">${fmtNum(t.targetPax)}</td>
+              <td class="num">${fmtUSD(t.targetSales)}</td>
+              <td class="num">${fmtNum(t.actualPax)}</td>
+              <td class="num">${fmtNum(t.forecastPax - t.actualPax)}</td>
+              <td class="num">${fmtNum(t.forecastPax)}</td>
+              <td class="num">${fmtUSD(t.forecastSales)}</td>
+              <td class="num">${fmtPct(t.pctTargetSold)}</td>
+              <td class="num">${fmtPct(t.pctForecastVsTarget)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fx-note">NZD equivalent (FX ${FX_RATE}): Forecast Sales ${fmtUSD(Math.round(t.forecastSales * FX_RATE))} | Target Sales ${fmtUSD(Math.round(t.targetSales * FX_RATE))}</p>
+    `;
+  });
+
+  renderCharts(data, totals, grandTotals);
+}
+
+function renderCharts(data, totals, grandTotals) {
+  Object.values(chartInstances).forEach(c => c.destroy());
+  chartInstances = {};
+
+  const labels = SEASON_KEYS.map(k => SEASON_META[k].label);
+  const colors = SEASON_KEYS.map(k => SEASON_META[k].color);
+
+  chartInstances.bar = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Target Sales', data: SEASON_KEYS.map(k => totals[k].targetSales), backgroundColor: 'rgba(27,42,74,0.15)', borderColor: 'rgba(27,42,74,0.4)', borderWidth: 1 },
+        { label: 'Forecast Sales', data: SEASON_KEYS.map(k => totals[k].forecastSales), backgroundColor: colors.map(c => c + 'CC'), borderColor: colors, borderWidth: 1 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'K' } } }
+    }
+  });
+
+  chartInstances.doughnut = new Chart(document.getElementById('doughnutChart'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: SEASON_KEYS.map(k => totals[k].forecastSales), backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ctx.label + ': ' + fmtUSD(ctx.parsed) } }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+// ═══════════════════════════════════════════
+// DATA SOURCE HANDLING
+// ═══════════════════════════════════════════
+async function handleSourceChange() {
+  const source = document.getElementById('dataSource').value;
+  const statusEl = document.getElementById('hubspotStatus');
+  statusEl.textContent = '';
+
+  if (source === 'hubspot') {
+    document.getElementById('loadingText').textContent = 'Fetching live data from HubSpot...';
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('errorState').style.display = 'none';
+    try {
+      const data = await fetchHubSpotData();
+      document.getElementById('loadingState').style.display = 'none';
+      statusEl.textContent = '● Live';
+      statusEl.style.color = '#70AD47';
+      render(data);
+    } catch (e) {
+      document.getElementById('loadingState').style.display = 'none';
+      statusEl.textContent = '● Offline';
+      statusEl.style.color = '#E74C3C';
+      const isLocal = window.location.protocol === 'file:';
+      const helpText = isLocal
+        ? 'HubSpot integration requires deployment to Netlify. For local preview, use Embedded data.'
+        : `Error: ${e.message}. Check that HUBSPOT_TOKEN is set in Netlify environment variables.`;
+      document.getElementById('errorState').innerHTML = `<div class="error-msg">${helpText}</div>`;
+      document.getElementById('errorState').style.display = 'block';
+      document.getElementById('dataSource').value = 'embedded';
+      render(EMBEDDED_DATA);
+    }
+  } else if (source === 'gsheet') {
+    if (!GSHEET_CSV_URL) {
+      document.getElementById('errorState').innerHTML = '<div class="info-msg">To connect Google Sheets: open your spreadsheet → File → Share → Publish to web → CSV format → paste URL into <code>GSHEET_CSV_URL</code>.</div>';
+      document.getElementById('errorState').style.display = 'block';
+      document.getElementById('dataSource').value = 'embedded';
+      return;
+    }
+    document.getElementById('loadingText').textContent = 'Fetching data from Google Sheets...';
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('errorState').style.display = 'none';
+    try {
+      const data = await fetchGoogleSheet(GSHEET_CSV_URL);
+      document.getElementById('loadingState').style.display = 'none';
+      render(data);
+    } catch (e) {
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('errorState').innerHTML = `<div class="error-msg">Error loading Google Sheet: ${e.message}.</div>`;
+      document.getElementById('errorState').style.display = 'block';
+      render(EMBEDDED_DATA);
+    }
+  } else {
+    document.getElementById('errorState').style.display = 'none';
+    render(EMBEDDED_DATA);
+  }
+}
+
+// Auto-detect: if deployed on Netlify, try HubSpot first
+async function initDataSource() {
+  const isNetlify = window.location.hostname.includes('netlify') || window.location.hostname.includes('.app');
+  if (isNetlify) {
+    document.getElementById('dataSource').value = 'hubspot';
+    await handleSourceChange();
+  } else {
+    render(EMBEDDED_DATA);
+  }
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+initDataSource();
+</script>
+</body>
+</html>
