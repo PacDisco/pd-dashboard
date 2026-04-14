@@ -211,6 +211,52 @@
   .source-toggle select option { color: #333; }
 
   .fx-note { font-size: 0.7rem; color: var(--gray-500); margin-top: 0.5rem; padding: 0 1.25rem 1rem; }
+
+  /* Editable cells */
+  .editable {
+    cursor: pointer;
+    position: relative;
+    border-bottom: 1px dashed var(--accent);
+    padding-bottom: 1px;
+  }
+  .editable:hover { background: #FFFFCC; }
+  .editable input {
+    width: 60px;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 0.8rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+  }
+  .save-indicator {
+    display: inline-block;
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    margin-left: 0.3rem;
+    animation: fadeout 2s forwards;
+  }
+  .save-ok { background: #E8F5E9; color: var(--green); }
+  .save-err { background: #FEF2F2; color: var(--red); }
+  @keyframes fadeout { 80% { opacity: 1; } 100% { opacity: 0; } }
+  .edit-legend {
+    font-size: 0.7rem;
+    color: var(--gray-500);
+    padding: 0.5rem 1.25rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .edit-legend .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-bottom: 1px dashed var(--accent);
+    background: #FFFFCC;
+    border-radius: 2px;
+  }
 </style>
 </head>
 <body>
@@ -276,6 +322,9 @@ const HUBSPOT_API_URL = '/api/hubspot';
 const GSHEET_CSV_URL = '';
 const FX_RATE = 1.62;
 
+// Google Apps Script Web App URL — enables inline editing + write-back
+const GSHEET_API_URL = 'https://script.google.com/macros/s/AKfycbznheXhdgXD1Hhjsbjzix7dHgPBcjfGycTfqX8WyhVQuSfeZFihtd7aU3TW9CE8xmMU0Q/exec';
+
 // ═══════════════════════════════════════════
 // DYNAMIC YEAR CALCULATION (mirrors serverless function)
 // ═══════════════════════════════════════════
@@ -302,14 +351,14 @@ const EMBEDDED_DATA = {
   seasons: {
     summer: {
       programs: [
-        { name: 'Bali Summer', price: 7950, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Hawaii Summer', price: 8950, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Hawaii 2 Week', price: 6500, maxPax: 36, targetPax: 24, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Thailand Summer', price: 7950, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Costa Rica Summer', price: 7950, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Australia Summer', price: 7950, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'NZ & Fiji Summer', price: 7950, maxPax: 12, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Thailand - High School', price: 6599, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Bali Summer', price: null, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii Summer', price: null, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii 2 Week', price: null, maxPax: 36, targetPax: 24, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand Summer', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Costa Rica Summer', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia Summer', price: null, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'NZ & Fiji Summer', price: null, maxPax: 12, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand - High School', price: null, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
         { name: 'Alaska - College', price: null, maxPax: 14, targetPax: 8, actualPax: 0, estFuture: 0, forecastSales: 0 },
         { name: 'Peru - High School', price: null, maxPax: 14, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
         { name: 'Western USA - College', price: null, maxPax: 12, targetPax: 0, actualPax: 0, estFuture: 0, forecastSales: 0 },
@@ -321,36 +370,36 @@ const EMBEDDED_DATA = {
     },
     fall: {
       programs: [
-        { name: 'Nepal & India', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Nepal & Tibet', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'New Zealand & Australia', price: 16500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'South America', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Southeast Asia', price: 15000, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Australia & Bali', price: 15500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Polynesian Journey', price: 15500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Central America', price: 15500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Hawaii Mini', price: 11500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Australia Mini', price: 11500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Costa Rica Mini', price: 10500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Thailand Mini', price: 10500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Greece & Croatia Mini', price: 11500, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Nepal & India', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Nepal & Tibet', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'New Zealand & Australia', price: null, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'South America', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Southeast Asia', price: null, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia & Bali', price: null, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Polynesian Journey', price: null, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Central America', price: null, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii Mini', price: null, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia Mini', price: null, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Costa Rica Mini', price: null, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand Mini', price: null, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Greece & Croatia Mini', price: null, maxPax: 14, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
       ]
     },
     spring: {
       programs: [
-        { name: 'Nepal & India', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Nepal & Tibet', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'New Zealand & Australia', price: 16500, maxPax: 12, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'South America', price: 15500, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Southeast Asia', price: 15000, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Australia & Bali', price: 15500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Polynesian Journey', price: 15500, maxPax: 13, targetPax: 13, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Central America', price: 15500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Rewilding Semester', price: 15000, maxPax: 14, targetPax: 8, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Hawaii Mini', price: 11500, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Australia Mini', price: 11500, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Costa Rica Mini', price: 10500, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
-        { name: 'Thailand Mini', price: 10500, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Nepal & India', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Nepal & Tibet', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'New Zealand & Australia', price: null, maxPax: 12, targetPax: 14, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'South America', price: null, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Southeast Asia', price: null, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia & Bali', price: null, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Polynesian Journey', price: null, maxPax: 13, targetPax: 13, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Central America', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Rewilding Semester', price: null, maxPax: 14, targetPax: 8, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Hawaii Mini', price: null, maxPax: 14, targetPax: 10, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Australia Mini', price: null, maxPax: 12, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Costa Rica Mini', price: null, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
+        { name: 'Thailand Mini', price: null, maxPax: 14, targetPax: 12, actualPax: 0, estFuture: 0, forecastSales: 0 },
       ]
     }
   }
@@ -461,6 +510,7 @@ let chartInstances = {};
 const SEASON_KEYS = ['summer', 'fall', 'spring'];
 
 function render(data) {
+  currentData = data; // store for inline editing mutations
   // Update subtitle with dynamic years
   document.getElementById('subtitle').textContent =
     `${YEARS.summer}–${YEARS.spring} Seasonal Program Forecast`;
@@ -548,21 +598,27 @@ function render(data) {
     const t = totals[key];
 
     const rows = programs.map(p => {
-      const forecastPax = (p.actualPax || 0) + (p.estFuture || 0);
+      const estFuture = p.estFuturePax || p.estFuture || 0;
+      const forecastPax = (p.actualPax || 0) + estFuture;
       const pctSold = p.targetPax > 0 ? p.actualPax / p.targetPax : null;
       const pctForecast = p.targetPax > 0 ? forecastPax / p.targetPax : null;
       const maxSales = p.price && p.maxPax ? p.price * p.maxPax : null;
       const targetSales = p.price && p.targetPax ? p.price * p.targetPax : null;
       const hsBadge = p._hubspot ? '<span class="hs-badge">HS</span>' : '';
+      const pKey = p.hubspotName || p.name;
+      const canEdit = !!GSHEET_API_URL;
+      const editCell = (field, val) => canEdit
+        ? `<td class="num editable" onclick="startEdit(this,'${pKey}','${key}','${field}',${val})">${fmtNum(val)}</td>`
+        : `<td class="num">${fmtNum(val)}</td>`;
       return `<tr>
         <td class="program-name">${p.name}${hsBadge}</td>
         <td class="num">${p.price ? fmtUSD(p.price) : '—'}</td>
-        <td class="num">${fmtNum(p.maxPax)}</td>
+        ${editCell('max_pax', p.maxPax)}
         <td class="num">${maxSales ? fmtUSD(maxSales) : '—'}</td>
-        <td class="num">${fmtNum(p.targetPax)}</td>
+        ${editCell('target_pax', p.targetPax)}
         <td class="num">${targetSales ? fmtUSD(targetSales) : '—'}</td>
         <td class="num">${fmtNum(p.actualPax)}</td>
-        <td class="num">${fmtNum(p.estFuture || 0)}</td>
+        ${editCell('est_future_pax', estFuture)}
         <td class="num">${fmtNum(forecastPax)}</td>
         <td class="num">${fmtUSD(p.forecastSales)}</td>
         <td class="num">${pctSold != null ? fmtPct(pctSold) : '—'}</td>
@@ -570,7 +626,12 @@ function render(data) {
       </tr>`;
     }).join('');
 
+    const editLegend = GSHEET_API_URL
+      ? `<div class="edit-legend"><span class="swatch"></span> Click to edit — changes save to Google Sheet</div>`
+      : '';
+
     document.getElementById(`tab-${key}`).innerHTML = `
+      ${editLegend}
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr>
@@ -711,14 +772,104 @@ async function handleSourceChange() {
   }
 }
 
-// Auto-detect: if deployed on Netlify, try HubSpot first
+// ═══════════════════════════════════════════
+// INLINE EDITING (writes back to Google Sheet)
+// ═══════════════════════════════════════════
+let currentData = null; // holds active dataset for local mutation after edits
+
+function startEdit(cell, programKey, season, field, currentValue) {
+  if (!GSHEET_API_URL) return;
+  // Prevent double-editing if already has an input
+  if (cell.querySelector('input')) return;
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.value = currentValue || 0;
+  cell.textContent = '';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+
+  const commit = async () => {
+    const newVal = parseInt(input.value) || 0;
+    if (newVal === currentValue) {
+      // No change — just restore display
+      cell.textContent = fmtNum(currentValue);
+      return;
+    }
+    cell.textContent = fmtNum(newVal);
+    try {
+      await saveToSheet(programKey, season, field, newVal);
+      // Update local data and re-render to recalculate totals/charts
+      updateLocalData(programKey, season, field, newVal);
+      showSaveIndicator(cell, true);
+    } catch (e) {
+      console.error('Save failed:', e);
+      cell.textContent = fmtNum(currentValue);
+      showSaveIndicator(cell, false);
+    }
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { cell.textContent = fmtNum(currentValue); }
+  });
+  input.addEventListener('blur', commit);
+}
+
+async function saveToSheet(programKey, season, field, value) {
+  // Google Apps Script redirects on POST, so we need to handle that
+  const resp = await fetch(GSHEET_API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ programKey, season, field, value }),
+    redirect: 'follow',
+  });
+  // Apps Script may return opaque response with no-cors, so check if we got JSON
+  const text = await resp.text();
+  let result;
+  try { result = JSON.parse(text); } catch { result = { status: 'ok' }; }
+  if (result.status === 'error') throw new Error(result.message || 'Save failed');
+  return result;
+}
+
+function updateLocalData(programKey, season, field, newVal) {
+  if (!currentData || !currentData.seasons[season]) return;
+  const programs = currentData.seasons[season].programs;
+  const prog = programs.find(p => (p.hubspotName || p.name) === programKey);
+  if (!prog) return;
+
+  // Map sheet field names to local data property names
+  const fieldMap = { max_pax: 'maxPax', target_pax: 'targetPax', est_future_pax: 'estFuture' };
+  const localField = fieldMap[field];
+  if (localField) {
+    prog[localField] = newVal;
+    // Also update estFuturePax alias used by HubSpot-sourced data
+    if (field === 'est_future_pax') prog.estFuturePax = newVal;
+  }
+
+  // Re-render with updated data (recalculates subtotals, KPIs, charts)
+  render(currentData);
+}
+
+function showSaveIndicator(cell, success) {
+  const existing = cell.querySelector('.save-indicator');
+  if (existing) existing.remove();
+  const badge = document.createElement('span');
+  badge.className = `save-indicator ${success ? 'save-ok' : 'save-err'}`;
+  badge.textContent = success ? '✓ saved' : '✗ error';
+  cell.appendChild(badge);
+  setTimeout(() => badge.remove(), 2500);
+}
+
+// Always try HubSpot first — prices live there
 async function initDataSource() {
-  const isNetlify = window.location.hostname.includes('netlify') || window.location.hostname.includes('.app');
-  if (isNetlify) {
+  const isLocal = window.location.protocol === 'file:';
+  if (isLocal) {
+    render(EMBEDDED_DATA);
+  } else {
     document.getElementById('dataSource').value = 'hubspot';
     await handleSourceChange();
-  } else {
-    render(EMBEDDED_DATA);
   }
 }
 
