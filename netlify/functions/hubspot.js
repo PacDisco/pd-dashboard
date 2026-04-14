@@ -249,6 +249,67 @@ function aggregateDeals(deals) {
 }
 
 // ═══════════════════════════════════════════
+// GOOGLE SHEETS FETCH (via Google Apps Script Web App)
+// ═══════════════════════════════════════════
+const GSHEET_API_URL = process.env.GSHEET_API_URL || 'https://script.google.com/macros/s/AKfycbznheXhdgXD1Hhjsbjzix7dHgPBcjfGycTfqX8WyhVQuSfeZFihtd7aU3TW9CE8xmMU0Q/exec';
+
+async function fetchSheetData() {
+  if (!GSHEET_API_URL) return null;
+  try {
+    const resp = await fetch(GSHEET_API_URL);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.status === 'ok' ? data.seasons : null;
+  } catch { return null; }
+}
+
+// ═══════════════════════════════════════════
+// MERGE: HubSpot (prices, actual pax) + Google Sheets (max, target, est future)
+// ═══════════════════════════════════════════
+function mergeData(hubspotSeasons, sheetSeasons) {
+  const merged = {};
+
+  Object.entries(hubspotSeasons).forEach(([seasonKey, seasonData]) => {
+    const sheetPrograms = (sheetSeasons && sheetSeasons[seasonKey]) || [];
+
+    merged[seasonKey] = {
+      year: seasonData.year,
+      programs: seasonData.programs.map(hsP => {
+        // Find matching sheet row by programKey (hubspotName)
+        const sheetRow = sheetPrograms.find(sp => sp.programKey === hsP.hubspotName);
+        return {
+          ...hsP,
+          maxPax: sheetRow ? sheetRow.maxPax : (hsP.maxPax || 0),
+          targetPax: sheetRow ? sheetRow.targetPax : (hsP.targetPax || 0),
+          estFuturePax: sheetRow ? sheetRow.estFuturePax : 0,
+        };
+      })
+    };
+
+    // Add sheet-only programs (in sheet but not yet in HubSpot deals)
+    sheetPrograms.forEach(sp => {
+      const exists = merged[seasonKey].programs.some(p => p.hubspotName === sp.programKey);
+      if (!exists) {
+        merged[seasonKey].programs.push({
+          name: sp.displayName,
+          hubspotName: sp.programKey,
+          season: seasonKey,
+          price: null,
+          maxPax: sp.maxPax,
+          targetPax: sp.targetPax,
+          estFuturePax: sp.estFuturePax,
+          actualPax: 0,
+          totalDeals: 0,
+          forecastSales: 0,
+        });
+      }
+    });
+  });
+
+  return merged;
+}
+
+// ═══════════════════════════════════════════
 // NETLIFY HANDLER
 // ═══════════════════════════════════════════
 
@@ -262,13 +323,20 @@ export default async (req) => {
   }
 
   try {
-    const deals = await fetchAllDeals(token);
-    const seasons = aggregateDeals(deals);
+    // Fetch both sources in parallel
+    const [deals, sheetSeasons] = await Promise.all([
+      fetchAllDeals(token),
+      fetchSheetData(),
+    ]);
+
+    const hubspotSeasons = aggregateDeals(deals);
+    const seasons = sheetSeasons ? mergeData(hubspotSeasons, sheetSeasons) : hubspotSeasons;
     const years = getSeasonYears();
 
     return new Response(JSON.stringify({
       updatedAt: new Date().toISOString(),
       totalDeals: deals.length,
+      sheetConnected: !!sheetSeasons,
       years,
       seasons,
     }), {
