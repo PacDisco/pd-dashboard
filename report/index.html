@@ -426,11 +426,12 @@ function transformHubSpotData(apiData) {
     data.seasons[seasonKey] = {
       programs: seasonData.programs.map(p => ({
         name: p.name,
+        hubspotName: p.hubspotName || p.name,
         price: p.price,
         maxPax: p.maxPax || 0,
         targetPax: p.targetPax || 0,
         actualPax: p.actualPax || 0,
-        estFuture: 0,
+        estFuture: p.estFuturePax || p.estFuture || 0,
         forecastSales: p.forecastSales || 0,
         totalDeals: p.totalDeals || 0,
         _hubspot: true,
@@ -439,6 +440,65 @@ function transformHubSpotData(apiData) {
   });
 
   return data;
+}
+
+// ═══════════════════════════════════════════
+// GOOGLE SHEET CLIENT-SIDE FETCH + MERGE
+// ═══════════════════════════════════════════
+// Fetches sheet data directly from Apps Script and merges with existing data.
+// This ensures edits to max_pax, target_pax, est_future_pax always show up.
+async function fetchAndMergeSheetData(data) {
+  if (!GSHEET_API_URL) return data;
+  try {
+    const resp = await fetch(GSHEET_API_URL);
+    if (!resp.ok) return data;
+    const sheetJson = await resp.json();
+    if (sheetJson.status !== 'ok' || !sheetJson.seasons) return data;
+
+    // Merge sheet values into existing data
+    Object.entries(sheetJson.seasons).forEach(([seasonKey, sheetPrograms]) => {
+      if (!data.seasons[seasonKey]) return;
+      const programs = data.seasons[seasonKey].programs;
+
+      sheetPrograms.forEach(sp => {
+        const match = programs.find(p =>
+          (p.hubspotName || p.name) === sp.programKey || p.name === sp.displayName
+        );
+        if (match) {
+          match.maxPax = sp.maxPax;
+          match.targetPax = sp.targetPax;
+          match.estFuture = sp.estFuturePax || 0;
+          match.estFuturePax = sp.estFuturePax || 0;
+        } else {
+          // Program exists in sheet but not in HubSpot — add it
+          programs.push({
+            name: sp.displayName,
+            hubspotName: sp.programKey,
+            price: null,
+            maxPax: sp.maxPax,
+            targetPax: sp.targetPax,
+            actualPax: 0,
+            estFuture: sp.estFuturePax || 0,
+            forecastSales: 0,
+            totalDeals: 0,
+          });
+        }
+      });
+    });
+
+    // Recalculate forecast sales after merge
+    Object.values(data.seasons).forEach(seasonData => {
+      seasonData.programs.forEach(p => {
+        const forecastPax = (p.actualPax || 0) + (p.estFuture || 0);
+        if (p.price) p.forecastSales = p.price * forecastPax;
+      });
+    });
+
+    return data;
+  } catch (e) {
+    console.warn('Sheet merge failed:', e);
+    return data;
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -724,11 +784,12 @@ async function handleSourceChange() {
   statusEl.textContent = '';
 
   if (source === 'hubspot') {
-    document.getElementById('loadingText').textContent = 'Fetching live data from HubSpot...';
+    document.getElementById('loadingText').textContent = 'Fetching live data from HubSpot + Google Sheet...';
     document.getElementById('loadingState').style.display = 'block';
     document.getElementById('errorState').style.display = 'none';
     try {
-      const data = await fetchHubSpotData();
+      let data = await fetchHubSpotData();
+      data = await fetchAndMergeSheetData(data);
       document.getElementById('loadingState').style.display = 'none';
       statusEl.textContent = '● Live';
       statusEl.style.color = '#70AD47';
@@ -744,7 +805,9 @@ async function handleSourceChange() {
       document.getElementById('errorState').innerHTML = `<div class="error-msg">${helpText}</div>`;
       document.getElementById('errorState').style.display = 'block';
       document.getElementById('dataSource').value = 'embedded';
-      render(EMBEDDED_DATA);
+      let fallback = JSON.parse(JSON.stringify(EMBEDDED_DATA));
+      fallback = await fetchAndMergeSheetData(fallback);
+      render(fallback);
     }
   } else if (source === 'gsheet') {
     if (!GSHEET_CSV_URL) {
@@ -768,7 +831,9 @@ async function handleSourceChange() {
     }
   } else {
     document.getElementById('errorState').style.display = 'none';
-    render(EMBEDDED_DATA);
+    let data = JSON.parse(JSON.stringify(EMBEDDED_DATA));
+    data = await fetchAndMergeSheetData(data);
+    render(data);
   }
 }
 
