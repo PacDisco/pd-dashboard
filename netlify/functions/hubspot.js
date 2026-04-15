@@ -1,72 +1,44 @@
-// Netlify serverless function — fetches program data from HubSpot
+// Netlify serverless function — Forward Business Report
 // Environment variable required: HUBSPOT_TOKEN (Private App token)
+//
+// Architecture:
+//   Custom Program Objects (2-58411705) = source of truth for program list, names, tuition
+//   Deals = only used to count actual pax (via associations to program objects)
+//   Google Sheet = max pax, target pax, est future pax (editable from dashboard)
 
 const HUBSPOT_API = 'https://api.hubapi.com';
+const PROGRAM_OBJECT_TYPE = '2-58411705';
 
 // ═══════════════════════════════════════════
 // DYNAMIC YEAR CALCULATION
 // ═══════════════════════════════════════════
-// Academic cycle: Summer & Fall = same year, Spring = next year
-// Rolls forward automatically each September
 function getSeasonYears() {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
-  // After August, look ahead to next year's cycle
   const baseYear = month >= 9 ? year + 1 : year;
-  return {
-    summer: baseYear,
-    fall: baseYear,
-    spring: baseYear + 1,
-  };
+  return { summer: baseYear, fall: baseYear, spring: baseYear + 1 };
 }
 
 // ═══════════════════════════════════════════
-// NAME-BASED SEASON DETECTION
+// SEASON DETECTION FROM PROGRAM NAME
 // ═══════════════════════════════════════════
-// Assigns a program to a season based on keywords in the pd_program name.
-// "Summer" in the name → summer
-// "Mini Semester" → falls into fall (minis typically run fall)
-// "Semester" (without Summer) → fall by default; pipeline override for spring
-function getSeasonFromName(pdProgram) {
-  const lower = pdProgram.toLowerCase();
+function getSeasonFromName(name) {
+  const lower = name.toLowerCase();
+  if (lower.includes('spring')) return 'spring';
   if (lower.includes('summer')) return 'summer';
-  if (lower.includes('high school summer')) return 'summer';
-  if (lower.includes('college summer')) return 'summer';
-  if (lower.includes('mini semester') || lower.includes('mini')) return 'fall'; // default, pipeline can override
-  if (lower.includes('semester')) return 'fall'; // default, pipeline can override
+  if (lower.includes('fall')) return 'fall';
+  if (lower.includes('mini')) return 'fall';
+  if (lower.includes('semester')) return 'fall';
   if (lower.includes('journey')) return 'fall';
-  return null; // unknown — will use pipeline fallback
+  return null;
 }
 
 // ═══════════════════════════════════════════
 // CONFIGURATION
 // ═══════════════════════════════════════════
 
-// Pipeline-to-season overrides. Only needed when the program name
-// doesn't tell us the season (e.g., semesters that run in Spring).
-// Add pipeline IDs here that are specifically Spring runs.
-const PIPELINE_SEASON_OVERRIDE = {
-  // Spring pipelines — deals in these pipelines override the name-based season
-  '74759274': 'spring',   // PD Spring Mini Semester pipeline
-  // Add more spring pipeline IDs as you create them each year
-};
-
-// All pipeline IDs to fetch deals from (current year only).
-// Update this list each year, or use the wildcard approach below.
-const ACTIVE_PIPELINE_IDS = [
-  '694619955',   // PD Summer Programs
-  '742406417',   // PD Summer HS
-  '74958084',    // PD Fall/Spring Gap Semester
-  '74759274',    // PD Spring Mini Semester
-  // Add new pipeline IDs as they're created each season
-];
-
-// Program names come directly from HubSpot (pd_program on deals /
-// pacific_discovery_program on the custom Programs object).
-// No renaming — the dashboard shows exactly what's in HubSpot.
-
-// Deal stages that count as "paid" / confirmed enrollment (actual pax).
+// Deal stages that count as "paid" / confirmed enrollment
 const PAID_STAGES = [
   'closedwon',
   '2519302',
@@ -75,75 +47,23 @@ const PAID_STAGES = [
   '12030854',
 ];
 
-// Programs to exclude from the report
-const EXCLUDED_PROGRAMS = ['Dropped', 'College Credit Program', 'Basecamp'];
-
 // ═══════════════════════════════════════════
-// HUBSPOT API HELPERS
+// STEP 1: Fetch all custom Program objects
 // ═══════════════════════════════════════════
-
-async function hubspotSearch(token, objectType, body) {
-  const resp = await fetch(`${HUBSPOT_API}/crm/v3/objects/${objectType}/search`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`HubSpot API error ${resp.status}: ${err}`);
-  }
-  return resp.json();
-}
-
-async function fetchAllDeals(token) {
-  const allDeals = [];
-  const properties = ['dealname', 'pd_program', 'pd_season', 'pd_year', 'pipeline', 'amount', 'total_amount_paid', 'dealstage'];
-
-  for (let i = 0; i < ACTIVE_PIPELINE_IDS.length; i += 3) {
-    const batch = ACTIVE_PIPELINE_IDS.slice(i, i + 3);
-    const filterGroups = batch.map(pid => ({
-      filters: [{ propertyName: 'pipeline', operator: 'EQ', value: pid }]
-    }));
-
-    let after = 0;
-    let hasMore = true;
-    while (hasMore) {
-      const body = { filterGroups, properties, limit: 100 };
-      if (after > 0) body.after = after;
-      const result = await hubspotSearch(token, 'deals', body);
-      allDeals.push(...(result.results || []));
-      if (result.paging && result.paging.next) {
-        after = result.paging.next.after;
-      } else {
-        hasMore = false;
-      }
-    }
-  }
-
-  return allDeals;
-}
-
-// ═══════════════════════════════════════════
-// CUSTOM OBJECT: Programs (2-58411705)
-// ═══════════════════════════════════════════
-// Uses HubSpot associations to link deals → custom program objects.
-// This is reliable — no name guessing needed.
-
-const PROGRAM_OBJECT_TYPE = '2-58411705';
-
-// Step 1: Fetch all custom program objects (id → name + tuition)
-async function fetchProgramObjects(token) {
-  const programMap = {}; // objectId → { name, tuition }
+async function fetchAllPrograms(token) {
+  const programs = []; // { id, name, tuition }
   const properties = ['pacific_discovery_program', 'program_tuition'];
   let after = 0;
   let hasMore = true;
 
   while (hasMore) {
-    const resp = await fetch(`${HUBSPOT_API}/crm/v3/objects/${PROGRAM_OBJECT_TYPE}?${new URLSearchParams({
+    const params = new URLSearchParams({
       limit: '100',
       properties: properties.join(','),
-      ...(after ? { after: String(after) } : {}),
-    })}`, {
+    });
+    if (after) params.set('after', String(after));
+
+    const resp = await fetch(`${HUBSPOT_API}/crm/v3/objects/${PROGRAM_OBJECT_TYPE}?${params}`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
 
@@ -158,10 +78,11 @@ async function fetchProgramObjects(token) {
       const name = props.pacific_discovery_program;
       const tuition = parseFloat(props.program_tuition);
       if (name) {
-        programMap[obj.id] = {
+        programs.push({
+          id: obj.id,
           name,
-          tuition: !isNaN(tuition) ? tuition : null,
-        };
+          tuition: !isNaN(tuition) && tuition > 0 ? tuition : null,
+        });
       }
     });
 
@@ -172,18 +93,19 @@ async function fetchProgramObjects(token) {
     }
   }
 
-  return programMap;
+  return programs;
 }
 
-// Step 2: Batch-fetch associations from deals → custom program objects
-// Returns a map: dealId → programObjectId
-async function fetchDealProgramAssociations(token, dealIds) {
-  const dealToProgram = {}; // dealId → programObjectId
+// ═══════════════════════════════════════════
+// STEP 2: Fetch associated deals for each program object
+// ═══════════════════════════════════════════
+// Uses batch associations: program objects → deals
+async function fetchProgramDealAssociations(token, programIds) {
+  const programToDeals = {}; // programObjectId → [dealId, ...]
 
-  // HubSpot batch associations: max 100 per request
-  for (let i = 0; i < dealIds.length; i += 100) {
-    const batch = dealIds.slice(i, i + 100);
-    const resp = await fetch(`${HUBSPOT_API}/crm/v4/associations/deals/${PROGRAM_OBJECT_TYPE}/batch/read`, {
+  for (let i = 0; i < programIds.length; i += 100) {
+    const batch = programIds.slice(i, i + 100);
+    const resp = await fetch(`${HUBSPOT_API}/crm/v4/associations/${PROGRAM_OBJECT_TYPE}/deals/batch/read`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ inputs: batch.map(id => ({ id: String(id) })) }),
@@ -196,94 +118,99 @@ async function fetchDealProgramAssociations(token, dealIds) {
 
     const result = await resp.json();
     (result.results || []).forEach(r => {
-      const dealId = r.from && r.from.id;
-      const toIds = (r.to || []).map(t => t.toObjectId);
-      if (dealId && toIds.length > 0) {
-        dealToProgram[dealId] = String(toIds[0]); // use first associated program
+      const fromId = r.from && r.from.id;
+      const dealIds = (r.to || []).map(t => t.toObjectId);
+      if (fromId && dealIds.length > 0) {
+        programToDeals[fromId] = dealIds.map(String);
       }
     });
   }
 
-  return dealToProgram;
+  return programToDeals;
 }
 
 // ═══════════════════════════════════════════
-// AGGREGATION
+// STEP 3: Batch-fetch deal properties
 // ═══════════════════════════════════════════
+async function fetchDealsByIds(token, dealIds) {
+  const dealMap = {}; // dealId → { dealstage, total_amount_paid, amount }
+  const uniqueIds = [...new Set(dealIds)];
 
-function aggregateDeals(deals, programMap = {}, dealToProgram = {}) {
-  const programs = {};
+  for (let i = 0; i < uniqueIds.length; i += 100) {
+    const batch = uniqueIds.slice(i, i + 100);
+    const resp = await fetch(`${HUBSPOT_API}/crm/v3/objects/deals/batch/read`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inputs: batch.map(id => ({ id: String(id) })),
+        properties: ['dealstage', 'total_amount_paid', 'amount'],
+      }),
+    });
+
+    if (!resp.ok) {
+      console.error(`Deals batch read error: ${resp.status}`);
+      continue;
+    }
+
+    const result = await resp.json();
+    (result.results || []).forEach(deal => {
+      dealMap[deal.id] = deal.properties || {};
+    });
+  }
+
+  return dealMap;
+}
+
+// ═══════════════════════════════════════════
+// STEP 4: Build the report from program objects
+// ═══════════════════════════════════════════
+function buildReport(programs, programToDeals, dealMap) {
   const years = getSeasonYears();
-
-  deals.forEach(deal => {
-    const props = deal.properties || {};
-    const pdProgram = props.pd_program;
-    if (!pdProgram || EXCLUDED_PROGRAMS.includes(pdProgram)) return;
-
-    const pipeline = props.pipeline;
-
-    // Determine season: pipeline override > name-based detection
-    let season = PIPELINE_SEASON_OVERRIDE[pipeline] || getSeasonFromName(pdProgram);
-    if (!season) season = 'fall'; // safe default
-
-    const key = `${pdProgram}__${season}`;
-
-    if (!programs[key]) {
-      // Look up the associated custom program object via associations
-      const programObjId = dealToProgram[deal.id];
-      const programObj = programObjId ? programMap[programObjId] : null;
-
-      programs[key] = {
-        name: programObj ? programObj.name : pdProgram,    // Custom object name, or fallback to deal pd_program
-        hubspotName: pdProgram,                            // Keep deal pd_program for sheet matching
-        season,
-        price: programObj && programObj.tuition ? programObj.tuition : null,
-        maxPax: 0,
-        targetPax: 0,
-        actualPax: 0,
-        totalDeals: 0,
-        forecastSales: 0,
-        prices: [],
-      };
-    }
-
-    programs[key].totalDeals++;
-
-    const amount = parseFloat(props.amount) || 0;
-    if (amount > 0) programs[key].prices.push(amount);
-
-    const totalPaid = parseFloat(props.total_amount_paid) || 0;
-    const isPaidStage = PAID_STAGES.includes(props.dealstage);
-
-    if (totalPaid > 0 || isPaidStage) {
-      programs[key].actualPax++;
-      programs[key].forecastSales += amount;
-    }
-  });
-
-  // Set price: if custom object tuition was already set, keep it; otherwise fall back to deal amount mode
-  Object.values(programs).forEach(p => {
-    if (!p.price && p.prices.length > 0) {
-      const freq = {};
-      p.prices.forEach(pr => { const r = Math.round(pr); freq[r] = (freq[r] || 0) + 1; });
-      const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-      p.price = parseFloat(sorted[0][0]);
-    }
-    delete p.prices;
-  });
-
-  // Group by season
   const seasons = {
     summer: { year: years.summer, programs: [] },
     fall:   { year: years.fall, programs: [] },
     spring: { year: years.spring, programs: [] },
   };
 
-  Object.values(programs).forEach(p => {
-    if (seasons[p.season]) seasons[p.season].programs.push(p);
+  programs.forEach(prog => {
+    const season = getSeasonFromName(prog.name);
+    if (!season || !seasons[season]) return;
+
+    // Count actual pax from associated deals
+    const associatedDealIds = programToDeals[prog.id] || [];
+    let actualPax = 0;
+    let forecastSales = 0;
+
+    associatedDealIds.forEach(dealId => {
+      const deal = dealMap[dealId];
+      if (!deal) return;
+
+      const totalPaid = parseFloat(deal.total_amount_paid) || 0;
+      const isPaidStage = PAID_STAGES.includes(deal.dealstage);
+      const amount = parseFloat(deal.amount) || 0;
+
+      if (totalPaid > 0 || isPaidStage) {
+        actualPax++;
+        forecastSales += prog.tuition || amount;
+      }
+    });
+
+    seasons[season].programs.push({
+      name: prog.name,
+      hubspotName: prog.name,       // For sheet matching
+      programObjectId: prog.id,
+      season,
+      price: prog.tuition,
+      maxPax: 0,
+      targetPax: 0,
+      actualPax,
+      totalDeals: associatedDealIds.length,
+      forecastSales,
+      estFuturePax: 0,
+    });
   });
 
-  // Sort each season: programs with actual pax first, then alphabetically
+  // Sort: programs with actual pax first, then alphabetically
   Object.keys(seasons).forEach(s => {
     seasons[s].programs.sort((a, b) => (b.actualPax - a.actualPax) || a.name.localeCompare(b.name));
   });
@@ -307,7 +234,7 @@ async function fetchSheetData() {
 }
 
 // ═══════════════════════════════════════════
-// MERGE: HubSpot (prices, actual pax) + Google Sheets (max, target, est future)
+// MERGE: HubSpot + Google Sheets
 // ═══════════════════════════════════════════
 function mergeData(hubspotSeasons, sheetSeasons) {
   const merged = {};
@@ -318,8 +245,12 @@ function mergeData(hubspotSeasons, sheetSeasons) {
     merged[seasonKey] = {
       year: seasonData.year,
       programs: seasonData.programs.map(hsP => {
-        // Find matching sheet row by programKey (hubspotName)
-        const sheetRow = sheetPrograms.find(sp => sp.programKey === hsP.hubspotName);
+        // Try matching by program name (sheet programKey may use old deal names)
+        const sheetRow = sheetPrograms.find(sp =>
+          sp.programKey === hsP.name ||
+          sp.programKey === hsP.hubspotName ||
+          sp.displayName === hsP.name
+        );
         return {
           ...hsP,
           maxPax: sheetRow ? sheetRow.maxPax : (hsP.maxPax || 0),
@@ -328,8 +259,6 @@ function mergeData(hubspotSeasons, sheetSeasons) {
         };
       })
     };
-
-    // Only show programs that exist in HubSpot deals — skip sheet-only programs
   });
 
   return merged;
@@ -349,27 +278,30 @@ export default async (req) => {
   }
 
   try {
-    // Fetch deals, sheet data, and program objects in parallel
-    const [deals, sheetSeasons, programMap] = await Promise.all([
-      fetchAllDeals(token),
+    // Step 1: Fetch program objects and sheet data in parallel
+    const [programs, sheetSeasons] = await Promise.all([
+      fetchAllPrograms(token),
       fetchSheetData(),
-      fetchProgramObjects(token),
     ]);
 
-    // Now fetch deal → program associations (needs deal IDs from step above)
-    const dealIds = deals.map(d => d.id);
-    const dealToProgram = await fetchDealProgramAssociations(token, dealIds);
+    // Step 2: Fetch associations (program → deals)
+    const programIds = programs.map(p => p.id);
+    const programToDeals = await fetchProgramDealAssociations(token, programIds);
 
-    const hubspotSeasons = aggregateDeals(deals, programMap, dealToProgram);
+    // Step 3: Fetch deal properties for all associated deals
+    const allDealIds = Object.values(programToDeals).flat();
+    const dealMap = allDealIds.length > 0 ? await fetchDealsByIds(token, allDealIds) : {};
+
+    // Step 4: Build report from program objects
+    const hubspotSeasons = buildReport(programs, programToDeals, dealMap);
     const seasons = sheetSeasons ? mergeData(hubspotSeasons, sheetSeasons) : hubspotSeasons;
     const years = getSeasonYears();
 
     return new Response(JSON.stringify({
       updatedAt: new Date().toISOString(),
-      totalDeals: deals.length,
+      totalPrograms: programs.length,
+      totalAssociatedDeals: allDealIds.length,
       sheetConnected: !!sheetSeasons,
-      programObjectsLoaded: Object.keys(programMap).length,
-      dealsWithAssociations: Object.keys(dealToProgram).length,
       years,
       seasons,
     }), {
