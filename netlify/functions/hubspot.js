@@ -126,13 +126,14 @@ async function fetchAllDeals(token) {
 // ═══════════════════════════════════════════
 // CUSTOM OBJECT: Programs (2-58411705)
 // ═══════════════════════════════════════════
-// Fetches program names and tuition prices from the custom "Programs" object.
-// Returns a map: { programName: tuitionPrice }
+// Uses HubSpot associations to link deals → custom program objects.
+// This is reliable — no name guessing needed.
 
 const PROGRAM_OBJECT_TYPE = '2-58411705';
 
+// Step 1: Fetch all custom program objects (id → name + tuition)
 async function fetchProgramObjects(token) {
-  const programObjects = [];
+  const programMap = {}; // objectId → { name, tuition }
   const properties = ['pacific_discovery_program', 'program_tuition'];
   let after = 0;
   let hasMore = true;
@@ -147,8 +148,7 @@ async function fetchProgramObjects(token) {
     });
 
     if (!resp.ok) {
-      const err = await resp.text();
-      console.error(`Program objects fetch error: ${resp.status} ${err}`);
+      console.error(`Program objects fetch error: ${resp.status}`);
       break;
     }
 
@@ -158,10 +158,10 @@ async function fetchProgramObjects(token) {
       const name = props.pacific_discovery_program;
       const tuition = parseFloat(props.program_tuition);
       if (name) {
-        programObjects.push({
-          fullName: name,                          // e.g. "2026 Bali Summer Program"
+        programMap[obj.id] = {
+          name,
           tuition: !isNaN(tuition) ? tuition : null,
-        });
+        };
       }
     });
 
@@ -172,52 +172,46 @@ async function fetchProgramObjects(token) {
     }
   }
 
-  return programObjects;
+  return programMap;
 }
 
-// Match a deal's pd_program (e.g. "Bali Summer Program") to a custom object
-// name (e.g. "2026 Bali Summer Program") by checking if the custom object
-// name ends with the pd_program value (after stripping the year prefix).
-function matchProgramObject(pdProgram, programObjects, season) {
-  // Try exact match first (custom object name ends with pd_program)
-  const match = programObjects.find(po => {
-    const stripped = po.fullName.replace(/^\d{4}\s+/, ''); // strip "2026 " prefix
-    return stripped === pdProgram;
-  });
-  if (match) return match;
+// Step 2: Batch-fetch associations from deals → custom program objects
+// Returns a map: dealId → programObjectId
+async function fetchDealProgramAssociations(token, dealIds) {
+  const dealToProgram = {}; // dealId → programObjectId
 
-  // Try fuzzy: custom object name contains pd_program
-  const fuzzy = programObjects.find(po => {
-    const lower = po.fullName.toLowerCase();
-    return lower.includes(pdProgram.toLowerCase());
-  });
-  if (fuzzy) return fuzzy;
+  // HubSpot batch associations: max 100 per request
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const batch = dealIds.slice(i, i + 100);
+    const resp = await fetch(`${HUBSPOT_API}/crm/v4/associations/deals/${PROGRAM_OBJECT_TYPE}/batch/read`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs: batch.map(id => ({ id: String(id) })) }),
+    });
 
-  // Try: pd_program is contained in custom object name after adding season context
-  // e.g. pd_program "Central America Semester" → custom "2026 Central America Fall Semester Program"
-  const seasonWord = season === 'spring' ? 'spring' : season === 'fall' ? 'fall' : 'summer';
-  const withSeason = programObjects.find(po => {
-    const lower = po.fullName.toLowerCase();
-    const pdLower = pdProgram.toLowerCase().replace(' semester', '').replace(' program', '').trim();
-    return lower.includes(pdLower) && lower.includes(seasonWord);
-  });
-  return withSeason || null;
-}
+    if (!resp.ok) {
+      console.error(`Associations batch error: ${resp.status}`);
+      continue;
+    }
 
-// Build lookup maps from program objects
-function buildProgramMaps(programObjects) {
-  const tuitionMap = {};   // pdProgram → tuition
-  const nameMap = {};      // pdProgram → custom object full name
+    const result = await resp.json();
+    (result.results || []).forEach(r => {
+      const dealId = r.from && r.from.id;
+      const toIds = (r.to || []).map(t => t.toObjectId);
+      if (dealId && toIds.length > 0) {
+        dealToProgram[dealId] = String(toIds[0]); // use first associated program
+      }
+    });
+  }
 
-  // These get populated during aggregation via matchProgramObject()
-  return { tuitionMap, nameMap, programObjects };
+  return dealToProgram;
 }
 
 // ═══════════════════════════════════════════
 // AGGREGATION
 // ═══════════════════════════════════════════
 
-function aggregateDeals(deals, programObjects = []) {
+function aggregateDeals(deals, programMap = {}, dealToProgram = {}) {
   const programs = {};
   const years = getSeasonYears();
 
@@ -235,14 +229,15 @@ function aggregateDeals(deals, programObjects = []) {
     const key = `${pdProgram}__${season}`;
 
     if (!programs[key]) {
-      // Match to custom object for display name and tuition
-      const matched = matchProgramObject(pdProgram, programObjects, season);
+      // Look up the associated custom program object via associations
+      const programObjId = dealToProgram[deal.id];
+      const programObj = programObjId ? programMap[programObjId] : null;
 
       programs[key] = {
-        name: matched ? matched.fullName : pdProgram,  // Use custom object name
-        hubspotName: pdProgram,                         // Keep deal pd_program for sheet matching
+        name: programObj ? programObj.name : pdProgram,    // Custom object name, or fallback to deal pd_program
+        hubspotName: pdProgram,                            // Keep deal pd_program for sheet matching
         season,
-        price: matched && matched.tuition ? matched.tuition : null,
+        price: programObj && programObj.tuition ? programObj.tuition : null,
         maxPax: 0,
         targetPax: 0,
         actualPax: 0,
@@ -354,14 +349,18 @@ export default async (req) => {
   }
 
   try {
-    // Fetch all three sources in parallel
-    const [deals, sheetSeasons, programObjects] = await Promise.all([
+    // Fetch deals, sheet data, and program objects in parallel
+    const [deals, sheetSeasons, programMap] = await Promise.all([
       fetchAllDeals(token),
       fetchSheetData(),
       fetchProgramObjects(token),
     ]);
 
-    const hubspotSeasons = aggregateDeals(deals, programObjects);
+    // Now fetch deal → program associations (needs deal IDs from step above)
+    const dealIds = deals.map(d => d.id);
+    const dealToProgram = await fetchDealProgramAssociations(token, dealIds);
+
+    const hubspotSeasons = aggregateDeals(deals, programMap, dealToProgram);
     const seasons = sheetSeasons ? mergeData(hubspotSeasons, sheetSeasons) : hubspotSeasons;
     const years = getSeasonYears();
 
@@ -369,7 +368,8 @@ export default async (req) => {
       updatedAt: new Date().toISOString(),
       totalDeals: deals.length,
       sheetConnected: !!sheetSeasons,
-      programObjectsLoaded: programObjects.length,
+      programObjectsLoaded: Object.keys(programMap).length,
+      dealsWithAssociations: Object.keys(dealToProgram).length,
       years,
       seasons,
     }), {
