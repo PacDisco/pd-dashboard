@@ -62,54 +62,9 @@ const ACTIVE_PIPELINE_IDS = [
   // Add new pipeline IDs as they're created each season
 ];
 
-// Display-friendly names. If a pd_program value isn't here,
-// the raw HubSpot name is cleaned up automatically.
-const DISPLAY_NAMES = {
-  'Bali Summer Program': 'Bali Summer',
-  'Hawaii Summer Program': 'Hawaii Summer',
-  'Hawaii Summer Expedition': 'Hawaii 2 Week',
-  'Marine Conservation and Reef Monitoring Field Program': 'Hawaii 2 Week',
-  'Thailand Summer Program': 'Thailand Summer',
-  'Costa Rica Summer Program': 'Costa Rica Summer',
-  'Australia Summer Program': 'Australia Summer',
-  'New Zealand & Fiji Summer Program': 'NZ & Fiji Summer',
-  'Thailand High School Summer': 'Thailand - High School',
-  'Alaska College Summer': 'Alaska - College',
-  'Peru High School Summer': 'Peru - High School',
-  'Western USA College Summer': 'Western USA - College',
-  'Caribbean College Summer': 'Caribbean - College',
-  'Ecuador & Galapagos College Summer': 'Ecuador/Galapagos - College',
-  'Vietnam & Cambodia College Summer': 'Vietnam/Cambodia - College',
-  'Fiji & Vanuatu College Summer': 'Fiji/Vanuatu - College',
-  'Caribbean High School Summer': 'Caribbean - High School',
-  'Galapagos High School Summer': 'Galapagos - High School',
-  'Nepal & India Semester': 'Nepal & India',
-  'Nepal & Tibet Semester': 'Nepal & Tibet',
-  'New Zealand & Australia Semester': 'New Zealand & Australia',
-  'South America Semester': 'South America',
-  'Southeast Asia Semester': 'Southeast Asia',
-  'Australia & Bali Semester': 'Australia & Bali',
-  'Polynesian Journey': 'Polynesian Journey',
-  'Central America Semester': 'Central America',
-  'Rewilding Residential Semester': 'Rewilding Semester',
-  'Hawaii Mini Semester': 'Hawaii Mini',
-  'Australia Mini Semester': 'Australia Mini',
-  'Costa Rica Mini Semester': 'Costa Rica Mini',
-  'Thailand Mini Semester': 'Thailand Mini',
-  'Greece & Croatia Mini Semester': 'Greece & Croatia Mini',
-  'Japan Mini Semester': 'Japan Mini',
-};
-
-// Auto-clean: strip " Semester", " Program", " College", " High School" suffixes
-function cleanProgramName(raw) {
-  if (DISPLAY_NAMES[raw]) return DISPLAY_NAMES[raw];
-  return raw
-    .replace(/ Semester$/i, '')
-    .replace(/ Program$/i, '')
-    .replace(/ College$/i, '')
-    .replace(/ High School$/i, '')
-    .trim();
-}
+// Program names come directly from HubSpot (pd_program on deals /
+// pacific_discovery_program on the custom Programs object).
+// No renaming — the dashboard shows exactly what's in HubSpot.
 
 // Deal stages that count as "paid" / confirmed enrollment (actual pax).
 const PAID_STAGES = [
@@ -244,7 +199,7 @@ function aggregateDeals(deals, tuitionMap = {}) {
 
     if (!programs[key]) {
       programs[key] = {
-        name: cleanProgramName(pdProgram),
+        name: pdProgram,
         hubspotName: pdProgram,
         season,
         price: null,
@@ -348,7 +303,7 @@ function mergeData(hubspotSeasons, sheetSeasons) {
       const exists = merged[seasonKey].programs.some(p => p.hubspotName === sp.programKey);
       if (!exists) {
         merged[seasonKey].programs.push({
-          name: sp.displayName,
+          name: sp.programKey,
           hubspotName: sp.programKey,
           season: seasonKey,
           price: null,
