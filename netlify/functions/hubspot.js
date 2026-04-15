@@ -234,6 +234,51 @@ async function fetchSheetData() {
 }
 
 // ═══════════════════════════════════════════
+// AUTO-SYNC: Add new HubSpot programs to Google Sheet
+// ═══════════════════════════════════════════
+async function syncNewProgramsToSheet(hubspotSeasons, sheetSeasons) {
+  if (!GSHEET_API_URL) return 0;
+
+  // Build list of all HubSpot programs
+  const hubspotPrograms = [];
+  Object.entries(hubspotSeasons).forEach(([seasonKey, seasonData]) => {
+    seasonData.programs.forEach(p => {
+      hubspotPrograms.push({ name: p.name, season: seasonKey });
+    });
+  });
+
+  // Build set of existing sheet programs
+  const sheetKeys = new Set();
+  if (sheetSeasons) {
+    Object.entries(sheetSeasons).forEach(([seasonKey, programs]) => {
+      programs.forEach(sp => {
+        sheetKeys.add(`${sp.programKey}__${seasonKey}`);
+      });
+    });
+  }
+
+  // Find programs in HubSpot but not in the sheet
+  const missing = hubspotPrograms.filter(p => !sheetKeys.has(`${p.name}__${p.season}`));
+  if (missing.length === 0) return 0;
+
+  // Call Apps Script sync endpoint to add missing rows
+  try {
+    const params = new URLSearchParams({
+      action: 'sync',
+      programs: JSON.stringify(missing),
+    });
+    const resp = await fetch(`${GSHEET_API_URL}?${params}`);
+    if (resp.ok) {
+      const result = await resp.json();
+      return result.added || 0;
+    }
+  } catch (e) {
+    console.error('Sheet sync error:', e);
+  }
+  return 0;
+}
+
+// ═══════════════════════════════════════════
 // MERGE: HubSpot + Google Sheets
 // ═══════════════════════════════════════════
 function mergeData(hubspotSeasons, sheetSeasons) {
@@ -294,14 +339,21 @@ export default async (req) => {
 
     // Step 4: Build report from program objects
     const hubspotSeasons = buildReport(programs, programToDeals, dealMap);
-    const seasons = sheetSeasons ? mergeData(hubspotSeasons, sheetSeasons) : hubspotSeasons;
+
+    // Step 5: Auto-sync — add any new HubSpot programs to the Google Sheet
+    const newProgramsAdded = await syncNewProgramsToSheet(hubspotSeasons, sheetSeasons);
+
+    // If we added new programs, re-fetch sheet data so the merge picks them up
+    const finalSheetSeasons = newProgramsAdded > 0 ? await fetchSheetData() : sheetSeasons;
+    const seasons = finalSheetSeasons ? mergeData(hubspotSeasons, finalSheetSeasons) : hubspotSeasons;
     const years = getSeasonYears();
 
     return new Response(JSON.stringify({
       updatedAt: new Date().toISOString(),
       totalPrograms: programs.length,
       totalAssociatedDeals: allDealIds.length,
-      sheetConnected: !!sheetSeasons,
+      sheetConnected: !!finalSheetSeasons,
+      newProgramsSynced: newProgramsAdded,
       years,
       seasons,
     }), {
