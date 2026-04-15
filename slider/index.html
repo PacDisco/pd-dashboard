@@ -1,3 +1,32 @@
+
+These tasks run locally and aren't synced across devices
+
+
+Invite team members
+Reporting
+
+
+
+
+Outputs
+Recents
+Convert files to HTML dashboard
+1 minute ago
+use chrome to look at it
+Permissions needed
+Remove password protection from slider tool
+2 minutes ago
+remove the password gate on this file: <!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewpo…
+
+Slider manager
+Build student enrollment dashboard
+18 minutes ago
+we don't need to show the payment 1-10 on the dashboard, just use them as the reference for total paid
+
+Student enrollment dashboard
+
+Slider manager
+· HTML
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,16 +36,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 body{background:#f5f5f3;color:#1a1a1a;font-size:14px;height:100vh;overflow:hidden}
-#pd-login{position:fixed;inset:0;background:#f5f5f3;display:flex;align-items:center;justify-content:center;z-index:999}
-.login-box{background:#fff;border-radius:12px;border:1px solid #e5e5e3;padding:32px;width:300px;display:flex;flex-direction:column;gap:12px}
-.login-box h2{font-size:16px;font-weight:600;color:#1a3a2a}
-.login-box p{font-size:12px;color:#888}
-.login-box input{width:100%;padding:8px 10px;border:1px solid #e0e0de;border-radius:6px;font-size:13px}
-.login-box input:focus{outline:none;border-color:#1D9E75}
-.login-box button{padding:10px;background:#1a3a2a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
-.login-box button:hover{background:#0F6E56}
-.login-err{font-size:12px;color:#c0392b;display:none}
-#pd-app{display:none;grid-template-columns:220px 1fr 260px;height:100vh;overflow:hidden}
+#pd-app{display:grid;grid-template-columns:220px 1fr 260px;height:100vh;overflow:hidden}
 .sidebar{background:#fff;border-right:1px solid #e5e5e3;display:flex;flex-direction:column}
 .sh{padding:14px;border-bottom:1px solid #e5e5e3;display:flex;align-items:center;justify-content:space-between}
 .sh strong{font-size:13px}
@@ -105,17 +125,6 @@ input[type=range]{flex:1}
 </style>
 </head>
 <body>
-
-<div id="pd-login">
-  <div class="login-box">
-    <h2>Slider Manager</h2>
-    <p>Pacific Discovery — internal tool</p>
-    <input type="password" id="pd-pw" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
-    <div class="login-err" id="pd-err">Incorrect password</div>
-    <button onclick="doLogin()">Sign in</button>
-  </div>
-</div>
-
 <div id="pd-app">
   <div class="sidebar">
     <div class="sh"><strong>Slides</strong><button class="btn-add" onclick="addSlide()">+ Add slide</button></div>
@@ -139,16 +148,12 @@ input[type=range]{flex:1}
     </div>
   </div>
 </div>
-
 <script>
 const PROXY    = 'https://hubspot-proxy.marketing-4e4.workers.dev';
 const FOLDER   = 'pacific-discovery-slider';
 const CFG_FILE = 'pd-slider-config.json';
-const PASSWORD = 'slider2025'; // ← change this
-
 let slides = [], ai = null, dev = 'desktop', idc = 0;
 window._cfgUrl = null;
-
 function saveLocal(){
   try{ localStorage.setItem('pd_slides', JSON.stringify(slides)); localStorage.setItem('pd_idc', idc); }catch(e){}
 }
@@ -160,22 +165,8 @@ function loadLocal(){
     if(c){ idc = parseInt(c); }
   }catch(e){}
 }
-
-function doLogin(){
-  if(document.getElementById('pd-pw').value === PASSWORD){
-    document.getElementById('pd-login').style.display = 'none';
-    document.getElementById('pd-app').style.display = 'grid';
-    loadLocal();
-    if(slides.length){ ai = 0; }
-    render();
-  } else {
-    document.getElementById('pd-err').style.display = 'block';
-  }
-}
-
 function uid(){ return 'sl' + (idc++); }
 function ns(){ return {id:uid(),title:'Slide title',sub:'Subtitle text',btnText:'Explore now',btnLink:'#',overlayColor:'#000000',overlayOpacity:40,visible:true,desktopUrl:null,mobileUrl:null,desktopName:null,mobileName:null}; }
-
 function addSlide(){ slides.push(ns()); ai = slides.length - 1; saveLocal(); render(); }
 function selSlide(i){ ai = i; render(); }
 function delSlide(i, e){
@@ -203,18 +194,15 @@ function togVis(){
   slides[ai].visible = !slides[ai].visible;
   saveLocal(); renderEditor(); renderSideItem(ai);
 }
-
 function setStat(m, t){ const el=document.getElementById('stat'); el.className='stat '+t; el.textContent=m; }
 function showProg(p){
   const bar=document.getElementById('prog'), fill=document.getElementById('prog-fill');
   bar.style.display='block'; fill.style.width=p+'%';
   if(p>=100) setTimeout(function(){ bar.style.display='none'; }, 800);
 }
-
 async function getFolder(){
   return '210671463784'; // pacific-discovery-slider folder ID
 }
-
 async function hsUpload(blob, name, folderId){
   const fd = new FormData();
   fd.append('file', blob, name);
@@ -225,7 +213,6 @@ async function hsUpload(blob, name, folderId){
   if(!r.ok){ const t=await r.text(); throw new Error('Upload failed ' + r.status + ': ' + t); }
   return (await r.json()).url;
 }
-
 async function uploadImage(type, input){
   if(!input.files||!input.files[0]||ai===null) return;
   const file = input.files[0];
@@ -244,7 +231,6 @@ async function uploadImage(type, input){
     renderEditor(); renderSideItem(ai); renderPreview();
   }catch(err){ showProg(100); setStat('Upload failed: ' + err.message, 'err'); renderEditor(); }
 }
-
 async function saveConfig(){
   const btn = document.getElementById('btn-pub'); btn.disabled = true;
   showProg(10); setStat('Saving…', 'loading');
@@ -257,7 +243,6 @@ async function saveConfig(){
   }catch(err){ showProg(100); setStat('Save failed: ' + err.message, 'err'); }
   btn.disabled = false;
 }
-
 function showGTM(){
   var cfgUrl = window._cfgUrl || 'https://fs.hubspotusercontent.com/hubfs/' + FOLDER + '/' + CFG_FILE;
   var code = '<style>\n'
@@ -347,17 +332,14 @@ function showGTM(){
     + '    }).catch(function(e){console.warn("PD Slider:",e);});\n'
     + '})();\n'
     + '<\/script>';
-
   window._gtmCode = code;
   const m = document.createElement('div'); m.className = 'modal-bg';
   m.innerHTML = '<div class="modal"><h3>GTM Custom HTML tag</h3><p>One-time setup — paste into a <strong>Custom HTML</strong> tag in GTM, trigger on <strong>All Pages</strong>, publish. After that every "Save &amp; publish" here updates the live site automatically.</p><pre>' + code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre><div class="modal-btns"><button class="btn-copy" onclick="doCopy(this)">Copy code</button><button class="btn-close" onclick="this.closest(\'.modal-bg\').remove()">Close</button></div></div>';
   document.body.appendChild(m);
 }
-
 window.doCopy = function(btn){
   navigator.clipboard.writeText(window._gtmCode||'').then(function(){ btn.textContent='Copied!'; setTimeout(function(){ btn.textContent='Copy code'; }, 2000); });
 };
-
 function renderPreview(){
   const f = document.getElementById('pf');
   if(ai===null||!slides[ai]){ f.innerHTML='<div class="pempty">No slide selected</div>'; return; }
@@ -368,14 +350,12 @@ function renderPreview(){
     + '<div class="pov" style="background:rgba('+r+','+g+','+b+','+op+')"></div>'
     + '<div class="pc">'+(s.title?'<div class="pt">'+s.title+'</div>':'')+(s.sub?'<div class="ps">'+s.sub+'</div>':'')+(s.btnText?'<div class="pb2">'+s.btnText+'</div>':'')+'</div>';
 }
-
 function renderSideItem(i){
   const s=slides[i], el=document.getElementById('si-'+i); if(!el) return;
   el.querySelector('.t').textContent = s.title||'Untitled';
   el.querySelector('.s').textContent = s.visible?'Visible':'Hidden';
   el.querySelector('.sl-thumb').innerHTML = s.desktopUrl ? '<img src="'+s.desktopUrl+'" alt="">' : '';
 }
-
 function renderSidebar(){
   const list = document.getElementById('sl-list'); list.innerHTML='';
   slides.forEach(function(s,i){
@@ -386,7 +366,6 @@ function renderSidebar(){
     list.appendChild(d);
   });
 }
-
 function renderEditor(){
   const ed = document.getElementById('editor');
   if(ai===null||!slides[ai]){ ed.innerHTML='<div class="nosl">Add or select a slide to begin</div>'; return; }
@@ -418,8 +397,12 @@ function renderEditor(){
     +'<div class="tr"><span style="font-size:13px">Show on site</span><button class="tog'+(s.visible?' on':'')+'" onclick="togVis()"></button></div>'
     +'</div>';
 }
-
 function render(){ renderSidebar(); renderEditor(); renderPreview(); }
+ 
+// Initialize immediately — no login required
+loadLocal();
+if(slides.length){ ai = 0; }
+render();
 </script>
 </body>
 </html>
