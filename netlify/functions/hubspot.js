@@ -334,24 +334,7 @@ function mergeData(hubspotSeasons, sheetSeasons) {
       })
     };
 
-    // Add sheet-only programs (in sheet but not yet in HubSpot deals)
-    sheetPrograms.forEach(sp => {
-      const exists = merged[seasonKey].programs.some(p => p.hubspotName === sp.programKey);
-      if (!exists) {
-        merged[seasonKey].programs.push({
-          name: sp.programKey,
-          hubspotName: sp.programKey,
-          season: seasonKey,
-          price: null,
-          maxPax: sp.maxPax,
-          targetPax: sp.targetPax,
-          estFuturePax: sp.estFuturePax,
-          actualPax: 0,
-          totalDeals: 0,
-          forecastSales: 0,
-        });
-      }
-    });
+    // Only show programs that exist in HubSpot deals — skip sheet-only programs
   });
 
   return merged;
