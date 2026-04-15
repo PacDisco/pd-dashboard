@@ -469,20 +469,8 @@ async function fetchAndMergeSheetData(data) {
           match.targetPax = sp.targetPax;
           match.estFuture = sp.estFuturePax || 0;
           match.estFuturePax = sp.estFuturePax || 0;
-        } else {
-          // Program exists in sheet but not in HubSpot — add it
-          programs.push({
-            name: sp.displayName,
-            hubspotName: sp.programKey,
-            price: null,
-            maxPax: sp.maxPax,
-            targetPax: sp.targetPax,
-            actualPax: 0,
-            estFuture: sp.estFuturePax || 0,
-            forecastSales: 0,
-            totalDeals: 0,
-          });
         }
+        // Only show programs that exist in HubSpot — skip sheet-only programs
       });
     });
 
