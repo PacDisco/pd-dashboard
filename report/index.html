@@ -884,10 +884,6 @@ function startEdit(cell, programKey, season, field, currentValue) {
 }
 
 async function saveToSheet(programKey, season, field, value) {
-  // Google Apps Script redirects GET to a different origin (googleusercontent.com).
-  // Browsers block reading cross-origin redirect responses.
-  // Solution: use mode 'no-cors' — the request still goes through and updates the sheet,
-  // we just can't read the response. We assume success if no network error.
   const params = new URLSearchParams({
     action: 'update',
     programKey,
@@ -896,14 +892,12 @@ async function saveToSheet(programKey, season, field, value) {
     value: String(value),
   });
   const url = `${GSHEET_API_URL}?${params.toString()}`;
-  try {
-    await fetch(url, { mode: 'no-cors', redirect: 'follow' });
-    // With no-cors we get an opaque response — can't read it.
-    // The request still reaches Apps Script and updates the sheet.
-    return { status: 'ok' };
-  } catch (e) {
-    throw new Error('Network error: ' + e.message);
-  }
+  const resp = await fetch(url);
+  const text = await resp.text();
+  let result;
+  try { result = JSON.parse(text); } catch { result = { status: 'ok' }; }
+  if (result.status === 'error') throw new Error(result.message || 'Save failed');
+  return result;
 }
 
 function updateLocalData(programKey, season, field, newVal) {
