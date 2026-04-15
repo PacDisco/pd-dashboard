@@ -169,10 +169,63 @@ async function fetchAllDeals(token) {
 }
 
 // ═══════════════════════════════════════════
+// CUSTOM OBJECT: Programs (2-58411705)
+// ═══════════════════════════════════════════
+// Fetches program names and tuition prices from the custom "Programs" object.
+// Returns a map: { programName: tuitionPrice }
+
+const PROGRAM_OBJECT_TYPE = '2-58411705';
+
+async function fetchProgramTuitions(token) {
+  const tuitionMap = {};
+  const properties = ['pacific_discovery_program', 'program_tuition'];
+  let after = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const body = { properties, limit: 100 };
+    if (after > 0) body.after = after;
+
+    // Use the list endpoint (not search) for custom objects
+    const resp = await fetch(`${HUBSPOT_API}/crm/v3/objects/${PROGRAM_OBJECT_TYPE}?${new URLSearchParams({
+      limit: '100',
+      properties: properties.join(','),
+      ...(after ? { after: String(after) } : {}),
+    })}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.error(`Program objects fetch error: ${resp.status} ${err}`);
+      break;
+    }
+
+    const result = await resp.json();
+    (result.results || []).forEach(obj => {
+      const props = obj.properties || {};
+      const name = props.pacific_discovery_program;
+      const tuition = parseFloat(props.program_tuition);
+      if (name && !isNaN(tuition) && tuition > 0) {
+        tuitionMap[name] = tuition;
+      }
+    });
+
+    if (result.paging && result.paging.next) {
+      after = result.paging.next.after;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return tuitionMap;
+}
+
+// ═══════════════════════════════════════════
 // AGGREGATION
 // ═══════════════════════════════════════════
 
-function aggregateDeals(deals) {
+function aggregateDeals(deals, tuitionMap = {}) {
   const programs = {};
   const years = getSeasonYears();
 
@@ -218,9 +271,13 @@ function aggregateDeals(deals) {
     }
   });
 
-  // Compute price from deals (use mode — most common price)
+  // Set price: prefer program_tuition from custom object, fall back to deal amount mode
   Object.values(programs).forEach(p => {
-    if (p.prices.length > 0) {
+    // First check the custom object tuition map (keyed by pd_program name)
+    if (tuitionMap[p.hubspotName]) {
+      p.price = tuitionMap[p.hubspotName];
+    } else if (p.prices.length > 0) {
+      // Fallback: mode of deal amounts
       const freq = {};
       p.prices.forEach(pr => { const r = Math.round(pr); freq[r] = (freq[r] || 0) + 1; });
       const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
@@ -323,13 +380,14 @@ export default async (req) => {
   }
 
   try {
-    // Fetch both sources in parallel
-    const [deals, sheetSeasons] = await Promise.all([
+    // Fetch all three sources in parallel
+    const [deals, sheetSeasons, tuitionMap] = await Promise.all([
       fetchAllDeals(token),
       fetchSheetData(),
+      fetchProgramTuitions(token),
     ]);
 
-    const hubspotSeasons = aggregateDeals(deals);
+    const hubspotSeasons = aggregateDeals(deals, tuitionMap);
     const seasons = sheetSeasons ? mergeData(hubspotSeasons, sheetSeasons) : hubspotSeasons;
     const years = getSeasonYears();
 
@@ -337,6 +395,7 @@ export default async (req) => {
       updatedAt: new Date().toISOString(),
       totalDeals: deals.length,
       sheetConnected: !!sheetSeasons,
+      programTuitionsLoaded: Object.keys(tuitionMap).length,
       years,
       seasons,
     }), {
