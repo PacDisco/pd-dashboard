@@ -210,9 +210,20 @@ function buildReport(programs, programToDeals, dealMap) {
     });
   });
 
-  // Sort: programs with actual pax first, then alphabetically
+  // Sort: summer by actual pax then alpha.
+  // Fall & spring: full semesters first, mini semesters at bottom, each group by actual pax then alpha.
   Object.keys(seasons).forEach(s => {
-    seasons[s].programs.sort((a, b) => (b.actualPax - a.actualPax) || a.name.localeCompare(b.name));
+    if (s === 'summer') {
+      seasons[s].programs.sort((a, b) => (b.actualPax - a.actualPax) || a.name.localeCompare(b.name));
+    } else {
+      const isMini = (name) => name.toLowerCase().includes('mini');
+      seasons[s].programs.sort((a, b) => {
+        const aM = isMini(a.name) ? 1 : 0;
+        const bM = isMini(b.name) ? 1 : 0;
+        if (aM !== bM) return aM - bM; // semesters first, minis last
+        return (b.actualPax - a.actualPax) || a.name.localeCompare(b.name);
+      });
+    }
   });
 
   return seasons;
