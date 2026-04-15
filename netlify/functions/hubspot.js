@@ -131,17 +131,13 @@ async function fetchAllDeals(token) {
 
 const PROGRAM_OBJECT_TYPE = '2-58411705';
 
-async function fetchProgramTuitions(token) {
-  const tuitionMap = {};
+async function fetchProgramObjects(token) {
+  const programObjects = [];
   const properties = ['pacific_discovery_program', 'program_tuition'];
   let after = 0;
   let hasMore = true;
 
   while (hasMore) {
-    const body = { properties, limit: 100 };
-    if (after > 0) body.after = after;
-
-    // Use the list endpoint (not search) for custom objects
     const resp = await fetch(`${HUBSPOT_API}/crm/v3/objects/${PROGRAM_OBJECT_TYPE}?${new URLSearchParams({
       limit: '100',
       properties: properties.join(','),
@@ -161,8 +157,11 @@ async function fetchProgramTuitions(token) {
       const props = obj.properties || {};
       const name = props.pacific_discovery_program;
       const tuition = parseFloat(props.program_tuition);
-      if (name && !isNaN(tuition) && tuition > 0) {
-        tuitionMap[name] = tuition;
+      if (name) {
+        programObjects.push({
+          fullName: name,                          // e.g. "2026 Bali Summer Program"
+          tuition: !isNaN(tuition) ? tuition : null,
+        });
       }
     });
 
@@ -173,14 +172,52 @@ async function fetchProgramTuitions(token) {
     }
   }
 
-  return tuitionMap;
+  return programObjects;
+}
+
+// Match a deal's pd_program (e.g. "Bali Summer Program") to a custom object
+// name (e.g. "2026 Bali Summer Program") by checking if the custom object
+// name ends with the pd_program value (after stripping the year prefix).
+function matchProgramObject(pdProgram, programObjects, season) {
+  // Try exact match first (custom object name ends with pd_program)
+  const match = programObjects.find(po => {
+    const stripped = po.fullName.replace(/^\d{4}\s+/, ''); // strip "2026 " prefix
+    return stripped === pdProgram;
+  });
+  if (match) return match;
+
+  // Try fuzzy: custom object name contains pd_program
+  const fuzzy = programObjects.find(po => {
+    const lower = po.fullName.toLowerCase();
+    return lower.includes(pdProgram.toLowerCase());
+  });
+  if (fuzzy) return fuzzy;
+
+  // Try: pd_program is contained in custom object name after adding season context
+  // e.g. pd_program "Central America Semester" → custom "2026 Central America Fall Semester Program"
+  const seasonWord = season === 'spring' ? 'spring' : season === 'fall' ? 'fall' : 'summer';
+  const withSeason = programObjects.find(po => {
+    const lower = po.fullName.toLowerCase();
+    const pdLower = pdProgram.toLowerCase().replace(' semester', '').replace(' program', '').trim();
+    return lower.includes(pdLower) && lower.includes(seasonWord);
+  });
+  return withSeason || null;
+}
+
+// Build lookup maps from program objects
+function buildProgramMaps(programObjects) {
+  const tuitionMap = {};   // pdProgram → tuition
+  const nameMap = {};      // pdProgram → custom object full name
+
+  // These get populated during aggregation via matchProgramObject()
+  return { tuitionMap, nameMap, programObjects };
 }
 
 // ═══════════════════════════════════════════
 // AGGREGATION
 // ═══════════════════════════════════════════
 
-function aggregateDeals(deals, tuitionMap = {}) {
+function aggregateDeals(deals, programObjects = []) {
   const programs = {};
   const years = getSeasonYears();
 
@@ -198,11 +235,14 @@ function aggregateDeals(deals, tuitionMap = {}) {
     const key = `${pdProgram}__${season}`;
 
     if (!programs[key]) {
+      // Match to custom object for display name and tuition
+      const matched = matchProgramObject(pdProgram, programObjects, season);
+
       programs[key] = {
-        name: pdProgram,
-        hubspotName: pdProgram,
+        name: matched ? matched.fullName : pdProgram,  // Use custom object name
+        hubspotName: pdProgram,                         // Keep deal pd_program for sheet matching
         season,
-        price: null,
+        price: matched && matched.tuition ? matched.tuition : null,
         maxPax: 0,
         targetPax: 0,
         actualPax: 0,
@@ -226,13 +266,9 @@ function aggregateDeals(deals, tuitionMap = {}) {
     }
   });
 
-  // Set price: prefer program_tuition from custom object, fall back to deal amount mode
+  // Set price: if custom object tuition was already set, keep it; otherwise fall back to deal amount mode
   Object.values(programs).forEach(p => {
-    // First check the custom object tuition map (keyed by pd_program name)
-    if (tuitionMap[p.hubspotName]) {
-      p.price = tuitionMap[p.hubspotName];
-    } else if (p.prices.length > 0) {
-      // Fallback: mode of deal amounts
+    if (!p.price && p.prices.length > 0) {
       const freq = {};
       p.prices.forEach(pr => { const r = Math.round(pr); freq[r] = (freq[r] || 0) + 1; });
       const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
@@ -336,13 +372,13 @@ export default async (req) => {
 
   try {
     // Fetch all three sources in parallel
-    const [deals, sheetSeasons, tuitionMap] = await Promise.all([
+    const [deals, sheetSeasons, programObjects] = await Promise.all([
       fetchAllDeals(token),
       fetchSheetData(),
-      fetchProgramTuitions(token),
+      fetchProgramObjects(token),
     ]);
 
-    const hubspotSeasons = aggregateDeals(deals, tuitionMap);
+    const hubspotSeasons = aggregateDeals(deals, programObjects);
     const seasons = sheetSeasons ? mergeData(hubspotSeasons, sheetSeasons) : hubspotSeasons;
     const years = getSeasonYears();
 
@@ -350,7 +386,7 @@ export default async (req) => {
       updatedAt: new Date().toISOString(),
       totalDeals: deals.length,
       sheetConnected: !!sheetSeasons,
-      programTuitionsLoaded: Object.keys(tuitionMap).length,
+      programObjectsLoaded: programObjects.length,
       years,
       seasons,
     }), {
