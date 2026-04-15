@@ -884,18 +884,14 @@ function startEdit(cell, programKey, season, field, currentValue) {
 }
 
 async function saveToSheet(programKey, season, field, value) {
-  const params = new URLSearchParams({
-    action: 'update',
-    programKey,
-    season,
-    field,
-    value: String(value),
+  // Route writes through Netlify serverless proxy to avoid CORS issues
+  // with Apps Script's cross-origin redirects
+  const resp = await fetch('/api/sheets-update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ programKey, season, field, value: Number(value) }),
   });
-  const url = `${GSHEET_API_URL}?${params.toString()}`;
-  const resp = await fetch(url);
-  const text = await resp.text();
-  let result;
-  try { result = JSON.parse(text); } catch { result = { status: 'ok' }; }
+  const result = await resp.json();
   if (result.status === 'error') throw new Error(result.message || 'Save failed');
   return result;
 }
