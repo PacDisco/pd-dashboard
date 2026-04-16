@@ -94,9 +94,10 @@ function stageBadge(stage) {
 }
 
 function summaryFor(deals) {
-  const totalAmount = deals.reduce((s, d) => s + d.amount, 0);
-  const totalPaid = deals.reduce((s, d) => s + d.totalPaid, 0);
-  return { count: deals.length, totalAmount, totalPaid, outstanding: totalAmount - totalPaid };
+  const counted = deals.filter(d => !d.excludeFromCount);
+  const totalAmount = counted.reduce((s, d) => s + d.amount, 0);
+  const totalPaid = counted.reduce((s, d) => s + d.totalPaid, 0);
+  return { count: counted.length, totalAmount, totalPaid, outstanding: totalAmount - totalPaid };
 }
 
 // ═══════════════════════════════════════════
@@ -149,9 +150,11 @@ function renderSubTabs(deals, parentId) {
   }
   var sortedPrograms = Object.entries(byProgram).sort(function(a, b) { return b[1].length - a[1].length; });
 
-  var buttons = '<button class="sub-tab-btn sub-tab-active" data-subtab="' + parentId + '_all">All <span class="ml-1 text-xs opacity-70">' + deals.length + '</span></button>';
+  var allCountedDeals = deals.filter(function(d) { return !d.excludeFromCount; });
+  var buttons = '<button class="sub-tab-btn sub-tab-active" data-subtab="' + parentId + '_all">All <span class="ml-1 text-xs opacity-70">' + allCountedDeals.length + '</span></button>';
   for (var j = 0; j < sortedPrograms.length; j++) {
-    buttons += '<button class="sub-tab-btn" data-subtab="' + parentId + '_p' + j + '">' + sortedPrograms[j][0] + ' <span class="ml-1 text-xs opacity-70">' + sortedPrograms[j][1].length + '</span></button>';
+    var progCounted = sortedPrograms[j][1].filter(function(d) { return !d.excludeFromCount; });
+    buttons += '<button class="sub-tab-btn" data-subtab="' + parentId + '_p' + j + '">' + sortedPrograms[j][0] + ' <span class="ml-1 text-xs opacity-70">' + progCounted.length + '</span></button>';
   }
 
   var allSummary = summaryFor(deals);
@@ -187,7 +190,8 @@ function renderDashboard(data) {
     var active = i === 0 ? ' tab-btn-active' : '';
     var pastAttr = isPast ? ' data-past="true"' : '';
     var pastLabel = isPast ? ' (Past)' : '';
-    tabHtml += '<button class="tab-btn' + active + '" data-tab="tab_' + i + '"' + pastAttr + '>' + tab.key + pastLabel + ' <span class="ml-1 text-xs bg-white bg-opacity-30 px-1.5 py-0.5 rounded-full">' + tab.deals.length + '</span></button>';
+    var badgeCount = typeof tab.countedDeals === 'number' ? tab.countedDeals : tab.deals.length;
+    tabHtml += '<button class="tab-btn' + active + '" data-tab="tab_' + i + '"' + pastAttr + '>' + tab.key + pastLabel + ' <span class="ml-1 text-xs bg-white bg-opacity-30 px-1.5 py-0.5 rounded-full">' + badgeCount + '</span></button>';
   }
   tabBar.innerHTML = tabHtml;
 
