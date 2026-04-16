@@ -470,10 +470,9 @@
     <div style="background: white;">
         <div class="container" style="padding: 0;">
             <div class="tab-navigation">
-                <button class="tab-button active" onclick="switchTab('executive')">Executive Summary</button>
-                <button class="tab-button" onclick="switchTab('channels')">Channel Comparison</button>
-                <button class="tab-button" onclick="switchTab('trends')">Monthly Trends</button>
-                <button class="tab-button" onclick="switchTab('funnel')">Funnel Analysis</button>
+                <button class="tab-button active" onclick="switchTab('overview')">FY Overview</button>
+                <button class="tab-button" onclick="switchTab('monthly')">Monthly Breakdown</button>
+                <button class="tab-button" onclick="switchTab('comparison')">Channel Comparison</button>
             </div>
         </div>
     </div>
@@ -482,24 +481,19 @@
     <div class="container">
         <div id="errorContainer"></div>
 
-        <!-- Tab 1: Executive Summary -->
-        <div id="executive" class="tab-content active">
-            <div id="executiveContent"></div>
+        <!-- Tab 1: FY Overview -->
+        <div id="overview" class="tab-content active">
+            <div id="overviewContent"></div>
         </div>
 
-        <!-- Tab 2: Channel Comparison -->
-        <div id="channels" class="tab-content">
-            <div id="channelsContent"></div>
+        <!-- Tab 2: Monthly Breakdown -->
+        <div id="monthly" class="tab-content">
+            <div id="monthlyContent"></div>
         </div>
 
-        <!-- Tab 3: Monthly Trends -->
-        <div id="trends" class="tab-content">
-            <div id="trendsContent"></div>
-        </div>
-
-        <!-- Tab 4: Funnel Analysis -->
-        <div id="funnel" class="tab-content">
-            <div id="funnelContent"></div>
+        <!-- Tab 3: Channel Comparison -->
+        <div id="comparison" class="tab-content">
+            <div id="comparisonContent"></div>
         </div>
     </div>
 
@@ -860,10 +854,9 @@
 
         function updateDashboard() {
             clearCharts();
-            renderExecutiveSummary();
+            renderFYOverview();
+            renderMonthlyBreakdown();
             renderChannelComparison();
-            renderMonthlyTrends();
-            renderFunnelAnalysis();
         }
 
         function clearCharts() {
@@ -875,13 +868,15 @@
             charts = {};
         }
 
-        function renderExecutiveSummary() {
+        function renderFYOverview() {
             const fyData = dashboardData.sales[currentYear];
             if (!fyData) { showError('No data for ' + currentYear); return; }
             const salesData = fyData.sources;
-            const months = fyData.months; // ['Apr','May',...,'Feb','Mar']
+            const spendData = fyData.spend;
+            const leadsData = fyData.leads;
+            const months = fyData.months;
 
-            // Auto-detect active months (find last month with any data)
+            // Auto-detect active months
             let lastActiveMonth = 11;
             if (currentYear !== 'FY2024/25') {
                 lastActiveMonth = 0;
@@ -890,50 +885,66 @@
                     if (hasData) lastActiveMonth = idx;
                 });
                 lastActiveMonth = Math.max(lastActiveMonth, 0);
-                if (lastActiveMonth === 0 && !Object.values(salesData).some(src => (src[months[0]] || 0) > 0)) {
-                    // No data at all for this FY
-                }
             }
             const displayMonths = months.slice(0, lastActiveMonth + 1);
 
+            // Calculate KPIs
             const totalSales = Object.keys(salesData).reduce((sum, source) => {
                 return sum + displayMonths.reduce((m, month) => m + (salesData[source][month] || 0), 0);
             }, 0);
 
-            let topSource = '';
-            let topValue = 0;
-            Object.keys(salesData).forEach(source => {
-                const sourceTotal = displayMonths.reduce((sum, month) => sum + (salesData[source][month] || 0), 0);
-                if (sourceTotal > topValue) {
-                    topValue = sourceTotal;
-                    topSource = source;
-                }
-            });
+            const totalSpend = Object.keys(spendData).reduce((sum, source) => {
+                return sum + displayMonths.reduce((m, month) => m + (spendData[source][month] || 0), 0);
+            }, 0);
 
-            const avgPerMonth = displayMonths.length > 0 ? totalSales / displayMonths.length : 0;
-            const totalTraffic = dashboardData.direct.totals.traffic + dashboardData.organic.totals.traffic;
+            const totalLeads = Object.keys(leadsData).reduce((sum, source) => {
+                return sum + displayMonths.reduce((m, month) => m + (leadsData[source][month] || 0), 0);
+            }, 0);
+
+            const costPerSale = totalSales > 0 ? (totalSpend / totalSales).toFixed(2) : 0;
+            const leadToSaleConv = totalLeads > 0 ? ((totalSales / totalLeads) * 100).toFixed(1) : 0;
+            const avgSalesPerMonth = displayMonths.length > 0 ? (totalSales / displayMonths.length).toFixed(0) : 0;
+
+            // Source breakdown
+            const sourceBreakdown = {};
+            Object.keys(salesData).forEach(source => {
+                const sales = displayMonths.reduce((sum, month) => sum + (salesData[source][month] || 0), 0);
+                const spend = displayMonths.reduce((sum, month) => sum + (spendData[source][month] || 0), 0);
+                const leads = displayMonths.reduce((sum, month) => sum + (leadsData[source][month] || 0), 0);
+                sourceBreakdown[source] = { sales, spend, leads };
+            });
 
             let html = `
                 <div class="kpi-grid">
                     <div class="kpi-card">
                         <div class="kpi-label">Total Sales</div>
                         <div class="kpi-value">${formatNumber(totalSales)}</div>
-                        <div class="kpi-detail">${displayMonths.length >= 12 ? 'Full FY' : displayMonths[0] + '–' + displayMonths[displayMonths.length-1] + ' (' + displayMonths.length + ' months)'}</div>
+                        <div class="kpi-detail">${displayMonths.length >= 12 ? 'Full FY' : displayMonths.length + ' months'}</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Spend</div>
+                        <div class="kpi-value">${formatCurrency(totalSpend)}</div>
+                        <div class="kpi-detail">All channels</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Cost per Sale</div>
+                        <div class="kpi-value">${formatCurrency(costPerSale)}</div>
+                        <div class="kpi-detail">Spend ÷ Sales</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Leads</div>
+                        <div class="kpi-value">${formatNumber(totalLeads)}</div>
+                        <div class="kpi-detail">All sources</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Lead→Sale Conv %</div>
+                        <div class="kpi-value">${formatPercent(leadToSaleConv)}</div>
+                        <div class="kpi-detail">Leads to Sales</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label">Avg Sales/Month</div>
-                        <div class="kpi-value">${formatNumber(Math.round(avgPerMonth))}</div>
+                        <div class="kpi-value">${formatNumber(avgSalesPerMonth)}</div>
                         <div class="kpi-detail">Monthly average</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Website Traffic</div>
-                        <div class="kpi-value">${formatNumber(totalTraffic)}</div>
-                        <div class="kpi-detail">Direct + Organic</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Top Lead Source</div>
-                        <div class="kpi-value" style="font-size: 1.25rem;">${topSource}</div>
-                        <div class="kpi-detail">${formatNumber(topValue)} leads</div>
                     </div>
                 </div>
 
@@ -945,66 +956,286 @@
                         </div>
                     </div>
                     <div class="chart-container">
-                        <div class="chart-title">Lead Source Distribution</div>
+                        <div class="chart-title">Lead Source Share %</div>
                         <div class="chart-wrapper">
                             <canvas id="chart-source-share"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-container full-width">
-                        <div class="chart-title">Monthly Sales Trend</div>
-                        <div class="chart-wrapper large">
-                            <canvas id="chart-monthly-trend"></canvas>
                         </div>
                     </div>
                 </div>
 
                 <div class="table-container">
-                    <div class="chart-title">Sales Breakdown by Source & Month</div>
+                    <div class="chart-title">Lead Source Performance</div>
                     <table class="data-table">
-                        <thead><tr><th>Lead Source</th>${displayMonths.map(m => `<th class="numeric">${m}</th>`).join('')}<th class="numeric">Total</th><th class="numeric">Share %</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Lead Source</th>
+                                <th class="numeric">Sales</th>
+                                <th class="numeric">Spend</th>
+                                <th class="numeric">Leads</th>
+                                <th class="numeric">Cost/Sale</th>
+                                <th class="numeric">Lead→Sale %</th>
+                            </tr>
+                        </thead>
                         <tbody>
             `;
 
+            Object.keys(sourceBreakdown).forEach(source => {
+                const data = sourceBreakdown[source];
+                const costPerSaleSource = data.sales > 0 ? (data.spend / data.sales).toFixed(2) : 0;
+                const convSource = data.leads > 0 ? ((data.sales / data.leads) * 100).toFixed(1) : 0;
+                html += `<tr>
+                    <td>${source}</td>
+                    <td class="numeric">${formatNumber(data.sales)}</td>
+                    <td class="numeric">${formatCurrency(data.spend)}</td>
+                    <td class="numeric">${formatNumber(data.leads)}</td>
+                    <td class="numeric">${formatCurrency(costPerSaleSource)}</td>
+                    <td class="numeric">${formatPercent(convSource)}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+
+            document.getElementById('overviewContent').innerHTML = html;
+
+            renderSalesBySourceChart(sourceBreakdown);
+            renderSourceShareChart(sourceBreakdown);
+        }
+
+        function renderMonthlyBreakdown() {
+            const fyData = dashboardData.sales[currentYear];
+            if (!fyData) { showError('No data for ' + currentYear); return; }
+
+            const salesData = fyData.sources;
+            const spendData = fyData.spend;
+            const leadsData = fyData.leads;
+            const months = fyData.months;
+
+            // Auto-detect active months
+            let lastActiveMonth = 11;
+            if (currentYear !== 'FY2024/25') {
+                lastActiveMonth = 0;
+                months.forEach((m, idx) => {
+                    const hasData = Object.values(salesData).some(src => (src[m] || 0) > 0);
+                    if (hasData) lastActiveMonth = idx;
+                });
+                lastActiveMonth = Math.max(lastActiveMonth, 0);
+            }
+            const displayMonths = months.slice(0, lastActiveMonth + 1);
+
+            // Build stacked bar data
+            const stackedData = {};
             Object.keys(salesData).forEach(source => {
-                let sourceTotal = 0;
+                stackedData[source] = {};
+                displayMonths.forEach(month => {
+                    stackedData[source][month] = salesData[source][month] || 0;
+                });
+            });
+
+            // Build monthly totals and spend
+            const monthlyTotals = {};
+            const monthlySpend = {};
+            displayMonths.forEach(month => {
+                monthlyTotals[month] = 0;
+                monthlySpend[month] = 0;
+                Object.keys(salesData).forEach(source => {
+                    monthlyTotals[month] += salesData[source][month] || 0;
+                    monthlySpend[month] += spendData[source][month] || 0;
+                });
+            });
+
+            const sources = Object.keys(salesData);
+
+            let html = `
+                <div class="chart-grid">
+                    <div class="chart-container full-width">
+                        <div class="chart-title">Monthly Sales by Lead Source (Stacked)</div>
+                        <div class="chart-wrapper large">
+                            <canvas id="chart-stacked-monthly"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container full-width">
+                        <div class="chart-title">Monthly Sales & Spend Trend</div>
+                        <div class="chart-wrapper large">
+                            <canvas id="chart-sales-spend-trend"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Monthly breakdown tables
+            html += `
+                <div class="table-container">
+                    <div class="chart-title">Monthly Sales Breakdown</div>
+                    <table class="data-table">
+                        <thead><tr><th>Lead Source</th>${displayMonths.map(m => `<th class="numeric">${m}</th>`).join('')}<th class="numeric">Total</th></tr></thead>
+                        <tbody>
+            `;
+
+            sources.forEach(source => {
+                let total = 0;
                 html += `<tr><td>${source}</td>`;
                 displayMonths.forEach(month => {
                     const val = salesData[source][month] || 0;
-                    sourceTotal += val;
+                    total += val;
                     html += `<td class="numeric">${formatNumber(val)}</td>`;
                 });
-                const sharePercent = totalSales > 0 ? ((sourceTotal / totalSales) * 100).toFixed(1) : 0;
-                html += `<td class="numeric"><strong>${formatNumber(sourceTotal)}</strong></td><td class="numeric">${sharePercent}%</td></tr>`;
+                html += `<td class="numeric"><strong>${formatNumber(total)}</strong></td></tr>`;
+            });
+
+            html += '<tr style="background-color: #f7fafc; font-weight: bold;"><td>Total</td>';
+            displayMonths.forEach(month => {
+                html += `<td class="numeric">${formatNumber(monthlyTotals[month])}</td>`;
+            });
+            const totalAll = Object.values(monthlyTotals).reduce((a, b) => a + b, 0);
+            html += `<td class="numeric">${formatNumber(totalAll)}</td></tr></tbody></table>
+                </div>
+
+                <div class="table-container">
+                    <div class="chart-title">Monthly Spend Breakdown</div>
+                    <table class="data-table">
+                        <thead><tr><th>Lead Source</th>${displayMonths.map(m => `<th class="numeric">${m}</th>`).join('')}<th class="numeric">Total</th></tr></thead>
+                        <tbody>
+            `;
+
+            sources.forEach(source => {
+                let total = 0;
+                html += `<tr><td>${source}</td>`;
+                displayMonths.forEach(month => {
+                    const val = spendData[source][month] || 0;
+                    total += val;
+                    html += `<td class="numeric">${formatCurrency(val)}</td>`;
+                });
+                html += `<td class="numeric"><strong>${formatCurrency(total)}</strong></td></tr>`;
+            });
+
+            html += '<tr style="background-color: #f7fafc; font-weight: bold;"><td>Total</td>';
+            displayMonths.forEach(month => {
+                html += `<td class="numeric">${formatCurrency(monthlySpend[month])}</td>`;
+            });
+            const totalSpendAll = Object.values(monthlySpend).reduce((a, b) => a + b, 0);
+            html += `<td class="numeric">${formatCurrency(totalSpendAll)}</td></tr></tbody></table>
+                </div>
+
+                <div class="table-container">
+                    <div class="chart-title">Monthly Leads Breakdown</div>
+                    <table class="data-table">
+                        <thead><tr><th>Lead Source</th>${displayMonths.map(m => `<th class="numeric">${m}</th>`).join('')}<th class="numeric">Total</th></tr></thead>
+                        <tbody>
+            `;
+
+            sources.forEach(source => {
+                let total = 0;
+                html += `<tr><td>${source}</td>`;
+                displayMonths.forEach(month => {
+                    const val = leadsData[source][month] || 0;
+                    total += val;
+                    html += `<td class="numeric">${formatNumber(val)}</td>`;
+                });
+                html += `<td class="numeric"><strong>${formatNumber(total)}</strong></td></tr>`;
             });
 
             html += '<tr style="background-color: #f7fafc; font-weight: bold;"><td>Total</td>';
             displayMonths.forEach(month => {
                 let monthTotal = 0;
-                Object.keys(salesData).forEach(source => {
-                    monthTotal += salesData[source][month] || 0;
+                sources.forEach(source => {
+                    monthTotal += leadsData[source][month] || 0;
                 });
                 html += `<td class="numeric">${formatNumber(monthTotal)}</td>`;
             });
-            html += `<td class="numeric">${formatNumber(totalSales)}</td><td class="numeric">100%</td></tr></tbody></table></div>`;
+            const totalLeadsAll = sources.reduce((sum, source) =>
+                sum + displayMonths.reduce((m, month) => m + (leadsData[source][month] || 0), 0), 0);
+            html += `<td class="numeric">${formatNumber(totalLeadsAll)}</td></tr></tbody></table>
+                </div>
+            `;
 
-            document.getElementById('executiveContent').innerHTML = html;
+            document.getElementById('monthlyContent').innerHTML = html;
 
-            renderSalesBySourceChart(salesData, displayMonths);
-            renderSourceShareChart(salesData, displayMonths);
-            renderMonthlyTrendChart(salesData, displayMonths);
-        }
+            // Stacked bar chart
+            const stackedCtx = document.getElementById('chart-stacked-monthly').getContext('2d');
+            const datasets = sources.map((source, idx) => ({
+                label: source,
+                data: displayMonths.map(m => salesData[source][m] || 0),
+                backgroundColor: COLORS[idx % COLORS.length]
+            }));
 
-        function renderSalesBySourceChart(salesData, displayMonths) {
-            const sourceData = {};
-            Object.keys(salesData).forEach(source => {
-                let total = 0;
-                displayMonths.forEach(month => {
-                    total += salesData[source][month] || 0;
-                });
-                sourceData[source] = total;
+            charts['stackedMonthly'] = new Chart(stackedCtx, {
+                type: 'bar',
+                data: {
+                    labels: displayMonths,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, ticks: { callback: v => formatNumber(v) } }
+                    },
+                    plugins: { legend: { position: 'top' } }
+                }
             });
 
-            const sortedSources = Object.keys(sourceData).sort((a, b) => sourceData[b] - sourceData[a]);
+            // Sales & Spend trend
+            const trendCtx = document.getElementById('chart-sales-spend-trend').getContext('2d');
+            charts['salesSpendTrend'] = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: displayMonths,
+                    datasets: [
+                        {
+                            label: 'Total Sales',
+                            data: displayMonths.map(m => monthlyTotals[m]),
+                            borderColor: '#4299e1',
+                            backgroundColor: 'rgba(66, 153, 225, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y',
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#4299e1'
+                        },
+                        {
+                            label: 'Total Spend ($)',
+                            data: displayMonths.map(m => monthlySpend[m]),
+                            borderColor: '#ed8936',
+                            backgroundColor: 'rgba(237, 137, 54, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y1',
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#ed8936'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: true, position: 'top' } },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Sales' },
+                            ticks: { callback: v => formatNumber(v) }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Spend ($)' },
+                            grid: { drawOnChartArea: false },
+                            ticks: { callback: v => formatCurrency(v) }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderSalesBySourceChart(sourceBreakdown) {
+            const sortedSources = Object.keys(sourceBreakdown)
+                .sort((a, b) => sourceBreakdown[b].sales - sourceBreakdown[a].sales);
+            const values = sortedSources.map(s => sourceBreakdown[s].sales);
 
             const ctx = document.getElementById('chart-sales-by-source').getContext('2d');
             charts['salesBySource'] = new Chart(ctx, {
@@ -1013,7 +1244,7 @@
                     labels: sortedSources,
                     datasets: [{
                         label: 'Sales',
-                        data: sortedSources.map(s => sourceData[s]),
+                        data: values,
                         backgroundColor: COLORS.slice(0, sortedSources.length),
                         borderWidth: 0
                     }]
@@ -1033,23 +1264,17 @@
             });
         }
 
-        function renderSourceShareChart(salesData, displayMonths) {
-            const sourceData = {};
-            Object.keys(salesData).forEach(source => {
-                let total = 0;
-                displayMonths.forEach(month => {
-                    total += salesData[source][month] || 0;
-                });
-                sourceData[source] = total;
-            });
+        function renderSourceShareChart(sourceBreakdown) {
+            const sources = Object.keys(sourceBreakdown);
+            const values = sources.map(s => sourceBreakdown[s].sales);
 
             const ctx = document.getElementById('chart-source-share').getContext('2d');
             charts['sourceShare'] = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: Object.keys(sourceData),
+                    labels: sources,
                     datasets: [{
-                        data: Object.values(sourceData),
+                        data: values,
                         backgroundColor: COLORS,
                         borderColor: 'white',
                         borderWidth: 2
@@ -1074,273 +1299,139 @@
             });
         }
 
-        function renderMonthlyTrendChart(salesData, displayMonths) {
-            const monthlyData = {};
-            displayMonths.forEach(month => {
-                monthlyData[month] = 0;
-                Object.keys(salesData).forEach(source => {
-                    monthlyData[month] += salesData[source][month] || 0;
-                });
-            });
-
-            const ctx = document.getElementById('chart-monthly-trend').getContext('2d');
-            charts['monthlyTrend'] = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: displayMonths,
-                    datasets: [{
-                        label: 'Sales',
-                        data: displayMonths.map(m => monthlyData[m]),
-                        backgroundColor: '#4299e1',
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: { callback: v => formatNumber(v) }
-                        }
-                    }
-                }
-            });
-        }
-
         function renderChannelComparison() {
-            let html = '<div class="channel-grid">';
+            const fyData = dashboardData.sales[currentYear];
+            if (!fyData) { showError('No data for ' + currentYear); return; }
 
-            const channels = [
-                { name: 'Direct Web Traffic', data: dashboardData.direct },
-                { name: 'Organic Web Traffic', data: dashboardData.organic }
-            ];
+            const salesData = fyData.sources;
+            const spendData = fyData.spend;
+            const leadsData = fyData.leads;
+            const months = fyData.months;
 
-            channels.forEach(channel => {
-                const traffic = channel.data.totals.traffic || 0;
-                const leads = channel.data.totals.leads || 0;
-                const opps = channel.data.totals.opps || 0;
-                const clients = channel.data.totals.clients || 0;
-                const leadToClient = clients > 0 ? ((leads / clients) * 100).toFixed(1) : 0;
+            // Auto-detect active months
+            let lastActiveMonth = 11;
+            if (currentYear !== 'FY2024/25') {
+                lastActiveMonth = 0;
+                months.forEach((m, idx) => {
+                    const hasData = Object.values(salesData).some(src => (src[m] || 0) > 0);
+                    if (hasData) lastActiveMonth = idx;
+                });
+                lastActiveMonth = Math.max(lastActiveMonth, 0);
+            }
+            const displayMonths = months.slice(0, lastActiveMonth + 1);
 
-                html += `
-                    <div class="channel-card">
-                        <div class="channel-name">${channel.name}</div>
-                        <div class="channel-metric">
-                            <span class="channel-metric-label">Annual Traffic</span>
-                            <span class="channel-metric-value">${formatNumber(traffic)}</span>
-                        </div>
-                        <div class="channel-metric">
-                            <span class="channel-metric-label">Total Leads</span>
-                            <span class="channel-metric-value">${formatNumber(leads)}</span>
-                        </div>
-                        <div class="channel-metric">
-                            <span class="channel-metric-label">Opportunities</span>
-                            <span class="channel-metric-value">${formatNumber(opps)}</span>
-                        </div>
-                        <div class="channel-metric">
-                            <span class="channel-metric-label">Clients</span>
-                            <span class="channel-metric-value">${formatNumber(clients)}</span>
-                        </div>
-                        <div class="channel-metric">
-                            <span class="channel-metric-label">Lead-to-Client</span>
-                            <span class="channel-metric-value">${leadToClient}%</span>
-                        </div>
-                    </div>
-                `;
+            // Build source comparison data
+            const sourceData = {};
+            Object.keys(salesData).forEach(source => {
+                const sales = displayMonths.reduce((sum, m) => sum + (salesData[source][m] || 0), 0);
+                const spend = displayMonths.reduce((sum, m) => sum + (spendData[source][m] || 0), 0);
+                const leads = displayMonths.reduce((sum, m) => sum + (leadsData[source][m] || 0), 0);
+                const costPerLead = leads > 0 ? (spend / leads).toFixed(2) : 0;
+                const costPerSale = sales > 0 ? (spend / sales).toFixed(2) : 0;
+                const leadToSaleConv = leads > 0 ? ((sales / leads) * 100).toFixed(1) : 0;
+
+                sourceData[source] = { sales, spend, leads, costPerLead, costPerSale, leadToSaleConv };
             });
 
-            html += '</div><div class="chart-grid">';
-            html += '<div class="chart-container"><div class="chart-title">Traffic by Channel</div><div class="chart-wrapper"><canvas id="chart-traffic-by-channel"></canvas></div></div>';
-            html += '<div class="chart-container"><div class="chart-title">Conversion Rates by Channel</div><div class="chart-wrapper"><canvas id="chart-conversion-rates"></canvas></div></div>';
-            html += '</div>';
+            const sources = Object.keys(sourceData);
 
-            document.getElementById('channelsContent').innerHTML = html;
-
-            const ctx1 = document.getElementById('chart-traffic-by-channel').getContext('2d');
-            charts['trafficByChannel'] = new Chart(ctx1, {
-                type: 'bar',
-                data: {
-                    labels: ['Direct Web', 'Organic Web'],
-                    datasets: [{
-                        label: 'Traffic',
-                        data: [dashboardData.direct.totals.traffic, dashboardData.organic.totals.traffic],
-                        backgroundColor: ['#4299e1', '#48bb78'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: { beginAtZero: true, ticks: { callback: v => formatNumber(v) } }
-                    }
-                }
-            });
-
-            const directLeadConv = dashboardData.direct.totals.traffic > 0 ?
-                ((dashboardData.direct.totals.leads / dashboardData.direct.totals.traffic) * 100).toFixed(1) : 0;
-            const organicLeadConv = dashboardData.organic.totals.traffic > 0 ?
-                ((dashboardData.organic.totals.leads / dashboardData.organic.totals.traffic) * 100).toFixed(1) : 0;
-
-            const ctx2 = document.getElementById('chart-conversion-rates').getContext('2d');
-            charts['conversionRates'] = new Chart(ctx2, {
-                type: 'bar',
-                data: {
-                    labels: ['Direct Web', 'Organic Web'],
-                    datasets: [{
-                        label: 'Traffic to Lead %',
-                        data: [directLeadConv, organicLeadConv],
-                        backgroundColor: '#ed8936',
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: { beginAtZero: true, ticks: { callback: v => v.toFixed(1) + '%' } }
-                    }
-                }
-            });
-        }
-
-        function renderMonthlyTrends() {
             let html = `
                 <div class="chart-grid">
                     <div class="chart-container full-width">
-                        <div class="chart-title">Direct Web Traffic - Monthly Trend</div>
+                        <div class="chart-title">Sales vs Leads vs Spend by Channel</div>
                         <div class="chart-wrapper large">
-                            <canvas id="chart-direct-trend"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-container full-width">
-                        <div class="chart-title">Organic Web Traffic - Monthly Trend</div>
-                        <div class="chart-wrapper large">
-                            <canvas id="chart-organic-trend"></canvas>
+                            <canvas id="chart-channel-comparison"></canvas>
                         </div>
                     </div>
                 </div>
+
+                <div class="table-container">
+                    <div class="chart-title">Channel Comparison Details</div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th class="numeric">Sales</th>
+                                <th class="numeric">Leads</th>
+                                <th class="numeric">Spend</th>
+                                <th class="numeric">Cost/Lead</th>
+                                <th class="numeric">Cost/Sale</th>
+                                <th class="numeric">Lead→Sale %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
             `;
 
-            document.getElementById('trendsContent').innerHTML = html;
+            sources.forEach(source => {
+                const data = sourceData[source];
+                html += `<tr>
+                    <td><strong>${source}</strong></td>
+                    <td class="numeric">${formatNumber(data.sales)}</td>
+                    <td class="numeric">${formatNumber(data.leads)}</td>
+                    <td class="numeric">${formatCurrency(data.spend)}</td>
+                    <td class="numeric">${formatCurrency(data.costPerLead)}</td>
+                    <td class="numeric">${formatCurrency(data.costPerSale)}</td>
+                    <td class="numeric">${formatPercent(data.leadToSaleConv)}</td>
+                </tr>`;
+            });
 
-            renderChannelTrendChart('direct', dashboardData.direct.monthly);
-            renderChannelTrendChart('organic', dashboardData.organic.monthly);
-        }
+            html += '</tbody></table></div>';
 
-        function renderChannelTrendChart(channelKey, monthlyData) {
-            if (!monthlyData || monthlyData.length === 0) return;
+            document.getElementById('comparisonContent').innerHTML = html;
 
-            const months = monthlyData.map(m => m.month || '');
-            const traffic = monthlyData.map(m => m.traffic || 0);
-            const leads = monthlyData.map(m => m.leads || 0);
-
-            const ctx = document.getElementById(`chart-${channelKey}-trend`).getContext('2d');
-            charts[`${channelKey}Trend`] = new Chart(ctx, {
-                type: 'line',
+            // Grouped bar chart
+            const ctx = document.getElementById('chart-channel-comparison').getContext('2d');
+            charts['channelComparison'] = new Chart(ctx, {
+                type: 'bar',
                 data: {
-                    labels: months,
+                    labels: sources,
                     datasets: [
                         {
-                            label: 'Traffic',
-                            data: traffic,
-                            borderColor: '#4299e1',
-                            backgroundColor: 'rgba(66, 153, 225, 0.1)',
-                            borderWidth: 2,
-                            yAxisID: 'y',
-                            tension: 0.3
+                            label: 'Sales',
+                            data: sources.map(s => sourceData[s].sales),
+                            backgroundColor: '#4299e1',
+                            order: 1
                         },
                         {
                             label: 'Leads',
-                            data: leads,
-                            borderColor: '#48bb78',
-                            backgroundColor: 'rgba(72, 187, 120, 0.1)',
-                            borderWidth: 2,
+                            data: sources.map(s => sourceData[s].leads),
+                            backgroundColor: '#48bb78',
+                            order: 1
+                        },
+                        {
+                            label: 'Spend ($)',
+                            data: sources.map(s => sourceData[s].spend),
+                            backgroundColor: '#ed8936',
                             yAxisID: 'y1',
-                            tension: 0.3
+                            order: 2
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { display: true } },
+                    plugins: { legend: { display: true, position: 'top' } },
                     scales: {
                         y: {
                             type: 'linear',
                             display: true,
                             position: 'left',
-                            title: { display: true, text: 'Traffic' },
+                            title: { display: true, text: 'Sales & Leads' },
                             ticks: { callback: v => formatNumber(v) }
                         },
                         y1: {
                             type: 'linear',
                             display: true,
                             position: 'right',
-                            title: { display: true, text: 'Leads' },
+                            title: { display: true, text: 'Spend ($)' },
                             grid: { drawOnChartArea: false },
-                            ticks: { callback: v => formatNumber(v) }
+                            ticks: { callback: v => formatCurrency(v) }
                         }
                     }
                 }
             });
         }
 
-        function renderFunnelAnalysis() {
-            let html = `
-                <div class="chart-grid">
-                    <div class="chart-container">
-                        <div class="chart-title">Direct Web Traffic Funnel</div>
-                        <div class="chart-wrapper large">
-                            <canvas id="chart-direct-funnel"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-container">
-                        <div class="chart-title">Organic Web Traffic Funnel</div>
-                        <div class="chart-wrapper large">
-                            <canvas id="chart-organic-funnel"></canvas>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.getElementById('funnelContent').innerHTML = html;
-
-            renderFunnelChart('direct', dashboardData.direct.totals);
-            renderFunnelChart('organic', dashboardData.organic.totals);
-        }
-
-        function renderFunnelChart(channelKey, totals) {
-            const data = [totals.traffic || 0, totals.leads || 0, totals.opps || 0, totals.clients || 0];
-
-            const ctx = document.getElementById(`chart-${channelKey}-funnel`).getContext('2d');
-            charts[`${channelKey}Funnel`] = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Traffic', 'Leads', 'Opportunities', 'Clients'],
-                    datasets: [{
-                        label: 'Funnel',
-                        data: data,
-                        backgroundColor: ['#4299e1', '#ed8936', '#48bb78', '#9f7aea'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { beginAtZero: true, ticks: { callback: v => formatNumber(v) } }
-                    }
-                }
-            });
-        }
 
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
@@ -1371,7 +1462,21 @@
             if (num === null || num === undefined) return '0';
             if (typeof num === 'string') num = parseFloat(num);
             if (isNaN(num)) return '0';
-            return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+            return Math.round(num).toLocaleString('en-US', { maximumFractionDigits: 0 });
+        }
+
+        function formatCurrency(num) {
+            if (num === null || num === undefined) return '$0';
+            if (typeof num === 'string') num = parseFloat(num);
+            if (isNaN(num)) return '$0';
+            return '$' + Math.round(num).toLocaleString('en-US', { maximumFractionDigits: 0 });
+        }
+
+        function formatPercent(num) {
+            if (num === null || num === undefined) return '0.0%';
+            if (typeof num === 'string') num = parseFloat(num);
+            if (isNaN(num)) return '0.0%';
+            return parseFloat(num).toFixed(1) + '%';
         }
     </script>
 </body>
