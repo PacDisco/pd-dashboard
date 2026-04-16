@@ -451,8 +451,9 @@
                 </div>
                 <div class="header-controls">
                     <div class="year-toggle">
-                        <button class="active" data-year="2024">2024</button>
-                        <button data-year="2025">2025 YTD</button>
+                        <button data-year="FY2023/24">FY23/24</button>
+                        <button class="active" data-year="FY2024/25">FY24/25</button>
+                        <button data-year="FY2025/26">FY25/26</button>
                     </div>
                     <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">
                         🔄 Refresh
@@ -527,7 +528,7 @@
 
         // Global state
         let dashboardData = {};
-        let currentYear = '2024';
+        let currentYear = 'FY2024/25';
         let charts = {};
         let useAppsScript = APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE';
 
@@ -607,20 +608,12 @@
         }
 
         function parseSalesData(rows) {
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const result = {
-                '2024': { sources: {}, months: months },
-                '2025': { sources: {}, months: months }
-            };
+            // Calendar months as stored in the spreadsheet (Jan=col1 .. Dec=col12)
+            const calMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            // FY months run Apr–Mar
+            const fyMonths = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 
-            const leadSources = [
-                'Paid social', 'Paid Search', 'Direct traffic (email, phone call, direct url)',
-                'Organic search', 'Organic social', 'Referral (Gap Year Ass)',
-                'Referral (StudiekeuzeMaken)', 'Referral (GoOverseas)', 'Referral (GoAbroad)',
-                'Advisors (Amber)', 'Recruitment (Amber)'
-            ];
-
-            // Display-friendly names
+            // Source name normalization
             const displayNames = {
                 'Direct traffic (email, phone call, direct url)': 'Direct Traffic',
                 'Paid social': 'Paid Social', 'Paid Search': 'Paid Search',
@@ -629,68 +622,123 @@
                 'Referral (StudiekeuzeMaken)': 'Ref: StudiekeuzeMaken',
                 'Referral (GoOverseas)': 'Ref: GoOverseas',
                 'Referral (GoAbroad)': 'Ref: GoAbroad',
-                'Advisors (Amber)': 'Advisors', 'Recruitment (Amber)': 'Recruitment'
+                'Advisors (Amber)': 'Advisors', 'Advisors': 'Advisors',
+                'Recruitment (Amber)': 'Recruitment', 'Recruitment': 'Recruitment'
             };
+            function normName(raw) { return displayNames[raw] || raw; }
 
-            // Initialize sources with zeros for both years
-            leadSources.forEach(source => {
-                const name = displayNames[source] || source;
-                result['2024'].sources[name] = {};
-                result['2025'].sources[name] = {};
-                months.forEach(m => { result['2024'].sources[name][m] = 0; result['2025'].sources[name][m] = 0; });
-            });
+            // Step 1: Parse calendar-year data from each "Sales by month 20XX" section
+            const calendarData = {}; // { '2024': { 'Paid Social': [jan..dec], ... }, '2025': {...} }
 
-            // Find "Sales by month 20XX" header rows dynamically
-            function findSalesSection(year) {
+            function findSection(prefix) {
+                const results = [];
                 for (let i = 0; i < rows.length; i++) {
-                    if (rows[i] && String(rows[i][0]).includes('Sales by month ' + year)) return i;
+                    if (rows[i] && String(rows[i][0]).includes(prefix)) results.push({ year: String(rows[i][0]).replace(prefix, '').trim(), row: i });
                 }
-                return -1;
+                return results;
             }
 
-            function parseSection(year) {
-                const startRow = findSalesSection(year);
-                if (startRow === -1) return;
-                // Data rows follow immediately after header
+            findSection('Sales by month ').forEach(({ year, row: startRow }) => {
+                calendarData[year] = {};
                 for (let i = startRow + 1; i < Math.min(rows.length, startRow + 15); i++) {
-                    const rawSource = rows[i] ? String(rows[i][0]).trim() : '';
-                    if (rawSource === 'Total per month' || rawSource === '') break;
-                    const matchedSource = leadSources.find(s => rawSource === s);
-                    if (matchedSource) {
-                        const name = displayNames[matchedSource] || matchedSource;
-                        for (let j = 1; j <= 12; j++) {
-                            result[year].sources[name][months[j - 1]] = parseFloat(rows[i][j]) || 0;
-                        }
-                    }
-                }
-            }
-
-            parseSection('2024');
-            parseSection('2025');
-
-            // Also extract spend, leads, and traffic data
-            result.spend = {};
-            result.leadsData = {};
-            result.trafficData = {};
-            ['2024','2025'].forEach(year => {
-                for (let i = 0; i < rows.length; i++) {
-                    const cell = rows[i] ? String(rows[i][0]) : '';
-                    if (cell.includes('Spend by month ' + year)) {
-                        result.spend[year] = {};
-                        for (let j = i + 1; j < Math.min(rows.length, i + 12); j++) {
-                            if (rows[j] && rows[j][0] && String(rows[j][0]).trim() !== '' && !String(rows[j][0]).includes('Total')) {
-                                result.spend[year][String(rows[j][0]).trim()] = rows[j].slice(1, 13).map(v => parseFloat(v) || 0);
-                            }
-                        }
-                    }
-                    if (cell === 'Traffic' || cell.includes('Traffic')) {
-                        // Check if it's in the right section by looking at nearby rows for the year
-                        if (i > 10 && String(rows[Math.max(0, i-5)] && rows[Math.max(0, i-5)][0] || '').includes(year)) {
-                            result.trafficData[year] = rows[i].slice(1, 13).map(v => parseFloat(v) || 0);
-                        }
+                    const raw = rows[i] ? String(rows[i][0]).trim() : '';
+                    if (raw === 'Total per month' || raw === '') break;
+                    const name = normName(raw);
+                    calendarData[year][name] = [];
+                    for (let j = 1; j <= 12; j++) {
+                        calendarData[year][name].push(parseFloat(rows[i][j]) || 0);
                     }
                 }
             });
+
+            // Also parse spend sections
+            const calendarSpend = {};
+            findSection('Spend by month ').forEach(({ year, row: startRow }) => {
+                calendarSpend[year] = {};
+                for (let i = startRow + 1; i < Math.min(rows.length, startRow + 12); i++) {
+                    const raw = rows[i] ? String(rows[i][0]).trim() : '';
+                    if (raw === 'Total per month' || raw === '' || raw.includes('Total')) continue;
+                    calendarSpend[year][normName(raw)] = [];
+                    for (let j = 1; j <= 12; j++) {
+                        calendarSpend[year][normName(raw)].push(parseFloat(rows[i][j]) || 0);
+                    }
+                }
+            });
+
+            // Also parse leads sections
+            const calendarLeads = {};
+            findSection('Leads per month').forEach(({ year, row: startRow }) => {
+                // Year might be empty for leads; infer from nearest "Sales by month" above
+                let inferredYear = year;
+                if (!inferredYear) {
+                    for (let k = startRow - 1; k >= 0; k--) {
+                        const c = String(rows[k] ? rows[k][0] : '');
+                        const m = c.match(/Sales by month (\d{4})/);
+                        if (m) { inferredYear = m[1]; break; }
+                    }
+                }
+                if (!inferredYear) return;
+                calendarLeads[inferredYear] = {};
+                for (let i = startRow + 1; i < Math.min(rows.length, startRow + 15); i++) {
+                    const raw = rows[i] ? String(rows[i][0]).trim() : '';
+                    if (raw === '' || raw.includes('Total')) break;
+                    calendarLeads[inferredYear][normName(raw)] = [];
+                    for (let j = 1; j <= 12; j++) {
+                        calendarLeads[inferredYear][normName(raw)].push(parseFloat(rows[i][j]) || 0);
+                    }
+                }
+            });
+
+            // Step 2: Build fiscal year views
+            // FY2023/24 = Apr–Dec 2023 (cols 3–11 of CY2023) + Jan–Mar 2024 (cols 0–2 of CY2024)
+            // FY2024/25 = Apr–Dec 2024 (cols 3–11 of CY2024) + Jan–Mar 2025 (cols 0–2 of CY2025)
+            // FY2025/26 = Apr–Dec 2025 (cols 3–11 of CY2025) + Jan–Mar 2026 (cols 0–2 of CY2026)
+
+            const allSources = new Set();
+            Object.values(calendarData).forEach(yearData => Object.keys(yearData).forEach(s => allSources.add(s)));
+
+            function buildFY(startYear) {
+                const endYear = String(parseInt(startYear) + 1);
+                const label = 'FY' + startYear + '/' + endYear.slice(2);
+                const sources = {};
+                const spend = {};
+                const leads = {};
+
+                allSources.forEach(source => {
+                    // Apr–Dec from startYear (calendar month indices 3–11)
+                    const h1Sales = calendarData[startYear] ? (calendarData[startYear][source] || []).slice(3, 12) : new Array(9).fill(0);
+                    // Jan–Mar from endYear (calendar month indices 0–2)
+                    const h2Sales = calendarData[endYear] ? (calendarData[endYear][source] || []).slice(0, 3) : new Array(3).fill(0);
+                    sources[source] = {};
+                    fyMonths.forEach((m, idx) => {
+                        sources[source][m] = idx < 9 ? (h1Sales[idx] || 0) : (h2Sales[idx - 9] || 0);
+                    });
+
+                    // Spend
+                    const h1Spend = calendarSpend[startYear] ? (calendarSpend[startYear][source] || []).slice(3, 12) : new Array(9).fill(0);
+                    const h2Spend = calendarSpend[endYear] ? (calendarSpend[endYear][source] || []).slice(0, 3) : new Array(3).fill(0);
+                    spend[source] = {};
+                    fyMonths.forEach((m, idx) => {
+                        spend[source][m] = idx < 9 ? (h1Spend[idx] || 0) : (h2Spend[idx - 9] || 0);
+                    });
+
+                    // Leads
+                    const h1Leads = calendarLeads[startYear] ? (calendarLeads[startYear][source] || []).slice(3, 12) : new Array(9).fill(0);
+                    const h2Leads = calendarLeads[endYear] ? (calendarLeads[endYear][source] || []).slice(0, 3) : new Array(3).fill(0);
+                    leads[source] = {};
+                    fyMonths.forEach((m, idx) => {
+                        leads[source][m] = idx < 9 ? (h1Leads[idx] || 0) : (h2Leads[idx - 9] || 0);
+                    });
+                });
+
+                return { label, sources, spend, leads, months: fyMonths };
+            }
+
+            const result = {
+                'FY2023/24': buildFY('2023'),
+                'FY2024/25': buildFY('2024'),
+                'FY2025/26': buildFY('2025'),
+            };
 
             return result;
         }
@@ -828,16 +876,23 @@
         }
 
         function renderExecutiveSummary() {
-            const salesData = dashboardData.sales[currentYear].sources;
-            const months = dashboardData.sales[currentYear].months;
+            const fyData = dashboardData.sales[currentYear];
+            if (!fyData) { showError('No data for ' + currentYear); return; }
+            const salesData = fyData.sources;
+            const months = fyData.months; // ['Apr','May',...,'Feb','Mar']
+
             // Auto-detect active months (find last month with any data)
-            let lastActiveMonth = currentYear === '2025' ? 0 : 11;
-            if (currentYear === '2025') {
+            let lastActiveMonth = 11;
+            if (currentYear === 'FY2025/26' || currentYear === 'FY2023/24') {
+                lastActiveMonth = 0;
                 months.forEach((m, idx) => {
                     const hasData = Object.values(salesData).some(src => (src[m] || 0) > 0);
                     if (hasData) lastActiveMonth = idx;
                 });
-                lastActiveMonth = Math.max(lastActiveMonth, 2); // at least Jan-Mar
+                lastActiveMonth = Math.max(lastActiveMonth, 0);
+                if (lastActiveMonth === 0 && !Object.values(salesData).some(src => (src[months[0]] || 0) > 0)) {
+                    // No data at all for this FY
+                }
             }
             const displayMonths = months.slice(0, lastActiveMonth + 1);
 
@@ -863,7 +918,7 @@
                     <div class="kpi-card">
                         <div class="kpi-label">Total Sales</div>
                         <div class="kpi-value">${formatNumber(totalSales)}</div>
-                        <div class="kpi-detail">${currentYear === '2024' ? 'Full year' : 'YTD (' + displayMonths[0] + '-' + displayMonths[displayMonths.length-1] + ')'}</div>
+                        <div class="kpi-detail">${displayMonths.length >= 12 ? 'Full FY' : displayMonths[0] + '–' + displayMonths[displayMonths.length-1] + ' (' + displayMonths.length + ' months)'}</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-label">Avg Sales/Month</div>
