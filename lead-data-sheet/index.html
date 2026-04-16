@@ -451,9 +451,9 @@
                 </div>
                 <div class="header-controls">
                     <div class="year-toggle">
-                        <button data-year="FY2023/24">FY23/24</button>
-                        <button class="active" data-year="FY2024/25">FY24/25</button>
-                        <button data-year="FY2025/26">FY25/26</button>
+                        <button data-year="FY2024/25">FY24/25</button>
+                        <button class="active" data-year="FY2025/26">FY25/26</button>
+                        <button data-year="FY2026/27">FY26/27</button>
                     </div>
                     <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">
                         🔄 Refresh
@@ -528,7 +528,7 @@
 
         // Global state
         let dashboardData = {};
-        let currentYear = 'FY2024/25';
+        let currentYear = 'FY2025/26';
         let charts = {};
         let useAppsScript = APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE';
 
@@ -735,9 +735,9 @@
             }
 
             const result = {
-                'FY2023/24': buildFY('2023'),
                 'FY2024/25': buildFY('2024'),
                 'FY2025/26': buildFY('2025'),
+                'FY2026/27': buildFY('2026'),
             };
 
             return result;
@@ -883,7 +883,7 @@
 
             // Auto-detect active months (find last month with any data)
             let lastActiveMonth = 11;
-            if (currentYear === 'FY2025/26' || currentYear === 'FY2023/24') {
+            if (currentYear !== 'FY2024/25') {
                 lastActiveMonth = 0;
                 months.forEach((m, idx) => {
                     const hasData = Object.values(salesData).some(src => (src[m] || 0) > 0);
