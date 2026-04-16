@@ -170,6 +170,9 @@ function processDeals(rawDeals) {
       travelYear = parts[parts.length - 1];
     }
 
+    // Flag deals with empty or College Credit PD Program (still shown in table, excluded from counts)
+    const excludeFromCount = !pdProgram || pdProgram.toLowerCase().includes('college credit');
+
     processed.push({
       id: deal.id,
       studentName,
@@ -180,6 +183,7 @@ function processDeals(rawDeals) {
       stage: stageLabel,
       amount,
       totalPaid,
+      excludeFromCount,
       hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${deal.id}`
     });
   }
@@ -196,9 +200,10 @@ function groupBySeason(deals) {
   for (const d of deals) {
     const key = `${d.season} ${d.travelYear}`;
     if (!groups[key]) {
-      groups[key] = { key, season: d.season, year: d.travelYear, deals: [] };
+      groups[key] = { key, season: d.season, year: d.travelYear, deals: [], countedDeals: 0 };
     }
     groups[key].deals.push(d);
+    if (!d.excludeFromCount) groups[key].countedDeals++;
   }
 
   // Sort: by year then season order
@@ -243,13 +248,14 @@ export default async (req) => {
     const processed = processDeals(rawDeals);
     const { current, past } = groupBySeason(processed);
 
-    // Summary stats
-    const totalAmount = processed.reduce((s, d) => s + d.amount, 0);
-    const totalPaid = processed.reduce((s, d) => s + d.totalPaid, 0);
+    // Summary stats (exclude College Credit / empty PD Program from counts)
+    const counted = processed.filter(d => !d.excludeFromCount);
+    const totalAmount = counted.reduce((s, d) => s + d.amount, 0);
+    const totalPaid = counted.reduce((s, d) => s + d.totalPaid, 0);
 
     return new Response(JSON.stringify({
       updatedAt: new Date().toISOString(),
-      totalStudents: processed.length,
+      totalStudents: counted.length,
       totalAmount,
       totalPaid,
       outstanding: totalAmount - totalPaid,
