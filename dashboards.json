@@ -8,7 +8,8 @@
       "category": "Enrollment",
       "icon": "🎓",
       "owner": "",
-      "pinned": true
+      "pinned": true,
+      "allowedRoles": ["admin", "viewer"]
     },
     {
       "slug": "lead-data-sheet",
@@ -16,7 +17,8 @@
       "description": "Live lead data synced from HubSpot with source, stage, and owner views.",
       "category": "Marketing",
       "icon": "📈",
-      "owner": ""
+      "owner": "",
+      "allowedRoles": ["admin", "viewer"]
     },
     {
       "slug": "report",
@@ -24,7 +26,8 @@
       "description": "Summary report dashboard.",
       "category": "Reporting",
       "icon": "📊",
-      "owner": ""
+      "owner": "",
+      "allowedRoles": ["admin", "viewer"]
     },
     {
       "slug": "slider",
@@ -32,7 +35,8 @@
       "description": "Manage dashboard sliders and homepage content.",
       "category": "Admin",
       "icon": "🎛️",
-      "owner": ""
+      "owner": "",
+      "allowedRoles": ["admin"]
     }
   ]
 }

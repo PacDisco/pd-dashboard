@@ -1,17 +1,24 @@
 #!/usr/bin/env node
 /**
- * Auto-generate dashboards.json by scanning the repo for dashboard folders.
+ * Auto-generate dashboards.json AND _redirects by scanning the repo.
  *
  * Rules:
  *  - A "dashboard" is any top-level folder containing an index.html
  *  - Folders in EXCLUDED_DIRS are ignored (netlify, scripts, node_modules, etc.)
- *  - Optional per-folder metadata: drop a `dashboard.json` inside a folder like
- *      { "title": "...", "description": "...", "category": "...",
- *        "icon": "📊", "owner": "...", "pinned": true, "colors": ["#hex","#hex"] }
+ *  - Optional per-folder metadata: drop a `dashboard.json` inside a folder:
+ *      {
+ *        "title": "...", "description": "...", "category": "...",
+ *        "icon": "📊", "owner": "...", "pinned": true,
+ *        "colors": ["#hex","#hex"],
+ *        "allowedRoles": ["admin","viewer"]
+ *      }
  *  - If no dashboard.json exists, the script falls back to the folder's
- *    index.html <title> and <meta name="description">
+ *    index.html <title> and <meta name="description"> and defaults
+ *    allowedRoles to ["admin","viewer"]
  *  - Existing entries in dashboards.json are preserved (merged) so hand-edited
  *    metadata survives rebuilds
+ *  - _redirects is fully regenerated from allowedRoles (role-based gating
+ *    enforced at Netlify's edge — required for real security)
  *
  * Run manually:   node scripts/build-manifest.js
  * Run on deploy:  set as Netlify build command (see README).
@@ -21,62 +28,47 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const OUT = path.join(ROOT, "dashboards.json");
+const MANIFEST = path.join(ROOT, "dashboards.json");
+const REDIRECTS = path.join(ROOT, "_redirects");
 
 const EXCLUDED_DIRS = new Set([
-  "netlify",
-  "scripts",
-  "node_modules",
-  ".git",
-  ".netlify",
-  ".github",
-  "assets",
-  "public",
-  "dist",
-  "build"
+  "netlify", "scripts", "node_modules",
+  ".git", ".netlify", ".github",
+  "assets", "public", "dist", "build"
 ]);
 
+const DEFAULT_ROLES = ["admin", "viewer"];
+
 function readExisting() {
-  try {
-    const raw = fs.readFileSync(OUT, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return { dashboards: [] };
-  }
+  try { return JSON.parse(fs.readFileSync(MANIFEST, "utf8")); }
+  catch { return { dashboards: [] }; }
 }
 
 function titleFromHtml(html) {
   const t = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return t ? t[1].trim().replace(/\s+/g, " ") : null;
 }
-
 function descFromHtml(html) {
-  const m = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i);
+  const m = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
   return m ? m[1].trim() : null;
 }
-
 function prettifySlug(slug) {
-  return slug
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map(s => s[0].toUpperCase() + s.slice(1))
-    .join(" ");
+  return slug.split(/[-_]/).filter(Boolean)
+    .map(s => s[0].toUpperCase() + s.slice(1)).join(" ");
 }
 
 function scan() {
-  const entries = fs.readdirSync(ROOT, { withFileTypes: true });
-  const folders = entries
+  const folders = fs.readdirSync(ROOT, { withFileTypes: true })
     .filter(e => e.isDirectory() && !e.name.startsWith(".") && !EXCLUDED_DIRS.has(e.name))
     .map(e => e.name);
 
-  const dashboards = [];
+  const out = [];
   for (const slug of folders) {
-    const folder = path.join(ROOT, slug);
-    const indexPath = path.join(folder, "index.html");
+    const indexPath = path.join(ROOT, slug, "index.html");
     if (!fs.existsSync(indexPath)) continue;
 
     let meta = {};
-    const metaPath = path.join(folder, "dashboard.json");
+    const metaPath = path.join(ROOT, slug, "dashboard.json");
     if (fs.existsSync(metaPath)) {
       try { meta = JSON.parse(fs.readFileSync(metaPath, "utf8")); }
       catch (err) { console.warn(`Couldn't parse ${metaPath}:`, err.message); }
@@ -89,7 +81,7 @@ function scan() {
       htmlDesc = descFromHtml(html);
     } catch {}
 
-    dashboards.push({
+    out.push({
       slug,
       title: meta.title || htmlTitle || prettifySlug(slug),
       description: meta.description || htmlDesc || "",
@@ -98,34 +90,62 @@ function scan() {
       owner: meta.owner || "",
       pinned: meta.pinned || false,
       colors: meta.colors || undefined,
+      allowedRoles: meta.allowedRoles || DEFAULT_ROLES.slice(),
       url: meta.url || `/${slug}/`
     });
   }
-  return dashboards;
+  return out;
 }
 
 function merge(existing, scanned) {
-  // Preserve hand-edited fields on existing entries; add new ones; drop missing.
-  const byslug = new Map(existing.map(d => [d.slug, d]));
-  return scanned.map(scan => {
-    const prev = byslug.get(scan.slug);
-    if (!prev) return scan;
-    // Prefer current filesystem for title/description when no dashboard.json
+  const bySlug = new Map(existing.map(d => [d.slug, d]));
+  return scanned.map(s => {
+    const prev = bySlug.get(s.slug);
+    if (!prev) return s;
     return {
       ...prev,
-      ...scan,
-      // If the existing entry had a manual title/description/category etc,
-      // keep those rather than overwriting with scanned defaults.
-      title: prev.title && prev.title !== scan.slug ? prev.title : scan.title,
-      description: prev.description || scan.description,
-      category: prev.category || scan.category,
-      icon: prev.icon || scan.icon,
-      owner: prev.owner || scan.owner,
-      pinned: prev.pinned ?? scan.pinned,
-      colors: prev.colors || scan.colors,
-      url: scan.url
+      ...s,
+      // Prefer hand-edited fields
+      title: prev.title && prev.title !== s.slug ? prev.title : s.title,
+      description: prev.description || s.description,
+      category: prev.category || s.category,
+      icon: prev.icon || s.icon,
+      owner: prev.owner || s.owner,
+      pinned: prev.pinned ?? s.pinned,
+      colors: prev.colors || s.colors,
+      allowedRoles: (Array.isArray(prev.allowedRoles) && prev.allowedRoles.length)
+        ? prev.allowedRoles : s.allowedRoles,
+      url: s.url
     };
   });
+}
+
+function writeRedirects(dashboards) {
+  const lines = [
+    "# AUTO-GENERATED by scripts/build-manifest.js — do not edit by hand",
+    "# Role-based gating for dashboard subpaths + the manifest.",
+    "# Any user without a matching role (including unauthenticated users) gets 401.",
+    ""
+  ];
+
+  // Gate the manifest: visible to anyone with any of the union of roles in use.
+  const allRoles = [...new Set(dashboards.flatMap(d => d.allowedRoles || []))];
+  if (allRoles.length) {
+    lines.push(`/dashboards.json    200!    Role=${allRoles.join(",")}`);
+  }
+
+  for (const d of dashboards) {
+    const roles = (d.allowedRoles || []).join(",");
+    if (!roles) continue;
+    lines.push(`/${d.slug}/*${pad(d.slug)}200!    Role=${roles}`);
+  }
+  lines.push("");
+  fs.writeFileSync(REDIRECTS, lines.join("\n"));
+}
+function pad(slug) {
+  // Align the status column loosely for readability.
+  const width = Math.max(0, 18 - (slug.length + 3));
+  return " ".repeat(width + 1);
 }
 
 function main() {
@@ -133,14 +153,15 @@ function main() {
   const scanned = scan();
   const merged = merge(existing.dashboards || [], scanned);
 
-  const payload = {
-    generatedAt: new Date().toISOString(),
-    dashboards: merged
-  };
+  const payload = { generatedAt: new Date().toISOString(), dashboards: merged };
+  fs.writeFileSync(MANIFEST, JSON.stringify(payload, null, 2) + "\n");
+  writeRedirects(merged);
 
-  fs.writeFileSync(OUT, JSON.stringify(payload, null, 2) + "\n");
-  console.log(`Wrote ${merged.length} dashboard(s) → ${path.relative(ROOT, OUT)}`);
-  merged.forEach(d => console.log(`  • ${d.slug.padEnd(20)} ${d.title}`));
+  console.log(`Wrote ${merged.length} dashboard(s) → ${path.relative(ROOT, MANIFEST)}`);
+  console.log(`Wrote _redirects with role-based gating`);
+  merged.forEach(d => console.log(
+    `  • ${d.slug.padEnd(20)} ${d.title.padEnd(30)} roles: [${(d.allowedRoles || []).join(",")}]`
+  ));
 }
 
 main();

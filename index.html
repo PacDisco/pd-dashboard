@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pacific Discovery Dashboards</title>
   <meta name="description" content="Central hub for all Pacific Discovery reporting dashboards." />
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
   <style>
     :root {
       --bg: #0b1020;
@@ -16,6 +17,7 @@
       --text-dim: #9aa3c0;
       --accent: #7c9bff;
       --accent-2: #6ee7b7;
+      --danger: #fb7185;
       --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       --radius: 14px;
     }
@@ -35,6 +37,11 @@
       max-width: 1200px;
       margin: 0 auto;
       padding: 56px 24px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      flex-wrap: wrap;
     }
     .brand {
       display: flex;
@@ -63,6 +70,44 @@
       font-size: 16px;
       max-width: 620px;
     }
+    .user-panel {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 6px 6px 14px;
+    }
+    .user-panel.hidden { display: none; }
+    .user-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid; place-items: center;
+      color: #0b1020; font-weight: 700; font-size: 13px;
+    }
+    .user-info { font-size: 13px; line-height: 1.3; }
+    .user-info .email { color: var(--text-dim); font-size: 11px; }
+    .user-info .role { color: var(--accent-2); font-size: 11px; }
+    .btn {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b1020;
+      border: 0;
+      font-weight: 600;
+    }
+    .btn-primary:hover { opacity: .92; }
     .toolbar {
       max-width: 1200px;
       margin: 24px auto 0;
@@ -81,23 +126,14 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 10px 14px;
-      transition: border-color .2s;
     }
     .search:focus-within { border-color: var(--accent); }
     .search svg { flex-shrink: 0; opacity: .7; margin-right: 10px; }
     .search input {
-      background: transparent;
-      border: 0;
-      outline: none;
-      color: var(--text);
-      width: 100%;
-      font-size: 15px;
+      background: transparent; border: 0; outline: none;
+      color: var(--text); width: 100%; font-size: 15px;
     }
-    .chips {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .chip {
       background: var(--bg-soft);
       color: var(--text-dim);
@@ -106,15 +142,13 @@
       padding: 8px 14px;
       font-size: 13px;
       cursor: pointer;
-      transition: all .15s ease;
       user-select: none;
+      transition: all .15s;
     }
     .chip:hover { color: var(--text); border-color: var(--accent); }
     .chip.active {
-      color: var(--bg);
-      background: var(--text);
-      border-color: var(--text);
-      font-weight: 600;
+      color: var(--bg); background: var(--text);
+      border-color: var(--text); font-weight: 600;
     }
     main {
       max-width: 1200px;
@@ -137,7 +171,7 @@
       color: inherit;
       position: relative;
       overflow: hidden;
-      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+      transition: transform .18s, border-color .18s, background .18s;
       box-shadow: var(--shadow);
     }
     .card:hover {
@@ -151,7 +185,6 @@
       inset: 0 0 auto 0;
       height: 4px;
       background: linear-gradient(90deg, var(--c1, var(--accent)), var(--c2, var(--accent-2)));
-      opacity: .9;
     }
     .card-top {
       display: flex;
@@ -162,8 +195,7 @@
     .icon {
       width: 44px; height: 44px;
       border-radius: 10px;
-      display: grid;
-      place-items: center;
+      display: grid; place-items: center;
       font-size: 22px;
       background: linear-gradient(135deg, rgba(124,155,255,.18), rgba(110,231,183,.14));
       border: 1px solid var(--border);
@@ -180,38 +212,40 @@
     }
     .card h3 {
       margin: 0 0 6px;
-      font-size: 18px;
-      font-weight: 600;
+      font-size: 18px; font-weight: 600;
       letter-spacing: -0.01em;
     }
     .card p {
       margin: 0 0 16px;
       color: var(--text-dim);
-      font-size: 14px;
-      line-height: 1.5;
+      font-size: 14px; line-height: 1.5;
       flex: 1;
     }
     .card-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 13px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 13px; color: var(--text-dim);
+    }
+    .open { color: var(--accent); font-weight: 600; }
+    .role-tag {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .1em;
       color: var(--text-dim);
     }
-    .open {
-      color: var(--accent);
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .empty, .loading {
+    .empty, .loading, .gate {
       text-align: center;
       color: var(--text-dim);
       padding: 60px 20px;
       border: 1px dashed var(--border);
       border-radius: var(--radius);
     }
+    .gate h2 {
+      color: var(--text);
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+    .gate p { max-width: 440px; margin: 0 auto 20px; }
+    .gate .btn-primary { padding: 12px 22px; font-size: 15px; }
     footer {
       max-width: 1200px;
       margin: 0 auto;
@@ -220,23 +254,32 @@
       font-size: 13px;
       display: flex;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 8px;
+      flex-wrap: wrap; gap: 8px;
     }
     @media (max-width: 540px) {
       header { padding-top: 32px; }
-      .toolbar { margin-top: 16px; }
     }
   </style>
 </head>
 <body>
   <header>
-    <div class="brand"><span class="brand-dot"></span> Pacific Discovery</div>
-    <h1>Dashboards</h1>
-    <p class="subtitle">A central hub for reporting. New dashboards show up automatically after each deploy.</p>
+    <div>
+      <div class="brand"><span class="brand-dot"></span> Pacific Discovery</div>
+      <h1>Dashboards</h1>
+      <p class="subtitle">A central hub for reporting. Access is restricted to invited team members.</p>
+    </div>
+    <div id="userPanel" class="user-panel hidden">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div class="user-info">
+        <div id="userName"></div>
+        <div class="email" id="userEmail"></div>
+        <div class="role" id="userRole"></div>
+      </div>
+      <button class="btn" id="logoutBtn" title="Sign out">Sign out</button>
+    </div>
   </header>
 
-  <div class="toolbar">
+  <div class="toolbar" id="toolbar" style="display:none">
     <label class="search">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input id="search" type="search" placeholder="Search dashboards..." autocomplete="off" />
@@ -246,7 +289,7 @@
 
   <main>
     <div id="grid" class="grid" aria-live="polite">
-      <div class="loading">Loading dashboards…</div>
+      <div class="loading">Starting up…</div>
     </div>
   </main>
 
@@ -265,20 +308,74 @@
       ["#fb7185", "#f97316"]
     ];
 
-    async function load() {
+    let STATE = { dashboards: [], query: "", category: "All", user: null, roles: [] };
+
+    // --- Auth lifecycle ---
+    window.addEventListener("DOMContentLoaded", () => {
+      if (!window.netlifyIdentity) {
+        showGate("Netlify Identity didn't load. Check the site configuration.", null);
+        return;
+      }
+      netlifyIdentity.on("init", user => { user ? onLogin(user) : showGate(); });
+      netlifyIdentity.on("login", user => { netlifyIdentity.close(); onLogin(user); });
+      netlifyIdentity.on("logout", () => { STATE.user = null; STATE.roles = []; showGate(); });
+      netlifyIdentity.init();
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => netlifyIdentity.logout());
+
+    function showGate(message, _) {
+      document.getElementById("userPanel").classList.add("hidden");
+      document.getElementById("toolbar").style.display = "none";
       const grid = document.getElementById("grid");
+      grid.innerHTML = `
+        <div class="gate" style="grid-column: 1 / -1">
+          <h2>Sign in to view dashboards</h2>
+          <p>${message || "Access is restricted to Pacific Discovery team members. Sign in with your Google account to continue."}</p>
+          <button class="btn btn-primary" id="loginBtn">Sign in</button>
+        </div>`;
+      document.getElementById("loginBtn").onclick = () => netlifyIdentity.open();
+    }
+
+    function onLogin(user) {
+      STATE.user = user;
+      STATE.roles = (user.app_metadata && user.app_metadata.roles) || [];
+      paintUser(user);
+      loadDashboards();
+    }
+
+    function paintUser(user) {
+      const email = user.email || "";
+      const name = (user.user_metadata && user.user_metadata.full_name) || email.split("@")[0];
+      const initials = (name || "?").split(/\s+/).map(s => s[0]).slice(0, 2).join("").toUpperCase();
+      document.getElementById("userAvatar").textContent = initials || "?";
+      document.getElementById("userName").textContent = name;
+      document.getElementById("userEmail").textContent = email;
+      document.getElementById("userRole").textContent =
+        STATE.roles.length ? STATE.roles.join(" · ") : "no roles assigned";
+      document.getElementById("userPanel").classList.remove("hidden");
+    }
+
+    async function loadDashboards() {
+      const grid = document.getElementById("grid");
+      grid.innerHTML = `<div class="loading" style="grid-column: 1 / -1">Loading dashboards…</div>`;
       try {
-        // Cache-bust so new deploys show up immediately
-        const res = await fetch(`dashboards.json?t=${Date.now()}`);
+        const token = STATE.user ? await STATE.user.jwt() : null;
+        const res = await fetch(`dashboards.json?t=${Date.now()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include"
+        });
+        if (res.status === 401 || res.status === 403) {
+          showGate("Your session expired or you don't have access. Please sign in again.");
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         render(data);
       } catch (err) {
-        grid.innerHTML = `<div class="empty">Couldn't load dashboards.json<br><small>${err.message}</small></div>`;
+        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1">Couldn't load dashboards.json<br><small>${err.message}</small></div>`;
       }
     }
-
-    let STATE = { dashboards: [], query: "", category: "All" };
 
     function render(data) {
       STATE.dashboards = (data.dashboards || []).slice().sort((a, b) => {
@@ -289,11 +386,23 @@
       document.getElementById("updated").textContent =
         data.generatedAt ? `Last updated ${new Date(data.generatedAt).toLocaleString()}` : "";
       buildChips();
+      document.getElementById("toolbar").style.display = "";
       draw();
     }
 
+    function visibleDashboards() {
+      const roles = STATE.roles;
+      const isAdmin = roles.includes("admin");
+      return STATE.dashboards.filter(d => {
+        if (isAdmin) return true;
+        const allowed = d.allowedRoles || [];
+        if (!allowed.length) return true;              // no restriction = visible to all logged-in users
+        return allowed.some(r => roles.includes(r));
+      });
+    }
+
     function buildChips() {
-      const cats = ["All", ...new Set(STATE.dashboards.map(d => d.category).filter(Boolean))];
+      const cats = ["All", ...new Set(visibleDashboards().map(d => d.category).filter(Boolean))];
       const wrap = document.getElementById("categoryChips");
       wrap.innerHTML = "";
       cats.forEach(c => {
@@ -308,17 +417,17 @@
     function draw() {
       const grid = document.getElementById("grid");
       const q = STATE.query.trim().toLowerCase();
-      const filtered = STATE.dashboards.filter(d => {
+      const filtered = visibleDashboards().filter(d => {
         const matchesCat = STATE.category === "All" || d.category === STATE.category;
         const hay = `${d.title || ""} ${d.description || ""} ${d.category || ""}`.toLowerCase();
         return matchesCat && (!q || hay.includes(q));
       });
 
       document.getElementById("count").textContent =
-        `${filtered.length} dashboard${filtered.length === 1 ? "" : "s"}`;
+        `${filtered.length} dashboard${filtered.length === 1 ? "" : "s"} visible`;
 
       if (!filtered.length) {
-        grid.innerHTML = `<div class="empty">No dashboards match your filter.</div>`;
+        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1">No dashboards match your access or filters.</div>`;
         return;
       }
 
@@ -328,6 +437,9 @@
         const icon = d.icon || "📊";
         const href = d.url || `/${d.slug}/`;
         const cat = d.category ? `<span class="category">${escapeHtml(d.category)}</span>` : "";
+        const roleTag = d.allowedRoles && d.allowedRoles.length
+          ? `<span class="role-tag">${escapeHtml(d.allowedRoles.join(" · "))}</span>`
+          : "";
         return `
           <a class="card" href="${escapeAttr(href)}" style="--c1:${c1};--c2:${c2}">
             <div class="card-top">
@@ -337,7 +449,7 @@
             <h3>${escapeHtml(d.title || d.slug || "Untitled")}</h3>
             <p>${escapeHtml(d.description || "")}</p>
             <div class="card-footer">
-              <span>${d.owner ? escapeHtml(d.owner) : ""}</span>
+              ${roleTag}
               <span class="open">Open →</span>
             </div>
           </a>`;
@@ -348,11 +460,9 @@
     function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
     function escapeAttr(s) { return escapeHtml(s); }
 
-    document.getElementById("search").addEventListener("input", (e) => {
+    document.getElementById("search").addEventListener("input", e => {
       STATE.query = e.target.value; draw();
     });
-
-    load();
   </script>
 </body>
 </html>
