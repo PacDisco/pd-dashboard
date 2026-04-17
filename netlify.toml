@@ -10,10 +10,8 @@
 [functions]
   node_bundler = "esbuild"
   directory = "netlify/functions"
-  external_node_modules = ["@netlify/blobs"]
   # Ship the discovery manifests with the bundled functions so config.js
-  # can read them from the filesystem if HTTP fetch fails (e.g. if
-  # dashboards.json is gated by _redirects).
+  # can read them from the filesystem if HTTP fetch fails.
   included_files = [
     "dashboards.discovery.json",
     "dashboards.json"
@@ -41,7 +39,6 @@
   to   = "/.netlify/functions/:splat"
   status = 200
 
-# Headers
 [[headers]]
   for = "/dashboards.json"
   [headers.values]
@@ -59,10 +56,6 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
 
-# Edge function runs on dashboard subpaths to enforce fine-grained role
-# gating dynamically (reads permissions from Netlify Blobs). It uses a
-# wildcard so new dashboard folders are automatically gated without toml edits;
-# static assets and API/manifest paths are excluded.
 [[edge_functions]]
   function = "auth-gate"
   path = "/*"
