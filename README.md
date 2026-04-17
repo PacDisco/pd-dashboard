@@ -1,3 +1,82 @@
+# Pacific Discovery Dashboards — Landing Page
+
+A card-grid landing page at `dashboard.pacificdiscovery.org` that auto-updates
+when new dashboards are added.
+
+## How it works
+
+1. Each dashboard lives in its own top-level folder with an `index.html`
+   (you already have this — `enrollment/`, `lead-data-sheet/`, `report/`,
+   `slider/`).
+2. On every Netlify deploy, `scripts/build-manifest.js` scans the repo for
+   folders that contain an `index.html` and regenerates `dashboards.json`.
+3. `index.html` (the root landing page) fetches `dashboards.json` on load and
+   renders a card for each dashboard.
+
+**Net result:** push a new folder with an `index.html` → redeploy → a new card
+shows up automatically. No code changes needed.
+
+## Files
+
+| File | Purpose |
+| --- | --- |
+| `index.html` | The landing page. Drop at repo root. |
+| `dashboards.json` | Generated manifest. Safe to hand-edit; the build script preserves your edits. |
+| `scripts/build-manifest.js` | Scans folders, writes `dashboards.json`. |
+| `netlify.toml.snippet` | Add these lines to your `netlify.toml`. |
+
+## Install (one-time)
+
+1. Copy `index.html`, `dashboards.json`, and `scripts/` into the root of your
+   Netlify repo (the one with `enrollment/`, `lead-data-sheet/`, etc.).
+2. Merge `netlify.toml.snippet` into your existing `netlify.toml`. The key line is:
+
+   ```toml
+   [build]
+     command = "node scripts/build-manifest.js"
+   ```
+3. Commit and push. Netlify rebuilds, regenerates `dashboards.json`, and the
+   landing page goes live at `dashboard.pacificdiscovery.org`.
+
+## Customizing a dashboard card
+
+Two ways:
+
+**Option A — edit `dashboards.json` directly.** Set `title`, `description`,
+`category`, `icon`, `owner`, `pinned`, `colors`. Your edits are preserved
+across rebuilds.
+
+**Option B — drop a `dashboard.json` inside the dashboard folder.** For example,
+`enrollment/dashboard.json`:
+
+```json
+{
+  "title": "Student Enrollment",
+  "description": "Pipeline, funnel, and conversion metrics.",
+  "category": "Enrollment",
+  "icon": "🎓",
+  "owner": "Jake",
+  "pinned": true,
+  "colors": ["#7c9bff", "#6ee7b7"]
+}
+```
+
+If neither is provided, the script falls back to the `<title>` and
+`<meta name="description">` of the folder's `index.html`.
+
+## Excluded folders
+
+The script ignores `netlify`, `scripts`, `node_modules`, `.git`, `.netlify`,
+`.github`, `assets`, `public`, `dist`, `build`, and any folder starting with
+`.`. Add more in `scripts/build-manifest.js` if needed.
+
+## Run locally
+
+```bash
+node scripts/build-manifest.js     # regenerates dashboards.json
+python3 -m http.server 8080        # or any static server, then open :8080
+```
+
 # Forward Business Report — Netlify Dashboard
 
 ## Quick Deploy
