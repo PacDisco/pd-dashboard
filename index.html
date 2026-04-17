@@ -23,8 +23,7 @@
     }
     * { box-sizing: border-box; }
     html, body {
-      margin: 0;
-      padding: 0;
+      margin: 0; padding: 0;
       background: radial-gradient(1200px 600px at 10% -10%, #1a2550 0%, transparent 60%),
                   radial-gradient(1000px 500px at 110% 10%, #0f3b3a 0%, transparent 60%),
                   var(--bg);
@@ -34,24 +33,15 @@
       -webkit-font-smoothing: antialiased;
     }
     header {
-      max-width: 1200px;
-      margin: 0 auto;
+      max-width: 1200px; margin: 0 auto;
       padding: 56px 24px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 24px;
-      flex-wrap: wrap;
+      display: flex; justify-content: space-between; align-items: flex-end;
+      gap: 24px; flex-wrap: wrap;
     }
     .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 13px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--text-dim);
-      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 16px;
     }
     .brand-dot {
       width: 8px; height: 8px; border-radius: 50%;
@@ -61,28 +51,17 @@
     h1 {
       margin: 0 0 10px;
       font-size: clamp(28px, 4vw, 44px);
-      letter-spacing: -0.02em;
-      font-weight: 700;
+      letter-spacing: -0.02em; font-weight: 700;
     }
-    .subtitle {
-      margin: 0;
-      color: var(--text-dim);
-      font-size: 16px;
-      max-width: 620px;
-    }
+    .subtitle { margin: 0; color: var(--text-dim); font-size: 16px; max-width: 620px; }
     .user-panel {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: var(--bg-soft);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 6px 6px 6px 14px;
+      display: flex; align-items: center; gap: 12px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 999px; padding: 6px 6px 6px 14px;
     }
     .user-panel.hidden { display: none; }
     .user-avatar {
-      width: 32px; height: 32px;
-      border-radius: 50%;
+      width: 32px; height: 32px; border-radius: 50%;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
       display: grid; place-items: center;
       color: #0b1020; font-weight: 700; font-size: 13px;
@@ -90,87 +69,64 @@
     .user-info { font-size: 13px; line-height: 1.3; }
     .user-info .email { color: var(--text-dim); font-size: 11px; }
     .user-info .role { color: var(--accent-2); font-size: 11px; }
+
     .btn {
-      background: transparent;
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 7px 14px;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all .15s;
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 7px 14px; font-size: 13px; cursor: pointer;
+      transition: all .15s; font-family: inherit;
     }
     .btn:hover { border-color: var(--accent); }
     .btn-primary {
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #0b1020;
-      border: 0;
-      font-weight: 600;
+      color: #0b1020; border: 0; font-weight: 600;
     }
     .btn-primary:hover { opacity: .92; }
+    .btn-danger { color: var(--danger); border-color: rgba(251,113,133,.3); }
+    .btn-danger:hover { border-color: var(--danger); background: rgba(251,113,133,.1); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
     .toolbar {
-      max-width: 1200px;
-      margin: 24px auto 0;
-      padding: 0 24px;
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      align-items: center;
+      max-width: 1200px; margin: 24px auto 0; padding: 0 24px;
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
     }
     .search {
-      flex: 1 1 260px;
-      min-width: 240px;
-      display: flex;
-      align-items: center;
-      background: var(--bg-soft);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px 14px;
+      flex: 1 1 260px; min-width: 240px;
+      display: flex; align-items: center;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 14px;
     }
     .search:focus-within { border-color: var(--accent); }
     .search svg { flex-shrink: 0; opacity: .7; margin-right: 10px; }
     .search input {
       background: transparent; border: 0; outline: none;
-      color: var(--text); width: 100%; font-size: 15px;
+      color: var(--text); width: 100%; font-size: 15px; font-family: inherit;
     }
     .chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .chip {
-      background: var(--bg-soft);
-      color: var(--text-dim);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 8px 14px;
-      font-size: 13px;
-      cursor: pointer;
-      user-select: none;
-      transition: all .15s;
+      background: var(--bg-soft); color: var(--text-dim);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 8px 14px; font-size: 13px; cursor: pointer;
+      user-select: none; transition: all .15s; font-family: inherit;
     }
     .chip:hover { color: var(--text); border-color: var(--accent); }
     .chip.active {
       color: var(--bg); background: var(--text);
       border-color: var(--text); font-weight: 600;
     }
-    main {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 28px 24px 80px;
-    }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 18px;
     }
     .card {
-      display: flex;
-      flex-direction: column;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      text-decoration: none;
-      color: inherit;
-      position: relative;
-      overflow: hidden;
+      display: flex; flex-direction: column;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+      text-decoration: none; color: inherit;
+      position: relative; overflow: hidden;
       transition: transform .18s, border-color .18s, background .18s;
       box-shadow: var(--shadow);
     }
@@ -180,84 +136,143 @@
       background: var(--card-hover);
     }
     .card::before {
-      content: "";
-      position: absolute;
-      inset: 0 0 auto 0;
-      height: 4px;
+      content: ""; position: absolute; inset: 0 0 auto 0; height: 4px;
       background: linear-gradient(90deg, var(--c1, var(--accent)), var(--c2, var(--accent-2)));
     }
-    .card-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-    }
+    .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .icon {
-      width: 44px; height: 44px;
-      border-radius: 10px;
-      display: grid; place-items: center;
-      font-size: 22px;
+      width: 44px; height: 44px; border-radius: 10px;
+      display: grid; place-items: center; font-size: 22px;
       background: linear-gradient(135deg, rgba(124,155,255,.18), rgba(110,231,183,.14));
       border: 1px solid var(--border);
     }
     .category {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .12em;
-      color: var(--text-dim);
-      background: var(--bg-soft);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 4px 10px;
+      font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--text-dim); background: var(--bg-soft);
+      border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
     }
-    .card h3 {
-      margin: 0 0 6px;
-      font-size: 18px; font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-    .card p {
-      margin: 0 0 16px;
-      color: var(--text-dim);
-      font-size: 14px; line-height: 1.5;
-      flex: 1;
-    }
-    .card-footer {
-      display: flex; align-items: center; justify-content: space-between;
-      font-size: 13px; color: var(--text-dim);
-    }
+    .card h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    .card p { margin: 0 0 16px; color: var(--text-dim); font-size: 14px; line-height: 1.5; flex: 1; }
+    .card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-dim); }
     .open { color: var(--accent); font-weight: 600; }
-    .role-tag {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      color: var(--text-dim);
-    }
+    .role-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
+
     .empty, .loading, .gate {
-      text-align: center;
-      color: var(--text-dim);
-      padding: 60px 20px;
-      border: 1px dashed var(--border);
+      text-align: center; color: var(--text-dim);
+      padding: 60px 20px; border: 1px dashed var(--border);
       border-radius: var(--radius);
     }
-    .gate h2 {
-      color: var(--text);
-      margin: 0 0 8px;
-      font-size: 22px;
-    }
+    .gate h2 { color: var(--text); margin: 0 0 8px; font-size: 22px; }
     .gate p { max-width: 440px; margin: 0 auto 20px; }
     .gate .btn-primary { padding: 12px 22px; font-size: 15px; }
+
     footer {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 20px 24px 40px;
-      color: var(--text-dim);
-      font-size: 13px;
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap; gap: 8px;
+      max-width: 1200px; margin: 0 auto; padding: 20px 24px 40px;
+      color: var(--text-dim); font-size: 13px;
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
     }
+
+    /* --- Admin modal --- */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(2, 5, 20, 0.7);
+      backdrop-filter: blur(6px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 40px 20px; overflow-y: auto; z-index: 100;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0;
+      width: 100%; max-width: 960px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { margin: 0; font-size: 20px; }
+    .modal-tabs {
+      display: flex; gap: 4px; padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-tab {
+      padding: 14px 18px; cursor: pointer;
+      color: var(--text-dim); font-size: 14px; font-weight: 500;
+      border: 0; background: transparent;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      font-family: inherit;
+    }
+    .modal-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .modal-body { padding: 24px; max-height: 65vh; overflow-y: auto; }
+    .modal-footer {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+    }
+    .perm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .perm-table th, .perm-table td {
+      padding: 12px 10px; text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .perm-table th {
+      color: var(--text-dim); font-weight: 500; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .1em;
+    }
+    .perm-table .slug { color: var(--text-dim); font-size: 12px; }
+    .perm-table .role-cell { text-align: center; }
+    .perm-table input[type="checkbox"] {
+      width: 18px; height: 18px; cursor: pointer;
+      accent-color: var(--accent);
+    }
+    .role-pill {
+      display: inline-block; padding: 2px 8px; margin: 2px;
+      font-size: 11px; border-radius: 999px;
+      background: rgba(124,155,255,.15); color: var(--accent);
+      border: 1px solid rgba(124,155,255,.3);
+    }
+    .role-pill.admin { background: rgba(110,231,183,.15); color: var(--accent-2); border-color: rgba(110,231,183,.3); }
+
+    .users-toolbar {
+      display: flex; gap: 8px; margin-bottom: 16px; align-items: center;
+    }
+    .users-toolbar input[type="email"] {
+      flex: 1; background: var(--bg-soft); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 10px 14px;
+      font-size: 14px; font-family: inherit;
+    }
+    .users-toolbar input[type="email"]:focus { outline: none; border-color: var(--accent); }
+
+    .role-editor {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 8px; padding: 6px; min-width: 220px;
+    }
+    .role-editor label {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 999px; cursor: pointer;
+      font-size: 11px; border: 1px solid transparent;
+    }
+    .role-editor label:hover { background: var(--card); }
+    .role-editor label.checked { background: rgba(124,155,255,.15); color: var(--accent); border-color: rgba(124,155,255,.3); }
+    .role-editor input { display: none; }
+
+    .toast {
+      position: fixed; bottom: 30px; right: 30px; z-index: 200;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px;
+      box-shadow: var(--shadow); font-size: 14px;
+      opacity: 0; transform: translateY(10px); pointer-events: none;
+      transition: all .25s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { border-color: var(--danger); color: var(--danger); }
+    .toast.success { border-color: var(--accent-2); }
+
     @media (max-width: 540px) {
       header { padding-top: 32px; }
+      .perm-table th, .perm-table td { padding: 8px 4px; font-size: 12px; }
     }
   </style>
 </head>
@@ -275,6 +290,7 @@
         <div class="email" id="userEmail"></div>
         <div class="role" id="userRole"></div>
       </div>
+      <button class="btn" id="adminBtn" style="display:none">Manage access</button>
       <button class="btn" id="logoutBtn" title="Sign out">Sign out</button>
     </div>
   </header>
@@ -298,82 +314,118 @@
     <div id="updated">—</div>
   </footer>
 
+  <!-- Admin modal -->
+  <div class="modal-backdrop" id="adminModal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>Manage access</h2>
+        <button class="btn" id="closeModalBtn">Close</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="permissions">Dashboard permissions</button>
+        <button class="modal-tab" data-tab="users">Users</button>
+      </div>
+      <div class="modal-body">
+        <div id="tabPermissions">
+          <p style="color:var(--text-dim); font-size:13px; margin:0 0 16px">
+            Check which roles should see each dashboard. Admins always see everything. Empty row = admin-only.
+          </p>
+          <div id="permissionsContent"><div class="loading">Loading…</div></div>
+        </div>
+        <div id="tabUsers" style="display:none">
+          <div class="users-toolbar">
+            <input id="inviteEmail" type="email" placeholder="person@pacificdiscovery.org" />
+            <button class="btn btn-primary" id="inviteBtn">Invite</button>
+          </div>
+          <div id="usersContent"><div class="loading">Loading…</div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div id="modalStatus" style="color:var(--text-dim); font-size:12px">—</div>
+        <div>
+          <button class="btn" id="refreshBtn">Refresh</button>
+          <button class="btn btn-primary" id="savePermsBtn">Save permissions</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
   <script>
     const PALETTES = [
-      ["#7c9bff", "#6ee7b7"],
-      ["#f0abfc", "#fca5a5"],
-      ["#fcd34d", "#f59e0b"],
-      ["#34d399", "#06b6d4"],
-      ["#a78bfa", "#60a5fa"],
-      ["#fb7185", "#f97316"]
+      ["#7c9bff", "#6ee7b7"], ["#f0abfc", "#fca5a5"], ["#fcd34d", "#f59e0b"],
+      ["#34d399", "#06b6d4"], ["#a78bfa", "#60a5fa"], ["#fb7185", "#f97316"]
     ];
+    const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights"];
+    const ALL_ROLES = ["admin", ...FUNCTIONAL_ROLES];
 
-    let STATE = { dashboards: [], query: "", category: "All", user: null, roles: [] };
+    let STATE = {
+      dashboards: [], query: "", category: "All",
+      user: null, roles: [],
+      draftPerms: null,        // in-flight edits in admin modal
+      users: []                // loaded on admin modal open
+    };
 
     // --- Auth lifecycle ---
     window.addEventListener("DOMContentLoaded", () => {
-      if (!window.netlifyIdentity) {
-        showGate("Netlify Identity didn't load. Check the site configuration.", null);
-        return;
-      }
-      netlifyIdentity.on("init", user => { user ? onLogin(user) : showGate(); });
-      netlifyIdentity.on("login", user => { netlifyIdentity.close(); onLogin(user); });
+      if (!window.netlifyIdentity) { showGate("Netlify Identity didn't load."); return; }
+      netlifyIdentity.on("init", u => u ? onLogin(u) : showGate());
+      netlifyIdentity.on("login", u => { netlifyIdentity.close(); onLogin(u); });
       netlifyIdentity.on("logout", () => { STATE.user = null; STATE.roles = []; showGate(); });
       netlifyIdentity.init();
     });
 
-    document.getElementById("logoutBtn").addEventListener("click", () => netlifyIdentity.logout());
+    $("logoutBtn").addEventListener("click", () => netlifyIdentity.logout());
+    $("adminBtn").addEventListener("click", openAdmin);
+    $("closeModalBtn").addEventListener("click", closeAdmin);
+    $("refreshBtn").addEventListener("click", () => { loadDashboards(); loadUsers(); });
+    $("savePermsBtn").addEventListener("click", savePermissions);
+    $("inviteBtn").addEventListener("click", inviteUser);
+    $("inviteEmail").addEventListener("keydown", e => { if (e.key === "Enter") inviteUser(); });
+    document.querySelectorAll(".modal-tab").forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
 
-    function showGate(message, _) {
-      document.getElementById("userPanel").classList.add("hidden");
-      document.getElementById("toolbar").style.display = "none";
-      const grid = document.getElementById("grid");
-      grid.innerHTML = `
-        <div class="gate" style="grid-column: 1 / -1">
-          <h2>Sign in to view dashboards</h2>
-          <p>${message || "Access is restricted to Pacific Discovery team members. Sign in with your Google account to continue."}</p>
-          <button class="btn btn-primary" id="loginBtn">Sign in</button>
-        </div>`;
-      document.getElementById("loginBtn").onclick = () => netlifyIdentity.open();
+    function showGate(message) {
+      $("userPanel").classList.add("hidden");
+      $("toolbar").style.display = "none";
+      $("grid").innerHTML = `<div class="gate" style="grid-column:1/-1">
+        <h2>Sign in to view dashboards</h2>
+        <p>${message || "Access is restricted to Pacific Discovery team members. Sign in with your Google account to continue."}</p>
+        <button class="btn btn-primary" id="loginBtn">Sign in</button>
+      </div>`;
+      $("loginBtn").onclick = () => netlifyIdentity.open();
     }
 
     function onLogin(user) {
       STATE.user = user;
-      STATE.roles = (user.app_metadata && user.app_metadata.roles) || [];
+      STATE.roles = user.app_metadata?.roles || [];
       paintUser(user);
+      $("adminBtn").style.display = STATE.roles.includes("admin") ? "" : "none";
       loadDashboards();
     }
 
     function paintUser(user) {
       const email = user.email || "";
-      const name = (user.user_metadata && user.user_metadata.full_name) || email.split("@")[0];
+      const name = user.user_metadata?.full_name || email.split("@")[0];
       const initials = (name || "?").split(/\s+/).map(s => s[0]).slice(0, 2).join("").toUpperCase();
-      document.getElementById("userAvatar").textContent = initials || "?";
-      document.getElementById("userName").textContent = name;
-      document.getElementById("userEmail").textContent = email;
-      document.getElementById("userRole").textContent =
-        STATE.roles.length ? STATE.roles.join(" · ") : "no roles assigned";
-      document.getElementById("userPanel").classList.remove("hidden");
+      $("userAvatar").textContent = initials || "?";
+      $("userName").textContent = name;
+      $("userEmail").textContent = email;
+      $("userRole").textContent = STATE.roles.length ? STATE.roles.join(" · ") : "no roles assigned";
+      $("userPanel").classList.remove("hidden");
     }
 
+    // --- Dashboard listing ---
     async function loadDashboards() {
-      const grid = document.getElementById("grid");
-      grid.innerHTML = `<div class="loading" style="grid-column: 1 / -1">Loading dashboards…</div>`;
+      const grid = $("grid");
+      grid.innerHTML = `<div class="loading" style="grid-column:1/-1">Loading dashboards…</div>`;
       try {
-        const token = STATE.user ? await STATE.user.jwt() : null;
-        const res = await fetch(`dashboards.json?t=${Date.now()}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          credentials: "include"
-        });
-        if (res.status === 401 || res.status === 403) {
-          showGate("Your session expired or you don't have access. Please sign in again.");
-          return;
-        }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const res = await api("GET", "/api/config");
+        if (res.status === 401 || res.status === 403) { showGate("Your session expired."); return; }
         const data = await res.json();
         render(data);
       } catch (err) {
-        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1">Couldn't load dashboards.json<br><small>${err.message}</small></div>`;
+        grid.innerHTML = `<div class="empty" style="grid-column:1/-1">Couldn't load config<br><small>${err.message}</small></div>`;
       }
     }
 
@@ -383,28 +435,25 @@
         if (b.pinned && !a.pinned) return 1;
         return (a.title || "").localeCompare(b.title || "");
       });
-      document.getElementById("updated").textContent =
-        data.generatedAt ? `Last updated ${new Date(data.generatedAt).toLocaleString()}` : "";
+      $("updated").textContent = data.generatedAt ? `Last updated ${new Date(data.generatedAt).toLocaleString()}` : "";
       buildChips();
-      document.getElementById("toolbar").style.display = "";
+      $("toolbar").style.display = "";
       draw();
     }
 
     function visibleDashboards() {
-      const roles = STATE.roles;
-      const isAdmin = roles.includes("admin");
+      const isAdmin = STATE.roles.includes("admin");
       return STATE.dashboards.filter(d => {
         if (isAdmin) return true;
         const allowed = d.allowedRoles || [];
-        if (!allowed.length) return true;              // no restriction = visible to all logged-in users
-        return allowed.some(r => roles.includes(r));
+        if (!allowed.length) return false;
+        return allowed.some(r => STATE.roles.includes(r));
       });
     }
 
     function buildChips() {
       const cats = ["All", ...new Set(visibleDashboards().map(d => d.category).filter(Boolean))];
-      const wrap = document.getElementById("categoryChips");
-      wrap.innerHTML = "";
+      const wrap = $("categoryChips"); wrap.innerHTML = "";
       cats.forEach(c => {
         const el = document.createElement("button");
         el.className = "chip" + (c === STATE.category ? " active" : "");
@@ -415,54 +464,237 @@
     }
 
     function draw() {
-      const grid = document.getElementById("grid");
+      const grid = $("grid");
       const q = STATE.query.trim().toLowerCase();
       const filtered = visibleDashboards().filter(d => {
         const matchesCat = STATE.category === "All" || d.category === STATE.category;
-        const hay = `${d.title || ""} ${d.description || ""} ${d.category || ""}`.toLowerCase();
+        const hay = `${d.title||""} ${d.description||""} ${d.category||""}`.toLowerCase();
         return matchesCat && (!q || hay.includes(q));
       });
-
-      document.getElementById("count").textContent =
-        `${filtered.length} dashboard${filtered.length === 1 ? "" : "s"} visible`;
-
-      if (!filtered.length) {
-        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1">No dashboards match your access or filters.</div>`;
-        return;
-      }
+      $("count").textContent = `${filtered.length} dashboard${filtered.length===1?"":"s"} visible`;
+      if (!filtered.length) { grid.innerHTML = `<div class="empty" style="grid-column:1/-1">No dashboards match your access or filters.</div>`; return; }
 
       grid.innerHTML = filtered.map((d, i) => {
-        const palette = PALETTES[Math.abs(hash(d.slug || d.title || String(i))) % PALETTES.length];
+        const palette = PALETTES[Math.abs(hash(d.slug||d.title||String(i))) % PALETTES.length];
         const [c1, c2] = d.colors || palette;
         const icon = d.icon || "📊";
         const href = d.url || `/${d.slug}/`;
-        const cat = d.category ? `<span class="category">${escapeHtml(d.category)}</span>` : "";
-        const roleTag = d.allowedRoles && d.allowedRoles.length
-          ? `<span class="role-tag">${escapeHtml(d.allowedRoles.join(" · "))}</span>`
-          : "";
-        return `
-          <a class="card" href="${escapeAttr(href)}" style="--c1:${c1};--c2:${c2}">
-            <div class="card-top">
-              <div class="icon" style="background:linear-gradient(135deg, ${c1}33, ${c2}22)">${icon}</div>
-              ${cat}
-            </div>
-            <h3>${escapeHtml(d.title || d.slug || "Untitled")}</h3>
-            <p>${escapeHtml(d.description || "")}</p>
-            <div class="card-footer">
-              ${roleTag}
-              <span class="open">Open →</span>
-            </div>
-          </a>`;
+        const cat = d.category ? `<span class="category">${esc(d.category)}</span>` : "";
+        const tag = d.allowedRoles?.length
+          ? `<span class="role-tag">${esc(d.allowedRoles.join(" · "))}</span>`
+          : `<span class="role-tag">admin only</span>`;
+        return `<a class="card" href="${esc(href)}" style="--c1:${c1};--c2:${c2}">
+          <div class="card-top"><div class="icon" style="background:linear-gradient(135deg, ${c1}33, ${c2}22)">${icon}</div>${cat}</div>
+          <h3>${esc(d.title||d.slug||"Untitled")}</h3>
+          <p>${esc(d.description||"")}</p>
+          <div class="card-footer">${tag}<span class="open">Open →</span></div>
+        </a>`;
       }).join("");
     }
 
-    function hash(str) { let h = 0; for (const c of str) h = (h << 5) - h + c.charCodeAt(0) | 0; return h; }
-    function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-    function escapeAttr(s) { return escapeHtml(s); }
+    $("search").addEventListener("input", e => { STATE.query = e.target.value; draw(); });
 
-    document.getElementById("search").addEventListener("input", e => {
-      STATE.query = e.target.value; draw();
-    });
+    // --- Admin modal ---
+    function openAdmin() {
+      $("adminModal").classList.add("show");
+      switchTab("permissions");
+      renderPermissions();
+      loadUsers();
+    }
+    function closeAdmin() { $("adminModal").classList.remove("show"); }
+    function switchTab(name) {
+      document.querySelectorAll(".modal-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+      $("tabPermissions").style.display = name === "permissions" ? "" : "none";
+      $("tabUsers").style.display = name === "users" ? "" : "none";
+      $("savePermsBtn").style.display = name === "permissions" ? "" : "none";
+    }
+
+    function renderPermissions() {
+      STATE.draftPerms = STATE.dashboards.map(d => ({
+        slug: d.slug,
+        title: d.title,
+        allowedRoles: Array.isArray(d.allowedRoles) ? [...d.allowedRoles] : []
+      }));
+      const rows = STATE.draftPerms.map(d => `
+        <tr data-slug="${esc(d.slug)}">
+          <td>
+            <div style="font-weight:600">${esc(d.title)}</div>
+            <div class="slug">${esc(d.slug)}</div>
+          </td>
+          ${FUNCTIONAL_ROLES.map(r => `
+            <td class="role-cell">
+              <input type="checkbox" data-role="${r}" ${d.allowedRoles.includes(r) ? "checked" : ""} />
+            </td>`).join("")}
+        </tr>`).join("");
+      $("permissionsContent").innerHTML = `
+        <table class="perm-table">
+          <thead><tr>
+            <th>Dashboard</th>
+            ${FUNCTIONAL_ROLES.map(r => `<th class="role-cell">${r}</th>`).join("")}
+          </tr></thead>
+          <tbody>${rows || `<tr><td colspan="${FUNCTIONAL_ROLES.length+1}" style="color:var(--text-dim); text-align:center; padding:30px">No dashboards found.</td></tr>`}</tbody>
+        </table>`;
+      $("permissionsContent").querySelectorAll("input[type=checkbox]").forEach(cb => {
+        cb.addEventListener("change", e => {
+          const row = e.target.closest("tr");
+          const slug = row.dataset.slug;
+          const role = e.target.dataset.role;
+          const entry = STATE.draftPerms.find(x => x.slug === slug);
+          if (!entry) return;
+          if (e.target.checked) {
+            if (!entry.allowedRoles.includes(role)) entry.allowedRoles.push(role);
+          } else {
+            entry.allowedRoles = entry.allowedRoles.filter(r => r !== role);
+          }
+        });
+      });
+    }
+
+    async function savePermissions() {
+      if (!STATE.draftPerms) return;
+      setStatus("Saving…");
+      try {
+        const res = await api("PUT", "/api/config", {
+          dashboards: STATE.draftPerms.map(d => ({ slug: d.slug, allowedRoles: d.allowedRoles }))
+        });
+        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        toast("Permissions saved", "success");
+        setStatus("Saved · " + new Date().toLocaleTimeString());
+        await loadDashboards();
+        renderPermissions();
+      } catch (err) {
+        toast("Save failed: " + err.message, "error");
+        setStatus("Error: " + err.message);
+      }
+    }
+
+    // --- User management ---
+    async function loadUsers() {
+      $("usersContent").innerHTML = `<div class="loading">Loading users…</div>`;
+      try {
+        const res = await api("GET", "/api/users");
+        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        const data = await res.json();
+        STATE.users = data.users || [];
+        renderUsers();
+      } catch (err) {
+        $("usersContent").innerHTML = `<div class="empty">Couldn't load users: ${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderUsers() {
+      if (!STATE.users.length) {
+        $("usersContent").innerHTML = `<div class="empty">No users yet — invite someone using the form above.</div>`;
+        return;
+      }
+      const rows = STATE.users.map(u => `
+        <tr data-id="${esc(u.id)}">
+          <td>
+            <div style="font-weight:600">${esc(u.full_name || u.email.split("@")[0])}</div>
+            <div class="slug">${esc(u.email)}${u.invited ? ' <em style="color:var(--accent-2)">· invited, pending</em>' : ""}</div>
+          </td>
+          <td>
+            <div class="role-editor">
+              ${ALL_ROLES.map(r => `
+                <label class="${u.roles.includes(r) ? "checked" : ""}">
+                  <input type="checkbox" data-role="${r}" ${u.roles.includes(r) ? "checked" : ""} />${r}
+                </label>`).join("")}
+            </div>
+          </td>
+          <td style="text-align:right">
+            <button class="btn btn-danger btn-sm" data-action="delete">Remove</button>
+          </td>
+        </tr>`).join("");
+      $("usersContent").innerHTML = `
+        <table class="perm-table">
+          <thead><tr><th>User</th><th>Roles</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+
+      $("usersContent").querySelectorAll("tr[data-id]").forEach(tr => {
+        const id = tr.dataset.id;
+        tr.querySelectorAll("input[type=checkbox]").forEach(cb => {
+          cb.addEventListener("change", () => {
+            const label = cb.closest("label");
+            label.classList.toggle("checked", cb.checked);
+            saveUserRoles(id, tr);
+          });
+        });
+        tr.querySelector("button[data-action=delete]").addEventListener("click", () => deleteUser(id, tr));
+      });
+    }
+
+    async function saveUserRoles(id, tr) {
+      const roles = [...tr.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.dataset.role);
+      setStatus("Saving…");
+      try {
+        const res = await api("PATCH", `/api/users/${encodeURIComponent(id)}`, { roles });
+        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        const u = STATE.users.find(x => x.id === id);
+        if (u) u.roles = roles;
+        toast("Roles updated", "success");
+        setStatus("Saved · " + new Date().toLocaleTimeString());
+      } catch (err) {
+        toast("Save failed: " + err.message, "error");
+      }
+    }
+
+    async function deleteUser(id, tr) {
+      const u = STATE.users.find(x => x.id === id);
+      if (!confirm(`Remove ${u?.email || "this user"}? They'll lose all access immediately.`)) return;
+      try {
+        const res = await api("DELETE", `/api/users/${encodeURIComponent(id)}`);
+        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        STATE.users = STATE.users.filter(x => x.id !== id);
+        tr.remove();
+        toast("User removed", "success");
+      } catch (err) {
+        toast("Remove failed: " + err.message, "error");
+      }
+    }
+
+    async function inviteUser() {
+      const email = $("inviteEmail").value.trim();
+      if (!email) return;
+      $("inviteBtn").disabled = true;
+      try {
+        const res = await api("POST", "/api/users", { email });
+        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        toast(`Invite sent to ${email}`, "success");
+        $("inviteEmail").value = "";
+        loadUsers();
+      } catch (err) {
+        toast("Invite failed: " + err.message, "error");
+      } finally {
+        $("inviteBtn").disabled = false;
+      }
+    }
+
+    // --- API helpers ---
+    async function api(method, url, body) {
+      const headers = { "Content-Type": "application/json" };
+      if (STATE.user) {
+        try { headers.Authorization = `Bearer ${await STATE.user.jwt()}`; } catch {}
+      }
+      return fetch(url, {
+        method, headers, credentials: "include",
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    }
+    async function safeJson(r) { try { return await r.json(); } catch { return {}; } }
+
+    function setStatus(s) { $("modalStatus").textContent = s; }
+    function toast(msg, kind) {
+      const t = $("toast");
+      t.className = `toast show ${kind || ""}`;
+      t.textContent = msg;
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => t.classList.remove("show"), 2500);
+    }
+
+    function $(id) { return document.getElementById(id); }
+    function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+    function hash(str) { let h = 0; for (const c of str) h = (h << 5) - h + c.charCodeAt(0) | 0; return h; }
   </script>
 </body>
 </html>

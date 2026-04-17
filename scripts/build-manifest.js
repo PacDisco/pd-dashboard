@@ -1,33 +1,35 @@
 #!/usr/bin/env node
 /**
- * Auto-generate dashboards.json AND _redirects by scanning the repo.
+ * Scan the repo for dashboard folders and emit a "discovery" manifest.
+ *
+ * Outputs:
+ *   - dashboards.discovery.json  (committed to the deploy; read by the config
+ *      function as the baseline for which dashboards exist)
+ *   - dashboards.json            (same content, kept for backwards compat and
+ *      as a read-only fallback if Blobs are unavailable)
+ *   - _redirects                 (coarse edge rules — fine-grained gating is
+ *      enforced by netlify/edge-functions/auth-gate.js reading the blob)
  *
  * Rules:
- *  - A "dashboard" is any top-level folder containing an index.html
- *  - Folders in EXCLUDED_DIRS are ignored (netlify, scripts, node_modules, etc.)
- *  - Optional per-folder metadata: drop a `dashboard.json` inside a folder:
- *      {
- *        "title": "...", "description": "...", "category": "...",
- *        "icon": "📊", "owner": "...", "pinned": true,
- *        "colors": ["#hex","#hex"],
- *        "allowedRoles": ["admin","viewer"]
- *      }
- *  - If no dashboard.json exists, the script falls back to the folder's
- *    index.html <title> and <meta name="description"> and defaults
- *    allowedRoles to ["admin","viewer"]
- *  - Existing entries in dashboards.json are preserved (merged) so hand-edited
- *    metadata survives rebuilds
- *  - _redirects is fully regenerated from allowedRoles (role-based gating
- *    enforced at Netlify's edge — required for real security)
+ *   - A dashboard is any top-level folder containing an index.html
+ *   - Folders in EXCLUDED_DIRS are ignored
+ *   - Optional per-folder metadata: drop `dashboard.json` inside a folder:
+ *       { "title":"…", "description":"…", "category":"…", "icon":"📊",
+ *         "owner":"…", "pinned":true, "colors":["#…","#…"],
+ *         "allowedRoles":["outreach"] }
+ *   - If no dashboard.json exists, falls back to folder's <title> +
+ *     <meta name="description">, and defaults allowedRoles to [] (admin-only)
  *
- * Run manually:   node scripts/build-manifest.js
- * Run on deploy:  set as Netlify build command (see README).
+ * NOTE: Permissions live in Netlify Blobs at runtime. This script only sets
+ * the INITIAL value for new dashboards. Once an admin edits permissions in
+ * the UI, those blob values override whatever's in this file.
  */
 
 const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
+const DISCOVERY = path.join(ROOT, "dashboards.discovery.json");
 const MANIFEST = path.join(ROOT, "dashboards.json");
 const REDIRECTS = path.join(ROOT, "_redirects");
 
@@ -36,17 +38,11 @@ const EXCLUDED_DIRS = new Set([
   ".git", ".netlify", ".github",
   "assets", "public", "dist", "build"
 ]);
-
-const DEFAULT_ROLES = ["admin", "viewer"];
-
-function readExisting() {
-  try { return JSON.parse(fs.readFileSync(MANIFEST, "utf8")); }
-  catch { return { dashboards: [] }; }
-}
+const DEFAULT_ROLES = []; // admin-only until explicitly granted
 
 function titleFromHtml(html) {
-  const t = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return t ? t[1].trim().replace(/\s+/g, " ") : null;
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return m ? m[1].trim().replace(/\s+/g, " ") : null;
 }
 function descFromHtml(html) {
   const m = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
@@ -90,7 +86,7 @@ function scan() {
       owner: meta.owner || "",
       pinned: meta.pinned || false,
       colors: meta.colors || undefined,
-      allowedRoles: meta.allowedRoles || DEFAULT_ROLES.slice(),
+      allowedRoles: Array.isArray(meta.allowedRoles) ? meta.allowedRoles : DEFAULT_ROLES.slice(),
       url: meta.url || `/${slug}/`
     });
   }
@@ -103,9 +99,7 @@ function merge(existing, scanned) {
     const prev = bySlug.get(s.slug);
     if (!prev) return s;
     return {
-      ...prev,
-      ...s,
-      // Prefer hand-edited fields
+      ...prev, ...s,
       title: prev.title && prev.title !== s.slug ? prev.title : s.title,
       description: prev.description || s.description,
       category: prev.category || s.category,
@@ -113,54 +107,59 @@ function merge(existing, scanned) {
       owner: prev.owner || s.owner,
       pinned: prev.pinned ?? s.pinned,
       colors: prev.colors || s.colors,
-      allowedRoles: (Array.isArray(prev.allowedRoles) && prev.allowedRoles.length)
-        ? prev.allowedRoles : s.allowedRoles,
+      allowedRoles: Array.isArray(prev.allowedRoles) ? prev.allowedRoles : s.allowedRoles,
       url: s.url
     };
   });
 }
 
+function readExisting(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return { dashboards: [] }; }
+}
+
 function writeRedirects(dashboards) {
+  // The edge function (netlify/edge-functions/auth-gate.js) does fine-grained
+  // role enforcement at request time by reading the blob. We still emit a
+  // coarse `_redirects` as a belt-and-suspenders fallback: any authenticated
+  // user with any functional role OR admin can reach a dashboard path; the
+  // edge function then refines this per-dashboard.
+  const roles = ["admin", "admissions", "outreach", "programs", "operations", "flights"];
   const lines = [
     "# AUTO-GENERATED by scripts/build-manifest.js — do not edit by hand",
-    "# Role-based gating for dashboard subpaths + the manifest.",
-    "# Any user without a matching role (including unauthenticated users) gets 401.",
-    ""
+    "# Coarse baseline: any authenticated user with a role can reach these paths.",
+    "# Fine-grained permissions are enforced by netlify/edge-functions/auth-gate.js.",
+    "",
+    `/api/config          200!    Role=${roles.join(",")}`,
+    `/api/users           200!    Role=admin`,
+    `/api/users/*         200!    Role=admin`,
   ];
-
-  // Gate the manifest: visible to anyone with any of the union of roles in use.
-  const allRoles = [...new Set(dashboards.flatMap(d => d.allowedRoles || []))];
-  if (allRoles.length) {
-    lines.push(`/dashboards.json    200!    Role=${allRoles.join(",")}`);
-  }
-
   for (const d of dashboards) {
-    const roles = (d.allowedRoles || []).join(",");
-    if (!roles) continue;
-    lines.push(`/${d.slug}/*${pad(d.slug)}200!    Role=${roles}`);
+    lines.push(`/${d.slug}/*${pad(d.slug)}200!    Role=${roles.join(",")}`);
   }
   lines.push("");
   fs.writeFileSync(REDIRECTS, lines.join("\n"));
 }
 function pad(slug) {
-  // Align the status column loosely for readability.
-  const width = Math.max(0, 18 - (slug.length + 3));
-  return " ".repeat(width + 1);
+  const w = Math.max(0, 18 - (slug.length + 3));
+  return " ".repeat(w + 1);
 }
 
 function main() {
-  const existing = readExisting();
+  const existing = readExisting(DISCOVERY).dashboards?.length
+    ? readExisting(DISCOVERY)
+    : readExisting(MANIFEST);
   const scanned = scan();
   const merged = merge(existing.dashboards || [], scanned);
 
   const payload = { generatedAt: new Date().toISOString(), dashboards: merged };
+  fs.writeFileSync(DISCOVERY, JSON.stringify(payload, null, 2) + "\n");
   fs.writeFileSync(MANIFEST, JSON.stringify(payload, null, 2) + "\n");
   writeRedirects(merged);
 
-  console.log(`Wrote ${merged.length} dashboard(s) → ${path.relative(ROOT, MANIFEST)}`);
-  console.log(`Wrote _redirects with role-based gating`);
+  console.log(`Wrote ${merged.length} dashboard(s) → dashboards.discovery.json + dashboards.json`);
+  console.log(`Wrote _redirects (coarse edge rules)`);
   merged.forEach(d => console.log(
-    `  • ${d.slug.padEnd(20)} ${d.title.padEnd(30)} roles: [${(d.allowedRoles || []).join(",")}]`
+    `  • ${d.slug.padEnd(20)} ${d.title.padEnd(30)} default roles: [${(d.allowedRoles || []).join(",")}]`
   ));
 }
 

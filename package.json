@@ -1,0 +1,15 @@
+{
+  "name": "pacific-discovery-dashboards",
+  "version": "1.0.0",
+  "description": "Gated dashboards landing page with admin permission management",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "build": "node scripts/build-manifest.js"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
