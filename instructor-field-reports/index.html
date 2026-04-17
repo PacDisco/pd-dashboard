@@ -623,7 +623,7 @@
     charts.programs = new Chart($("chart-programs"), {
       type: "bar",
       data: {
-        labels: progEntries.map(e => e[0].replace(/(Spring|Fall) (\d{4}) - /, "$1$2 ")),
+        labels: progEntries.map(e => e[0].replace(/(Spring|Fall) (\d{4}) - /, "$1 $2 ")),
         datasets: [{ data: progEntries.map(e => e[1]), backgroundColor: "#059669" }]
       },
       options: {
