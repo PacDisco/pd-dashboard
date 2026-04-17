@@ -411,10 +411,13 @@
     return j.content;
   }
   async function fetchAllSubmissions() {
-    const limit = 1000;
+    // Netlify Functions cap responses at 6MB. The proxy slims each submission
+    // by dropping empty answers, so 500 per page stays well under the cap.
+    const limit = 500;
     let offset = 0;
     const all = [];
     while (true) {
+      setStatus(`Loading submissions… ${all.length} so far`);
       const j = await fetchJSON(proxyUrl(`/form/${FORM_ID}/submissions`, { limit, offset, orderby: "created_at" }));
       const batch = j.content || [];
       all.push(...batch);
