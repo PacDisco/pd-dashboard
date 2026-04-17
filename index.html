@@ -1,1 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pacific Discovery Dashboards</title>
+  <meta name="description" content="Central hub for all Pacific Discovery reporting dashboards." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #121830;
+      --card: #171f3a;
+      --card-hover: #1e2748;
+      --border: #2a335a;
+      --text: #e8ecf6;
+      --text-dim: #9aa3c0;
+      --accent: #7c9bff;
+      --accent-2: #6ee7b7;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2550 0%, transparent 60%),
+                  radial-gradient(1000px 500px at 110% 10%, #0f3b3a 0%, transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 56px 24px 24px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+    .brand-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 12px var(--accent);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 44px);
+      letter-spacing: -0.02em;
+      font-weight: 700;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--text-dim);
+      font-size: 16px;
+      max-width: 620px;
+    }
+    .toolbar {
+      max-width: 1200px;
+      margin: 24px auto 0;
+      padding: 0 24px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .search {
+      flex: 1 1 260px;
+      min-width: 240px;
+      display: flex;
+      align-items: center;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      transition: border-color .2s;
+    }
+    .search:focus-within { border-color: var(--accent); }
+    .search svg { flex-shrink: 0; opacity: .7; margin-right: 10px; }
+    .search input {
+      background: transparent;
+      border: 0;
+      outline: none;
+      color: var(--text);
+      width: 100%;
+      font-size: 15px;
+    }
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      background: var(--bg-soft);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .15s ease;
+      user-select: none;
+    }
+    .chip:hover { color: var(--text); border-color: var(--accent); }
+    .chip.active {
+      color: var(--bg);
+      background: var(--text);
+      border-color: var(--text);
+      font-weight: 600;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 24px 80px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-decoration: none;
+      color: inherit;
+      position: relative;
+      overflow: hidden;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+      box-shadow: var(--shadow);
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      background: var(--card-hover);
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--c1, var(--accent)), var(--c2, var(--accent-2)));
+      opacity: .9;
+    }
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .icon {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      background: linear-gradient(135deg, rgba(124,155,255,.18), rgba(110,231,183,.14));
+      border: 1px solid var(--border);
+    }
+    .category {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--text-dim);
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .card p {
+      margin: 0 0 16px;
+      color: var(--text-dim);
+      font-size: 14px;
+      line-height: 1.5;
+      flex: 1;
+    }
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .open {
+      color: var(--accent);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .empty, .loading {
+      text-align: center;
+      color: var(--text-dim);
+      padding: 60px 20px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+    }
+    footer {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px 24px 40px;
+      color: var(--text-dim);
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    @media (max-width: 540px) {
+      header { padding-top: 32px; }
+      .toolbar { margin-top: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="brand-dot"></span> Pacific Discovery</div>
+    <h1>Dashboards</h1>
+    <p class="subtitle">A central hub for reporting. New dashboards show up automatically after each deploy.</p>
+  </header>
 
+  <div class="toolbar">
+    <label class="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" type="search" placeholder="Search dashboards..." autocomplete="off" />
+    </label>
+    <div class="chips" id="categoryChips"></div>
+  </div>
+
+  <main>
+    <div id="grid" class="grid" aria-live="polite">
+      <div class="loading">Loading dashboards…</div>
+    </div>
+  </main>
+
+  <footer>
+    <div id="count">—</div>
+    <div id="updated">—</div>
+  </footer>
+
+  <script>
+    const PALETTES = [
+      ["#7c9bff", "#6ee7b7"],
+      ["#f0abfc", "#fca5a5"],
+      ["#fcd34d", "#f59e0b"],
+      ["#34d399", "#06b6d4"],
+      ["#a78bfa", "#60a5fa"],
+      ["#fb7185", "#f97316"]
+    ];
+
+    async function load() {
+      const grid = document.getElementById("grid");
+      try {
+        // Cache-bust so new deploys show up immediately
+        const res = await fetch(`dashboards.json?t=${Date.now()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        render(data);
+      } catch (err) {
+        grid.innerHTML = `<div class="empty">Couldn't load dashboards.json<br><small>${err.message}</small></div>`;
+      }
+    }
+
+    let STATE = { dashboards: [], query: "", category: "All" };
+
+    function render(data) {
+      STATE.dashboards = (data.dashboards || []).slice().sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (b.pinned && !a.pinned) return 1;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+      document.getElementById("updated").textContent =
+        data.generatedAt ? `Last updated ${new Date(data.generatedAt).toLocaleString()}` : "";
+      buildChips();
+      draw();
+    }
+
+    function buildChips() {
+      const cats = ["All", ...new Set(STATE.dashboards.map(d => d.category).filter(Boolean))];
+      const wrap = document.getElementById("categoryChips");
+      wrap.innerHTML = "";
+      cats.forEach(c => {
+        const el = document.createElement("button");
+        el.className = "chip" + (c === STATE.category ? " active" : "");
+        el.textContent = c;
+        el.onclick = () => { STATE.category = c; buildChips(); draw(); };
+        wrap.appendChild(el);
+      });
+    }
+
+    function draw() {
+      const grid = document.getElementById("grid");
+      const q = STATE.query.trim().toLowerCase();
+      const filtered = STATE.dashboards.filter(d => {
+        const matchesCat = STATE.category === "All" || d.category === STATE.category;
+        const hay = `${d.title || ""} ${d.description || ""} ${d.category || ""}`.toLowerCase();
+        return matchesCat && (!q || hay.includes(q));
+      });
+
+      document.getElementById("count").textContent =
+        `${filtered.length} dashboard${filtered.length === 1 ? "" : "s"}`;
+
+      if (!filtered.length) {
+        grid.innerHTML = `<div class="empty">No dashboards match your filter.</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map((d, i) => {
+        const palette = PALETTES[Math.abs(hash(d.slug || d.title || String(i))) % PALETTES.length];
+        const [c1, c2] = d.colors || palette;
+        const icon = d.icon || "📊";
+        const href = d.url || `/${d.slug}/`;
+        const cat = d.category ? `<span class="category">${escapeHtml(d.category)}</span>` : "";
+        return `
+          <a class="card" href="${escapeAttr(href)}" style="--c1:${c1};--c2:${c2}">
+            <div class="card-top">
+              <div class="icon" style="background:linear-gradient(135deg, ${c1}33, ${c2}22)">${icon}</div>
+              ${cat}
+            </div>
+            <h3>${escapeHtml(d.title || d.slug || "Untitled")}</h3>
+            <p>${escapeHtml(d.description || "")}</p>
+            <div class="card-footer">
+              <span>${d.owner ? escapeHtml(d.owner) : ""}</span>
+              <span class="open">Open →</span>
+            </div>
+          </a>`;
+      }).join("");
+    }
+
+    function hash(str) { let h = 0; for (const c of str) h = (h << 5) - h + c.charCodeAt(0) | 0; return h; }
+    function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+    function escapeAttr(s) { return escapeHtml(s); }
+
+    document.getElementById("search").addEventListener("input", (e) => {
+      STATE.query = e.target.value; draw();
+    });
+
+    load();
+  </script>
+</body>
+</html>

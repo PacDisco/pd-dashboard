@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-04-17T00:00:00.000Z",
+  "dashboards": [
+    {
+      "slug": "enrollment",
+      "title": "Student Enrollment",
+      "description": "Pipeline, funnel, and conversion metrics across the enrollment journey.",
+      "category": "Enrollment",
+      "icon": "🎓",
+      "owner": "",
+      "pinned": true
+    },
+    {
+      "slug": "lead-data-sheet",
+      "title": "Lead Data Sheet",
+      "description": "Live lead data synced from HubSpot with source, stage, and owner views.",
+      "category": "Marketing",
+      "icon": "📈",
+      "owner": ""
+    },
+    {
+      "slug": "report",
+      "title": "Report",
+      "description": "Summary report dashboard.",
+      "category": "Reporting",
+      "icon": "📊",
+      "owner": ""
+    },
+    {
+      "slug": "slider",
+      "title": "Slider Manager",
+      "description": "Manage dashboard sliders and homepage content.",
+      "category": "Admin",
+      "icon": "🎛️",
+      "owner": ""
+    }
+  ]
+}
