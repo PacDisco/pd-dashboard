@@ -1,11 +1,18 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  command = "node scripts/build-manifest.js"
 
 [functions]
   node_bundler = "esbuild"
+  directory = "netlify/functions"
 
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+
+[[headers]]
+  for = "/dashboards.json"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
