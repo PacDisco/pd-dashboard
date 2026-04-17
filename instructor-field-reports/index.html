@@ -386,9 +386,15 @@
   // ---------- data fetch (through Netlify Function proxy) ----------
   async function fetchJSON(url) {
     const res = await fetch(url);
-    const j = await res.json().catch(() => ({ error: "Invalid JSON from proxy" }));
+    const text = await res.text();
+    let j;
+    try { j = JSON.parse(text); }
+    catch (_) {
+      throw new Error(`Non-JSON response (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    }
     if (!res.ok || j.error) {
-      throw new Error(j.error || `HTTP ${res.status}`);
+      const detail = j.detail ? ` — ${j.detail}` : "";
+      throw new Error((j.error || `HTTP ${res.status}`) + detail);
     }
     if (j.responseCode && j.responseCode !== 200) {
       throw new Error(j.message || `Jotform error ${j.responseCode}`);
