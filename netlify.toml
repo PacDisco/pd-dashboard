@@ -1,6 +1,7 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  edge_functions = "netlify/edge-functions"
   command = "node scripts/build-manifest.js"
 
 [build.environment]
@@ -9,21 +10,83 @@
 [functions]
   node_bundler = "esbuild"
   directory = "netlify/functions"
+  external_node_modules = ["@netlify/blobs"]
+  # Ship the discovery manifests with the bundled functions so config.js
+  # can read them from the filesystem if HTTP fetch fails (e.g. if
+  # dashboards.json is gated by _redirects).
+  included_files = [
+    "dashboards.discovery.json",
+    "dashboards.json"
+  ]
 
+# Route /api/config → config function, /api/users[/*] → users function.
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  from = "/api/config"
+  to   = "/.netlify/functions/config"
   status = 200
 
+[[redirects]]
+  from = "/api/users"
+  to   = "/.netlify/functions/users"
+  status = 200
+
+[[redirects]]
+  from = "/api/users/*"
+  to   = "/.netlify/functions/users/:splat"
+  status = 200
+
+# Keep legacy /api/* proxy for your existing functions (hubspot.js, enrollment.js, etc.)
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
+# Headers
 [[headers]]
   for = "/dashboards.json"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
-# Basic security headers for the landing page and all routes
+[[headers]]
+  for = "/dashboards.discovery.json"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Edge function runs on dashboard subpaths to enforce fine-grained role
+# gating dynamically (reads permissions from Netlify Blobs). It uses a
+# wildcard so new dashboard folders are automatically gated without toml edits;
+# static assets and API/manifest paths are excluded.
+[[edge_functions]]
+  function = "auth-gate"
+  path = "/*"
+  excludedPath = [
+    "/",
+    "/index.html",
+    "/api/*",
+    "/.netlify/*",
+    "/dashboards.json",
+    "/dashboards.discovery.json",
+    "/_redirects",
+    "/netlify.toml",
+    "/package.json",
+    "/README.md",
+    "/scripts/*",
+    "/assets/*",
+    "/favicon.ico",
+    "/*.css",
+    "/*.js",
+    "/*.png",
+    "/*.svg",
+    "/*.jpg",
+    "/*.jpeg",
+    "/*.webp",
+    "/*.woff",
+    "/*.woff2"
+  ]
