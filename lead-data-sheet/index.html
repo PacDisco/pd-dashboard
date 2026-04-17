@@ -591,6 +591,8 @@
                     goabroad: parseReferralData(goabroadRows)
                 };
 
+                // Auto-detect best default FY (the one with the most sales data)
+                autoSelectBestFY();
                 updateDashboard();
                 updateLastRefreshed();
             } catch (error) {
@@ -607,8 +609,9 @@
             // FY months run Apr–Mar
             const fyMonths = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 
-            // Source name normalization
+            // Source name normalization — covers ALL variant names across Sales, Spend, and Leads sections
             const displayNames = {
+                // Sales section names
                 'Direct traffic (email, phone call, direct url)': 'Direct Traffic',
                 'Paid social': 'Paid Social', 'Paid Search': 'Paid Search',
                 'Organic search': 'Organic Search', 'Organic social': 'Organic Social',
@@ -617,9 +620,25 @@
                 'Referral (GoOverseas)': 'Ref: GoOverseas',
                 'Referral (GoAbroad)': 'Ref: GoAbroad',
                 'Advisors (Amber)': 'Advisors', 'Advisors': 'Advisors',
-                'Recruitment (Amber)': 'Recruitment', 'Recruitment': 'Recruitment'
+                'Recruitment (Amber)': 'Recruitment', 'Recruitment': 'Recruitment',
+                // Leads section variant names (shorter/different from sales)
+                'Direct': 'Direct Traffic',
+                'Organic': 'Organic Search',
+                'organic social': 'Organic Social',
+                'StudiekeuzeMaken': 'Ref: StudiekeuzeMaken',
+                // Spend section variants
+                'paid social': 'Paid Social',
+                'paid search': 'Paid Search'
             };
-            function normName(raw) { return displayNames[raw] || raw; }
+            function normName(raw) {
+                if (displayNames[raw]) return displayNames[raw];
+                // Case-insensitive fallback
+                const lower = raw.toLowerCase();
+                for (const [key, val] of Object.entries(displayNames)) {
+                    if (key.toLowerCase() === lower) return val;
+                }
+                return raw;
+            }
 
             // Step 1: Parse calendar-year data from each "Sales by month 20XX" section
             const calendarData = {}; // { '2024': { 'Paid Social': [jan..dec], ... }, '2025': {...} }
@@ -676,9 +695,15 @@
                 for (let i = startRow + 1; i < Math.min(rows.length, startRow + 15); i++) {
                     const raw = rows[i] ? String(rows[i][0]).trim() : '';
                     if (raw === '' || raw.includes('Total')) break;
-                    calendarLeads[inferredYear][normName(raw)] = [];
+                    // Skip non-source rows (e.g. "% +/- leads previous month")
+                    if (raw.includes('%') || raw.includes('Website') || raw.includes('traffic per')) continue;
+                    const normalized = normName(raw);
+                    calendarLeads[inferredYear][normalized] = [];
                     for (let j = 1; j <= 12; j++) {
-                        calendarLeads[inferredYear][normName(raw)].push(parseFloat(rows[i][j]) || 0);
+                        const val = rows[i][j];
+                        // Handle #REF! and other non-numeric values
+                        const num = (typeof val === 'number') ? val : parseFloat(val);
+                        calendarLeads[inferredYear][normalized].push(isNaN(num) ? 0 : num);
                     }
                 }
             });
@@ -738,78 +763,195 @@
         }
 
         function parseChannelData(rows) {
-            const result = { monthly: [], totals: {} };
+            // Parse FY-organized channel data (Direct web traffic, Organic web traffic)
+            // Structure:
+            //   Row with "FY" in A, ISO date in B (first month of that FY)
+            //   Row with "1 Apr YYYY - 31 Mar YYYY" in A, ISO date in B (second month)
+            //   Subsequent rows with empty A, ISO date in B (remaining months)
+            //   Row with "Total" in A marks end of FY section
+
+            const result = {}; // { 'FY2024/25': { months: [...], traffic: {...}, leads: {...}, ...}, ... }
 
             let headerIndex = -1;
-            for (let i = 0; i < Math.min(rows.length, 5); i++) {
-                if (rows[i][0] && (rows[i][0] === 'FY' || rows[i][0] === 'Month' || rows[i][2] === 'Traffic')) {
+            for (let i = 0; i < Math.min(rows.length, 10); i++) {
+                if (rows[i] && (rows[i][2] === 'Traffic' || rows[i][2] === 'Leads')) {
                     headerIndex = i;
                     break;
                 }
             }
+            if (headerIndex === -1) headerIndex = 5;
 
-            if (headerIndex === -1) headerIndex = 0;
+            let currentFY = null;
+            let fyData = null;
 
             for (let i = headerIndex + 1; i < rows.length; i++) {
-                if (rows[i] && rows[i][0] && rows[i][1]) {
-                    result.monthly.push({
-                        fy: rows[i][0],
-                        month: rows[i][1],
-                        traffic: parseFloat(rows[i][2]) || 0,
-                        leads: parseFloat(rows[i][3]) || 0,
-                        opps: parseFloat(rows[i][4]) || 0,
-                        clients: parseFloat(rows[i][5]) || 0,
-                        leadConversion: parseFloat(rows[i][6]) || 0,
-                        oppsConversion: parseFloat(rows[i][7]) || 0,
-                        customerConversion: parseFloat(rows[i][8]) || 0
-                    });
+                if (!rows[i]) continue;
+
+                const colA = String(rows[i][0] || '').trim();
+                const colB = rows[i][1]; // ISO date string
+
+                // Check for "Total" row (end of FY section)
+                if (colA === 'Total') {
+                    currentFY = null;
+                    fyData = null;
+                    continue;
+                }
+
+                // Extract FY from label row (e.g., "1 Apr 2024 - 31 Mar 2025")
+                // This comes after the "FY" marker row, so we detect it and set up fyData
+                if (colA.includes('Apr') && colA.includes('-') && colA.includes('Mar')) {
+                    const fyMatch = colA.match(/(\d{4}).*(\d{4})/);
+                    if (fyMatch && fyMatch.length >= 3) {
+                        const startYear = fyMatch[1];
+                        const endYear = fyMatch[2];
+                        // Validate that this looks like a FY label (has Apr and Mar)
+                        currentFY = 'FY' + startYear + '/' + endYear.slice(2);
+                        if (!result[currentFY]) {
+                            result[currentFY] = {
+                                months: [],
+                                traffic: {},
+                                leads: {},
+                                opps: {},
+                                clients: {}
+                            };
+                        }
+                        fyData = result[currentFY];
+                    }
+                    // Continue to parse this row as a data row if it has colB
+                }
+
+                // "FY" marker row — contains the FIRST month's data!
+                // We need to set up fyData from the date, then parse the data below
+                if (colA === 'FY' && colB) {
+                    const dateStr = String(colB);
+                    const fyInfo = extractFYFromISO(dateStr);
+                    if (fyInfo) {
+                        currentFY = fyInfo.fy;
+                        if (!result[currentFY]) {
+                            result[currentFY] = {
+                                months: [],
+                                traffic: {},
+                                leads: {},
+                                opps: {},
+                                clients: {}
+                            };
+                        }
+                        fyData = result[currentFY];
+                    }
+                    // Fall through to parse this row's data below
+                } else if (colA === 'FY') {
+                    continue;
+                }
+
+                // Data row: ISO date in colB
+                if (!colB) {
+                    continue;
+                }
+
+                if (fyData) {
+                    const dateStr = String(colB);
+                    const monthKey = extractMonthFromISO(dateStr);
+
+                    if (monthKey) {
+                        if (!fyData.months.includes(monthKey)) {
+                            fyData.months.push(monthKey);
+                        }
+                        fyData.traffic[monthKey] = parseFloat(rows[i][2]) || 0;
+                        fyData.leads[monthKey] = parseFloat(rows[i][3]) || 0;
+                        fyData.opps[monthKey] = parseFloat(rows[i][4]) || 0;
+                        fyData.clients[monthKey] = parseFloat(rows[i][5]) || 0;
+                    }
                 }
             }
-
-            result.totals = {
-                traffic: result.monthly.reduce((sum, row) => sum + (row.traffic || 0), 0),
-                leads: result.monthly.reduce((sum, row) => sum + (row.leads || 0), 0),
-                opps: result.monthly.reduce((sum, row) => sum + (row.opps || 0), 0),
-                clients: result.monthly.reduce((sum, row) => sum + (row.clients || 0), 0)
-            };
 
             return result;
         }
 
+        function extractMonthFromISO(dateStr) {
+            // Parse ISO 8601 string like "2024-04-01T07:00:00.000Z" to "Apr"
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            const match = dateStr.match(/(\d{4})-(\d{2})/);
+            if (!match) return null;
+            const year = parseInt(match[1]);
+            const month = parseInt(match[2]);
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return monthNames[month - 1] || null;
+        }
+
         function parsePaidSocialData(rows) {
-            const result = { monthly: [], totals: {} };
+            // Parse Paid Social data: continuous monthly rows with ISO dates in column A
+            // Structure: A=ISO date, B=empty, C=USD spend, D=NZD spend, E=Reach, F=Traffic,
+            //           G=Cost/Traffic, H=Leads, I=Cost/Lead, J=Opps, ...
+
+            const result = {}; // { 'FY2024/25': { months: [...], spend: {...}, leads: {...}, ...}, ... }
 
             let headerIndex = -1;
-            for (let i = 0; i < Math.min(rows.length, 5); i++) {
-                if (rows[i] && rows[i][0] === 'Month') {
+            // Find header row
+            for (let i = 0; i < Math.min(rows.length, 20); i++) {
+                if (rows[i] && (rows[i][2] === 'USD' || rows[i][4] === 'Reach')) {
                     headerIndex = i;
                     break;
                 }
             }
-
-            if (headerIndex === -1) headerIndex = 0;
+            if (headerIndex === -1) headerIndex = 11; // Fallback based on raw data structure
 
             for (let i = headerIndex + 1; i < rows.length; i++) {
-                if (rows[i] && rows[i][0]) {
-                    result.monthly.push({
-                        month: rows[i][0],
-                        usdSpend: parseFloat(rows[i][1]) || 0,
-                        nzdSpend: parseFloat(rows[i][2]) || 0,
-                        reach: parseFloat(rows[i][3]) || 0,
-                        clicks: parseFloat(rows[i][4]) || 0,
-                        costPerClick: parseFloat(rows[i][5]) || 0,
-                        leads: parseFloat(rows[i][6]) || 0,
-                        costPerLead: parseFloat(rows[i][7]) || 0
-                    });
+                if (!rows[i] || !rows[i][0]) continue;
+
+                const dateStr = String(rows[i][0]);
+                const fyMonth = extractFYFromISO(dateStr);
+                if (!fyMonth) continue;
+
+                const { fy, month } = fyMonth;
+
+                if (!result[fy]) {
+                    result[fy] = {
+                        months: [],
+                        spend: {},
+                        reach: {},
+                        traffic: {},
+                        leads: {},
+                        costPerLead: {}
+                    };
                 }
+
+                // Record unique months in order
+                if (!result[fy].months.includes(month)) {
+                    result[fy].months.push(month);
+                }
+
+                // Parse columns: A=date, B=empty, C=USD, D=NZD, E=Reach, F=Traffic, G=Cost/Traffic, H=Leads, I=Cost/Lead
+                result[fy].spend[month] = parseFloat(rows[i][3]) || 0; // NZD spend
+                result[fy].reach[month] = parseFloat(rows[i][4]) || 0;
+                result[fy].traffic[month] = parseFloat(rows[i][5]) || 0;
+                result[fy].leads[month] = parseFloat(rows[i][7]) || 0;
+                result[fy].costPerLead[month] = parseFloat(rows[i][8]) || 0;
             }
 
-            result.totals = {
-                leads: result.monthly.reduce((sum, row) => sum + (row.leads || 0), 0),
-                spend: result.monthly.reduce((sum, row) => sum + (row.nzdSpend || 0), 0)
-            };
-
             return result;
+        }
+
+        function extractFYFromISO(dateStr) {
+            // Parse ISO date string to FY and month
+            // FY2024/25 = Apr 2024 to Mar 2025
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            const match = dateStr.match(/(\d{4})-(\d{2})/);
+            if (!match) return null;
+
+            const year = parseInt(match[1]);
+            const monthNum = parseInt(match[2]);
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const month = monthNames[monthNum - 1];
+
+            // Determine FY: Apr-Dec belongs to start year, Jan-Mar belongs to end year
+            let fy;
+            if (monthNum >= 4) {
+                fy = 'FY' + year + '/' + String(year + 1).slice(2);
+            } else {
+                fy = 'FY' + (year - 1) + '/' + String(year).slice(2);
+            }
+
+            return { fy, month };
         }
 
         function parseReferralData(rows) {
@@ -850,6 +992,27 @@
             };
 
             return result;
+        }
+
+        function autoSelectBestFY() {
+            // Pick the FY with the most total sales as the default view
+            const fyKeys = Object.keys(dashboardData.sales);
+            let bestFY = fyKeys[0];
+            let bestTotal = 0;
+            fyKeys.forEach(fy => {
+                const fyData = dashboardData.sales[fy];
+                if (!fyData) return;
+                let total = 0;
+                Object.values(fyData.sources).forEach(src => {
+                    fyData.months.forEach(m => { total += src[m] || 0; });
+                });
+                if (total > bestTotal) { bestTotal = total; bestFY = fy; }
+            });
+            currentYear = bestFY;
+            // Update UI toggle buttons
+            document.querySelectorAll('.year-toggle button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.year === currentYear);
+            });
         }
 
         function updateDashboard() {
@@ -900,6 +1063,17 @@
             const totalLeads = Object.keys(leadsData).reduce((sum, source) => {
                 return sum + displayMonths.reduce((m, month) => m + (leadsData[source][month] || 0), 0);
             }, 0);
+
+            // Get channel data for total traffic if available
+            let totalTraffic = 0;
+            const directFY = dashboardData.direct[currentYear];
+            const organicFY = dashboardData.organic[currentYear];
+            if (directFY && directFY.traffic) {
+                totalTraffic += Object.values(directFY.traffic).reduce((a, b) => a + b, 0);
+            }
+            if (organicFY && organicFY.traffic) {
+                totalTraffic += Object.values(organicFY.traffic).reduce((a, b) => a + b, 0);
+            }
 
             const costPerSale = totalSales > 0 ? (totalSpend / totalSales).toFixed(2) : 0;
             const leadToSaleConv = totalLeads > 0 ? ((totalSales / totalLeads) * 100).toFixed(1) : 0;
@@ -1320,7 +1494,7 @@
             }
             const displayMonths = months.slice(0, lastActiveMonth + 1);
 
-            // Build source comparison data
+            // Build source comparison data with channel enrichment
             const sourceData = {};
             Object.keys(salesData).forEach(source => {
                 const sales = displayMonths.reduce((sum, m) => sum + (salesData[source][m] || 0), 0);
@@ -1330,7 +1504,37 @@
                 const costPerSale = sales > 0 ? (spend / sales).toFixed(2) : 0;
                 const leadToSaleConv = leads > 0 ? ((sales / leads) * 100).toFixed(1) : 0;
 
-                sourceData[source] = { sales, spend, leads, costPerLead, costPerSale, leadToSaleConv };
+                // Enrich with traffic data from Direct/Organic tabs if available
+                let traffic = 0;
+                let opps = 0;
+                let clients = 0;
+
+                // Map source names to channel data
+                if (source.includes('Direct')) {
+                    const directFY = dashboardData.direct[currentYear];
+                    if (directFY && directFY.traffic) {
+                        traffic = displayMonths.reduce((sum, m) => sum + (directFY.traffic[m] || 0), 0);
+                        opps = displayMonths.reduce((sum, m) => sum + (directFY.opps[m] || 0), 0);
+                        clients = displayMonths.reduce((sum, m) => sum + (directFY.clients[m] || 0), 0);
+                    }
+                } else if (source.includes('Organic')) {
+                    const organicFY = dashboardData.organic[currentYear];
+                    if (organicFY && organicFY.traffic) {
+                        traffic = displayMonths.reduce((sum, m) => sum + (organicFY.traffic[m] || 0), 0);
+                        opps = displayMonths.reduce((sum, m) => sum + (organicFY.opps[m] || 0), 0);
+                        clients = displayMonths.reduce((sum, m) => sum + (organicFY.clients[m] || 0), 0);
+                    }
+                } else if (source.includes('Paid Social')) {
+                    const paidSocialFY = dashboardData.paidSocial[currentYear];
+                    if (paidSocialFY && paidSocialFY.traffic) {
+                        traffic = displayMonths.reduce((sum, m) => sum + (paidSocialFY.traffic[m] || 0), 0);
+                    }
+                }
+
+                sourceData[source] = {
+                    sales, spend, leads, traffic, opps, clients,
+                    costPerLead, costPerSale, leadToSaleConv
+                };
             });
 
             const sources = Object.keys(sourceData);
@@ -1353,6 +1557,7 @@
                                 <th>Source</th>
                                 <th class="numeric">Sales</th>
                                 <th class="numeric">Leads</th>
+                                <th class="numeric">Traffic</th>
                                 <th class="numeric">Spend</th>
                                 <th class="numeric">Cost/Lead</th>
                                 <th class="numeric">Cost/Sale</th>
@@ -1368,6 +1573,7 @@
                     <td><strong>${source}</strong></td>
                     <td class="numeric">${formatNumber(data.sales)}</td>
                     <td class="numeric">${formatNumber(data.leads)}</td>
+                    <td class="numeric">${formatNumber(data.traffic)}</td>
                     <td class="numeric">${formatCurrency(data.spend)}</td>
                     <td class="numeric">${formatCurrency(data.costPerLead)}</td>
                     <td class="numeric">${formatCurrency(data.costPerSale)}</td>
