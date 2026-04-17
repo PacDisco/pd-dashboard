@@ -155,22 +155,23 @@
     border-radius: 50%; animation: spin 1s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-
-  .warn-banner {
-    background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px;
-    padding: 10px 14px; font-size: 12px; color: #92400e; margin-bottom: 16px;
-  }
 </style>
 </head>
 <body>
 <div class="container">
 
-  <!-- ======== CONFIG (edit here if your key/form ever changes) ======== -->
+  <!--
+    ============================================================
+    CONFIG
+    API key is NOT here — it lives in the Netlify environment
+    variable JOTFORM_API_KEY and is read server-side by
+    /netlify/functions/jotform.js. This HTML file has no secrets.
+    ============================================================
+  -->
   <script>
     window.CONFIG = {
-      API_KEY: "b04baabab365949b5be4cb55e22767fd",
       FORM_ID: "250887973978080",
-      API_BASE: "https://api.jotform.com"
+      PROXY: "/.netlify/functions/jotform"  // points to the Netlify Function
     };
   </script>
 
@@ -183,10 +184,6 @@
       <button class="secondary" id="refresh-btn" style="margin-left:auto;">↻ Refresh</button>
     </div>
   </header>
-
-  <div class="warn-banner">
-    ⚠ This HTML file contains your Jotform API key. Anyone who opens the file can see it. Keep it private or regenerate the key in Jotform if you share this file.
-  </div>
 
   <!-- Stats -->
   <div class="stats-grid" id="stats-grid">
@@ -246,7 +243,7 @@
   </div>
 
   <div class="loading" id="initial-loading">
-    <div class="spinner"></div><div style="margin-top:10px;">Loading submissions from Jotform…</div>
+    <div class="spinner"></div><div style="margin-top:10px;">Loading submissions…</div>
   </div>
 </div>
 
@@ -266,7 +263,14 @@
 
 <script>
 (() => {
-  const { API_KEY, FORM_ID, API_BASE } = window.CONFIG;
+  const { FORM_ID, PROXY } = window.CONFIG;
+
+  // Build a proxy URL that forwards to the Jotform API via the Netlify Function.
+  // Usage: proxyUrl("/form/XXX/submissions", { limit: 100 })
+  function proxyUrl(path, params) {
+    const q = new URLSearchParams({ path, ...(params || {}) });
+    return `${PROXY}?${q.toString()}`;
+  }
 
   // State
   let allSubmissions = [];
@@ -314,7 +318,6 @@
     if (typeof v === "string") return v;
     if (Array.isArray(v)) return v.join(", ");
     if (typeof v === "object") {
-      // datetime fields, name fields, etc
       if (v.datetime) return v.datetime;
       if (v.day && v.month && v.year) return `${v.year}-${v.month}-${v.day}`;
       if (v.first || v.last) return [v.first, v.last].filter(Boolean).join(" ");
@@ -333,7 +336,6 @@
   }
 
   function getWhoFilled(sub) {
-    // multiple "whosFilling" fields exist for different form types — try each
     const names = ["whosFilling", "whosFilling198", "whosFilling199", "whosFilling200", "whosFilling201"];
     for (const n of names) {
       const v = getAnswerByName(sub, n);
@@ -343,7 +345,6 @@
   }
 
   function getPreview(sub) {
-    // pick preview field based on type — try named candidates first, then any textarea
     const candidates = [
       "weeklyUpdate", "pleaseProvide", "whatIs", "individualStudent",
       "coinstructorDynamics", "anyNoticeable", "pleaseDescribe",
@@ -355,7 +356,6 @@
         return v.length > 120 ? v.slice(0, 117) + "…" : v;
       }
     }
-    // fallback: any feedbackFor* or any non-empty textarea answer
     const answers = sub.answers || {};
     for (const qid in answers) {
       const q = answers[qid];
@@ -383,30 +383,33 @@
     return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
   }
 
-  // ---------- data fetch ----------
+  // ---------- data fetch (through Netlify Function proxy) ----------
+  async function fetchJSON(url) {
+    const res = await fetch(url);
+    const j = await res.json().catch(() => ({ error: "Invalid JSON from proxy" }));
+    if (!res.ok || j.error) {
+      throw new Error(j.error || `HTTP ${res.status}`);
+    }
+    if (j.responseCode && j.responseCode !== 200) {
+      throw new Error(j.message || `Jotform error ${j.responseCode}`);
+    }
+    return j;
+  }
+
   async function fetchForm() {
-    const res = await fetch(`${API_BASE}/form/${FORM_ID}?apiKey=${API_KEY}`);
-    const j = await res.json();
-    if (j.responseCode !== 200) throw new Error(j.message || "Failed to fetch form");
+    const j = await fetchJSON(proxyUrl(`/form/${FORM_ID}`));
     return j.content;
   }
-
   async function fetchQuestions() {
-    const res = await fetch(`${API_BASE}/form/${FORM_ID}/questions?apiKey=${API_KEY}`);
-    const j = await res.json();
-    if (j.responseCode !== 200) throw new Error(j.message || "Failed to fetch questions");
+    const j = await fetchJSON(proxyUrl(`/form/${FORM_ID}/questions`));
     return j.content;
   }
-
   async function fetchAllSubmissions() {
     const limit = 1000;
     let offset = 0;
     const all = [];
     while (true) {
-      const url = `${API_BASE}/form/${FORM_ID}/submissions?apiKey=${API_KEY}&limit=${limit}&offset=${offset}&orderby=created_at`;
-      const res = await fetch(url);
-      const j = await res.json();
-      if (j.responseCode !== 200) throw new Error(j.message || "Failed to fetch submissions");
+      const j = await fetchJSON(proxyUrl(`/form/${FORM_ID}/submissions`, { limit, offset, orderby: "created_at" }));
       const batch = j.content || [];
       all.push(...batch);
       if (batch.length < limit) break;
@@ -444,7 +447,6 @@
   }
 
   function renderCharts() {
-    // Timeline — group by day
     const byDay = {};
     allSubmissions.forEach(s => {
       const d = s.created_at.split(" ")[0];
@@ -476,7 +478,6 @@
       }
     });
 
-    // Types
     const byType = {};
     allSubmissions.forEach(s => {
       const t = getAnswerByName(s, "whatType") || "(blank)";
@@ -489,10 +490,7 @@
       type: "bar",
       data: {
         labels: typeEntries.map(e => e[0]),
-        datasets: [{
-          data: typeEntries.map(e => e[1]),
-          backgroundColor: "#2563eb"
-        }]
+        datasets: [{ data: typeEntries.map(e => e[1]), backgroundColor: "#2563eb" }]
       },
       options: {
         indexAxis: "y", responsive: true, maintainAspectRatio: false,
@@ -501,7 +499,6 @@
       }
     });
 
-    // Programs (top 10)
     const byProg = {};
     allSubmissions.forEach(s => {
       const p = getAnswerByName(s, "typeA4") || "(blank)";
@@ -514,10 +511,7 @@
       type: "bar",
       data: {
         labels: progEntries.map(e => e[0].replace(/(Spring|Fall) (\d{4}) - /, "$1$2 ")),
-        datasets: [{
-          data: progEntries.map(e => e[1]),
-          backgroundColor: "#059669"
-        }]
+        datasets: [{ data: progEntries.map(e => e[1]), backgroundColor: "#059669" }]
       },
       options: {
         indexAxis: "y", responsive: true, maintainAspectRatio: false,
@@ -536,7 +530,6 @@
       if (t) types.add(t);
       if (p) programs.add(p);
     });
-
     const typeSel = $("filter-type");
     [...types].sort().forEach(t => {
       const opt = document.createElement("option");
@@ -567,7 +560,6 @@
       if (from && date < from) return false;
       if (to && date > to) return false;
       if (q) {
-        // search across all answer text
         let match = false;
         const answers = s.answers || {};
         for (const qid in answers) {
@@ -621,7 +613,6 @@
       </tr>`;
     }).join("");
 
-    // update sort indicators
     document.querySelectorAll("th[data-sort]").forEach(th => {
       th.classList.remove("sorted-asc", "sorted-desc");
       if (th.dataset.sort === sortKey) {
@@ -629,7 +620,6 @@
       }
     });
 
-    // attach row click
     tbody.querySelectorAll("tr").forEach(tr => {
       tr.addEventListener("click", () => showDetail(tr.dataset.id));
     });
@@ -648,7 +638,6 @@
     meta.push("ID: " + sub.id);
     $("modal-meta").textContent = meta.join(" • ");
 
-    // build ordered list of answered fields
     const answers = sub.answers || {};
     const items = Object.keys(answers)
       .map(qid => ({ qid, ...answers[qid] }))
@@ -661,7 +650,6 @@
 
     $("modal-body").innerHTML = items.map(a => {
       const txt = answerText(a.answer);
-      // handle file uploads
       let val;
       if (a.type === "control_fileupload" && Array.isArray(a.answer)) {
         val = a.answer.map(u => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(u.split("/").pop())}</a>`).join("<br>");
@@ -727,7 +715,6 @@
       $("form-title").textContent = form.title || "Form Dashboard";
       $("form-subtitle").textContent = `Form ID ${form.id} • Created ${fmtDate(form.created_at)} • Last submission ${fmtDate(form.last_submission)}`;
 
-      // Clear filter dropdowns (if re-running)
       $("filter-type").innerHTML = '<option value="">All form types</option>';
       $("filter-program").innerHTML = '<option value="">All programs</option>';
 
@@ -742,7 +729,9 @@
     } catch (e) {
       console.error(e);
       setStatus("Error: " + e.message, "error");
-      $("initial-loading").innerHTML = `<div class="error-msg">Failed to load: ${escapeHtml(e.message)}<br><br>Check that the API key is valid and the form is accessible.</div>`;
+      $("initial-loading").innerHTML =
+        `<div class="error-msg">Failed to load: ${escapeHtml(e.message)}<br><br>` +
+        `Make sure the Netlify environment variable <code>JOTFORM_API_KEY</code> is set and the site has redeployed.</div>`;
     }
   }
 
