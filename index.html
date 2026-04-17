@@ -573,13 +573,22 @@
       $("usersContent").innerHTML = `<div class="loading">Loading users…</div>`;
       try {
         const res = await api("GET", "/api/users");
-        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        if (!res.ok) throw await httpError(res);
         const data = await res.json();
         STATE.users = data.users || [];
         renderUsers();
       } catch (err) {
+        console.error("loadUsers failed:", err);
         $("usersContent").innerHTML = `<div class="empty">Couldn't load users: ${esc(err.message)}</div>`;
       }
+    }
+
+    async function httpError(res) {
+      const body = await safeJson(res);
+      const text = body.error || body.msg || body.error_description || body.message || "";
+      const status = `HTTP ${res.status}${res.statusText ? " " + res.statusText : ""}`;
+      const detail = text || JSON.stringify(body).slice(0, 200);
+      return new Error(detail ? `${status} — ${detail}` : status);
     }
 
     function renderUsers() {
@@ -629,12 +638,13 @@
       setStatus("Saving…");
       try {
         const res = await api("PATCH", `/api/users/${encodeURIComponent(id)}`, { roles });
-        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        if (!res.ok) throw await httpError(res);
         const u = STATE.users.find(x => x.id === id);
         if (u) u.roles = roles;
         toast("Roles updated", "success");
         setStatus("Saved · " + new Date().toLocaleTimeString());
       } catch (err) {
+        console.error("saveUserRoles failed:", err);
         toast("Save failed: " + err.message, "error");
       }
     }
@@ -644,11 +654,12 @@
       if (!confirm(`Remove ${u?.email || "this user"}? They'll lose all access immediately.`)) return;
       try {
         const res = await api("DELETE", `/api/users/${encodeURIComponent(id)}`);
-        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        if (!res.ok) throw await httpError(res);
         STATE.users = STATE.users.filter(x => x.id !== id);
         tr.remove();
         toast("User removed", "success");
       } catch (err) {
+        console.error("deleteUser failed:", err);
         toast("Remove failed: " + err.message, "error");
       }
     }
@@ -659,11 +670,12 @@
       $("inviteBtn").disabled = true;
       try {
         const res = await api("POST", "/api/users", { email });
-        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        if (!res.ok) throw await httpError(res);
         toast(`Invite sent to ${email}`, "success");
         $("inviteEmail").value = "";
         loadUsers();
       } catch (err) {
+        console.error("inviteUser failed:", err);
         toast("Invite failed: " + err.message, "error");
       } finally {
         $("inviteBtn").disabled = false;
