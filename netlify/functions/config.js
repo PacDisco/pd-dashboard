@@ -15,6 +15,22 @@ import path from "node:path";
 const BLOB_KEY = "permissions";
 const STORE = "dashboards";
 
+// Netlify normally auto-binds the blob context; if that fails (e.g. the
+// package was marked external or blobs aren't enabled on the site), fall back
+// to explicit config using env vars the caller sets up manually.
+function openStore() {
+  try {
+    return openStore();
+  } catch (err) {
+    const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
+    const token = process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN;
+    if (siteID && token) {
+      return getStore({ name: STORE, consistency: "strong", siteID, token });
+    }
+    throw err;
+  }
+}
+
 // Try multiple strategies to load the discovery manifest. Netlify's esbuild
 // bundler doesn't include static files by default, so earlier versions that
 // only used process.cwd() silently returned empty arrays. This version tries:
@@ -82,17 +98,40 @@ export const handler = async (event, context) => {
   // Debug endpoint — useful for verifying deploy state. GET /api/config?debug=1
   if (method === "GET" && event.queryStringParameters?.debug === "1") {
     const discovery = await loadDiscovery(event);
-    let blob = null, blobError = null;
+    let blob = null, blobError = null, blobStrategy = null;
+    // Try auto-context first, then explicit env-var fallback
     try {
-      const store = getStore({ name: STORE, consistency: "strong" });
-      blob = await store.get(BLOB_KEY, { type: "json" });
-    } catch (err) { blobError = err.message; }
+      const autoStore = getStore({ name: STORE, consistency: "strong" });
+      blob = await autoStore.get(BLOB_KEY, { type: "json" });
+      blobStrategy = "auto-context";
+    } catch (autoErr) {
+      const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
+      const token = process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN;
+      if (siteID && token) {
+        try {
+          const exStore = getStore({ name: STORE, consistency: "strong", siteID, token });
+          blob = await exStore.get(BLOB_KEY, { type: "json" });
+          blobStrategy = "explicit-env-vars";
+        } catch (explicitErr) {
+          blobError = `auto: ${autoErr.message} | explicit: ${explicitErr.message}`;
+        }
+      } else {
+        blobError = `${autoErr.message} (and NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN env vars not set)`;
+      }
+    }
     return send(200, {
       authed: !!user,
       roles: user?.app_metadata?.roles || [],
       discoveryCount: discovery.dashboards?.length || 0,
       discoverySlugs: (discovery.dashboards || []).map(d => d.slug),
-      blob, blobError,
+      blob, blobStrategy, blobError,
+      envVarsPresent: {
+        NETLIFY_SITE_ID: !!process.env.NETLIFY_SITE_ID,
+        SITE_ID: !!process.env.SITE_ID,
+        NETLIFY_BLOBS_TOKEN: !!process.env.NETLIFY_BLOBS_TOKEN,
+        NETLIFY_API_TOKEN: !!process.env.NETLIFY_API_TOKEN,
+        NETLIFY_BLOBS_CONTEXT: !!process.env.NETLIFY_BLOBS_CONTEXT,
+      },
       host: event.headers?.host,
       siteUrl: process.env.URL,
       deployUrl: process.env.DEPLOY_URL,
@@ -104,14 +143,20 @@ export const handler = async (event, context) => {
     if (err) return send(err.status, err.body);
     const discovery = await loadDiscovery(event);
     let overrides = null;
+    let blobWarning = null;
     try {
-      const store = getStore({ name: STORE, consistency: "strong" });
+      const store = openStore();
       overrides = await store.get(BLOB_KEY, { type: "json" });
     } catch (err) {
+      blobWarning = err.message;
       console.warn("blob read failed", err.message);
     }
     const merged = merge(discovery, overrides || { dashboards: [] });
-    return send(200, { ...merged, generatedAt: new Date().toISOString() });
+    return send(200, {
+      ...merged,
+      generatedAt: new Date().toISOString(),
+      ...(blobWarning ? { blobWarning } : {}),
+    });
   }
 
   if (method === "PUT") {
@@ -135,9 +180,15 @@ export const handler = async (event, context) => {
           : [],
       }));
 
-    const store = getStore({ name: STORE, consistency: "strong" });
-    await store.setJSON(BLOB_KEY, { dashboards: clean });
-    return send(200, { ok: true, count: clean.length });
+    try {
+      const store = openStore();
+      await store.setJSON(BLOB_KEY, { dashboards: clean });
+      return send(200, { ok: true, count: clean.length });
+    } catch (err) {
+      return send(500, {
+        error: `Can't save permissions: ${err.message}. Enable Netlify Blobs on your site (Site configuration → Blobs) and redeploy, or set NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN env vars.`,
+      });
+    }
   }
 
   return send(405, { error: "Method not allowed" });
