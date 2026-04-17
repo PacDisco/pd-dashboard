@@ -27,7 +27,7 @@ export default async (request, context) => {
   if (roles.includes(ADMIN)) return context.next();
 
   // Read the live permissions for this slug.
-  const perms = await loadPermissionsFor(slug);
+  const perms = await loadPermissionsFor(slug, request);
   if (!perms) {
     // Slug unknown → not a gated dashboard path; pass through.
     return context.next();
@@ -40,23 +40,41 @@ export default async (request, context) => {
   return context.next();
 };
 
-async function loadPermissionsFor(slug) {
+function openEdgeStore() {
   try {
-    const store = getStore({ name: "dashboards", consistency: "strong" });
+    return getStore({ name: "dashboards", consistency: "strong" });
+  } catch (err) {
+    const siteID =
+      (typeof Netlify !== "undefined" && Netlify.env?.get?.("NETLIFY_SITE_ID")) ||
+      (typeof Netlify !== "undefined" && Netlify.env?.get?.("SITE_ID"));
+    const token =
+      (typeof Netlify !== "undefined" && Netlify.env?.get?.("NETLIFY_BLOBS_TOKEN")) ||
+      (typeof Netlify !== "undefined" && Netlify.env?.get?.("NETLIFY_API_TOKEN"));
+    if (siteID && token) {
+      return getStore({ name: "dashboards", consistency: "strong", siteID, token });
+    }
+    throw err;
+  }
+}
+
+async function loadPermissionsFor(slug, request) {
+  try {
+    const store = openEdgeStore();
     const overrides = await store.get("permissions", { type: "json" });
     const entry = (overrides?.dashboards || []).find(d => d.slug === slug);
     if (entry) return entry;
-
-    // Fallback to the static manifest that ships with the deploy (discovery
-    // baseline). This covers the case where the blob hasn't been seeded yet
-    // or a new dashboard hasn't been given permissions by an admin.
+  } catch (err) {
+    console.warn("auth-gate blob read failed, falling back to discovery:", err.message);
+  }
+  // Fallback to the static discovery manifest that ships with the deploy.
+  try {
     const res = await fetch(new URL("/dashboards.discovery.json", request.url));
     if (res.ok) {
       const discovery = await res.json();
       return (discovery.dashboards || []).find(d => d.slug === slug) || null;
     }
   } catch (err) {
-    console.error("auth-gate loadPermissions error", err);
+    console.error("auth-gate discovery fetch error", err);
   }
   return null;
 }
