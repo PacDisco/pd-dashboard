@@ -155,6 +155,25 @@
     border-radius: 50%; animation: spin 1s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .range-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; box-shadow: var(--shadow);
+    margin-bottom: 16px;
+  }
+  .range-bar label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .range-bar input[type="date"] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: white;
+  }
+  .range-bar .preset {
+    padding: 4px 10px; border: 1px solid var(--border); background: white; color: var(--text);
+    border-radius: 16px; font-size: 12px; cursor: pointer; font-weight: 500;
+  }
+  .range-bar .preset:hover { background: #f9fafb; }
+  .range-bar .preset.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .range-bar .range-summary { color: var(--muted); font-size: 13px; margin-left: auto; }
 </style>
 </head>
 <body>
@@ -185,13 +204,27 @@
     </div>
   </header>
 
-  <!-- Stats -->
+  <!-- Global date range (drives cards, charts, and table) -->
+  <div class="range-bar">
+    <label>Date Range</label>
+    <input type="date" id="range-from" title="From" />
+    <span style="color: var(--muted);">→</span>
+    <input type="date" id="range-to" title="To" />
+    <button class="preset" data-preset="7">Last 7d</button>
+    <button class="preset" data-preset="30">Last 30d</button>
+    <button class="preset" data-preset="90">Last 90d</button>
+    <button class="preset" data-preset="ytd">YTD</button>
+    <button class="preset active" data-preset="all">All time</button>
+    <span class="range-summary" id="range-summary">—</span>
+  </div>
+
+  <!-- Stats (respect the date range) -->
   <div class="stats-grid" id="stats-grid">
-    <div class="stat-card"><div class="stat-label">Total Submissions</div><div class="stat-value" id="stat-total">—</div><div class="stat-sub">all time</div></div>
-    <div class="stat-card"><div class="stat-label">Last 30 Days</div><div class="stat-value" id="stat-30d">—</div><div class="stat-sub" id="stat-30d-sub">&nbsp;</div></div>
-    <div class="stat-card"><div class="stat-label">Incidents/Accidents</div><div class="stat-value" id="stat-incidents">—</div><div class="stat-sub">all reports</div></div>
-    <div class="stat-card"><div class="stat-label">Active Programs</div><div class="stat-value" id="stat-programs">—</div><div class="stat-sub">with submissions</div></div>
-    <div class="stat-card"><div class="stat-label">Last Submission</div><div class="stat-value" id="stat-last-date" style="font-size:16px;">—</div><div class="stat-sub" id="stat-last-sub">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Submissions</div><div class="stat-value" id="stat-total">—</div><div class="stat-sub" id="stat-total-sub">all time</div></div>
+    <div class="stat-card"><div class="stat-label">Daily Avg</div><div class="stat-value" id="stat-avg">—</div><div class="stat-sub" id="stat-avg-sub">per day in range</div></div>
+    <div class="stat-card"><div class="stat-label">Incidents/Accidents</div><div class="stat-value" id="stat-incidents">—</div><div class="stat-sub" id="stat-incidents-sub">in range</div></div>
+    <div class="stat-card"><div class="stat-label">Active Programs</div><div class="stat-value" id="stat-programs">—</div><div class="stat-sub" id="stat-programs-sub">with submissions</div></div>
+    <div class="stat-card"><div class="stat-label">Latest Submission</div><div class="stat-value" id="stat-last-date" style="font-size:16px;">—</div><div class="stat-sub" id="stat-last-sub">&nbsp;</div></div>
   </div>
 
   <!-- Charts -->
@@ -216,9 +249,7 @@
       <input type="search" id="search" placeholder="Search…" />
       <select id="filter-type"><option value="">All form types</option></select>
       <select id="filter-program"><option value="">All programs</option></select>
-      <input type="date" id="filter-from" title="From date" />
-      <input type="date" id="filter-to" title="To date" />
-      <button class="secondary" id="clear-filters">Clear</button>
+      <button class="secondary" id="clear-filters">Clear table filters</button>
       <span class="result-count" id="result-count">—</span>
     </div>
     <div class="table-scroll">
@@ -275,12 +306,14 @@
   // State
   let allSubmissions = [];
   let questions = {};
-  let filtered = [];
+  let rangeScoped = [];   // submissions within the selected date range (drives cards/charts)
+  let filtered = [];      // rangeScoped further narrowed by table-only filters (search/type/program)
   let currentPage = 1;
   const PAGE_SIZE = 25;
   let sortKey = "created_at";
   let sortDir = "desc";
   let charts = {};
+  let activePreset = "all"; // which preset button is active
 
   // DOM refs
   const $ = id => document.getElementById(id);
@@ -427,37 +460,108 @@
     return all;
   }
 
-  // ---------- rendering ----------
-  function renderStats(form) {
-    $("stat-total").textContent = allSubmissions.length.toLocaleString();
-    const now = Date.now();
-    const cutoff = now - 30 * 86400000;
-    const last30 = allSubmissions.filter(s => new Date(s.created_at.replace(" ", "T")) >= cutoff).length;
-    $("stat-30d").textContent = last30.toLocaleString();
+  // ---------- date range (global) ----------
+  function getRange() {
+    const from = $("range-from").value || null;
+    const to = $("range-to").value || null;
+    return { from, to };
+  }
+  function inRangeDate(dateStr, from, to) {
+    const d = dateStr.split(" ")[0];
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  }
+  function applyRange() {
+    const { from, to } = getRange();
+    rangeScoped = (from || to)
+      ? allSubmissions.filter(s => inRangeDate(s.created_at, from, to))
+      : allSubmissions.slice();
+    updateRangeSummary();
+    renderStats();
+    renderCharts();
+    applyFilters();
+  }
+  function updateRangeSummary() {
+    const { from, to } = getRange();
+    if (!from && !to) {
+      $("range-summary").textContent = `${allSubmissions.length.toLocaleString()} submissions, all time`;
+    } else {
+      const label = `${from || "start"} → ${to || "today"}`;
+      $("range-summary").textContent = `${rangeScoped.length.toLocaleString()} submissions, ${label}`;
+    }
+  }
+  function setPreset(name) {
+    activePreset = name;
+    document.querySelectorAll(".range-bar .preset").forEach(b => {
+      b.classList.toggle("active", b.dataset.preset === name);
+    });
+    const today = new Date();
+    const toStr = today.toISOString().slice(0,10);
+    if (name === "all") {
+      $("range-from").value = ""; $("range-to").value = "";
+    } else if (name === "ytd") {
+      $("range-from").value = `${today.getFullYear()}-01-01`;
+      $("range-to").value = toStr;
+    } else {
+      const days = parseInt(name, 10);
+      const from = new Date(today.getTime() - days * 86400000);
+      $("range-from").value = from.toISOString().slice(0,10);
+      $("range-to").value = toStr;
+    }
+    applyRange();
+  }
 
-    const incidents = allSubmissions.filter(s => {
+  // ---------- rendering ----------
+  function renderStats() {
+    const { from, to } = getRange();
+    const rangeActive = !!(from || to);
+
+    $("stat-total").textContent = rangeScoped.length.toLocaleString();
+    $("stat-total-sub").textContent = rangeActive
+      ? `in selected range`
+      : `all time (${allSubmissions.length.toLocaleString()} total)`;
+
+    // Daily average across the range (or across observed date span if all-time)
+    const dates = rangeScoped.map(s => s.created_at.split(" ")[0]).sort();
+    let spanDays = 1;
+    if (rangeActive && from && to) {
+      spanDays = Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
+    } else if (dates.length) {
+      spanDays = Math.max(1, Math.round((new Date(dates[dates.length-1]) - new Date(dates[0])) / 86400000) + 1);
+    }
+    const avg = rangeScoped.length / spanDays;
+    $("stat-avg").textContent = avg >= 10 ? Math.round(avg).toString() : avg.toFixed(1);
+    $("stat-avg-sub").textContent = `over ${spanDays} day${spanDays === 1 ? "" : "s"}`;
+
+    const incidents = rangeScoped.filter(s => {
       const t = getAnswerByName(s, "whatType") || "";
       return t.toLowerCase().includes("incident") || t.toLowerCase().includes("accident");
     }).length;
     $("stat-incidents").textContent = incidents.toLocaleString();
+    $("stat-incidents-sub").textContent = rangeActive ? "in range" : "all reports";
 
     const programs = new Set();
-    allSubmissions.forEach(s => {
+    rangeScoped.forEach(s => {
       const p = getAnswerByName(s, "typeA4");
       if (p) programs.add(p);
     });
     $("stat-programs").textContent = programs.size;
+    $("stat-programs-sub").textContent = rangeActive ? "in range" : "with submissions";
 
-    if (allSubmissions.length) {
-      const latest = allSubmissions.slice().sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    if (rangeScoped.length) {
+      const latest = rangeScoped.slice().sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
       $("stat-last-date").textContent = fmtDate(latest.created_at);
       $("stat-last-sub").textContent = daysAgo(latest.created_at);
+    } else {
+      $("stat-last-date").textContent = "—";
+      $("stat-last-sub").textContent = "no submissions in range";
     }
   }
 
   function renderCharts() {
     const byDay = {};
-    allSubmissions.forEach(s => {
+    rangeScoped.forEach(s => {
       const d = s.created_at.split(" ")[0];
       byDay[d] = (byDay[d] || 0) + 1;
     });
@@ -488,7 +592,7 @@
     });
 
     const byType = {};
-    allSubmissions.forEach(s => {
+    rangeScoped.forEach(s => {
       const t = getAnswerByName(s, "whatType") || "(blank)";
       byType[t] = (byType[t] || 0) + 1;
     });
@@ -509,7 +613,7 @@
     });
 
     const byProg = {};
-    allSubmissions.forEach(s => {
+    rangeScoped.forEach(s => {
       const p = getAnswerByName(s, "typeA4") || "(blank)";
       byProg[p] = (byProg[p] || 0) + 1;
     });
@@ -557,17 +661,13 @@
     const q = $("search").value.toLowerCase().trim();
     const typeF = $("filter-type").value;
     const progF = $("filter-program").value;
-    const from = $("filter-from").value;
-    const to = $("filter-to").value;
 
-    filtered = allSubmissions.filter(s => {
+    // Start from rangeScoped (global date filter already applied)
+    filtered = rangeScoped.filter(s => {
       const type = getAnswerByName(s, "whatType");
       const prog = getAnswerByName(s, "typeA4");
       if (typeF && type !== typeF) return false;
       if (progF && prog !== progF) return false;
-      const date = s.created_at.split(" ")[0];
-      if (from && date < from) return false;
-      if (to && date > to) return false;
       if (q) {
         let match = false;
         const answers = s.answers || {};
@@ -682,12 +782,25 @@
     $("search").addEventListener("input", debounce(applyFilters, 200));
     $("filter-type").addEventListener("change", applyFilters);
     $("filter-program").addEventListener("change", applyFilters);
-    $("filter-from").addEventListener("change", applyFilters);
-    $("filter-to").addEventListener("change", applyFilters);
     $("clear-filters").addEventListener("click", () => {
       $("search").value = ""; $("filter-type").value = ""; $("filter-program").value = "";
-      $("filter-from").value = ""; $("filter-to").value = "";
       applyFilters();
+    });
+
+    // Global range controls
+    document.querySelectorAll(".range-bar .preset").forEach(b => {
+      b.addEventListener("click", () => setPreset(b.dataset.preset));
+    });
+    $("range-from").addEventListener("change", () => {
+      // Manual edit deactivates the preset pills
+      document.querySelectorAll(".range-bar .preset").forEach(b => b.classList.remove("active"));
+      activePreset = "custom";
+      applyRange();
+    });
+    $("range-to").addEventListener("change", () => {
+      document.querySelectorAll(".range-bar .preset").forEach(b => b.classList.remove("active"));
+      activePreset = "custom";
+      applyRange();
     });
     $("prev-page").addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderTable(); } });
     $("next-page").addEventListener("click", () => { currentPage++; renderTable(); });
@@ -727,11 +840,9 @@
       $("filter-type").innerHTML = '<option value="">All form types</option>';
       $("filter-program").innerHTML = '<option value="">All programs</option>';
 
-      renderStats(form);
-      renderCharts();
       populateFilters();
-      filtered = allSubmissions.slice();
-      sortAndRender();
+      // First load starts in "All time" — cards/charts/table all show everything
+      applyRange();
 
       setStatus(`Live • ${allSubmissions.length} submissions loaded • Updated ${new Date().toLocaleTimeString()}`, "live");
       $("initial-loading").style.display = "none";
