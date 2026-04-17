@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instructor In The Field — Submissions Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --border: #e5e9f0;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --danger: #dc2626;
+    --warn: #d97706;
+    --success: #059669;
+    --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+  header { margin-bottom: 24px; }
+  h1 { margin: 0 0 4px 0; font-size: 24px; font-weight: 700; }
+  .subtitle { color: var(--muted); font-size: 14px; }
+  .status-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 8px; font-size: 13px; color: var(--muted);
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+  .status-dot.live { background: var(--success); animation: pulse 2s infinite; }
+  .status-dot.error { background: var(--danger); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  button {
+    background: var(--accent); color: white; border: none;
+    padding: 6px 14px; border-radius: 6px; font-size: 13px;
+    cursor: pointer; font-weight: 500;
+  }
+  button:hover { background: #1d4ed8; }
+  button.secondary { background: white; color: var(--text); border: 1px solid var(--border); }
+  button.secondary:hover { background: #f9fafb; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px; margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px; box-shadow: var(--shadow);
+  }
+  .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .stat-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px; margin-bottom: 24px;
+  }
+  .charts-grid > .full { grid-column: 1 / -1; }
+  @media (max-width: 900px) {
+    .charts-grid { grid-template-columns: 1fr; }
+  }
+  .chart-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px; box-shadow: var(--shadow);
+  }
+  .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .chart-wrap { position: relative; height: 280px; }
+
+  .table-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .table-controls {
+    padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-controls input, .table-controls select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: white;
+  }
+  .table-controls input[type="search"] { min-width: 220px; flex: 1; max-width: 320px; }
+  .result-count { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 10px 14px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;
+    background: #f9fafb; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+    cursor: pointer; user-select: none;
+  }
+  th:hover { background: #f3f4f6; }
+  th.sorted-asc::after { content: " ↑"; color: var(--accent); }
+  th.sorted-desc::after { content: " ↓"; color: var(--accent); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr.row-click { cursor: pointer; }
+  tr.row-click:hover { background: #f9fafb; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 11px; font-weight: 500; white-space: nowrap;
+    background: var(--accent-light); color: var(--accent);
+  }
+  .badge.incident { background: #fee2e2; color: var(--danger); }
+  .badge.audit { background: #fef3c7; color: var(--warn); }
+  .badge.weekly { background: #d1fae5; color: var(--success); }
+  .badge.eval { background: #e0e7ff; color: #4338ca; }
+  .badge.default { background: #f3f4f6; color: #4b5563; }
+
+  .pagination { padding: 14px 18px; display: flex; gap: 8px; align-items: center; justify-content: center; border-top: 1px solid var(--border); }
+  .pagination span { font-size: 13px; color: var(--muted); }
+
+  /* Modal */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 100; justify-content: center; align-items: flex-start; padding: 40px 20px; overflow-y: auto;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: white; border-radius: 12px; max-width: 800px; width: 100%;
+    padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px; gap: 12px; }
+  .modal-header h2 { margin: 0; font-size: 18px; }
+  .modal-close {
+    background: none; border: none; color: var(--muted); font-size: 22px;
+    cursor: pointer; padding: 0 8px;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-meta { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .detail-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .detail-item:last-child { border: none; }
+  .detail-label { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+  .detail-value { font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
+  .detail-value a { color: var(--accent); word-break: break-all; }
+
+  .loading, .error-msg {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+  }
+  .error-msg { color: var(--danger); }
+  .spinner {
+    display: inline-block; width: 28px; height: 28px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .warn-banner {
+    background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; color: #92400e; margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ======== CONFIG (edit here if your key/form ever changes) ======== -->
+  <script>
+    window.CONFIG = {
+      API_KEY: "b04baabab365949b5be4cb55e22767fd",
+      FORM_ID: "250887973978080",
+      API_BASE: "https://api.jotform.com"
+    };
+  </script>
+
+  <header>
+    <h1 id="form-title">Loading form…</h1>
+    <div class="subtitle" id="form-subtitle">&nbsp;</div>
+    <div class="status-bar">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Initializing…</span>
+      <button class="secondary" id="refresh-btn" style="margin-left:auto;">↻ Refresh</button>
+    </div>
+  </header>
+
+  <div class="warn-banner">
+    ⚠ This HTML file contains your Jotform API key. Anyone who opens the file can see it. Keep it private or regenerate the key in Jotform if you share this file.
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-label">Total Submissions</div><div class="stat-value" id="stat-total">—</div><div class="stat-sub">all time</div></div>
+    <div class="stat-card"><div class="stat-label">Last 30 Days</div><div class="stat-value" id="stat-30d">—</div><div class="stat-sub" id="stat-30d-sub">&nbsp;</div></div>
+    <div class="stat-card"><div class="stat-label">Incidents/Accidents</div><div class="stat-value" id="stat-incidents">—</div><div class="stat-sub">all reports</div></div>
+    <div class="stat-card"><div class="stat-label">Active Programs</div><div class="stat-value" id="stat-programs">—</div><div class="stat-sub">with submissions</div></div>
+    <div class="stat-card"><div class="stat-label">Last Submission</div><div class="stat-value" id="stat-last-date" style="font-size:16px;">—</div><div class="stat-sub" id="stat-last-sub">&nbsp;</div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+    <div class="chart-card full">
+      <div class="chart-title">Submissions Over Time (daily)</div>
+      <div class="chart-wrap"><canvas id="chart-timeline"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">By Form Type</div>
+      <div class="chart-wrap"><canvas id="chart-types"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">By Program (top 10)</div>
+      <div class="chart-wrap"><canvas id="chart-programs"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-controls">
+      <input type="search" id="search" placeholder="Search…" />
+      <select id="filter-type"><option value="">All form types</option></select>
+      <select id="filter-program"><option value="">All programs</option></select>
+      <input type="date" id="filter-from" title="From date" />
+      <input type="date" id="filter-to" title="To date" />
+      <button class="secondary" id="clear-filters">Clear</button>
+      <span class="result-count" id="result-count">—</span>
+    </div>
+    <div class="table-scroll">
+      <table id="submissions-table">
+        <thead>
+          <tr>
+            <th data-sort="created_at" class="sorted-desc">Date</th>
+            <th data-sort="type">Form Type</th>
+            <th data-sort="program">Program</th>
+            <th data-sort="who">Submitted By</th>
+            <th>Preview</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="secondary" id="prev-page">‹ Prev</button>
+      <span id="page-info">—</span>
+      <button class="secondary" id="next-page">Next ›</button>
+    </div>
+  </div>
+
+  <div class="loading" id="initial-loading">
+    <div class="spinner"></div><div style="margin-top:10px;">Loading submissions from Jotform…</div>
+  </div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="modal-title">Submission</h2>
+        <div class="modal-meta" id="modal-meta"></div>
+      </div>
+      <button class="modal-close" id="modal-close">×</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const { API_KEY, FORM_ID, API_BASE } = window.CONFIG;
+
+  // State
+  let allSubmissions = [];
+  let questions = {};
+  let filtered = [];
+  let currentPage = 1;
+  const PAGE_SIZE = 25;
+  let sortKey = "created_at";
+  let sortDir = "desc";
+  let charts = {};
+
+  // DOM refs
+  const $ = id => document.getElementById(id);
+  const tbody = $("tbody");
+
+  // ---------- helpers ----------
+  function setStatus(text, state) {
+    $("status-text").textContent = text;
+    const dot = $("status-dot");
+    dot.classList.remove("live", "error");
+    if (state) dot.classList.add(state);
+  }
+
+  function fmtDate(s) {
+    if (!s) return "";
+    const d = new Date(s.replace(" ", "T"));
+    return isNaN(d) ? s : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+  function fmtDateTime(s) {
+    if (!s) return "";
+    const d = new Date(s.replace(" ", "T"));
+    return isNaN(d) ? s : d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  function daysAgo(s) {
+    if (!s) return "";
+    const d = new Date(s.replace(" ", "T"));
+    const diff = Math.floor((Date.now() - d) / 86400000);
+    if (diff === 0) return "today";
+    if (diff === 1) return "yesterday";
+    return diff + " days ago";
+  }
+
+  function answerText(v) {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return v.join(", ");
+    if (typeof v === "object") {
+      // datetime fields, name fields, etc
+      if (v.datetime) return v.datetime;
+      if (v.day && v.month && v.year) return `${v.year}-${v.month}-${v.day}`;
+      if (v.first || v.last) return [v.first, v.last].filter(Boolean).join(" ");
+      if (v.full) return v.full;
+      return JSON.stringify(v);
+    }
+    return String(v);
+  }
+
+  function getAnswerByName(sub, name) {
+    const answers = sub.answers || {};
+    for (const qid in answers) {
+      if (answers[qid].name === name) return answerText(answers[qid].answer);
+    }
+    return "";
+  }
+
+  function getWhoFilled(sub) {
+    // multiple "whosFilling" fields exist for different form types — try each
+    const names = ["whosFilling", "whosFilling198", "whosFilling199", "whosFilling200", "whosFilling201"];
+    for (const n of names) {
+      const v = getAnswerByName(sub, n);
+      if (v) return v;
+    }
+    return "";
+  }
+
+  function getPreview(sub) {
+    // pick preview field based on type — try named candidates first, then any textarea
+    const candidates = [
+      "weeklyUpdate", "pleaseProvide", "whatIs", "individualStudent",
+      "coinstructorDynamics", "anyNoticeable", "pleaseDescribe",
+      "reasonFor", "pleaseIdentify", "hqNotescomments", "whatWould"
+    ];
+    for (const n of candidates) {
+      const v = getAnswerByName(sub, n);
+      if (v && v.length > 3) {
+        return v.length > 120 ? v.slice(0, 117) + "…" : v;
+      }
+    }
+    // fallback: any feedbackFor* or any non-empty textarea answer
+    const answers = sub.answers || {};
+    for (const qid in answers) {
+      const q = answers[qid];
+      if (q.type === "control_textarea") {
+        const v = answerText(q.answer);
+        if (v && v.length > 3) return v.length > 120 ? v.slice(0, 117) + "…" : v;
+      }
+    }
+    return "";
+  }
+
+  function typeBadge(type) {
+    if (!type) return `<span class="badge default">—</span>`;
+    let cls = "default";
+    const t = type.toLowerCase();
+    if (t.includes("incident") || t.includes("accident")) cls = "incident";
+    else if (t.includes("audit")) cls = "audit";
+    else if (t.includes("weekly")) cls = "weekly";
+    else if (t.includes("evaluat")) cls = "eval";
+    return `<span class="badge ${cls}">${escapeHtml(type)}</span>`;
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  }
+
+  // ---------- data fetch ----------
+  async function fetchForm() {
+    const res = await fetch(`${API_BASE}/form/${FORM_ID}?apiKey=${API_KEY}`);
+    const j = await res.json();
+    if (j.responseCode !== 200) throw new Error(j.message || "Failed to fetch form");
+    return j.content;
+  }
+
+  async function fetchQuestions() {
+    const res = await fetch(`${API_BASE}/form/${FORM_ID}/questions?apiKey=${API_KEY}`);
+    const j = await res.json();
+    if (j.responseCode !== 200) throw new Error(j.message || "Failed to fetch questions");
+    return j.content;
+  }
+
+  async function fetchAllSubmissions() {
+    const limit = 1000;
+    let offset = 0;
+    const all = [];
+    while (true) {
+      const url = `${API_BASE}/form/${FORM_ID}/submissions?apiKey=${API_KEY}&limit=${limit}&offset=${offset}&orderby=created_at`;
+      const res = await fetch(url);
+      const j = await res.json();
+      if (j.responseCode !== 200) throw new Error(j.message || "Failed to fetch submissions");
+      const batch = j.content || [];
+      all.push(...batch);
+      if (batch.length < limit) break;
+      offset += limit;
+    }
+    return all;
+  }
+
+  // ---------- rendering ----------
+  function renderStats(form) {
+    $("stat-total").textContent = allSubmissions.length.toLocaleString();
+    const now = Date.now();
+    const cutoff = now - 30 * 86400000;
+    const last30 = allSubmissions.filter(s => new Date(s.created_at.replace(" ", "T")) >= cutoff).length;
+    $("stat-30d").textContent = last30.toLocaleString();
+
+    const incidents = allSubmissions.filter(s => {
+      const t = getAnswerByName(s, "whatType") || "";
+      return t.toLowerCase().includes("incident") || t.toLowerCase().includes("accident");
+    }).length;
+    $("stat-incidents").textContent = incidents.toLocaleString();
+
+    const programs = new Set();
+    allSubmissions.forEach(s => {
+      const p = getAnswerByName(s, "typeA4");
+      if (p) programs.add(p);
+    });
+    $("stat-programs").textContent = programs.size;
+
+    if (allSubmissions.length) {
+      const latest = allSubmissions.slice().sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      $("stat-last-date").textContent = fmtDate(latest.created_at);
+      $("stat-last-sub").textContent = daysAgo(latest.created_at);
+    }
+  }
+
+  function renderCharts() {
+    // Timeline — group by day
+    const byDay = {};
+    allSubmissions.forEach(s => {
+      const d = s.created_at.split(" ")[0];
+      byDay[d] = (byDay[d] || 0) + 1;
+    });
+    const days = Object.keys(byDay).sort();
+    const counts = days.map(d => byDay[d]);
+
+    if (charts.timeline) charts.timeline.destroy();
+    charts.timeline = new Chart($("chart-timeline"), {
+      type: "line",
+      data: {
+        labels: days,
+        datasets: [{
+          label: "Submissions",
+          data: counts,
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37, 99, 235, 0.1)",
+          fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 12, autoSkip: true } },
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+
+    // Types
+    const byType = {};
+    allSubmissions.forEach(s => {
+      const t = getAnswerByName(s, "whatType") || "(blank)";
+      byType[t] = (byType[t] || 0) + 1;
+    });
+    const typeEntries = Object.entries(byType).sort((a,b) => b[1] - a[1]);
+
+    if (charts.types) charts.types.destroy();
+    charts.types = new Chart($("chart-types"), {
+      type: "bar",
+      data: {
+        labels: typeEntries.map(e => e[0]),
+        datasets: [{
+          data: typeEntries.map(e => e[1]),
+          backgroundColor: "#2563eb"
+        }]
+      },
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+
+    // Programs (top 10)
+    const byProg = {};
+    allSubmissions.forEach(s => {
+      const p = getAnswerByName(s, "typeA4") || "(blank)";
+      byProg[p] = (byProg[p] || 0) + 1;
+    });
+    const progEntries = Object.entries(byProg).sort((a,b) => b[1] - a[1]).slice(0, 10);
+
+    if (charts.programs) charts.programs.destroy();
+    charts.programs = new Chart($("chart-programs"), {
+      type: "bar",
+      data: {
+        labels: progEntries.map(e => e[0].replace(/(Spring|Fall) (\d{4}) - /, "$1$2 ")),
+        datasets: [{
+          data: progEntries.map(e => e[1]),
+          backgroundColor: "#059669"
+        }]
+      },
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  }
+
+  function populateFilters() {
+    const types = new Set();
+    const programs = new Set();
+    allSubmissions.forEach(s => {
+      const t = getAnswerByName(s, "whatType");
+      const p = getAnswerByName(s, "typeA4");
+      if (t) types.add(t);
+      if (p) programs.add(p);
+    });
+
+    const typeSel = $("filter-type");
+    [...types].sort().forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t; opt.textContent = t;
+      typeSel.appendChild(opt);
+    });
+    const progSel = $("filter-program");
+    [...programs].sort().forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p; opt.textContent = p;
+      progSel.appendChild(opt);
+    });
+  }
+
+  function applyFilters() {
+    const q = $("search").value.toLowerCase().trim();
+    const typeF = $("filter-type").value;
+    const progF = $("filter-program").value;
+    const from = $("filter-from").value;
+    const to = $("filter-to").value;
+
+    filtered = allSubmissions.filter(s => {
+      const type = getAnswerByName(s, "whatType");
+      const prog = getAnswerByName(s, "typeA4");
+      if (typeF && type !== typeF) return false;
+      if (progF && prog !== progF) return false;
+      const date = s.created_at.split(" ")[0];
+      if (from && date < from) return false;
+      if (to && date > to) return false;
+      if (q) {
+        // search across all answer text
+        let match = false;
+        const answers = s.answers || {};
+        for (const qid in answers) {
+          const a = answerText(answers[qid].answer).toLowerCase();
+          if (a.includes(q)) { match = true; break; }
+        }
+        if (!match) return false;
+      }
+      return true;
+    });
+
+    sortAndRender();
+  }
+
+  function sortAndRender() {
+    filtered.sort((a, b) => {
+      let va, vb;
+      if (sortKey === "created_at") { va = a.created_at; vb = b.created_at; }
+      else if (sortKey === "type") { va = getAnswerByName(a, "whatType"); vb = getAnswerByName(b, "whatType"); }
+      else if (sortKey === "program") { va = getAnswerByName(a, "typeA4"); vb = getAnswerByName(b, "typeA4"); }
+      else if (sortKey === "who") { va = getWhoFilled(a); vb = getWhoFilled(b); }
+      if (va < vb) return sortDir === "asc" ? -1 : 1;
+      if (va > vb) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    currentPage = 1;
+    renderTable();
+  }
+
+  function renderTable() {
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (currentPage > pages) currentPage = pages;
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const rows = filtered.slice(start, start + PAGE_SIZE);
+
+    $("result-count").textContent = `${total.toLocaleString()} result${total === 1 ? "" : "s"}`;
+    $("page-info").textContent = `Page ${currentPage} of ${pages}`;
+
+    tbody.innerHTML = rows.map(s => {
+      const type = getAnswerByName(s, "whatType");
+      const prog = getAnswerByName(s, "typeA4");
+      const who = getWhoFilled(s);
+      const preview = getPreview(s);
+      return `<tr class="row-click" data-id="${s.id}">
+        <td>${fmtDateTime(s.created_at)}</td>
+        <td>${typeBadge(type)}</td>
+        <td>${escapeHtml(prog || "—")}</td>
+        <td>${escapeHtml(who || "—")}</td>
+        <td style="color: var(--muted);">${escapeHtml(preview)}</td>
+      </tr>`;
+    }).join("");
+
+    // update sort indicators
+    document.querySelectorAll("th[data-sort]").forEach(th => {
+      th.classList.remove("sorted-asc", "sorted-desc");
+      if (th.dataset.sort === sortKey) {
+        th.classList.add(sortDir === "asc" ? "sorted-asc" : "sorted-desc");
+      }
+    });
+
+    // attach row click
+    tbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("click", () => showDetail(tr.dataset.id));
+    });
+  }
+
+  function showDetail(id) {
+    const sub = allSubmissions.find(s => s.id === id);
+    if (!sub) return;
+    $("modal-title").textContent = getAnswerByName(sub, "whatType") || "Submission";
+    const meta = [];
+    const prog = getAnswerByName(sub, "typeA4");
+    const who = getWhoFilled(sub);
+    meta.push(fmtDateTime(sub.created_at));
+    if (prog) meta.push(prog);
+    if (who) meta.push("by " + who);
+    meta.push("ID: " + sub.id);
+    $("modal-meta").textContent = meta.join(" • ");
+
+    // build ordered list of answered fields
+    const answers = sub.answers || {};
+    const items = Object.keys(answers)
+      .map(qid => ({ qid, ...answers[qid] }))
+      .filter(a => {
+        if (!a.text || a.type === "control_head" || a.type === "control_button" || a.type === "control_text") return false;
+        const txt = answerText(a.answer);
+        return txt && txt !== "[]" && txt !== "{}";
+      })
+      .sort((a, b) => (parseInt(a.order||999) - parseInt(b.order||999)));
+
+    $("modal-body").innerHTML = items.map(a => {
+      const txt = answerText(a.answer);
+      // handle file uploads
+      let val;
+      if (a.type === "control_fileupload" && Array.isArray(a.answer)) {
+        val = a.answer.map(u => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(u.split("/").pop())}</a>`).join("<br>");
+      } else if (a.type === "control_signature" && typeof a.answer === "string" && a.answer.startsWith("http")) {
+        val = `<a href="${escapeHtml(a.answer)}" target="_blank" rel="noopener">View signature</a>`;
+      } else {
+        val = escapeHtml(txt);
+      }
+      return `<div class="detail-item">
+        <div class="detail-label">${escapeHtml(a.text)}</div>
+        <div class="detail-value">${val}</div>
+      </div>`;
+    }).join("") || `<div style="color: var(--muted);">No answered fields.</div>`;
+
+    $("modal").classList.add("show");
+  }
+
+  // ---------- event wiring ----------
+  function wire() {
+    $("refresh-btn").addEventListener("click", init);
+    $("search").addEventListener("input", debounce(applyFilters, 200));
+    $("filter-type").addEventListener("change", applyFilters);
+    $("filter-program").addEventListener("change", applyFilters);
+    $("filter-from").addEventListener("change", applyFilters);
+    $("filter-to").addEventListener("change", applyFilters);
+    $("clear-filters").addEventListener("click", () => {
+      $("search").value = ""; $("filter-type").value = ""; $("filter-program").value = "";
+      $("filter-from").value = ""; $("filter-to").value = "";
+      applyFilters();
+    });
+    $("prev-page").addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderTable(); } });
+    $("next-page").addEventListener("click", () => { currentPage++; renderTable(); });
+
+    document.querySelectorAll("th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.dataset.sort;
+        if (sortKey === key) sortDir = sortDir === "asc" ? "desc" : "asc";
+        else { sortKey = key; sortDir = "asc"; }
+        sortAndRender();
+      });
+    });
+
+    $("modal-close").addEventListener("click", () => $("modal").classList.remove("show"));
+    $("modal").addEventListener("click", e => {
+      if (e.target.id === "modal") $("modal").classList.remove("show");
+    });
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  async function init() {
+    setStatus("Fetching form info…");
+    $("initial-loading").style.display = "block";
+    try {
+      const [form, qs, subs] = await Promise.all([
+        fetchForm(), fetchQuestions(), fetchAllSubmissions()
+      ]);
+      questions = qs;
+      allSubmissions = subs;
+      $("form-title").textContent = form.title || "Form Dashboard";
+      $("form-subtitle").textContent = `Form ID ${form.id} • Created ${fmtDate(form.created_at)} • Last submission ${fmtDate(form.last_submission)}`;
+
+      // Clear filter dropdowns (if re-running)
+      $("filter-type").innerHTML = '<option value="">All form types</option>';
+      $("filter-program").innerHTML = '<option value="">All programs</option>';
+
+      renderStats(form);
+      renderCharts();
+      populateFilters();
+      filtered = allSubmissions.slice();
+      sortAndRender();
+
+      setStatus(`Live • ${allSubmissions.length} submissions loaded • Updated ${new Date().toLocaleTimeString()}`, "live");
+      $("initial-loading").style.display = "none";
+    } catch (e) {
+      console.error(e);
+      setStatus("Error: " + e.message, "error");
+      $("initial-loading").innerHTML = `<div class="error-msg">Failed to load: ${escapeHtml(e.message)}<br><br>Check that the API key is valid and the form is accessible.</div>`;
+    }
+  }
+
+  wire();
+  init();
+})();
+</script>
+</body>
+</html>
