@@ -38,5 +38,19 @@
       "owner": "",
       "allowedRoles": ["outreach"]
     }
+    {
+  "title": "Stripe Payments",
+  "description": "Live transactions and revenue summary pulled directly from Stripe. Click any row for full charge details.",
+  "category": "Finance",
+  "icon": "💳",
+  "colors": [
+    "#635bff",
+    "#00d4ff"
+  ],
+  "allowedRoles": [
+    "admin",
+    "operations"
+  ]
+}
   ]
 }
