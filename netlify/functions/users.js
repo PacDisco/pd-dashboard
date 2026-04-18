@@ -68,20 +68,28 @@ export const handler = async (event, context) => {
   }
 
   // POST /users → invite  { email, roles?: [] }
+  //
+  // Netlify has two user endpoints:
+  //   - POST /sites/{id}/users         → creates user (no email sent)
+  //   - POST /sites/{id}/users/invite  → sends invite email (what we want)
+  //
+  // The invite endpoint takes { emails: [...] } (plural). Returns an array
+  // of invited user objects.
   if (method === "POST" && !userId) {
     const body = parseBody(event.body);
     if (!body?.email) return send(400, { error: "`email` required" });
 
-    const inviteRes = await fetch(usersUrl, {
+    const inviteRes = await fetch(`${usersUrl}/invite`, {
       method: "POST",
       headers: jsonAuth,
-      body: JSON.stringify({ email: body.email }),
+      body: JSON.stringify({ emails: [body.email] }),
     });
     if (!inviteRes.ok) return forward(inviteRes, "invite user");
 
-    // If roles were provided, set them on the invited user right away.
+    // If roles provided, set them on the newly-invited user.
     if (Array.isArray(body.roles) && body.roles.length) {
-      const invited = await inviteRes.json().catch(() => ({}));
+      const invitedList = await inviteRes.json().catch(() => []);
+      const invited = Array.isArray(invitedList) ? invitedList[0] : invitedList;
       if (invited?.id) {
         await fetch(`${usersUrl}/${invited.id}`, {
           method: "PUT",
