@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stripe Payments · Pacific Discovery</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --accent: #635bff;
+    --accent-soft: #efeffe;
+    --green: #0f9d58;
+    --red: #d93025;
+    --amber: #b8860b;
+    --shadow: 0 1px 2px rgba(15,23,42,.05), 0 4px 12px rgba(15,23,42,.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  header.page {
+    padding: 28px 32px 20px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+  }
+  header.page h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: -.01em;
+  }
+  header.page p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  main { padding: 24px 32px 80px; max-width: 1400px; margin: 0 auto; }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .field input, .field select {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13.5px;
+    color: var(--text);
+    min-width: 150px;
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.primary:hover { filter: brightness(1.05); }
+  button.ghost {
+    background: #fff;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .kpi .label {
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .kpi .value {
+    font-size: 24px;
+    font-weight: 650;
+    letter-spacing: -.01em;
+    line-height: 1.1;
+  }
+  .kpi .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .table-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: 12px 16px;
+    background: #fafbfd;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr { cursor: pointer; transition: background .1s; }
+  tbody tr:hover { background: #f8f9fc; }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.amount { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    text-transform: capitalize;
+  }
+  .status.succeeded { background: #e6f4ea; color: var(--green); }
+  .status.failed { background: #fce8e6; color: var(--red); }
+  .status.pending { background: #fef7e0; color: var(--amber); }
+  .status.refunded { background: #f1f3f4; color: var(--muted); }
+
+  .empty, .loading, .error {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .error { color: var(--red); }
+
+  .pagination { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #fafbfd; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,.45);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 50;
+    padding: 40px 20px;
+    overflow-y: auto;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 720px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(15,23,42,.25);
+    overflow: hidden;
+  }
+  .modal header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal header h2 { margin: 0; font-size: 16px; font-weight: 650; }
+  .modal .close {
+    background: transparent; border: 0; font-size: 22px; cursor: pointer; color: var(--muted); line-height: 1;
+  }
+  .modal .body { padding: 22px; }
+  .modal .amount-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
+  .modal .big-amount { font-size: 30px; font-weight: 650; letter-spacing: -.02em; }
+  .modal dl { display: grid; grid-template-columns: 160px 1fr; gap: 10px 16px; margin: 0; font-size: 13.5px; }
+  .modal dt { color: var(--muted); font-weight: 500; }
+  .modal dd { margin: 0; word-break: break-word; }
+  .modal dd code { background: #f1f3f4; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .modal .section-title {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+    font-weight: 600; margin: 22px 0 10px;
+  }
+  .modal .actions { padding: 16px 22px; background: #fafbfd; border-top: 1px solid var(--border); display: flex; gap: 10px; }
+  .modal a.link { color: var(--accent); text-decoration: none; font-size: 13.5px; font-weight: 500; }
+  .modal a.link:hover { text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    header.page, main { padding-left: 16px; padding-right: 16px; }
+    td.hide-sm, th.hide-sm { display: none; }
+    .modal dl { grid-template-columns: 1fr; gap: 4px 0; }
+    .modal dt { margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Stripe Payments</h1>
+  <p>Live transactions pulled directly from the Stripe account. Click any row for full details.</p>
+</header>
+<main>
+  <div class="toolbar" id="toolbar">
+    <div class="field">
+      <label for="range">Range</label>
+      <select id="range">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="365">Last 12 months</option>
+        <option value="custom">Custom…</option>
+      </select>
+    </div>
+    <div class="field" id="startWrap" style="display:none">
+      <label for="startDate">Start</label>
+      <input type="date" id="startDate" />
+    </div>
+    <div class="field" id="endWrap" style="display:none">
+      <label for="endDate">End</label>
+      <input type="date" id="endDate" />
+    </div>
+    <div class="field">
+      <label for="statusFilter">Status</label>
+      <select id="statusFilter">
+        <option value="">All</option>
+        <option value="succeeded">Succeeded</option>
+        <option value="failed">Failed</option>
+        <option value="pending">Pending</option>
+      </select>
+    </div>
+    <button class="primary" id="refreshBtn">Refresh</button>
+    <button class="ghost" id="exportBtn">Export CSV</button>
+  </div>
+
+  <div class="kpis" id="kpis">
+    <div class="kpi"><div class="label">Gross volume</div><div class="value" id="kpiGross">—</div><div class="sub" id="kpiGrossSub">&nbsp;</div></div>
+    <div class="kpi"><div class="label">Net volume</div><div class="value" id="kpiNet">—</div><div class="sub" id="kpiNetSub">after refunds</div></div>
+    <div class="kpi"><div class="label">Transactions</div><div class="value" id="kpiCount">—</div><div class="sub" id="kpiCountSub">&nbsp;</div></div>
+    <div class="kpi"><div class="label">Refunds</div><div class="value" id="kpiRefunds">—</div><div class="sub" id="kpiRefundsSub">&nbsp;</div></div>
+    <div class="kpi"><div class="label">Avg transaction</div><div class="value" id="kpiAvg">—</div><div class="sub">of succeeded</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:140px">Amount</th>
+          <th style="width:110px">Status</th>
+          <th>Description</th>
+          <th class="hide-sm">Customer</th>
+          <th class="hide-sm" style="width:120px">Payment</th>
+          <th style="width:160px">Date</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="6" class="loading">Loading charges…</td></tr>
+      </tbody>
+    </table>
+    <div class="pagination">
+      <span id="paginationInfo">—</span>
+      <div>
+        <button class="ghost" id="loadMoreBtn" style="display:none">Load more</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal" id="modal">
+    <header>
+      <h2 id="modalTitle">Transaction</h2>
+      <button class="close" id="modalClose" aria-label="Close">×</button>
+    </header>
+    <div class="body" id="modalBody"><div class="loading">Loading…</div></div>
+    <div class="actions" id="modalActions" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+// ---------- helpers ----------
+const fmtCurrency = (cents, currency) => {
+  if (cents == null) return "—";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: (currency || "usd").toUpperCase(),
+    }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency || ""}`.trim();
+  }
+};
+const fmtDate = (unix) => {
+  if (!unix) return "—";
+  const d = new Date(unix * 1000);
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+};
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ---------- state ----------
+const state = {
+  charges: [],
+  currency: "usd",
+  hasMore: false,
+  statusFilter: "",
+  range: { start: null, end: null },
+};
+
+// ---------- date helpers ----------
+function computeRange() {
+  const sel = document.getElementById("range").value;
+  const end = new Date();
+  let start;
+  if (sel === "custom") {
+    const sv = document.getElementById("startDate").value;
+    const ev = document.getElementById("endDate").value;
+    start = sv ? new Date(sv + "T00:00:00") : null;
+    const customEnd = ev ? new Date(ev + "T23:59:59") : end;
+    return { start: start || null, end: customEnd };
+  }
+  const days = parseInt(sel, 10);
+  start = new Date();
+  start.setDate(start.getDate() - days);
+  start.setHours(0, 0, 0, 0);
+  return { start, end };
+}
+
+// ---------- API ----------
+async function api(params) {
+  const query = new URLSearchParams(params).toString();
+  const res = await fetch(`/api/stripe?${query}`);
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
+  return body;
+}
+
+async function loadSummary() {
+  const { start, end } = state.range;
+  const params = { action: "summary" };
+  if (start) params.created_gte = start.toISOString();
+  if (end) params.created_lte = end.toISOString();
+  try {
+    const data = await api(params);
+    renderKPIs(data);
+  } catch (err) {
+    document.getElementById("kpiGross").textContent = "—";
+    document.getElementById("kpiGrossSub").textContent = err.message;
+  }
+}
+
+async function loadCharges(append = false) {
+  const tbody = document.getElementById("tbody");
+  if (!append) tbody.innerHTML = `<tr><td colspan="6" class="loading">Loading charges…</td></tr>`;
+  const { start, end } = state.range;
+  const params = { action: "charges", limit: 100 };
+  if (start) params.created_gte = start.toISOString();
+  if (end) params.created_lte = end.toISOString();
+  if (append && state.charges.length) params.starting_after = state.charges[state.charges.length - 1].id;
+  try {
+    const data = await api(params);
+    const rows = data.data || [];
+    state.charges = append ? state.charges.concat(rows) : rows;
+    state.hasMore = !!data.has_more;
+    if (rows[0]?.currency) state.currency = rows[0].currency;
+    renderTable();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="error">${esc(err.message)}</td></tr>`;
+  }
+}
+
+// ---------- render ----------
+function renderKPIs(s) {
+  const cur = s.currency || state.currency || "usd";
+  document.getElementById("kpiGross").textContent = fmtCurrency(s.grossCents, cur);
+  document.getElementById("kpiGrossSub").textContent = s.capped ? "first 1,000 charges in window" : " ";
+  document.getElementById("kpiNet").textContent = fmtCurrency(s.netCents, cur);
+  document.getElementById("kpiCount").textContent = (s.count || 0).toLocaleString();
+  document.getElementById("kpiCountSub").textContent = `${(s.succeeded || 0).toLocaleString()} succeeded · ${(s.failed || 0).toLocaleString()} failed`;
+  document.getElementById("kpiRefunds").textContent = fmtCurrency(s.refundedCents, cur);
+  document.getElementById("kpiRefundsSub").textContent = `${s.refunded_count || 0} transactions refunded`;
+  const avg = s.succeeded ? Math.round(s.grossCents / s.succeeded) : 0;
+  document.getElementById("kpiAvg").textContent = fmtCurrency(avg, cur);
+}
+
+function renderTable() {
+  const tbody = document.getElementById("tbody");
+  const filtered = state.statusFilter
+    ? state.charges.filter((c) => c.status === state.statusFilter)
+    : state.charges;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">No charges match this filter.</td></tr>`;
+  } else {
+    tbody.innerHTML = filtered.map(rowHTML).join("");
+    [...tbody.querySelectorAll("tr[data-id]")].forEach((tr) => {
+      tr.addEventListener("click", () => openModal(tr.dataset.id));
+    });
+  }
+  document.getElementById("paginationInfo").textContent =
+    `Showing ${filtered.length.toLocaleString()} of ${state.charges.length.toLocaleString()} loaded`;
+  document.getElementById("loadMoreBtn").style.display = state.hasMore ? "inline-block" : "none";
+}
+
+function rowHTML(c) {
+  const statusKey = c.refunded ? "refunded" : c.status || "pending";
+  const customer = c.customer_name || c.customer_email || "—";
+  const pm = c.payment_method_brand ? `${c.payment_method_brand.toUpperCase()} ···· ${c.payment_method_last4 || ""}` : "—";
+  return `<tr data-id="${esc(c.id)}">
+    <td class="amount">${esc(fmtCurrency(c.amount, c.currency))}</td>
+    <td><span class="status ${esc(statusKey)}">${esc(statusKey)}</span></td>
+    <td>${esc(c.description || "—")}</td>
+    <td class="hide-sm">${esc(customer)}</td>
+    <td class="hide-sm">${esc(pm)}</td>
+    <td>${esc(fmtDate(c.created))}</td>
+  </tr>`;
+}
+
+// ---------- modal ----------
+const backdrop = document.getElementById("modalBackdrop");
+const modalBody = document.getElementById("modalBody");
+const modalActions = document.getElementById("modalActions");
+const modalTitle = document.getElementById("modalTitle");
+document.getElementById("modalClose").addEventListener("click", closeModal);
+backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+function closeModal() { backdrop.classList.remove("open"); }
+
+async function openModal(id) {
+  backdrop.classList.add("open");
+  modalBody.innerHTML = `<div class="loading">Loading details…</div>`;
+  modalActions.style.display = "none";
+  modalTitle.textContent = "Transaction";
+  try {
+    const c = await api({ action: "charge", id });
+    modalTitle.textContent = `${fmtCurrency(c.amount, c.currency)} · ${c.status}`;
+    modalBody.innerHTML = detailHTML(c);
+    const stripeUrl = `https://dashboard.stripe.com/${c.livemode ? "" : "test/"}payments/${c.id}`;
+    const receiptUrl = c.receipt_url;
+    modalActions.innerHTML = `
+      <a class="link" href="${esc(stripeUrl)}" target="_blank" rel="noopener">Open in Stripe →</a>
+      ${receiptUrl ? `<a class="link" href="${esc(receiptUrl)}" target="_blank" rel="noopener">View receipt →</a>` : ""}
+    `;
+    modalActions.style.display = "flex";
+  } catch (err) {
+    modalBody.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+  }
+}
+
+function detailHTML(c) {
+  const cust = typeof c.customer === "object" ? c.customer : null;
+  const bt = typeof c.balance_transaction === "object" ? c.balance_transaction : null;
+  const pm = c.payment_method_details || {};
+  const card = pm.card || {};
+  const bd = c.billing_details || {};
+  const pi = typeof c.payment_intent === "object" ? c.payment_intent : null;
+
+  const fees = bt?.fee;
+  const netStripe = bt?.net;
+  const feeDetail = (bt?.fee_details || []).map((f) => `${f.description || f.type}: ${fmtCurrency(f.amount, f.currency)}`).join("<br>");
+
+  const refunds = (c.refunds?.data || []).map((r) =>
+    `<li>${esc(fmtCurrency(r.amount, r.currency))} — ${esc(r.reason || "refunded")} on ${esc(fmtDate(r.created))}</li>`
+  ).join("");
+
+  const metaRows = Object.entries(c.metadata || {}).map(([k, v]) =>
+    `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`
+  ).join("");
+
+  return `
+    <div class="amount-row">
+      <div>
+        <div class="big-amount">${esc(fmtCurrency(c.amount, c.currency))}</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px">${esc(fmtDate(c.created))}</div>
+      </div>
+      <span class="status ${esc(c.refunded ? "refunded" : c.status)}">${esc(c.refunded ? "refunded" : c.status)}</span>
+    </div>
+
+    <div class="section-title">Charge</div>
+    <dl>
+      <dt>Charge ID</dt><dd><code>${esc(c.id)}</code></dd>
+      <dt>Description</dt><dd>${esc(c.description || "—")}</dd>
+      ${c.statement_descriptor ? `<dt>Statement</dt><dd>${esc(c.statement_descriptor)}</dd>` : ""}
+      ${c.failure_message ? `<dt>Failure</dt><dd style="color:var(--red)">${esc(c.failure_message)}</dd>` : ""}
+      ${c.amount_refunded ? `<dt>Refunded</dt><dd>${esc(fmtCurrency(c.amount_refunded, c.currency))}</dd>` : ""}
+      <dt>Mode</dt><dd>${c.livemode ? "Live" : "Test"}</dd>
+    </dl>
+
+    <div class="section-title">Customer</div>
+    <dl>
+      <dt>Name</dt><dd>${esc(cust?.name || bd.name || "—")}</dd>
+      <dt>Email</dt><dd>${esc(cust?.email || bd.email || c.receipt_email || "—")}</dd>
+      <dt>Phone</dt><dd>${esc(cust?.phone || bd.phone || "—")}</dd>
+      ${cust?.id ? `<dt>Customer ID</dt><dd><code>${esc(cust.id)}</code></dd>` : ""}
+    </dl>
+
+    <div class="section-title">Payment method</div>
+    <dl>
+      <dt>Type</dt><dd>${esc(pm.type || "—")}</dd>
+      ${card.brand ? `<dt>Card</dt><dd>${esc(card.brand.toUpperCase())} ···· ${esc(card.last4 || "")}</dd>` : ""}
+      ${card.exp_month ? `<dt>Expires</dt><dd>${esc(card.exp_month)}/${esc(card.exp_year)}</dd>` : ""}
+      ${card.country ? `<dt>Country</dt><dd>${esc(card.country)}</dd>` : ""}
+      ${card.funding ? `<dt>Funding</dt><dd>${esc(card.funding)}</dd>` : ""}
+    </dl>
+
+    ${(fees != null || netStripe != null) ? `
+    <div class="section-title">Balance</div>
+    <dl>
+      ${fees != null ? `<dt>Stripe fee</dt><dd>${esc(fmtCurrency(fees, bt.currency))}${feeDetail ? `<br><span style="color:var(--muted);font-size:12.5px">${feeDetail}</span>` : ""}</dd>` : ""}
+      ${netStripe != null ? `<dt>Net</dt><dd>${esc(fmtCurrency(netStripe, bt.currency))}</dd>` : ""}
+    </dl>` : ""}
+
+    ${refunds ? `<div class="section-title">Refunds</div><ul style="margin:0;padding-left:18px;font-size:13.5px">${refunds}</ul>` : ""}
+
+    ${metaRows ? `<div class="section-title">Metadata</div><dl>${metaRows}</dl>` : ""}
+
+    ${pi?.id ? `<div class="section-title">Payment intent</div><dl><dt>ID</dt><dd><code>${esc(pi.id)}</code></dd></dl>` : ""}
+  `;
+}
+
+// ---------- export ----------
+function toCSV(rows, currency) {
+  const headers = ["id","amount","currency","status","customer_name","customer_email","description","card","created_iso"];
+  const lines = [headers.join(",")];
+  for (const c of rows) {
+    const vals = [
+      c.id,
+      (c.amount || 0) / 100,
+      (c.currency || currency || "usd").toUpperCase(),
+      c.refunded ? "refunded" : c.status || "",
+      c.customer_name || "",
+      c.customer_email || "",
+      (c.description || "").replace(/\s+/g, " "),
+      c.payment_method_brand ? `${c.payment_method_brand.toUpperCase()} ****${c.payment_method_last4 || ""}` : "",
+      c.created ? new Date(c.created * 1000).toISOString() : "",
+    ].map((v) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    });
+    lines.push(vals.join(","));
+  }
+  return lines.join("\n");
+}
+
+function exportCSV() {
+  const csv = toCSV(state.charges, state.currency);
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `stripe-charges-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------- wiring ----------
+document.getElementById("range").addEventListener("change", (e) => {
+  const custom = e.target.value === "custom";
+  document.getElementById("startWrap").style.display = custom ? "flex" : "none";
+  document.getElementById("endWrap").style.display = custom ? "flex" : "none";
+});
+document.getElementById("refreshBtn").addEventListener("click", () => { refresh(); });
+document.getElementById("statusFilter").addEventListener("change", (e) => {
+  state.statusFilter = e.target.value;
+  renderTable();
+});
+document.getElementById("loadMoreBtn").addEventListener("click", () => loadCharges(true));
+document.getElementById("exportBtn").addEventListener("click", exportCSV);
+
+async function refresh() {
+  state.range = computeRange();
+  state.charges = [];
+  await Promise.all([loadSummary(), loadCharges(false)]);
+}
+
+refresh();
+</script>
+</body>
+</html>
