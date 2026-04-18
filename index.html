@@ -396,9 +396,21 @@
       $("loginBtn").onclick = () => netlifyIdentity.open();
     }
 
-    function onLogin(user) {
+    async function onLogin(user) {
       STATE.user = user;
       STATE.roles = user.app_metadata?.roles || [];
+
+      // The login event sometimes fires before app_metadata is fully synced —
+      // if roles come back empty, force a JWT refresh and re-read.
+      if (!STATE.roles.length) {
+        try {
+          await user.jwt(true);
+          STATE.roles = user.app_metadata?.roles || [];
+        } catch (err) {
+          console.warn("JWT refresh failed:", err);
+        }
+      }
+
       paintUser(user);
       $("adminBtn").style.display = STATE.roles.includes("admin") ? "" : "none";
       loadDashboards();
@@ -420,7 +432,7 @@
       const grid = $("grid");
       grid.innerHTML = `<div class="loading" style="grid-column:1/-1">Loading dashboards…</div>`;
       try {
-        const res = await api("GET", "/api/config");
+        const res = await api("GET", "/.netlify/functions/config");
         if (res.status === 401 || res.status === 403) { showGate("Your session expired."); return; }
         const data = await res.json();
         render(data);
@@ -554,7 +566,7 @@
       if (!STATE.draftPerms) return;
       setStatus("Saving…");
       try {
-        const res = await api("PUT", "/api/config", {
+        const res = await api("PUT", "/.netlify/functions/config", {
           dashboards: STATE.draftPerms.map(d => ({ slug: d.slug, allowedRoles: d.allowedRoles }))
         });
         if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
@@ -572,7 +584,7 @@
     async function loadUsers() {
       $("usersContent").innerHTML = `<div class="loading">Loading users…</div>`;
       try {
-        const res = await api("GET", "/api/users");
+        const res = await api("GET", "/.netlify/functions/users");
         if (!res.ok) throw await httpError(res);
         const data = await res.json();
         STATE.users = data.users || [];
@@ -637,7 +649,7 @@
       const roles = [...tr.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.dataset.role);
       setStatus("Saving…");
       try {
-        const res = await api("PATCH", `/api/users/${encodeURIComponent(id)}`, { roles });
+        const res = await api("PATCH", `/.netlify/functions/users/${encodeURIComponent(id)}`, { roles });
         if (!res.ok) throw await httpError(res);
         const u = STATE.users.find(x => x.id === id);
         if (u) u.roles = roles;
@@ -653,7 +665,7 @@
       const u = STATE.users.find(x => x.id === id);
       if (!confirm(`Remove ${u?.email || "this user"}? They'll lose all access immediately.`)) return;
       try {
-        const res = await api("DELETE", `/api/users/${encodeURIComponent(id)}`);
+        const res = await api("DELETE", `/.netlify/functions/users/${encodeURIComponent(id)}`);
         if (!res.ok) throw await httpError(res);
         STATE.users = STATE.users.filter(x => x.id !== id);
         tr.remove();
@@ -669,7 +681,7 @@
       if (!email) return;
       $("inviteBtn").disabled = true;
       try {
-        const res = await api("POST", "/api/users", { email });
+        const res = await api("POST", "/.netlify/functions/users", { email });
         if (!res.ok) throw await httpError(res);
         toast(`Invite sent to ${email}`, "success");
         $("inviteEmail").value = "";
