@@ -398,22 +398,38 @@
 
     async function onLogin(user) {
       STATE.user = user;
-      STATE.roles = user.app_metadata?.roles || [];
+      STATE.roles = rolesFromUser(user);
 
-      // The login event sometimes fires before app_metadata is fully synced —
-      // if roles come back empty, force a JWT refresh and re-read.
-      if (!STATE.roles.length) {
-        try {
-          await user.jwt(true);
-          STATE.roles = user.app_metadata?.roles || [];
-        } catch (err) {
-          console.warn("JWT refresh failed:", err);
+      // The login event sometimes fires before app_metadata is fully synced.
+      // Force-refresh the JWT, re-pick the widget's updated currentUser(), and
+      // decode the raw JWT as a last resort so roles always land on first render.
+      try {
+        const token = await user.jwt(true);
+        const fresh = netlifyIdentity.currentUser();
+        if (fresh) { STATE.user = fresh; user = fresh; }
+        const refreshed = rolesFromUser(user);
+        if (refreshed.length) {
+          STATE.roles = refreshed;
+        } else if (token) {
+          // Decode JWT payload manually — the widget's user object can lag.
+          const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+          const padded = b64 + "===".slice((b64.length + 3) % 4);
+          const payload = JSON.parse(decodeURIComponent(
+            atob(padded).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+          ));
+          STATE.roles = payload.app_metadata?.roles || [];
         }
+      } catch (err) {
+        console.warn("JWT refresh failed:", err);
       }
 
       paintUser(user);
       $("adminBtn").style.display = STATE.roles.includes("admin") ? "" : "none";
       loadDashboards();
+    }
+
+    function rolesFromUser(user) {
+      return (user && user.app_metadata && user.app_metadata.roles) || [];
     }
 
     function paintUser(user) {
