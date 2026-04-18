@@ -1,98 +1,93 @@
 // netlify/functions/users.js
 //
-// Admin-only wrapper around the Netlify Identity GoTrue admin API.
-// Caller must have `admin` in their app_metadata.roles.
+// Admin-only user management. Caller must have `admin` in app_metadata.roles.
 //
-// GET    /api/users           → list users with roles
-// POST   /api/users           → invite a new user by email          body: { email }
-// PATCH  /api/users/:userId   → update a user's roles                body: { roles: [...] }
-// DELETE /api/users/:userId   → remove a user
-// GET    /api/users?debug=1   → diagnostic (authed but no role required)
+// Uses Netlify's REST API (https://api.netlify.com/api/v1) with a Personal
+// Access Token. This is the documented path — GoTrue's direct admin endpoints
+// at /.netlify/identity/admin/* are NOT publicly exposed and return 404, and
+// /.netlify/identity/invite requires a site-level admin secret (not a user
+// JWT), which is why the prior implementation got "User not allowed".
 //
-// We forward the caller's own JWT (which has admin role) to the GoTrue admin
-// endpoints. GoTrue accepts any Bearer token where the user has admin in
-// app_metadata.roles, so no separate admin secret or PAT is needed.
+// Required env vars:
+//   NETLIFY_SITE_ID     (or SITE_ID)        → your site's API ID
+//   NETLIFY_BLOBS_TOKEN (or NETLIFY_API_TOKEN) → a Netlify Personal Access Token
+//
+// Endpoints:
+//   GET    /users            → list users
+//   POST   /users            → invite user                      body: { email, roles?: [] }
+//   PATCH  /users/:id        → update roles                     body: { roles: [...] }
+//   DELETE /users/:id        → delete user
+//   GET    /users?debug=1    → diagnostic (no auth required)
 
 export const handler = async (event, context) => {
   const { user } = context.clientContext || {};
   const method = event.httpMethod;
 
-  // Debug endpoint
   if (method === "GET" && event.queryStringParameters?.debug === "1") {
     return send(200, {
       authed: !!user,
       roles: user?.app_metadata?.roles || [],
-      hasIdentity: !!context.clientContext?.identity,
-      identityUrl: context.clientContext?.identity?.url || null,
-      identityTokenPreview: context.clientContext?.identity?.token
-        ? context.clientContext.identity.token.slice(0, 12) + "…"
-        : null,
       hasAuthHeader: !!(event.headers?.authorization || event.headers?.Authorization),
+      envVarsPresent: {
+        NETLIFY_SITE_ID: !!process.env.NETLIFY_SITE_ID,
+        SITE_ID: !!process.env.SITE_ID,
+        NETLIFY_BLOBS_TOKEN: !!process.env.NETLIFY_BLOBS_TOKEN,
+        NETLIFY_API_TOKEN: !!process.env.NETLIFY_API_TOKEN,
+      },
       siteUrl: process.env.URL,
-      deployUrl: process.env.DEPLOY_URL,
     });
   }
 
   if (!user) return send(401, { error: "Not authenticated" });
   if (!isAdmin(user)) return send(403, { error: "Admin role required" });
 
-  // Extract the caller's JWT from the Authorization header to forward to GoTrue.
-  const rawAuth = event.headers?.authorization || event.headers?.Authorization || "";
-  const userJwt = rawAuth.replace(/^Bearer\s+/i, "");
-  if (!userJwt) {
+  const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
+  const token = process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN;
+  if (!siteID || !token) {
     return send(500, {
-      error: "Missing Authorization header — the landing page must send a Bearer JWT to /api/users",
+      error:
+        "Missing credentials — set NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN (or NETLIFY_API_TOKEN) as env vars on the Netlify site.",
     });
   }
 
-  // Build the identity admin base URL. Prefer context.clientContext.identity.url
-  // (set when Identity is configured), fall back to process.env.URL.
-  const identityUrl =
-    context.clientContext?.identity?.url ||
-    (process.env.URL ? `${process.env.URL}/.netlify/identity` : null);
-  if (!identityUrl) {
-    return send(500, {
-      error: "Identity URL unavailable — enable Netlify Identity on the site",
-    });
-  }
-
-  const adminBase = `${identityUrl}/admin/users`;
+  const usersUrl = `https://api.netlify.com/api/v1/sites/${siteID}/users`;
+  const auth = { Authorization: `Bearer ${token}` };
+  const jsonAuth = { ...auth, "Content-Type": "application/json" };
   const userId = extractUserId(event.path);
-  const authHeaders = { Authorization: `Bearer ${userJwt}` };
-  const jsonHeaders = { ...authHeaders, "Content-Type": "application/json" };
 
-  // GET /api/users → list
+  // GET /users → list
   if (method === "GET" && !userId) {
-    const res = await fetch(adminBase, { headers: authHeaders });
+    const res = await fetch(usersUrl, { headers: auth });
     if (!res.ok) return forward(res, "list users");
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => []);
+    const arr = Array.isArray(data) ? data : [];
     return send(200, {
-      users: (data.users || []).map(summarize),
-      total: data.users?.length || 0,
+      users: arr.map(summarize),
+      total: arr.length,
     });
   }
 
-  // POST /api/users → invite  { email, roles?: [] }
+  // POST /users → invite  { email, roles?: [] }
   if (method === "POST" && !userId) {
     const body = parseBody(event.body);
     if (!body?.email) return send(400, { error: "`email` required" });
 
-    const res = await fetch(`${identityUrl}/invite`, {
+    const inviteRes = await fetch(usersUrl, {
       method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify({ email: body.email, aud: "" }),
+      headers: jsonAuth,
+      body: JSON.stringify({ email: body.email }),
     });
-    if (!res.ok) return forward(res, "invite user");
+    if (!inviteRes.ok) return forward(inviteRes, "invite user");
 
-    // Set initial roles if provided
+    // If roles were provided, set them on the invited user right away.
     if (Array.isArray(body.roles) && body.roles.length) {
-      const invited = await res.json().catch(() => ({}));
+      const invited = await inviteRes.json().catch(() => ({}));
       if (invited?.id) {
-        await fetch(`${adminBase}/${invited.id}`, {
+        await fetch(`${usersUrl}/${invited.id}`, {
           method: "PUT",
-          headers: jsonHeaders,
+          headers: jsonAuth,
           body: JSON.stringify({
-            app_metadata: { ...(invited.app_metadata || {}), roles: body.roles },
+            app_metadata: { roles: body.roles.filter(r => typeof r === "string") },
           }),
         }).catch(() => {});
       }
@@ -100,33 +95,27 @@ export const handler = async (event, context) => {
     return send(200, { ok: true });
   }
 
-  // PATCH /api/users/:id  { roles: [] }
+  // PATCH /users/:id → update roles  { roles: [...] }
   if (method === "PATCH" && userId) {
     const body = parseBody(event.body);
     if (!Array.isArray(body?.roles)) return send(400, { error: "`roles` array required" });
     const roles = body.roles.filter(r => typeof r === "string");
 
-    const getRes = await fetch(`${adminBase}/${userId}`, { headers: authHeaders });
-    if (!getRes.ok) return forward(getRes, "fetch user before update");
-    const existing = await getRes.json().catch(() => ({}));
-
-    const putRes = await fetch(`${adminBase}/${userId}`, {
+    const putRes = await fetch(`${usersUrl}/${userId}`, {
       method: "PUT",
-      headers: jsonHeaders,
-      body: JSON.stringify({
-        app_metadata: { ...(existing.app_metadata || {}), roles },
-      }),
+      headers: jsonAuth,
+      body: JSON.stringify({ app_metadata: { roles } }),
     });
-    if (!putRes.ok) return forward(putRes, "update roles");
+    if (!putRes.ok) return forward(putRes, "update user roles");
     const updated = await putRes.json().catch(() => ({}));
     return send(200, { ok: true, user: summarize(updated) });
   }
 
-  // DELETE /api/users/:id
+  // DELETE /users/:id
   if (method === "DELETE" && userId) {
-    const res = await fetch(`${adminBase}/${userId}`, {
+    const res = await fetch(`${usersUrl}/${userId}`, {
       method: "DELETE",
-      headers: authHeaders,
+      headers: auth,
     });
     if (!res.ok && res.status !== 404) return forward(res, "delete user");
     return send(200, { ok: true });
@@ -149,7 +138,7 @@ function summarize(u) {
   return {
     id: u.id,
     email: u.email,
-    full_name: u.user_metadata?.full_name || "",
+    full_name: u.user_metadata?.full_name || u.full_name || "",
     roles: u.app_metadata?.roles || [],
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at || null,
@@ -157,22 +146,22 @@ function summarize(u) {
   };
 }
 async function forward(res, operation) {
-  let body, bodyText;
-  try {
-    bodyText = await res.text();
-    body = JSON.parse(bodyText);
-  } catch {
-    body = { raw: bodyText };
-  }
+  let bodyText = "";
+  try { bodyText = await res.text(); } catch {}
+  let body = {};
+  try { body = JSON.parse(bodyText); } catch { body = { raw: bodyText }; }
   const msg =
     body?.error_description ||
+    body?.message ||
     body?.msg ||
     body?.error ||
-    body?.message ||
     res.statusText ||
-    `GoTrue returned ${res.status}`;
-  console.error(`users.js ${operation} failed:`, res.status, bodyText?.slice(0, 300));
-  return send(res.status || 500, { error: `${operation}: ${msg}`, gotrueStatus: res.status });
+    `Netlify API returned ${res.status}`;
+  console.error(`users.js ${operation}:`, res.status, bodyText?.slice(0, 300));
+  return send(res.status || 500, {
+    error: `${operation}: ${msg}`,
+    netlifyStatus: res.status,
+  });
 }
 function send(status, body) {
   return {
