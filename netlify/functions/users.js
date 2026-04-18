@@ -69,38 +69,89 @@ export const handler = async (event, context) => {
 
   // POST /users → invite  { email, roles?: [] }
   //
-  // Netlify has two user endpoints:
-  //   - POST /sites/{id}/users         → creates user (no email sent)
-  //   - POST /sites/{id}/users/invite  → sends invite email (what we want)
-  //
-  // The invite endpoint takes { emails: [...] } (plural). Returns an array
-  // of invited user objects.
+  // Netlify's invite API isn't consistently documented — different endpoints
+  // and payload shapes work depending on site config. We try in priority order
+  // and report which one succeeded (or all errors if none do).
   if (method === "POST" && !userId) {
     const body = parseBody(event.body);
     if (!body?.email) return send(400, { error: "`email` required" });
 
-    const inviteRes = await fetch(`${usersUrl}/invite`, {
-      method: "POST",
-      headers: jsonAuth,
-      body: JSON.stringify({ emails: [body.email] }),
-    });
-    if (!inviteRes.ok) return forward(inviteRes, "invite user");
+    const attempts = [
+      {
+        name: "REST /users/invite {emails:[]}",
+        url: `${usersUrl}/invite`,
+        headers: jsonAuth,
+        body: { emails: [body.email] },
+      },
+      {
+        name: "REST /users {emails:[]}",
+        url: usersUrl,
+        headers: jsonAuth,
+        body: { emails: [body.email] },
+      },
+      {
+        name: "REST /users {email}",
+        url: usersUrl,
+        headers: jsonAuth,
+        body: { email: body.email },
+      },
+    ];
 
-    // If roles provided, set them on the newly-invited user.
-    if (Array.isArray(body.roles) && body.roles.length) {
-      const invitedList = await inviteRes.json().catch(() => []);
-      const invited = Array.isArray(invitedList) ? invitedList[0] : invitedList;
-      if (invited?.id) {
-        await fetch(`${usersUrl}/${invited.id}`, {
-          method: "PUT",
-          headers: jsonAuth,
-          body: JSON.stringify({
-            app_metadata: { roles: body.roles.filter(r => typeof r === "string") },
-          }),
-        }).catch(() => {});
+    // Add GoTrue /invite as a last-resort if the identity admin token exists.
+    const identityToken = context.clientContext?.identity?.token;
+    const identityUrl = context.clientContext?.identity?.url;
+    if (identityToken && identityUrl) {
+      attempts.push({
+        name: "GoTrue /invite (identity.token)",
+        url: `${identityUrl}/invite`,
+        headers: { Authorization: `Bearer ${identityToken}`, "Content-Type": "application/json" },
+        body: { email: body.email, aud: "" },
+      });
+    }
+
+    const errors = [];
+    let invitedUser = null, usedMethod = null;
+    for (const a of attempts) {
+      try {
+        const res = await fetch(a.url, {
+          method: "POST",
+          headers: a.headers,
+          body: JSON.stringify(a.body),
+        });
+        const text = await res.text().catch(() => "");
+        if (res.ok) {
+          usedMethod = a.name;
+          try {
+            const parsed = JSON.parse(text);
+            invitedUser = Array.isArray(parsed) ? parsed[0] : parsed;
+          } catch {}
+          break;
+        }
+        errors.push(`${a.name}: ${res.status} ${text.slice(0, 200) || res.statusText}`);
+      } catch (err) {
+        errors.push(`${a.name}: ${err.message}`);
       }
     }
-    return send(200, { ok: true });
+
+    if (!usedMethod) {
+      return send(500, {
+        error: "All invite methods failed",
+        tried: errors,
+      });
+    }
+
+    // If roles provided and we have the new user's ID, set them.
+    if (invitedUser?.id && Array.isArray(body.roles) && body.roles.length) {
+      await fetch(`${usersUrl}/${invitedUser.id}`, {
+        method: "PUT",
+        headers: jsonAuth,
+        body: JSON.stringify({
+          app_metadata: { roles: body.roles.filter(r => typeof r === "string") },
+        }),
+      }).catch(() => {});
+    }
+
+    return send(200, { ok: true, method: usedMethod });
   }
 
   // PATCH /users/:id → update roles  { roles: [...] }
