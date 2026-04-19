@@ -638,17 +638,208 @@
         let selectedTab = 'overview';
         let pendingUpdates = [];
 
+        // ==================== RAW DATA PARSING ====================
+        // Parses the raw {sheetName: {data: [[...]]}} format from Apps Script
+        // into the structured {sources: {name: {fiscalYears, colMap}}} format
+
+        const SOURCE_TABS = [
+            'Direct web traffic', 'Google Adwords', 'Paid Social',
+            'Organic web traffic', 'Gooverseas', 'GoAbroad',
+            'US Gap Year Assoc', 'Organic Social', 'AI Web Traffic', 'Teenlife'
+        ];
+
+        function parseRawData(rawData) {
+            const sources = {};
+            SOURCE_TABS.forEach(tabName => {
+                const sheetData = rawData[tabName];
+                if (!sheetData || !sheetData.data || sheetData.data.length === 0) return;
+                sources[tabName] = parseSourceTab(sheetData.data);
+            });
+            return { sources };
+        }
+
+        function parseSourceTab(data) {
+            // Find header row by scanning for metric keywords
+            let headerRow = null;
+            let headerRowIdx = -1;
+            let monthCol = 0;
+
+            for (let i = 0; i < Math.min(data.length, 15); i++) {
+                const row = data[i];
+                if (!row) continue;
+                let hits = 0;
+                for (let j = 0; j < row.length; j++) {
+                    const h = String(row[j] || '').toLowerCase().trim();
+                    if (h.includes('traffic') || h.includes('visit')) hits++;
+                    if ((h.includes('lead') && !h.includes('client')) || h === 'leads') hits++;
+                    if (h.includes('opp')) hits++;
+                    if (h.includes('client') || h.includes('sale')) hits++;
+                }
+                if (hits >= 2) {
+                    headerRow = row;
+                    headerRowIdx = i;
+                    break;
+                }
+            }
+
+            if (!headerRow) { headerRow = data[0]; headerRowIdx = 0; }
+
+            // Find month column in header
+            for (let j = 0; j < Math.min(headerRow.length, 5); j++) {
+                const h = String(headerRow[j] || '').toLowerCase().trim();
+                if (h.includes('month') || h.includes('date')) { monthCol = j; break; }
+            }
+
+            const colMap = detectMetricColumns(headerRow);
+
+            // Parse FY blocks
+            const fiscalYears = [];
+            let currentFY = null;
+
+            for (let i = headerRowIdx + 1; i < data.length; i++) {
+                const row = data[i];
+                if (!row || row.length === 0) continue;
+
+                const colAStr = String(row[0] || '').trim();
+                const colALower = colAStr.toLowerCase();
+
+                // FY marker row
+                if (colALower === 'fy' || colALower.startsWith('fy ') || /^fy\d/.test(colALower)) {
+                    if (currentFY) {
+                        if (!currentFY.totals) currentFY.totals = calcTotals(currentFY.months);
+                        fiscalYears.push(currentFY);
+                    }
+                    const fyLabel = String(row[monthCol] || row[1] || colAStr).trim();
+                    currentFY = { label: fyLabel || colAStr, description: fyLabel, months: [] };
+                    continue;
+                }
+
+                if (!currentFY) continue;
+
+                // Total row
+                const cellStr = String(row[monthCol] || '').trim().toLowerCase();
+                if (cellStr === 'total' || cellStr === 'totals') {
+                    currentFY.totals = extractTotals(row, colMap);
+                    continue;
+                }
+
+                // Month row
+                const parsed = parseMonthCell(row[monthCol]);
+                if (parsed) {
+                    const rowNum = i + 1; // 1-indexed for Sheets getRange
+                    currentFY.months.push(extractMonth(row, colMap, rowNum, parsed));
+                }
+            }
+
+            if (currentFY) {
+                if (!currentFY.totals) currentFY.totals = calcTotals(currentFY.months);
+                fiscalYears.push(currentFY);
+            }
+
+            return { fiscalYears, colMap };
+        }
+
+        function detectMetricColumns(headerRow) {
+            const map = { spend: -1, traffic: -1, leads: -1, opps: -1, clients: -1 };
+            for (let i = 0; i < headerRow.length; i++) {
+                const h = String(headerRow[i] || '').toLowerCase().trim();
+                if ((h.includes('nzd') || h.includes('spend') || h.includes('cost')) && map.spend === -1) map.spend = i;
+                else if ((h.includes('traffic') || h.includes('visit') || h.includes('session')) && map.traffic === -1) map.traffic = i;
+                else if (((h.includes('lead') && !h.includes('client')) || h === 'leads') && map.leads === -1) map.leads = i;
+                else if (h.includes('opp') && map.opps === -1) map.opps = i;
+                else if ((h.includes('client') || h.includes('sale') || h.includes('customer')) && map.clients === -1) map.clients = i;
+            }
+            return map;
+        }
+
+        function extractMonth(row, colMap, rowNum, parsedMonth) {
+            const m = { month: parsedMonth.display, monthKey: parsedMonth.key, row: rowNum };
+            ['spend', 'traffic', 'leads', 'opps', 'clients'].forEach(metric => {
+                const ci = colMap[metric];
+                if (ci >= 0 && ci < row.length) {
+                    m[metric] = numVal(row[ci]);
+                    m[metric + 'Col'] = ci + 1; // 1-indexed for Sheets
+                } else {
+                    m[metric] = 0;
+                    m[metric + 'Col'] = -1;
+                }
+            });
+            return m;
+        }
+
+        function extractTotals(row, colMap) {
+            const t = {};
+            ['spend', 'traffic', 'leads', 'opps', 'clients'].forEach(metric => {
+                const ci = colMap[metric];
+                t[metric] = (ci >= 0 && ci < row.length) ? numVal(row[ci]) : 0;
+            });
+            return t;
+        }
+
+        function calcTotals(months) {
+            const t = { spend: 0, traffic: 0, leads: 0, opps: 0, clients: 0 };
+            months.forEach(m => { t.spend += m.spend; t.traffic += m.traffic; t.leads += m.leads; t.opps += m.opps; t.clients += m.clients; });
+            return t;
+        }
+
+        function numVal(v) {
+            if (v === null || v === undefined || v === '') return 0;
+            if (typeof v === 'number') return v;
+            const n = parseFloat(String(v).replace(/[$,\s]/g, ''));
+            return isNaN(n) ? 0 : n;
+        }
+
+        function parseMonthCell(val) {
+            if (!val) return null;
+            const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const MONTH_MAP = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11,
+                january:0,february:1,march:2,april:3,june:5,july:6,august:7,september:8,october:9,november:10,december:11 };
+
+            // ISO date string from Google Sheets (e.g. "2024-04-01T00:00:00.000Z")
+            if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    return { display: `${MONTH_NAMES[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`, key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` };
+                }
+            }
+
+            const str = String(val).trim();
+            if (!str || str.toLowerCase() === 'total' || str.toLowerCase() === 'totals') return null;
+
+            // "Apr-24", "Apr-2024", "Apr 24", "April 2024"
+            const m1 = str.match(/^([a-zA-Z]+)[\s\-\/](\d{2,4})$/);
+            if (m1) {
+                const mi = MONTH_MAP[m1[1].toLowerCase().substring(0,3)];
+                if (mi !== undefined) {
+                    let y = parseInt(m1[2]); if (y < 100) y += 2000;
+                    return { display: `${MONTH_NAMES[mi]}-${String(y).slice(-2)}`, key: `${y}-${String(mi+1).padStart(2,'0')}` };
+                }
+            }
+
+            // "2024-04" ISO month
+            const m2 = str.match(/^(\d{4})-(\d{2})$/);
+            if (m2) {
+                const y = parseInt(m2[1]), mi = parseInt(m2[2]) - 1;
+                if (mi >= 0 && mi < 12) return { display: `${MONTH_NAMES[mi]}-${String(y).slice(-2)}`, key: `${y}-${String(mi+1).padStart(2,'0')}` };
+            }
+
+            return null;
+        }
+
         // ==================== INITIALIZATION ====================
         async function init() {
             showLoadingOverlay(true);
             try {
                 await fetchData();
+                if (!appData || !appData.sources || Object.keys(appData.sources).length === 0) {
+                    throw new Error('No source data found. Check that the spreadsheet tabs exist.');
+                }
                 setupUI();
                 showLoadingOverlay(false);
             } catch (error) {
                 console.error('Initialization error:', error);
                 showLoadingOverlay(false);
-                showErrorBanner('Failed to load dashboard. Please refresh the page.');
+                showErrorBanner('Failed to load dashboard: ' + error.message);
             }
         }
 
@@ -657,7 +848,8 @@
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
-            appData = await response.json();
+            const rawData = await response.json();
+            appData = parseRawData(rawData);
             updateLastUpdatedTime();
         }
 
