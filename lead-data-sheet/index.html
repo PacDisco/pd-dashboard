@@ -639,8 +639,10 @@
         let pendingUpdates = [];
 
         // ==================== RAW DATA PARSING ====================
-        // Parses the raw {sheetName: {data: [[...]]}} format from Apps Script
-        // into the structured {sources: {name: {fiscalYears, colMap}}} format
+        // Parses raw {sheetName: {data: [[...]]}} from Apps Script
+        // into structured {sources: {name: {fiscalYears, colMap}}} format
+        // Handles varied tab layouts: different header positions, column orders,
+        // FY-marker rows that also contain month data, tabs with no FY markers, etc.
 
         const SOURCE_TABS = [
             'Direct web traffic', 'Google Adwords', 'Paid Social',
@@ -653,101 +655,127 @@
             SOURCE_TABS.forEach(tabName => {
                 const sheetData = rawData[tabName];
                 if (!sheetData || !sheetData.data || sheetData.data.length === 0) return;
-                sources[tabName] = parseSourceTab(sheetData.data);
+                const parsed = parseSourceTab(sheetData.data);
+                if (parsed.fiscalYears.length > 0) sources[tabName] = parsed;
             });
             return { sources };
         }
 
         function parseSourceTab(data) {
-            // Find header row by scanning for metric keywords
-            let headerRow = null;
-            let headerRowIdx = -1;
-            let monthCol = 0;
-
-            for (let i = 0; i < Math.min(data.length, 15); i++) {
+            // Step 1: Find header row — pick row with MOST metric keyword hits
+            // (handles two-row headers where sub-headers like "Lead Conversion" appear above)
+            let bestRow = null, bestIdx = -1, bestHits = 0;
+            for (let i = 0; i < Math.min(data.length, 20); i++) {
                 const row = data[i];
                 if (!row) continue;
                 let hits = 0;
                 for (let j = 0; j < row.length; j++) {
                     const h = String(row[j] || '').toLowerCase().trim();
+                    if (h.startsWith('cost') || h.includes('conversion') || h.includes('$/')) continue;
                     if (h.includes('traffic') || h.includes('visit')) hits++;
-                    if ((h.includes('lead') && !h.includes('client')) || h === 'leads') hits++;
-                    if (h.includes('opp')) hits++;
-                    if (h.includes('client') || h.includes('sale')) hits++;
+                    else if (h.includes('lead') && !h.includes('client')) hits++;
+                    else if (h.includes('opp')) hits++;
+                    else if (h.includes('client') || h.includes('customer')) hits++;
+                    else if (h.includes('nzd') || h === 'spend') hits++;
                 }
-                if (hits >= 2) {
-                    headerRow = row;
-                    headerRowIdx = i;
-                    break;
+                if (hits >= bestHits && hits >= 2) { bestHits = hits; bestRow = row; bestIdx = i; }
+            }
+            if (!bestRow) { bestRow = data[0]; bestIdx = 0; }
+
+            // Step 2: Detect month column by scanning data rows for ISO date strings
+            let monthCol = -1;
+            for (let i = bestIdx + 1; i < Math.min(data.length, bestIdx + 30); i++) {
+                const row = data[i];
+                if (!row) continue;
+                for (let j = 0; j < Math.min(row.length, 3); j++) {
+                    if (/^\d{4}-\d{2}-\d{2}T/.test(String(row[j] || ''))) { monthCol = j; break; }
                 }
+                if (monthCol >= 0) break;
             }
+            if (monthCol < 0) monthCol = 0; // fallback
 
-            if (!headerRow) { headerRow = data[0]; headerRowIdx = 0; }
+            // Step 3: Detect metric columns from header (skip cost/conversion columns)
+            const colMap = detectMetricColumns(bestRow, monthCol);
 
-            // Find month column in header
-            for (let j = 0; j < Math.min(headerRow.length, 5); j++) {
-                const h = String(headerRow[j] || '').toLowerCase().trim();
-                if (h.includes('month') || h.includes('date')) { monthCol = j; break; }
-            }
+            // Step 4: Scan ALL rows after header, extract every parseable month,
+            // group into fiscal years automatically (Apr-Mar, FY key = year of April)
+            const monthsByFY = {};
 
-            const colMap = detectMetricColumns(headerRow);
-
-            // Parse FY blocks
-            const fiscalYears = [];
-            let currentFY = null;
-
-            for (let i = headerRowIdx + 1; i < data.length; i++) {
+            for (let i = bestIdx + 1; i < data.length; i++) {
                 const row = data[i];
                 if (!row || row.length === 0) continue;
 
-                const colAStr = String(row[0] || '').trim();
-                const colALower = colAStr.toLowerCase();
-
-                // FY marker row
-                if (colALower === 'fy' || colALower.startsWith('fy ') || /^fy\d/.test(colALower)) {
-                    if (currentFY) {
-                        if (!currentFY.totals) currentFY.totals = calcTotals(currentFY.months);
-                        fiscalYears.push(currentFY);
-                    }
-                    const fyLabel = String(row[monthCol] || row[1] || colAStr).trim();
-                    currentFY = { label: fyLabel || colAStr, description: fyLabel, months: [] };
-                    continue;
+                // Skip total rows (check col 0 and monthCol)
+                const col0Lower = String(row[0] || '').trim().toLowerCase();
+                if (col0Lower === 'total' || col0Lower === 'totals') continue;
+                if (monthCol !== 0) {
+                    const mLower = String(row[monthCol] || '').trim().toLowerCase();
+                    if (mLower === 'total' || mLower === 'totals') continue;
                 }
 
-                if (!currentFY) continue;
+                // Skip re-header rows (rows that look like headers again)
+                if (isLikelyHeaderRow(row)) continue;
 
-                // Total row
-                const cellStr = String(row[monthCol] || '').trim().toLowerCase();
-                if (cellStr === 'total' || cellStr === 'totals') {
-                    currentFY.totals = extractTotals(row, colMap);
-                    continue;
-                }
+                // Try to parse month from the month column
+                let parsed = parseMonthCell(row[monthCol]);
+                // If monthCol didn't work, try the other common column
+                if (!parsed && monthCol === 1) parsed = parseMonthCell(row[0]);
+                if (!parsed && monthCol === 0 && row.length > 1) parsed = parseMonthCell(row[1]);
+                if (!parsed) continue;
 
-                // Month row
-                const parsed = parseMonthCell(row[monthCol]);
-                if (parsed) {
-                    const rowNum = i + 1; // 1-indexed for Sheets getRange
-                    currentFY.months.push(extractMonth(row, colMap, rowNum, parsed));
-                }
+                // Extract metrics
+                const rowNum = i + 1; // 1-indexed for Google Sheets getRange()
+                const metrics = extractMonth(row, colMap, rowNum, parsed);
+
+                // Determine fiscal year from date (Apr-Mar cycle)
+                const [yearStr, monStr] = parsed.key.split('-');
+                const year = parseInt(yearStr), mon = parseInt(monStr);
+                const fyYear = mon >= 4 ? year : year - 1;
+                const fyKey = `${fyYear}/${fyYear + 1}`;
+
+                if (!monthsByFY[fyKey]) monthsByFY[fyKey] = [];
+                monthsByFY[fyKey].push(metrics);
             }
 
-            if (currentFY) {
-                if (!currentFY.totals) currentFY.totals = calcTotals(currentFY.months);
-                fiscalYears.push(currentFY);
-            }
+            // Step 5: Convert to sorted fiscalYears array
+            const fiscalYears = Object.keys(monthsByFY).sort().map(fyKey => ({
+                label: fyKey,
+                description: fyKey,
+                months: monthsByFY[fyKey],
+                totals: calcTotals(monthsByFY[fyKey])
+            }));
 
             return { fiscalYears, colMap };
         }
 
-        function detectMetricColumns(headerRow) {
+        function isLikelyHeaderRow(row) {
+            // A header row has ≥3 text-only cells and few numeric values
+            let textCells = 0, numCells = 0;
+            for (let j = 0; j < row.length; j++) {
+                const v = row[j];
+                if (v === '' || v === null || v === undefined) continue;
+                if (typeof v === 'number') numCells++;
+                else if (typeof v === 'string' && !/^\d{4}-\d{2}/.test(v)) textCells++;
+            }
+            return textCells >= 4 && numCells === 0;
+        }
+
+        function detectMetricColumns(headerRow, monthCol) {
             const map = { spend: -1, traffic: -1, leads: -1, opps: -1, clients: -1 };
             for (let i = 0; i < headerRow.length; i++) {
+                if (i === monthCol) continue; // skip month column
                 const h = String(headerRow[i] || '').toLowerCase().trim();
-                if ((h.includes('nzd') || h.includes('spend') || h.includes('cost')) && map.spend === -1) map.spend = i;
+                if (!h) continue;
+                // Skip cost/per-unit and conversion columns
+                if (h.startsWith('cost') || h.includes('conversion') || h === '$/day' || h.startsWith('$/')
+                    || h.includes('per ') || h.includes('impressions') || h.includes('clicks')
+                    || h.includes('notes') || h === 'note') continue;
+
+                if ((h.includes('nzd') || h === 'spend' || (h.includes('spend') && !h.includes('/'))) && map.spend === -1) map.spend = i;
                 else if ((h.includes('traffic') || h.includes('visit') || h.includes('session')) && map.traffic === -1) map.traffic = i;
-                else if (((h.includes('lead') && !h.includes('client')) || h === 'leads') && map.leads === -1) map.leads = i;
-                else if (h.includes('opp') && map.opps === -1) map.opps = i;
-                else if ((h.includes('client') || h.includes('sale') || h.includes('customer')) && map.clients === -1) map.clients = i;
+                else if ((h.includes('lead') && !h.includes('client') && !h.includes('to ')) && map.leads === -1) map.leads = i;
+                else if ((h.includes('opp') && !h.includes('to ')) && map.opps === -1) map.opps = i;
+                else if ((h.includes('client') || h.includes('customer') || (h.includes('sale') && !h.includes('cost'))) && map.clients === -1) map.clients = i;
             }
             return map;
         }
@@ -765,15 +793,6 @@
                 }
             });
             return m;
-        }
-
-        function extractTotals(row, colMap) {
-            const t = {};
-            ['spend', 'traffic', 'leads', 'opps', 'clients'].forEach(metric => {
-                const ci = colMap[metric];
-                t[metric] = (ci >= 0 && ci < row.length) ? numVal(row[ci]) : 0;
-            });
-            return t;
         }
 
         function calcTotals(months) {
