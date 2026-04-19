@@ -528,6 +528,112 @@
             font-weight: 500;
         }
 
+        /* Comparison Tool */
+        .compare-controls {
+            display: flex;
+            gap: 16px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+        }
+
+        .compare-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .compare-field label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .compare-field select {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            color: #2d3748;
+            background: white;
+            min-width: 180px;
+            cursor: pointer;
+        }
+
+        .compare-field select:focus {
+            outline: none;
+            border-color: #3182ce;
+            box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+        }
+
+        .compare-run-btn {
+            background: #3182ce;
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .compare-run-btn:hover {
+            background: #2c5282;
+        }
+
+        .compare-tables {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .change-positive {
+            color: #38a169;
+            font-weight: 600;
+        }
+
+        .change-negative {
+            color: #e53e3e;
+            font-weight: 600;
+        }
+
+        .change-neutral {
+            color: #a0aec0;
+        }
+
+        .compare-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .compare-badge.up {
+            background: #f0fff4;
+            color: #38a169;
+        }
+
+        .compare-badge.down {
+            background: #fff5f5;
+            color: #e53e3e;
+        }
+
+        .compare-badge.flat {
+            background: #f7fafc;
+            color: #a0aec0;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .header-top {
@@ -943,12 +1049,12 @@
             const tabBar = document.getElementById('tabBar');
             tabBar.innerHTML = '';
 
-            const tabs = ['overview', ...Object.keys(appData.sources).sort()];
+            const tabs = ['overview', ...Object.keys(appData.sources).sort(), 'compare'];
 
             tabs.forEach(tabId => {
                 const tab = document.createElement('div');
                 tab.className = `tab ${tabId === selectedTab ? 'active' : ''}`;
-                tab.textContent = tabId === 'overview' ? 'Overview' : SOURCE_DISPLAY_NAMES[tabId] || tabId;
+                tab.textContent = tabId === 'overview' ? 'Overview' : tabId === 'compare' ? '⚖️ Compare' : SOURCE_DISPLAY_NAMES[tabId] || tabId;
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
@@ -965,6 +1071,8 @@
 
             if (selectedTab === 'overview') {
                 renderOverviewTab(mainContent);
+            } else if (selectedTab === 'compare') {
+                renderCompareTab(mainContent);
             } else {
                 renderSourceTab(mainContent, selectedTab);
             }
@@ -1240,6 +1348,426 @@
                     }
                 }
             });
+        }
+
+        // ==================== COMPARISON TOOL ====================
+        let compareState = {
+            mode: 'fy',       // 'fy' or 'source'
+            fyA: null,
+            fyB: null,
+            sourceA: null,
+            sourceB: null,
+            compareFY: null    // which FY to use in source-vs-source mode
+        };
+
+        function getAllFYLabels() {
+            const seen = new Set();
+            const labels = [];
+            if (appData.overview) {
+                appData.overview.fiscalYears.forEach(fy => {
+                    if (!seen.has(fy.label)) { seen.add(fy.label); labels.push(fy.label); }
+                });
+            }
+            Object.values(appData.sources).forEach(src => {
+                src.fiscalYears.forEach(fy => {
+                    if (!seen.has(fy.label)) { seen.add(fy.label); labels.push(fy.label); }
+                });
+            });
+            return labels.sort().reverse();
+        }
+
+        function getAllSourceNames() {
+            return ['User Notes (Overview)', ...Object.keys(appData.sources).sort()];
+        }
+
+        function getSourceData(name) {
+            if (name === 'User Notes (Overview)') return appData.overview;
+            return appData.sources[name] || null;
+        }
+
+        function renderCompareTab(container) {
+            const fyLabels = getAllFYLabels();
+            const sourceNames = getAllSourceNames();
+
+            // Init defaults
+            if (!compareState.fyA && fyLabels.length >= 2) { compareState.fyA = fyLabels[0]; compareState.fyB = fyLabels[1]; }
+            if (!compareState.fyA && fyLabels.length === 1) { compareState.fyA = fyLabels[0]; compareState.fyB = fyLabels[0]; }
+            if (!compareState.sourceA) compareState.sourceA = sourceNames[0] || '';
+            if (!compareState.sourceB) compareState.sourceB = sourceNames[1] || sourceNames[0] || '';
+            if (!compareState.compareFY) compareState.compareFY = fyLabels[0] || null;
+
+            // Controls
+            const controls = document.createElement('div');
+            controls.className = 'compare-controls';
+            controls.innerHTML = `
+                <div class="compare-field">
+                    <label>Mode</label>
+                    <select id="compareMode">
+                        <option value="fy" ${compareState.mode === 'fy' ? 'selected' : ''}>FY vs FY</option>
+                        <option value="source" ${compareState.mode === 'source' ? 'selected' : ''}>Source vs Source</option>
+                    </select>
+                </div>
+                <div id="compareFYFields" style="${compareState.mode === 'fy' ? '' : 'display:none'}">
+                    <div style="display:flex;gap:16px;align-items:flex-end;">
+                        <div class="compare-field">
+                            <label>Fiscal Year A</label>
+                            <select id="compareFYA">
+                                ${fyLabels.map(l => `<option value="${l}" ${l === compareState.fyA ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="compare-field">
+                            <label>Fiscal Year B</label>
+                            <select id="compareFYB">
+                                ${fyLabels.map(l => `<option value="${l}" ${l === compareState.fyB ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="compare-field">
+                            <label>Source</label>
+                            <select id="compareFYSource">
+                                ${sourceNames.map(n => `<option value="${n}" ${n === (compareState.sourceA) ? 'selected' : ''}>${n === 'User Notes (Overview)' ? 'Overview' : SOURCE_DISPLAY_NAMES[n] || n}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div id="compareSourceFields" style="${compareState.mode === 'source' ? '' : 'display:none'}">
+                    <div style="display:flex;gap:16px;align-items:flex-end;">
+                        <div class="compare-field">
+                            <label>Source A</label>
+                            <select id="compareSourceA">
+                                ${sourceNames.map(n => `<option value="${n}" ${n === compareState.sourceA ? 'selected' : ''}>${n === 'User Notes (Overview)' ? 'Overview' : SOURCE_DISPLAY_NAMES[n] || n}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="compare-field">
+                            <label>Source B</label>
+                            <select id="compareSourceB">
+                                ${sourceNames.map(n => `<option value="${n}" ${n === compareState.sourceB ? 'selected' : ''}>${n === 'User Notes (Overview)' ? 'Overview' : SOURCE_DISPLAY_NAMES[n] || n}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="compare-field">
+                            <label>Fiscal Year</label>
+                            <select id="compareSourceFY">
+                                ${fyLabels.map(l => `<option value="${l}" ${l === compareState.compareFY ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <button class="compare-run-btn" id="compareRunBtn">Compare</button>
+            `;
+            container.appendChild(controls);
+
+            // Wire up mode toggle
+            document.getElementById('compareMode').addEventListener('change', (e) => {
+                compareState.mode = e.target.value;
+                document.getElementById('compareFYFields').style.display = e.target.value === 'fy' ? '' : 'none';
+                document.getElementById('compareSourceFields').style.display = e.target.value === 'source' ? '' : 'none';
+            });
+
+            // Results container
+            const results = document.createElement('div');
+            results.id = 'compareResults';
+            container.appendChild(results);
+
+            // Compare button
+            document.getElementById('compareRunBtn').addEventListener('click', () => {
+                if (compareState.mode === 'fy') {
+                    compareState.fyA = document.getElementById('compareFYA').value;
+                    compareState.fyB = document.getElementById('compareFYB').value;
+                    compareState.sourceA = document.getElementById('compareFYSource').value;
+                    runFYComparison(results);
+                } else {
+                    compareState.sourceA = document.getElementById('compareSourceA').value;
+                    compareState.sourceB = document.getElementById('compareSourceB').value;
+                    compareState.compareFY = document.getElementById('compareSourceFY').value;
+                    runSourceComparison(results);
+                }
+            });
+
+            // Auto-run on first render
+            if (compareState.mode === 'fy') {
+                runFYComparison(results);
+            } else {
+                runSourceComparison(results);
+            }
+        }
+
+        function changeBadge(a, b, higherIsBetter = true) {
+            if (b === 0 && a === 0) return '<span class="compare-badge flat">—</span>';
+            if (b === 0) return '<span class="compare-badge up">New</span>';
+            const pct = ((a - b) / Math.abs(b) * 100);
+            const sign = pct >= 0 ? '+' : '';
+            const cls = pct > 0 ? (higherIsBetter ? 'up' : 'down') : pct < 0 ? (higherIsBetter ? 'down' : 'up') : 'flat';
+            return `<span class="compare-badge ${cls}">${sign}${pct.toFixed(1)}%</span>`;
+        }
+
+        function runFYComparison(container) {
+            container.innerHTML = '';
+            const srcData = getSourceData(compareState.sourceA);
+            if (!srcData) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">Source not found</div></div>';
+                return;
+            }
+
+            const fyA = srcData.fiscalYears.find(f => f.label === compareState.fyA);
+            const fyB = srcData.fiscalYears.find(f => f.label === compareState.fyB);
+
+            if (!fyA && !fyB) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">No data for selected fiscal years</div></div>';
+                return;
+            }
+
+            const displayName = compareState.sourceA === 'User Notes (Overview)' ? 'Overview' : SOURCE_DISPLAY_NAMES[compareState.sourceA] || compareState.sourceA;
+
+            // Build comparison table
+            const MONTH_ORDER = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+            const monthsA = fyA ? fyA.months : [];
+            const monthsB = fyB ? fyB.months : [];
+            const totalsA = fyA ? fyA.totals : { spend: 0, traffic: 0, leads: 0, opps: 0, clients: 0 };
+            const totalsB = fyB ? fyB.totals : { spend: 0, traffic: 0, leads: 0, opps: 0, clients: 0 };
+
+            // Align months by display name prefix (Apr, May, etc.)
+            function monthIndex(m) {
+                const prefix = m.month.substring(0, 3);
+                const idx = MONTH_ORDER.indexOf(prefix);
+                return idx >= 0 ? idx : 99;
+            }
+
+            const allMonthKeys = new Set();
+            monthsA.forEach(m => allMonthKeys.add(m.month.substring(0, 3)));
+            monthsB.forEach(m => allMonthKeys.add(m.month.substring(0, 3)));
+            const sortedMonthPrefixes = [...allMonthKeys].sort((a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+
+            const metrics = ['spend', 'traffic', 'leads', 'opps', 'clients'];
+            const metricLabels = { spend: 'NZD Spend', traffic: 'Traffic', leads: 'Leads', opps: 'Opps', clients: 'Clients' };
+
+            let tableHTML = `<thead><tr><th>Month</th>`;
+            metrics.forEach(m => {
+                tableHTML += `<th>${metricLabels[m]} (${compareState.fyA})</th><th>${metricLabels[m]} (${compareState.fyB})</th><th>Change</th>`;
+            });
+            tableHTML += `</tr></thead><tbody>`;
+
+            sortedMonthPrefixes.forEach(prefix => {
+                const mA = monthsA.find(m => m.month.substring(0, 3) === prefix);
+                const mB = monthsB.find(m => m.month.substring(0, 3) === prefix);
+                tableHTML += `<tr><td>${prefix}</td>`;
+                metrics.forEach(metric => {
+                    const vA = mA ? mA[metric] : 0;
+                    const vB = mB ? mB[metric] : 0;
+                    const fmt = metric === 'spend' ? formatCurrency : formatNumber;
+                    tableHTML += `<td class="cell-text">${fmt(vA)}</td><td class="cell-text">${fmt(vB)}</td><td class="cell-text">${changeBadge(vA, vB, metric !== 'spend')}</td>`;
+                });
+                tableHTML += `</tr>`;
+            });
+
+            // Total row
+            tableHTML += `<tr class="total-row"><td>Total</td>`;
+            metrics.forEach(metric => {
+                const fmt = metric === 'spend' ? formatCurrency : formatNumber;
+                tableHTML += `<td class="cell-text">${fmt(totalsA[metric])}</td><td class="cell-text">${fmt(totalsB[metric])}</td><td class="cell-text">${changeBadge(totalsA[metric], totalsB[metric], metric !== 'spend')}</td>`;
+            });
+            tableHTML += `</tr></tbody>`;
+
+            const tableWrapper = document.createElement('div');
+            tableWrapper.className = 'table-container';
+            tableWrapper.style.overflowX = 'auto';
+            tableWrapper.innerHTML = `
+                <div class="table-title">${displayName}: FY ${compareState.fyA} vs FY ${compareState.fyB}</div>
+                <table>${tableHTML}</table>
+            `;
+            container.appendChild(tableWrapper);
+
+            // Overlay chart
+            const chartContainer = document.createElement('div');
+            chartContainer.className = 'chart-container';
+            chartContainer.innerHTML = `
+                <div class="chart-title">${displayName}: FY ${compareState.fyA} vs FY ${compareState.fyB}</div>
+                <canvas id="compareChart"></canvas>
+            `;
+            container.appendChild(chartContainer);
+
+            setTimeout(() => {
+                const ctx = document.getElementById('compareChart');
+                if (!ctx) return;
+
+                const chartMetric = 'clients'; // Primary chart metric
+                const dataA = sortedMonthPrefixes.map(prefix => {
+                    const m = monthsA.find(m => m.month.substring(0, 3) === prefix);
+                    return m ? m[chartMetric] : 0;
+                });
+                const dataB = sortedMonthPrefixes.map(prefix => {
+                    const m = monthsB.find(m => m.month.substring(0, 3) === prefix);
+                    return m ? m[chartMetric] : 0;
+                });
+
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: sortedMonthPrefixes,
+                        datasets: [
+                            {
+                                label: `Clients — ${compareState.fyA}`,
+                                data: dataA,
+                                backgroundColor: 'rgba(66, 153, 225, 0.7)',
+                                borderColor: '#4299e1',
+                                borderWidth: 1
+                            },
+                            {
+                                label: `Clients — ${compareState.fyB}`,
+                                data: dataB,
+                                backgroundColor: 'rgba(237, 137, 54, 0.7)',
+                                borderColor: '#ed8936',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { font: { size: 12 }, color: '#718096', padding: 12, usePointStyle: true } },
+                            tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', padding: 10 }
+                        },
+                        scales: {
+                            x: { ticks: { font: { size: 12 }, color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            y: { ticks: { font: { size: 12 }, color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                        }
+                    }
+                });
+            }, 0);
+        }
+
+        function runSourceComparison(container) {
+            container.innerHTML = '';
+            const srcA = getSourceData(compareState.sourceA);
+            const srcB = getSourceData(compareState.sourceB);
+            const fy = compareState.compareFY;
+
+            if (!srcA && !srcB) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">No data for selected sources</div></div>';
+                return;
+            }
+
+            const fyDataA = srcA ? srcA.fiscalYears.find(f => f.label === fy) : null;
+            const fyDataB = srcB ? srcB.fiscalYears.find(f => f.label === fy) : null;
+
+            if (!fyDataA && !fyDataB) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">No data for FY ' + fy + ' in selected sources</div></div>';
+                return;
+            }
+
+            const nameA = compareState.sourceA === 'User Notes (Overview)' ? 'Overview' : SOURCE_DISPLAY_NAMES[compareState.sourceA] || compareState.sourceA;
+            const nameB = compareState.sourceB === 'User Notes (Overview)' ? 'Overview' : SOURCE_DISPLAY_NAMES[compareState.sourceB] || compareState.sourceB;
+
+            const MONTH_ORDER = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+            const monthsA = fyDataA ? fyDataA.months : [];
+            const monthsB = fyDataB ? fyDataB.months : [];
+            const totalsA = fyDataA ? fyDataA.totals : { spend: 0, traffic: 0, leads: 0, opps: 0, clients: 0 };
+            const totalsB = fyDataB ? fyDataB.totals : { spend: 0, traffic: 0, leads: 0, opps: 0, clients: 0 };
+
+            const allMonthKeys = new Set();
+            monthsA.forEach(m => allMonthKeys.add(m.month.substring(0, 3)));
+            monthsB.forEach(m => allMonthKeys.add(m.month.substring(0, 3)));
+            const sortedMonthPrefixes = [...allMonthKeys].sort((a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+
+            const metrics = ['spend', 'traffic', 'leads', 'opps', 'clients'];
+            const metricLabels = { spend: 'NZD Spend', traffic: 'Traffic', leads: 'Leads', opps: 'Opps', clients: 'Clients' };
+
+            let tableHTML = `<thead><tr><th>Month</th>`;
+            metrics.forEach(m => {
+                tableHTML += `<th>${metricLabels[m]} (${nameA})</th><th>${metricLabels[m]} (${nameB})</th><th>Change</th>`;
+            });
+            tableHTML += `</tr></thead><tbody>`;
+
+            sortedMonthPrefixes.forEach(prefix => {
+                const mA = monthsA.find(m => m.month.substring(0, 3) === prefix);
+                const mB = monthsB.find(m => m.month.substring(0, 3) === prefix);
+                tableHTML += `<tr><td>${prefix}</td>`;
+                metrics.forEach(metric => {
+                    const vA = mA ? mA[metric] : 0;
+                    const vB = mB ? mB[metric] : 0;
+                    const fmt = metric === 'spend' ? formatCurrency : formatNumber;
+                    tableHTML += `<td class="cell-text">${fmt(vA)}</td><td class="cell-text">${fmt(vB)}</td><td class="cell-text">${changeBadge(vA, vB, metric !== 'spend')}</td>`;
+                });
+                tableHTML += `</tr>`;
+            });
+
+            tableHTML += `<tr class="total-row"><td>Total</td>`;
+            metrics.forEach(metric => {
+                const fmt = metric === 'spend' ? formatCurrency : formatNumber;
+                tableHTML += `<td class="cell-text">${fmt(totalsA[metric])}</td><td class="cell-text">${fmt(totalsB[metric])}</td><td class="cell-text">${changeBadge(totalsA[metric], totalsB[metric], metric !== 'spend')}</td>`;
+            });
+            tableHTML += `</tr></tbody>`;
+
+            const tableWrapper = document.createElement('div');
+            tableWrapper.className = 'table-container';
+            tableWrapper.style.overflowX = 'auto';
+            tableWrapper.innerHTML = `
+                <div class="table-title">${nameA} vs ${nameB} — FY ${fy}</div>
+                <table>${tableHTML}</table>
+            `;
+            container.appendChild(tableWrapper);
+
+            // Overlay chart — lines for each source's clients
+            const chartContainer = document.createElement('div');
+            chartContainer.className = 'chart-container';
+            chartContainer.innerHTML = `
+                <div class="chart-title">${nameA} vs ${nameB} — FY ${fy}</div>
+                <canvas id="compareChart"></canvas>
+            `;
+            container.appendChild(chartContainer);
+
+            setTimeout(() => {
+                const ctx = document.getElementById('compareChart');
+                if (!ctx) return;
+
+                const dataA = sortedMonthPrefixes.map(prefix => {
+                    const m = monthsA.find(m => m.month.substring(0, 3) === prefix);
+                    return m ? m.clients : 0;
+                });
+                const dataB = sortedMonthPrefixes.map(prefix => {
+                    const m = monthsB.find(m => m.month.substring(0, 3) === prefix);
+                    return m ? m.clients : 0;
+                });
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: sortedMonthPrefixes,
+                        datasets: [
+                            {
+                                label: `${nameA} — Clients`,
+                                data: dataA,
+                                borderColor: '#4299e1',
+                                backgroundColor: 'rgba(66, 153, 225, 0.1)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4
+                            },
+                            {
+                                label: `${nameB} — Clients`,
+                                data: dataB,
+                                borderColor: '#ed8936',
+                                backgroundColor: 'rgba(237, 137, 54, 0.1)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { font: { size: 12 }, color: '#718096', padding: 12, usePointStyle: true } },
+                            tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', padding: 10 }
+                        },
+                        scales: {
+                            x: { ticks: { font: { size: 12 }, color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            y: { ticks: { font: { size: 12 }, color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                        }
+                    }
+                });
+            }, 0);
         }
 
         function setupEventListeners() {
