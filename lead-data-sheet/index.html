@@ -659,108 +659,15 @@
                 if (parsed.fiscalYears.length > 0) sources[tabName] = parsed;
             });
 
-            // Parse the "Sales breakdown" overview tab
+            // Parse the "User Notes" tab as overview (same structure as source tabs)
             let overview = null;
-            const overviewSheet = rawData['Sales breakdown'];
+            const overviewSheet = rawData['User Notes'];
             if (overviewSheet && overviewSheet.data) {
-                overview = parseOverviewTab(overviewSheet.data);
+                const parsed = parseSourceTab(overviewSheet.data);
+                if (parsed.fiscalYears.length > 0) overview = parsed;
             }
 
             return { sources, overview };
-        }
-
-        // ==================== OVERVIEW TAB PARSER ====================
-        // "Sales breakdown" has repeating sections per calendar year:
-        //   "Sales by month YYYY" → clients, "Spend by month YYYY" → spend,
-        //   "Leads per month" → leads, "Website traffic per month" → traffic,
-        //   "Opps per month" → opps
-        // Each section: header row with months, then source rows, then Total row.
-
-        const SECTION_PATTERNS = [
-            { re: /sales by month/i, metric: 'clients' },
-            { re: /spend by month/i, metric: 'spend' },
-            { re: /leads per month/i, metric: 'leads' },
-            { re: /website traffic|traffic per month/i, metric: 'traffic' },
-            { re: /opps per month/i, metric: 'opps' }
-        ];
-
-        function parseOverviewTab(data) {
-            const result = {};      // { "2024": { months, sources: { name: { clients:[], ... } }, totals: {} }, ... }
-            let currentYear = null;
-
-            let i = 0;
-            while (i < data.length) {
-                const row = data[i];
-                if (!row || !row[0]) { i++; continue; }
-                const cellA = String(row[0]).trim();
-                if (!cellA) { i++; continue; }
-
-                // Try to match a section header
-                let matchedMetric = null;
-                for (const sp of SECTION_PATTERNS) {
-                    if (sp.re.test(cellA)) { matchedMetric = sp.metric; break; }
-                }
-                if (!matchedMetric) { i++; continue; }
-
-                // Extract year from header text (e.g. "Sales by month 2024")
-                const yearMatch = cellA.match(/(\d{4})/);
-                if (yearMatch) currentYear = yearMatch[1];
-                if (!currentYear) { i++; continue; }
-
-                // Init year bucket
-                if (!result[currentYear]) {
-                    result[currentYear] = { months: [], sources: {}, totals: {} };
-                }
-
-                // Header row has months: ["Section title", "Jan", "Feb", ..., "Total"]
-                const months = [];
-                for (let j = 1; j < Math.min(row.length, 13); j++) {
-                    const m = String(row[j] || '').trim();
-                    if (m && m !== 'Total') months.push(m);
-                }
-                if (months.length > 0 && result[currentYear].months.length === 0) {
-                    result[currentYear].months = months;
-                }
-
-                // Read source rows until total/blank/next section
-                i++;
-                while (i < data.length) {
-                    const srow = data[i];
-                    if (!srow) { i++; continue; }
-                    const srcName = String(srow[0] || '').trim();
-
-                    // Empty row or % row → end of section
-                    if (!srcName || srcName.toLowerCase().includes('% +/-')) { i++; break; }
-
-                    // Total row
-                    if (srcName.toLowerCase().startsWith('total')) {
-                        const vals = srow.slice(1, 13).map(v => numVal(v));
-                        result[currentYear].totals[matchedMetric] = vals;
-                        result[currentYear].totals[matchedMetric + 'Total'] = vals.reduce((a, b) => a + b, 0);
-                        i++;
-                        break;
-                    }
-
-                    // Check if it's actually the next section header
-                    let isNextSection = false;
-                    for (const sp of SECTION_PATTERNS) {
-                        if (sp.re.test(srcName)) { isNextSection = true; break; }
-                    }
-                    if (isNextSection) break; // don't advance i
-
-                    // Source data row
-                    const vals = srow.slice(1, 13).map(v => numVal(v));
-                    if (!result[currentYear].sources[srcName]) {
-                        result[currentYear].sources[srcName] = {};
-                    }
-                    result[currentYear].sources[srcName][matchedMetric] = vals;
-                    result[currentYear].sources[srcName][matchedMetric + 'Total'] = srow.length > 13 ? numVal(srow[13]) : vals.reduce((a, b) => a + b, 0);
-
-                    i++;
-                }
-            }
-
-            return result;
         }
 
         function parseSourceTab(data) {
@@ -985,27 +892,32 @@
             const fyContainer = document.getElementById('fyControls');
             fyContainer.innerHTML = '';
 
-            let options = []; // [{label, sortKey}]
+            // Always use fiscal years — collect from overview + all sources
+            const seen = new Set();
+            let options = [];
 
-            if (selectedTab === 'overview' && appData.overview) {
-                // Overview uses calendar years from "Sales breakdown" tab
-                options = Object.keys(appData.overview)
-                    .map(y => ({ label: y, sortKey: parseInt(y) }))
-                    .sort((a, b) => b.sortKey - a.sortKey);
-            } else {
-                // Source tabs use fiscal years
-                const seen = new Set();
-                Object.values(appData.sources).forEach(source => {
-                    source.fiscalYears.forEach(fy => {
-                        if (!seen.has(fy.label)) {
-                            seen.add(fy.label);
-                            const m = fy.label.match(/(\d{4})/);
-                            options.push({ label: fy.label, sortKey: m ? parseInt(m[1]) : 0 });
-                        }
-                    });
+            // Collect FYs from overview (User Notes) first
+            if (appData.overview) {
+                appData.overview.fiscalYears.forEach(fy => {
+                    if (!seen.has(fy.label)) {
+                        seen.add(fy.label);
+                        const m = fy.label.match(/(\d{4})/);
+                        options.push({ label: fy.label, sortKey: m ? parseInt(m[1]) : 0 });
+                    }
                 });
-                options.sort((a, b) => b.sortKey - a.sortKey);
             }
+
+            // Also collect from source tabs (in case they have FYs not in overview)
+            Object.values(appData.sources).forEach(source => {
+                source.fiscalYears.forEach(fy => {
+                    if (!seen.has(fy.label)) {
+                        seen.add(fy.label);
+                        const m = fy.label.match(/(\d{4})/);
+                        options.push({ label: fy.label, sortKey: m ? parseInt(m[1]) : 0 });
+                    }
+                });
+            });
+            options.sort((a, b) => b.sortKey - a.sortKey);
 
             // Auto-select newest if current selection is not available
             const available = options.map(o => o.label);
@@ -1040,11 +952,7 @@
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    const wasOverview = selectedTab === 'overview';
-                    const isOverview = tabId === 'overview';
                     selectedTab = tabId;
-                    // Rebuild FY controls when switching between overview and source tabs
-                    if (wasOverview !== isOverview) setupFYControls();
                     renderContent();
                 });
                 tabBar.appendChild(tab);
@@ -1063,30 +971,31 @@
         }
 
         function renderOverviewTab(container) {
-            const ov = appData.overview && appData.overview[selectedFY];
-            if (!ov) {
-                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">No overview data for ' + selectedFY + '</div></div>';
+            if (!appData.overview) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">No overview data available (User Notes tab not found)</div></div>';
                 return;
             }
 
-            // KPI Cards from overview totals
-            const t = ov.totals || {};
-            const totalTraffic = t.trafficTotal || 0;
-            const totalLeads = t.leadsTotal || 0;
-            const totalOpps = t.oppsTotal || 0;
-            const totalClients = t.clientsTotal || 0;
-            const totalSpend = t.spendTotal || 0;
-            const leadToClientPct = totalLeads > 0 ? (totalClients / totalLeads * 100) : 0;
+            const fy = appData.overview.fiscalYears.find(f => f.label === selectedFY);
+            if (!fy || !fy.months || fy.months.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">No overview data for FY ' + selectedFY + '</div></div>';
+                return;
+            }
+
+            // KPI Cards from FY totals
+            const t = fy.totals || calcTotals(fy.months);
+            const leadToClientPct = t.leads > 0 ? (t.clients / t.leads * 100) : 0;
+            const oppToClientPct = t.opps > 0 ? (t.clients / t.opps * 100) : 0;
 
             const kpiContainer = document.createElement('div');
             kpiContainer.className = 'kpi-grid';
             const kpis = [
-                { label: 'Total Traffic', value: formatNumber(totalTraffic) },
-                { label: 'Total Leads', value: formatNumber(totalLeads) },
-                { label: 'Total Opportunities', value: formatNumber(totalOpps) },
-                { label: 'Total Clients', value: formatNumber(totalClients) },
-                { label: 'Lead → Client %', value: formatPercent(leadToClientPct) },
-                { label: 'Total NZD Spend', value: formatCurrency(totalSpend) }
+                { label: 'Total NZD Spend', value: formatCurrency(t.spend) },
+                { label: 'Total Traffic', value: formatNumber(t.traffic) },
+                { label: 'Total Leads', value: formatNumber(t.leads) },
+                { label: 'Total Opportunities', value: formatNumber(t.opps) },
+                { label: 'Total Clients', value: formatNumber(t.clients) },
+                { label: 'Lead → Client %', value: formatPercent(leadToClientPct) }
             ];
             kpis.forEach(kpi => {
                 const card = document.createElement('div');
@@ -1096,24 +1005,24 @@
             });
             container.appendChild(kpiContainer);
 
-            // Summary Table from overview sources
-            const summaryContainer = document.createElement('div');
-            summaryContainer.className = 'table-container';
-            summaryContainer.innerHTML = `
-                <div class="table-title">Lead Sources Summary — ${selectedFY}</div>
-                <table>${renderOverviewSummaryTable(ov)}</table>
+            // Monthly Detail Table (editable, writing back to "User Notes" tab)
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'table-container';
+            tableContainer.innerHTML = `
+                <div class="table-title">Overview (User Notes) — FY ${selectedFY}</div>
+                <table>${renderMonthlyTable('User Notes', fy)}</table>
             `;
-            container.appendChild(summaryContainer);
+            container.appendChild(tableContainer);
 
-            // Chart
+            // Chart — monthly metrics line chart
             const chartContainer = document.createElement('div');
             chartContainer.className = 'chart-container';
             chartContainer.innerHTML = `
-                <div class="chart-title">Clients by Source (Monthly — ${selectedFY})</div>
-                <canvas id="clientsChart"></canvas>
+                <div class="chart-title">Monthly Overview — FY ${selectedFY}</div>
+                <canvas id="overviewChart"></canvas>
             `;
             container.appendChild(chartContainer);
-            setTimeout(() => renderOverviewClientsChart(ov), 0);
+            setTimeout(() => renderOverviewChart(fy), 0);
         }
 
         function renderSourceTab(container, sourceName) {
@@ -1136,77 +1045,6 @@
                 <table>${renderMonthlyTable(sourceName, fy)}</table>
             `;
             container.appendChild(tableContainer);
-        }
-
-        function renderOverviewSummaryTable(ov) {
-            const sourceNames = Object.keys(ov.sources).sort();
-            let html = `
-                <thead>
-                    <tr>
-                        <th>Source</th>
-                        <th>NZD Spend</th>
-                        <th>Traffic</th>
-                        <th>Leads</th>
-                        <th>Opps</th>
-                        <th>Clients</th>
-                        <th>Lead → Client %</th>
-                        <th>Traffic → Lead %</th>
-                    </tr>
-                </thead>
-                <tbody>
-            `;
-
-            let totalSpend = 0, totalTraffic = 0, totalLeads = 0, totalOpps = 0, totalClients = 0;
-
-            sourceNames.forEach(srcName => {
-                const src = ov.sources[srcName];
-                const spend = src.spendTotal || 0;
-                const traffic = src.trafficTotal || 0;
-                const leads = src.leadsTotal || 0;
-                const opps = src.oppsTotal || 0;
-                const clients = src.clientsTotal || 0;
-
-                totalSpend += spend;
-                totalTraffic += traffic;
-                totalLeads += leads;
-                totalOpps += opps;
-                totalClients += clients;
-
-                const leadToClient = leads > 0 ? (clients / leads * 100) : 0;
-                const trafficToLead = traffic > 0 ? (leads / traffic * 100) : 0;
-
-                html += `
-                    <tr>
-                        <td>${srcName}</td>
-                        <td class="cell-text">${formatCurrency(spend)}</td>
-                        <td class="cell-text">${formatNumber(traffic)}</td>
-                        <td class="cell-text">${formatNumber(leads)}</td>
-                        <td class="cell-text">${formatNumber(opps)}</td>
-                        <td class="cell-text">${formatNumber(clients)}</td>
-                        <td class="cell-text">${formatPercent(leadToClient)}</td>
-                        <td class="cell-text">${formatPercent(trafficToLead)}</td>
-                    </tr>
-                `;
-            });
-
-            const overallL2C = totalLeads > 0 ? (totalClients / totalLeads * 100) : 0;
-            const overallT2L = totalTraffic > 0 ? (totalLeads / totalTraffic * 100) : 0;
-
-            html += `
-                    <tr class="total-row">
-                        <td>Total</td>
-                        <td class="cell-text">${formatCurrency(totalSpend)}</td>
-                        <td class="cell-text">${formatNumber(totalTraffic)}</td>
-                        <td class="cell-text">${formatNumber(totalLeads)}</td>
-                        <td class="cell-text">${formatNumber(totalOpps)}</td>
-                        <td class="cell-text">${formatNumber(totalClients)}</td>
-                        <td class="cell-text">${formatPercent(overallL2C)}</td>
-                        <td class="cell-text">${formatPercent(overallT2L)}</td>
-                    </tr>
-                </tbody>
-            `;
-
-            return html;
         }
 
         function renderMonthlyTable(sourceName, fy) {
@@ -1322,29 +1160,59 @@
             `;
         }
 
-        function renderOverviewClientsChart(ov) {
-            const ctx = document.getElementById('clientsChart');
+        function renderOverviewChart(fy) {
+            const ctx = document.getElementById('overviewChart');
             if (!ctx) return;
 
-            const sourceNames = Object.keys(ov.sources).sort();
-            const months = ov.months || ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const months = fy.months || [];
+            const labels = months.map(m => m.month);
 
-            const datasets = sourceNames
-                .filter(name => ov.sources[name].clients) // only sources with client data
-                .map((name, idx) => ({
-                    label: name,
-                    data: ov.sources[name].clients || months.map(() => 0),
-                    backgroundColor: COLORS[idx % COLORS.length],
-                    borderColor: COLORS[idx % COLORS.length],
-                    borderWidth: 0
-                }));
+            const datasets = [
+                {
+                    label: 'Traffic',
+                    data: months.map(m => m.traffic || 0),
+                    borderColor: '#4299e1',
+                    backgroundColor: 'rgba(66, 153, 225, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Leads',
+                    data: months.map(m => m.leads || 0),
+                    borderColor: '#48bb78',
+                    backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                },
+                {
+                    label: 'Opps',
+                    data: months.map(m => m.opps || 0),
+                    borderColor: '#ed8936',
+                    backgroundColor: 'rgba(237, 137, 54, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                },
+                {
+                    label: 'Clients',
+                    data: months.map(m => m.clients || 0),
+                    borderColor: '#9f7aea',
+                    backgroundColor: 'rgba(159, 122, 234, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }
+            ];
 
             new Chart(ctx, {
-                type: 'bar',
-                data: { labels: months, datasets },
+                type: 'line',
+                data: { labels, datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: {
                             display: true, position: 'top',
@@ -1356,8 +1224,19 @@
                         }
                     },
                     scales: {
-                        x: { stacked: true, ticks: { font: { size: 12 }, color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)', drawBorder: false } },
-                        y: { stacked: true, ticks: { font: { size: 12 }, color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)', drawBorder: false } }
+                        x: { ticks: { font: { size: 12 }, color: '#718096' }, grid: { color: 'rgba(0,0,0,0.05)', drawBorder: false } },
+                        y: {
+                            type: 'linear', display: true, position: 'left',
+                            title: { display: true, text: 'Traffic', color: '#4299e1' },
+                            ticks: { font: { size: 12 }, color: '#718096' },
+                            grid: { color: 'rgba(0,0,0,0.05)', drawBorder: false }
+                        },
+                        y1: {
+                            type: 'linear', display: true, position: 'right',
+                            title: { display: true, text: 'Leads / Opps / Clients', color: '#718096' },
+                            ticks: { font: { size: 12 }, color: '#718096' },
+                            grid: { drawOnChartArea: false }
+                        }
                     }
                 }
             });
