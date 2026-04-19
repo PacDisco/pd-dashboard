@@ -55,16 +55,32 @@ export const handler = async (event, context) => {
   const jsonAuth = { ...auth, "Content-Type": "application/json" };
   const userId = extractUserId(event.path);
 
+  // Netlify also auto-provides an admin-level Identity token to the function.
+  // Use it to hit GoTrue's admin endpoints directly, which return the FULL
+  // Identity user list (REST `/sites/{id}/users` sometimes only returns
+  // site members, not all invited Identity users).
+  const identityToken = context.clientContext?.identity?.token;
+  const identityUrl = context.clientContext?.identity?.url;
+  const identityAuth = identityToken ? { Authorization: `Bearer ${identityToken}` } : null;
+  const identityJsonAuth = identityAuth ? { ...identityAuth, "Content-Type": "application/json" } : null;
+
   // GET /users → list
   if (method === "GET" && !userId) {
-    const res = await fetch(usersUrl, { headers: auth });
+    // Try GoTrue admin/users first (returns all Identity users)
+    if (identityAuth && identityUrl) {
+      const gotrueRes = await fetch(`${identityUrl}/admin/users?per_page=100`, { headers: identityAuth });
+      if (gotrueRes.ok) {
+        const data = await gotrueRes.json().catch(() => ({}));
+        const arr = Array.isArray(data) ? data : (data.users || []);
+        return send(200, { users: arr.map(summarize), total: arr.length, source: "gotrue" });
+      }
+    }
+    // Fallback: REST API
+    const res = await fetch(`${usersUrl}?per_page=100`, { headers: auth });
     if (!res.ok) return forward(res, "list users");
     const data = await res.json().catch(() => []);
-    const arr = Array.isArray(data) ? data : [];
-    return send(200, {
-      users: arr.map(summarize),
-      total: arr.length,
-    });
+    const arr = Array.isArray(data) ? data : (data.users || []);
+    return send(200, { users: arr.map(summarize), total: arr.length, source: "rest" });
   }
 
   // POST /users → invite  { email, roles?: [] }
@@ -160,6 +176,19 @@ export const handler = async (event, context) => {
     if (!Array.isArray(body?.roles)) return send(400, { error: "`roles` array required" });
     const roles = body.roles.filter(r => typeof r === "string");
 
+    // Try GoTrue admin endpoint first (it's where the list came from)
+    if (identityJsonAuth && identityUrl) {
+      const gotrueRes = await fetch(`${identityUrl}/admin/users/${userId}`, {
+        method: "PUT",
+        headers: identityJsonAuth,
+        body: JSON.stringify({ app_metadata: { roles } }),
+      });
+      if (gotrueRes.ok) {
+        const updated = await gotrueRes.json().catch(() => ({}));
+        return send(200, { ok: true, user: summarize(updated), source: "gotrue" });
+      }
+    }
+    // Fallback: REST API
     const putRes = await fetch(`${usersUrl}/${userId}`, {
       method: "PUT",
       headers: jsonAuth,
@@ -167,17 +196,26 @@ export const handler = async (event, context) => {
     });
     if (!putRes.ok) return forward(putRes, "update user roles");
     const updated = await putRes.json().catch(() => ({}));
-    return send(200, { ok: true, user: summarize(updated) });
+    return send(200, { ok: true, user: summarize(updated), source: "rest" });
   }
 
   // DELETE /users/:id
   if (method === "DELETE" && userId) {
+    if (identityAuth && identityUrl) {
+      const gotrueRes = await fetch(`${identityUrl}/admin/users/${userId}`, {
+        method: "DELETE",
+        headers: identityAuth,
+      });
+      if (gotrueRes.ok || gotrueRes.status === 404) {
+        return send(200, { ok: true, source: "gotrue" });
+      }
+    }
     const res = await fetch(`${usersUrl}/${userId}`, {
       method: "DELETE",
       headers: auth,
     });
     if (!res.ok && res.status !== 404) return forward(res, "delete user");
-    return send(200, { ok: true });
+    return send(200, { ok: true, source: "rest" });
   }
 
   return send(405, { error: `Method ${method} not allowed on ${event.path}` });
