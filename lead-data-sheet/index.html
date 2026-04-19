@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pacific Discovery — Marketing Lead Source Analysis</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-    <!-- Data is fetched via Google Apps Script web app -->
+    <title>Pacific Discovery - Marketing Lead Source Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
     <style>
         * {
             margin: 0;
@@ -14,18 +13,17 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background-color: #f7fafc;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f7fafc;
             color: #2d3748;
-            line-height: 1.6;
         }
 
-        /* Header */
+        /* Header & Navigation */
         .header {
             background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
             color: white;
-            padding: 2rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
         .header-content {
@@ -35,135 +33,136 @@
 
         .header-top {
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1.5rem;
+            margin-bottom: 24px;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .header-title {
+            flex: 1;
+            min-width: 250px;
         }
 
         .header-title h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 0.25rem;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 4px;
         }
 
         .header-title p {
-            font-size: 1rem;
+            font-size: 14px;
             opacity: 0.9;
-            margin-bottom: 0.5rem;
         }
 
         .header-badge {
-            background-color: rgba(255, 255, 255, 0.2);
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            font-size: 0.875rem;
             display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
         }
 
         .header-controls {
             display: flex;
-            gap: 1rem;
             align-items: center;
+            gap: 16px;
             flex-wrap: wrap;
         }
 
-        .year-toggle {
+        .fy-controls {
             display: flex;
-            background-color: rgba(255, 255, 255, 0.15);
-            border-radius: 4px;
-            overflow: hidden;
+            gap: 8px;
         }
 
-        .year-toggle button {
-            padding: 0.5rem 1rem;
-            border: none;
-            background: transparent;
+        .fy-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
             color: white;
+            padding: 8px 14px;
+            border-radius: 4px;
             cursor: pointer;
+            font-size: 13px;
             font-weight: 500;
-            transition: background-color 0.3s;
+            transition: all 0.2s;
         }
 
-        .year-toggle button.active {
-            background-color: rgba(255, 255, 255, 0.3);
+        .fy-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
         }
 
-        .year-toggle button:hover:not(.active) {
-            background-color: rgba(255, 255, 255, 0.1);
+        .fy-btn.active {
+            background: white;
+            color: #2c5282;
         }
 
         .refresh-btn {
-            padding: 0.6rem 1.2rem;
-            background-color: rgba(255, 255, 255, 0.2);
-            color: white;
+            background: rgba(255, 255, 255, 0.15);
             border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 14px;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 13px;
             font-weight: 500;
-            transition: all 0.3s;
-            font-size: 0.875rem;
+            transition: all 0.2s;
         }
 
         .refresh-btn:hover {
-            background-color: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.5);
-        }
-
-        .refresh-btn.loading {
-            opacity: 0.7;
-            pointer-events: none;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+            background: rgba(255, 255, 255, 0.25);
         }
 
         .last-updated {
-            font-size: 0.875rem;
-            opacity: 0.85;
-            margin-top: 1rem;
-        }
-
-        /* Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
+            font-size: 12px;
+            opacity: 0.8;
+            white-space: nowrap;
         }
 
         /* Tabs */
-        .tab-navigation {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #e2e8f0;
-            background-color: white;
-            padding: 0 1rem;
-            margin-left: -2rem;
-            margin-right: -2rem;
-            padding-left: 2rem;
-            padding-right: 2rem;
+        .tab-bar {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            max-width: 1400px;
+            margin: 0 auto;
         }
 
-        .tab-button {
-            padding: 1rem 1.5rem;
-            border: none;
-            background: transparent;
+        .tab-bar-content {
+            display: flex;
+            padding: 0 24px;
+            gap: 0;
+        }
+
+        .tab {
+            padding: 12px 16px;
+            border-bottom: 3px solid transparent;
             cursor: pointer;
+            font-size: 14px;
             font-weight: 500;
             color: #718096;
-            border-bottom: 3px solid transparent;
-            transition: all 0.3s;
-            font-size: 1rem;
+            white-space: nowrap;
+            transition: all 0.2s;
         }
 
-        .tab-button:hover {
+        .tab:hover {
             color: #2d3748;
         }
 
-        .tab-button.active {
+        .tab.active {
             color: #2c5282;
             border-bottom-color: #2c5282;
+        }
+
+        /* Content Area */
+        .content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
         }
 
         .tab-content {
@@ -172,7 +171,7 @@
 
         .tab-content.active {
             display: block;
-            animation: fadeIn 0.3s;
+            animation: fadeIn 0.2s ease-in;
         }
 
         @keyframes fadeIn {
@@ -180,1292 +179,927 @@
             to { opacity: 1; }
         }
 
-        /* Loading and Error States */
-        .loading-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .loading-overlay.active {
-            display: flex;
-        }
-
-        .loading-spinner {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #e2e8f0;
-            border-top-color: #2c5282;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-        }
-
-        .error-message {
-            background-color: #fed7d7;
-            color: #c53030;
-            padding: 1rem;
-            border-radius: 4px;
-            margin-bottom: 1rem;
-            border-left: 4px solid #c53030;
-        }
-
         /* KPI Cards */
         .kpi-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
         }
 
         .kpi-card {
             background: white;
-            padding: 1.5rem;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .kpi-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
         }
 
         .kpi-label {
-            font-size: 0.875rem;
+            font-size: 12px;
             color: #718096;
             font-weight: 500;
-            margin-bottom: 0.5rem;
+            margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         .kpi-value {
-            font-size: 2rem;
+            font-size: 24px;
             font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 0.25rem;
+            color: #1a365d;
         }
 
-        .kpi-detail {
-            font-size: 0.875rem;
+        .kpi-subtext {
+            font-size: 11px;
             color: #a0aec0;
+            margin-top: 4px;
         }
 
-        /* Chart Containers */
-        .chart-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
-
-        .chart-container {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .chart-title {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 1.5rem;
-        }
-
-        .chart-wrapper {
-            position: relative;
-            height: 300px;
-            margin-bottom: 1rem;
-        }
-
-        .chart-wrapper.large {
-            height: 400px;
-        }
-
-        /* Table */
+        /* Tables */
         .table-container {
             background: white;
-            padding: 1.5rem;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            overflow-x: auto;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            margin-bottom: 32px;
         }
 
-        .data-table {
+        .table-title {
+            padding: 16px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1a365d;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f7fafc;
+        }
+
+        table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.875rem;
+            font-size: 13px;
         }
 
-        .data-table thead {
-            background-color: #f7fafc;
-            border-bottom: 2px solid #e2e8f0;
-        }
-
-        .data-table th {
-            padding: 1rem;
+        th {
+            background: #f7fafc;
+            padding: 12px 16px;
             text-align: left;
             font-weight: 600;
-            color: #2d3748;
+            color: #1a365d;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
             white-space: nowrap;
         }
 
-        .data-table td {
-            padding: 0.875rem 1rem;
-            border-bottom: 1px solid #e2e8f0;
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #edf2f7;
         }
 
-        .data-table tbody tr:hover {
-            background-color: #f7fafc;
+        tbody tr:nth-child(odd) {
+            background: #f9fafb;
         }
 
-        .numeric {
-            text-align: right;
-            font-variant-numeric: tabular-nums;
+        tbody tr:hover {
+            background: #f0f4f8;
         }
 
-        /* Channel Cards */
-        .channel-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .channel-card {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            border-top: 4px solid #2c5282;
-        }
-
-        .channel-name {
-            font-size: 1rem;
+        tbody tr.total-row {
+            background: #edf2f7;
             font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 1rem;
+            border-top: 2px solid #cbd5e0;
         }
 
-        .channel-metric {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #e2e8f0;
-            font-size: 0.875rem;
-        }
-
-        .channel-metric:last-child {
+        tbody tr.total-row td {
             border-bottom: none;
         }
 
-        .channel-metric-label {
+        /* Inputs */
+        input[type="number"] {
+            width: 90px;
+            padding: 6px 8px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            text-align: right;
+            background: #ebf5fb;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        input[type="number"]:hover {
+            border-color: #90cdf4;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #3182ce;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+        }
+
+        input[type="number"].dirty {
+            background: #fff9c4;
+        }
+
+        input[type="number"]:disabled {
+            background: #f0f0f0;
+            color: #a0aec0;
+            cursor: not-allowed;
+            border-color: #e2e8f0;
+        }
+
+        input[type="number"]:disabled:hover {
+            border-color: #e2e8f0;
+        }
+
+        .cell-text {
+            text-align: right;
             color: #718096;
         }
 
-        .channel-metric-value {
-            font-weight: 600;
-            color: #2d3748;
+        .cell-text.tooltip-container {
+            position: relative;
         }
 
-        /* Full Width */
-        .full-width {
-            grid-column: 1 / -1;
+        .tooltip {
+            display: none;
+            position: absolute;
+            background: #2d3748;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 4px solid transparent;
+            border-top-color: #2d3748;
+        }
+
+        .cell-text.tooltip-container:hover .tooltip {
+            display: block;
+        }
+
+        /* Chart */
+        .chart-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 32px;
+            position: relative;
+            height: 400px;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1a365d;
+            margin-bottom: 16px;
+        }
+
+        /* Save Button */
+        .save-btn-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+        }
+
+        .save-btn {
+            background: #3182ce;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .save-btn:hover:not(:disabled) {
+            background: #2c5282;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .save-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .save-btn.hidden {
+            display: none;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 32px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .large-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #3182ce;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        .loading-text {
+            color: #4a5568;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 120px;
+            right: 24px;
+            background: white;
+            padding: 14px 18px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-size: 13px;
+            font-weight: 500;
+            animation: slideUp 0.3s ease-out;
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .toast.success {
+            border-left: 4px solid #48bb78;
+            color: #22543d;
+        }
+
+        .toast.error {
+            border-left: 4px solid #f56565;
+            color: #742a2a;
+        }
+
+        /* Error Banner */
+        .error-banner {
+            background: #fed7d7;
+            border: 1px solid #fc8181;
+            color: #742a2a;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: #718096;
+        }
+
+        .empty-state-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .empty-state-text {
+            font-size: 14px;
+            font-weight: 500;
         }
 
         /* Responsive */
         @media (max-width: 768px) {
             .header-top {
                 flex-direction: column;
-                gap: 1rem;
+                align-items: flex-start;
             }
 
             .header-controls {
                 width: 100%;
-                justify-content: flex-start;
-            }
-
-            .tab-navigation {
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            .tab-button {
-                white-space: nowrap;
             }
 
             .kpi-grid {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             }
 
-            .chart-grid {
-                grid-template-columns: 1fr;
+            .content {
+                padding: 16px;
             }
 
-            .chart-wrapper {
-                height: 250px;
+            input[type="number"] {
+                width: 70px;
+                font-size: 12px;
             }
 
-            .chart-wrapper.large {
-                height: 350px;
+            .chart-container {
+                height: 300px;
+            }
+
+            .save-btn-container {
+                bottom: 16px;
+                right: 16px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Loading Overlay -->
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="loading-spinner">
-            <div class="spinner"></div>
-            <p>Loading dashboard data...</p>
-        </div>
-    </div>
-
     <!-- Header -->
     <div class="header">
         <div class="header-content">
             <div class="header-top">
                 <div class="header-title">
                     <h1>Pacific Discovery</h1>
-                    <p>Marketing Lead Source Analysis</p>
-                    <div style="margin-top: 0.5rem;">
-                        <span class="header-badge">📊 Sales performance & channel analytics dashboard</span>
-                    </div>
+                    <p>Marketing Lead Source Dashboard</p>
+                </div>
+                <div class="header-badge">
+                    📊 Live from Google Sheets
                 </div>
                 <div class="header-controls">
-                    <div class="year-toggle">
-                        <button data-year="FY2024/25">FY24/25</button>
-                        <button class="active" data-year="FY2025/26">FY25/26</button>
-                        <button data-year="FY2026/27">FY26/27</button>
-                    </div>
-                    <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">
-                        🔄 Refresh
-                    </button>
+                    <div class="fy-controls" id="fyControls"></div>
+                    <button class="refresh-btn" id="refreshBtn">🔄 Refresh</button>
+                    <div class="last-updated" id="lastUpdated">Loading...</div>
                 </div>
             </div>
-            <div class="last-updated">
-                Last refreshed: <span id="lastUpdated">Never</span> | Live from Google Sheets
-            </div>
         </div>
     </div>
 
-    <!-- Tabs Navigation -->
-    <div style="background: white;">
-        <div class="container" style="padding: 0;">
-            <div class="tab-navigation">
-                <button class="tab-button active" onclick="switchTab('overview')">FY Overview</button>
-                <button class="tab-button" onclick="switchTab('monthly')">Monthly Breakdown</button>
-                <button class="tab-button" onclick="switchTab('comparison')">Channel Comparison</button>
-            </div>
-        </div>
+    <!-- Tab Navigation -->
+    <div class="tab-bar">
+        <div class="tab-bar-content" id="tabBar"></div>
     </div>
 
-    <!-- Main Content -->
-    <div class="container">
-        <div id="errorContainer"></div>
+    <!-- Content Area -->
+    <div class="content" id="mainContent"></div>
 
-        <!-- Tab 1: FY Overview -->
-        <div id="overview" class="tab-content active">
-            <div id="overviewContent"></div>
-        </div>
+    <!-- Save Button -->
+    <div class="save-btn-container">
+        <button class="save-btn hidden" id="saveBtn">
+            <span class="spinner" style="display: none;"></span>
+            <span id="saveBtnText">Save Changes (0)</span>
+        </button>
+    </div>
 
-        <!-- Tab 2: Monthly Breakdown -->
-        <div id="monthly" class="tab-content">
-            <div id="monthlyContent"></div>
-        </div>
-
-        <!-- Tab 3: Channel Comparison -->
-        <div id="comparison" class="tab-content">
-            <div id="comparisonContent"></div>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="loading-content">
+            <div class="large-spinner"></div>
+            <div class="loading-text">Loading dashboard data...</div>
         </div>
     </div>
 
     <script>
-        // ====================================================================
-        // CONFIGURATION — Paste your Apps Script Web App URL below
-        // ====================================================================
+        // ==================== CONFIG ====================
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx672KTLvgRzkH06ln8211xqIRdEzmOvfzD3fMV5FjxCxBFF0hbZ7n-il7bhu0Ykko1uQ/exec';
-        // ====================================================================
 
-        const SPREADSHEET_ID = '1p55qxX5vweCtU61EpWjhv-7-g9PzWFjwuq2wnd9LuPU';
-        const SHEET_NAMES = {
-            salesBreakdown: 'Sales breakdown',
-            directTraffic: 'Direct web traffic',
-            organicTraffic: 'Organic web traffic',
-            paidSocial: 'Paid Social',
-            gooverseas: 'Gooverseas',
-            goabroad: 'GoAbroad'
-        };
-
-        // Color palette
+        // Color palette for sources
         const COLORS = [
             '#4299e1', '#ed8936', '#48bb78', '#9f7aea', '#f56565',
             '#d69e2e', '#38b2ac', '#e53e3e', '#667eea', '#fc8181'
         ];
 
-        // Global state
-        let dashboardData = {};
-        let currentYear = 'FY2025/26';
-        let charts = {};
-        let useAppsScript = APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE';
+        // Source display names
+        const SOURCE_DISPLAY_NAMES = {
+            'Direct web traffic': 'Direct',
+            'Google Adwords': 'Adwords',
+            'Paid Social': 'Paid Social',
+            'Organic web traffic': 'Organic',
+            'Gooverseas': 'GoOverseas',
+            'GoAbroad': 'GoAbroad',
+            'US Gap Year Assoc': 'Gap Year',
+            'Organic Social': 'Org Social',
+            'AI Web Traffic': 'AI Traffic',
+            'Teenlife': 'Teenlife'
+        };
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
+        // ==================== STATE ====================
+        let appData = null;
+        let selectedFY = null;
+        let selectedTab = 'overview';
+        let pendingUpdates = [];
+
+        // ==================== INITIALIZATION ====================
+        async function init() {
+            showLoadingOverlay(true);
+            try {
+                await fetchData();
+                setupUI();
+                showLoadingOverlay(false);
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showLoadingOverlay(false);
+                showErrorBanner('Failed to load dashboard. Please refresh the page.');
+            }
+        }
+
+        async function fetchData() {
+            const response = await fetch(APPS_SCRIPT_URL);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            appData = await response.json();
+            updateLastUpdatedTime();
+        }
+
+        function setupUI() {
+            setupFYControls();
+            setupTabs();
+            renderContent();
             setupEventListeners();
-            loadData();
-        });
+        }
 
-        function setupEventListeners() {
-            document.querySelectorAll('.year-toggle button').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    document.querySelectorAll('.year-toggle button').forEach(b => b.classList.remove('active'));
-                    this.classList.add('active');
-                    currentYear = this.dataset.year;
-                    updateDashboard();
+        function setupFYControls() {
+            const fyContainer = document.getElementById('fyControls');
+            fyContainer.innerHTML = '';
+
+            // Collect unique fiscal years and sort (newest first)
+            const fiscalYears = [];
+            Object.values(appData.sources).forEach(source => {
+                source.fiscalYears.forEach(fy => {
+                    if (!fiscalYears.find(f => f.label === fy.label)) {
+                        fiscalYears.push(fy);
+                    }
                 });
+            });
+
+            fiscalYears.sort((a, b) => {
+                // Extract first 4-digit year from label (handles "2024/2025", "FY 2024/25", etc.)
+                const matchA = a.label.match(/(\d{4})/);
+                const matchB = b.label.match(/(\d{4})/);
+                const yearA = matchA ? parseInt(matchA[1]) : 0;
+                const yearB = matchB ? parseInt(matchB[1]) : 0;
+                return yearB - yearA;
+            });
+
+            // Auto-select FY with most data (most months)
+            if (!selectedFY && fiscalYears.length > 0) {
+                selectedFY = fiscalYears[0].label;
+            }
+
+            fiscalYears.forEach(fy => {
+                const btn = document.createElement('button');
+                btn.className = `fy-btn ${fy.label === selectedFY ? 'active' : ''}`;
+                btn.textContent = fy.label;
+                btn.addEventListener('click', () => {
+                    selectedFY = fy.label;
+                    document.querySelectorAll('.fy-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    renderContent();
+                });
+                fyContainer.appendChild(btn);
             });
         }
 
-        function showLoading(show = true) {
-            document.getElementById('loadingOverlay').classList.toggle('active', show);
+        function setupTabs() {
+            const tabBar = document.getElementById('tabBar');
+            tabBar.innerHTML = '';
+
+            const tabs = ['overview', ...Object.keys(appData.sources).sort()];
+
+            tabs.forEach(tabId => {
+                const tab = document.createElement('div');
+                tab.className = `tab ${tabId === selectedTab ? 'active' : ''}`;
+                tab.textContent = tabId === 'overview' ? 'Overview' : SOURCE_DISPLAY_NAMES[tabId] || tabId;
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    selectedTab = tabId;
+                    renderContent();
+                });
+                tabBar.appendChild(tab);
+            });
         }
 
-        function showError(message) {
-            const errorContainer = document.getElementById('errorContainer');
-            errorContainer.innerHTML = `<div class="error-message"><strong>Error:</strong> ${message}</div>`;
+        function renderContent() {
+            const mainContent = document.getElementById('mainContent');
+            mainContent.innerHTML = '';
+
+            if (selectedTab === 'overview') {
+                renderOverviewTab(mainContent);
+            } else {
+                renderSourceTab(mainContent, selectedTab);
+            }
         }
 
-        function clearError() {
-            document.getElementById('errorContainer').innerHTML = '';
+        function renderOverviewTab(container) {
+            // KPI Cards
+            const kpiContainer = document.createElement('div');
+            kpiContainer.className = 'kpi-grid';
+
+            const aggregates = aggregateDataByFY(selectedFY);
+
+            const kpis = [
+                { label: 'Total Traffic', value: aggregates.totalTraffic, unit: '' },
+                { label: 'Total Leads', value: aggregates.totalLeads, unit: '' },
+                { label: 'Total Opportunities', value: aggregates.totalOpps, unit: '' },
+                { label: 'Total Clients', value: aggregates.totalClients, unit: '' },
+                { label: 'Lead → Client %', value: formatPercent(aggregates.leadToClientPercent), unit: '' },
+                { label: 'Total NZD Spend', value: formatCurrency(aggregates.totalSpend), unit: '' }
+            ];
+
+            kpis.forEach(kpi => {
+                const card = document.createElement('div');
+                card.className = 'kpi-card';
+                card.innerHTML = `
+                    <div class="kpi-label">${kpi.label}</div>
+                    <div class="kpi-value">${kpi.value}</div>
+                    ${kpi.unit ? `<div class="kpi-subtext">${kpi.unit}</div>` : ''}
+                `;
+                kpiContainer.appendChild(card);
+            });
+
+            container.appendChild(kpiContainer);
+
+            // Summary Table
+            const summaryContainer = document.createElement('div');
+            summaryContainer.className = 'table-container';
+            summaryContainer.innerHTML = `
+                <div class="table-title">Lead Sources Summary</div>
+                <table>${renderSummaryTable()}</table>
+            `;
+            container.appendChild(summaryContainer);
+
+            // Chart
+            const chartContainer = document.createElement('div');
+            chartContainer.className = 'chart-container';
+            chartContainer.innerHTML = `
+                <div class="chart-title">Clients by Source (Monthly Trend)</div>
+                <canvas id="clientsChart"></canvas>
+            `;
+            container.appendChild(chartContainer);
+
+            // Render chart after DOM is ready
+            setTimeout(() => {
+                renderClientsChart();
+            }, 0);
         }
 
-        async function loadData() {
-            showLoading(true);
-            clearError();
-
-            if (!useAppsScript) {
-                showError('Apps Script URL not configured. Open this HTML file in a text editor and replace YOUR_APPS_SCRIPT_URL_HERE on line 3 with your deployed Apps Script web app URL. See the setup instructions in AppsScript_Code.js.');
-                showLoading(false);
+        function renderSourceTab(container, sourceName) {
+            const source = appData.sources[sourceName];
+            if (!source) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">Source not found</div></div>';
                 return;
             }
 
-            try {
-                // Fetch all sheets in one request via Apps Script
-                const response = await fetch(APPS_SCRIPT_URL);
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                const allData = await response.json();
-
-                // Convert Apps Script format (arrays of arrays) to our row format
-                const toRows = (sheetObj) => sheetObj && sheetObj.data ? sheetObj.data : [];
-
-                const salesRows = toRows(allData['Sales breakdown']);
-                const directRows = toRows(allData['Direct web traffic']);
-                const organicRows = toRows(allData['Organic web traffic']);
-                const paidSocialRows = toRows(allData['Paid Social']);
-                const gooverseasRows = toRows(allData['Gooverseas']);
-                const goabroadRows = toRows(allData['GoAbroad']);
-
-                dashboardData = {
-                    sales: parseSalesData(salesRows),
-                    direct: parseChannelData(directRows),
-                    organic: parseChannelData(organicRows),
-                    paidSocial: parsePaidSocialData(paidSocialRows),
-                    gooverseas: parseReferralData(gooverseasRows),
-                    goabroad: parseReferralData(goabroadRows)
-                };
-
-                // Auto-detect best default FY (the one with the most sales data)
-                autoSelectBestFY();
-                updateDashboard();
-                updateLastRefreshed();
-            } catch (error) {
-                console.error('Data loading error:', error);
-                showError('Failed to load data. Error: ' + error.message + '. Check that your Apps Script web app is deployed and the URL is correct.');
-            } finally {
-                showLoading(false);
+            const fy = source.fiscalYears.find(f => f.label === selectedFY);
+            if (!fy || !fy.months || fy.months.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">No data available for this fiscal year</div></div>';
+                return;
             }
+
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'table-container';
+            tableContainer.innerHTML = `
+                <div class="table-title">${sourceName} - FY${selectedFY}</div>
+                <table>${renderMonthlyTable(sourceName, fy)}</table>
+            `;
+            container.appendChild(tableContainer);
         }
 
-        function parseSalesData(rows) {
-            // Calendar months as stored in the spreadsheet (Jan=col1 .. Dec=col12)
-            const calMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            // FY months run Apr–Mar
-            const fyMonths = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
-
-            // Source name normalization — covers ALL variant names across Sales, Spend, and Leads sections
-            const displayNames = {
-                // Sales section names
-                'Direct traffic (email, phone call, direct url)': 'Direct Traffic',
-                'Paid social': 'Paid Social', 'Paid Search': 'Paid Search',
-                'Organic search': 'Organic Search', 'Organic social': 'Organic Social',
-                'Referral (Gap Year Ass)': 'Ref: Gap Year Assoc',
-                'Referral (StudiekeuzeMaken)': 'Ref: StudiekeuzeMaken',
-                'Referral (GoOverseas)': 'Ref: GoOverseas',
-                'Referral (GoAbroad)': 'Ref: GoAbroad',
-                'Advisors (Amber)': 'Advisors', 'Advisors': 'Advisors',
-                'Recruitment (Amber)': 'Recruitment', 'Recruitment': 'Recruitment',
-                // Leads section variant names (shorter/different from sales)
-                'Direct': 'Direct Traffic',
-                'Organic': 'Organic Search',
-                'organic social': 'Organic Social',
-                'StudiekeuzeMaken': 'Ref: StudiekeuzeMaken',
-                // Spend section variants
-                'paid social': 'Paid Social',
-                'paid search': 'Paid Search'
-            };
-            function normName(raw) {
-                if (displayNames[raw]) return displayNames[raw];
-                // Case-insensitive fallback
-                const lower = raw.toLowerCase();
-                for (const [key, val] of Object.entries(displayNames)) {
-                    if (key.toLowerCase() === lower) return val;
-                }
-                return raw;
-            }
-
-            // Step 1: Parse calendar-year data from each "Sales by month 20XX" section
-            const calendarData = {}; // { '2024': { 'Paid Social': [jan..dec], ... }, '2025': {...} }
-
-            function findSection(prefix) {
-                const results = [];
-                for (let i = 0; i < rows.length; i++) {
-                    if (rows[i] && String(rows[i][0]).includes(prefix)) results.push({ year: String(rows[i][0]).replace(prefix, '').trim(), row: i });
-                }
-                return results;
-            }
-
-            findSection('Sales by month ').forEach(({ year, row: startRow }) => {
-                calendarData[year] = {};
-                for (let i = startRow + 1; i < Math.min(rows.length, startRow + 15); i++) {
-                    const raw = rows[i] ? String(rows[i][0]).trim() : '';
-                    if (raw === 'Total per month' || raw === '') break;
-                    const name = normName(raw);
-                    calendarData[year][name] = [];
-                    for (let j = 1; j <= 12; j++) {
-                        calendarData[year][name].push(parseFloat(rows[i][j]) || 0);
-                    }
-                }
-            });
-
-            // Also parse spend sections
-            const calendarSpend = {};
-            findSection('Spend by month ').forEach(({ year, row: startRow }) => {
-                calendarSpend[year] = {};
-                for (let i = startRow + 1; i < Math.min(rows.length, startRow + 12); i++) {
-                    const raw = rows[i] ? String(rows[i][0]).trim() : '';
-                    if (raw === 'Total per month' || raw === '' || raw.includes('Total')) continue;
-                    calendarSpend[year][normName(raw)] = [];
-                    for (let j = 1; j <= 12; j++) {
-                        calendarSpend[year][normName(raw)].push(parseFloat(rows[i][j]) || 0);
-                    }
-                }
-            });
-
-            // Also parse leads sections
-            const calendarLeads = {};
-            findSection('Leads per month').forEach(({ year, row: startRow }) => {
-                // Year might be empty for leads; infer from nearest "Sales by month" above
-                let inferredYear = year;
-                if (!inferredYear) {
-                    for (let k = startRow - 1; k >= 0; k--) {
-                        const c = String(rows[k] ? rows[k][0] : '');
-                        const m = c.match(/Sales by month (\d{4})/);
-                        if (m) { inferredYear = m[1]; break; }
-                    }
-                }
-                if (!inferredYear) return;
-                calendarLeads[inferredYear] = {};
-                for (let i = startRow + 1; i < Math.min(rows.length, startRow + 15); i++) {
-                    const raw = rows[i] ? String(rows[i][0]).trim() : '';
-                    if (raw === '' || raw.includes('Total')) break;
-                    // Skip non-source rows (e.g. "% +/- leads previous month")
-                    if (raw.includes('%') || raw.includes('Website') || raw.includes('traffic per')) continue;
-                    const normalized = normName(raw);
-                    calendarLeads[inferredYear][normalized] = [];
-                    for (let j = 1; j <= 12; j++) {
-                        const val = rows[i][j];
-                        // Handle #REF! and other non-numeric values
-                        const num = (typeof val === 'number') ? val : parseFloat(val);
-                        calendarLeads[inferredYear][normalized].push(isNaN(num) ? 0 : num);
-                    }
-                }
-            });
-
-            // Step 2: Build fiscal year views
-            // FY2023/24 = Apr–Dec 2023 (cols 3–11 of CY2023) + Jan–Mar 2024 (cols 0–2 of CY2024)
-            // FY2024/25 = Apr–Dec 2024 (cols 3–11 of CY2024) + Jan–Mar 2025 (cols 0–2 of CY2025)
-            // FY2025/26 = Apr–Dec 2025 (cols 3–11 of CY2025) + Jan–Mar 2026 (cols 0–2 of CY2026)
-
-            const allSources = new Set();
-            Object.values(calendarData).forEach(yearData => Object.keys(yearData).forEach(s => allSources.add(s)));
-
-            function buildFY(startYear) {
-                const endYear = String(parseInt(startYear) + 1);
-                const label = 'FY' + startYear + '/' + endYear.slice(2);
-                const sources = {};
-                const spend = {};
-                const leads = {};
-
-                allSources.forEach(source => {
-                    // Apr–Dec from startYear (calendar month indices 3–11)
-                    const h1Sales = calendarData[startYear] ? (calendarData[startYear][source] || []).slice(3, 12) : new Array(9).fill(0);
-                    // Jan–Mar from endYear (calendar month indices 0–2)
-                    const h2Sales = calendarData[endYear] ? (calendarData[endYear][source] || []).slice(0, 3) : new Array(3).fill(0);
-                    sources[source] = {};
-                    fyMonths.forEach((m, idx) => {
-                        sources[source][m] = idx < 9 ? (h1Sales[idx] || 0) : (h2Sales[idx - 9] || 0);
-                    });
-
-                    // Spend
-                    const h1Spend = calendarSpend[startYear] ? (calendarSpend[startYear][source] || []).slice(3, 12) : new Array(9).fill(0);
-                    const h2Spend = calendarSpend[endYear] ? (calendarSpend[endYear][source] || []).slice(0, 3) : new Array(3).fill(0);
-                    spend[source] = {};
-                    fyMonths.forEach((m, idx) => {
-                        spend[source][m] = idx < 9 ? (h1Spend[idx] || 0) : (h2Spend[idx - 9] || 0);
-                    });
-
-                    // Leads
-                    const h1Leads = calendarLeads[startYear] ? (calendarLeads[startYear][source] || []).slice(3, 12) : new Array(9).fill(0);
-                    const h2Leads = calendarLeads[endYear] ? (calendarLeads[endYear][source] || []).slice(0, 3) : new Array(3).fill(0);
-                    leads[source] = {};
-                    fyMonths.forEach((m, idx) => {
-                        leads[source][m] = idx < 9 ? (h1Leads[idx] || 0) : (h2Leads[idx - 9] || 0);
-                    });
-                });
-
-                return { label, sources, spend, leads, months: fyMonths };
-            }
-
-            const result = {
-                'FY2024/25': buildFY('2024'),
-                'FY2025/26': buildFY('2025'),
-                'FY2026/27': buildFY('2026'),
-            };
-
-            return result;
-        }
-
-        function parseChannelData(rows) {
-            // Parse FY-organized channel data (Direct web traffic, Organic web traffic)
-            // Structure:
-            //   Row with "FY" in A, ISO date in B (first month of that FY)
-            //   Row with "1 Apr YYYY - 31 Mar YYYY" in A, ISO date in B (second month)
-            //   Subsequent rows with empty A, ISO date in B (remaining months)
-            //   Row with "Total" in A marks end of FY section
-
-            const result = {}; // { 'FY2024/25': { months: [...], traffic: {...}, leads: {...}, ...}, ... }
-
-            let headerIndex = -1;
-            for (let i = 0; i < Math.min(rows.length, 10); i++) {
-                if (rows[i] && (rows[i][2] === 'Traffic' || rows[i][2] === 'Leads')) {
-                    headerIndex = i;
-                    break;
-                }
-            }
-            if (headerIndex === -1) headerIndex = 5;
-
-            let currentFY = null;
-            let fyData = null;
-
-            for (let i = headerIndex + 1; i < rows.length; i++) {
-                if (!rows[i]) continue;
-
-                const colA = String(rows[i][0] || '').trim();
-                const colB = rows[i][1]; // ISO date string
-
-                // Check for "Total" row (end of FY section)
-                if (colA === 'Total') {
-                    currentFY = null;
-                    fyData = null;
-                    continue;
-                }
-
-                // Extract FY from label row (e.g., "1 Apr 2024 - 31 Mar 2025")
-                // This comes after the "FY" marker row, so we detect it and set up fyData
-                if (colA.includes('Apr') && colA.includes('-') && colA.includes('Mar')) {
-                    const fyMatch = colA.match(/(\d{4}).*(\d{4})/);
-                    if (fyMatch && fyMatch.length >= 3) {
-                        const startYear = fyMatch[1];
-                        const endYear = fyMatch[2];
-                        // Validate that this looks like a FY label (has Apr and Mar)
-                        currentFY = 'FY' + startYear + '/' + endYear.slice(2);
-                        if (!result[currentFY]) {
-                            result[currentFY] = {
-                                months: [],
-                                traffic: {},
-                                leads: {},
-                                opps: {},
-                                clients: {}
-                            };
-                        }
-                        fyData = result[currentFY];
-                    }
-                    // Continue to parse this row as a data row if it has colB
-                }
-
-                // "FY" marker row — contains the FIRST month's data!
-                // We need to set up fyData from the date, then parse the data below
-                if (colA === 'FY' && colB) {
-                    const dateStr = String(colB);
-                    const fyInfo = extractFYFromISO(dateStr);
-                    if (fyInfo) {
-                        currentFY = fyInfo.fy;
-                        if (!result[currentFY]) {
-                            result[currentFY] = {
-                                months: [],
-                                traffic: {},
-                                leads: {},
-                                opps: {},
-                                clients: {}
-                            };
-                        }
-                        fyData = result[currentFY];
-                    }
-                    // Fall through to parse this row's data below
-                } else if (colA === 'FY') {
-                    continue;
-                }
-
-                // Data row: ISO date in colB
-                if (!colB) {
-                    continue;
-                }
-
-                if (fyData) {
-                    const dateStr = String(colB);
-                    const monthKey = extractMonthFromISO(dateStr);
-
-                    if (monthKey) {
-                        if (!fyData.months.includes(monthKey)) {
-                            fyData.months.push(monthKey);
-                        }
-                        fyData.traffic[monthKey] = parseFloat(rows[i][2]) || 0;
-                        fyData.leads[monthKey] = parseFloat(rows[i][3]) || 0;
-                        fyData.opps[monthKey] = parseFloat(rows[i][4]) || 0;
-                        fyData.clients[monthKey] = parseFloat(rows[i][5]) || 0;
-                    }
-                }
-            }
-
-            return result;
-        }
-
-        function extractMonthFromISO(dateStr) {
-            // Parse ISO 8601 string like "2024-04-01T07:00:00.000Z" to "Apr"
-            if (!dateStr || typeof dateStr !== 'string') return null;
-            const match = dateStr.match(/(\d{4})-(\d{2})/);
-            if (!match) return null;
-            const year = parseInt(match[1]);
-            const month = parseInt(match[2]);
-            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            return monthNames[month - 1] || null;
-        }
-
-        function parsePaidSocialData(rows) {
-            // Parse Paid Social data: continuous monthly rows with ISO dates in column A
-            // Structure: A=ISO date, B=empty, C=USD spend, D=NZD spend, E=Reach, F=Traffic,
-            //           G=Cost/Traffic, H=Leads, I=Cost/Lead, J=Opps, ...
-
-            const result = {}; // { 'FY2024/25': { months: [...], spend: {...}, leads: {...}, ...}, ... }
-
-            let headerIndex = -1;
-            // Find header row
-            for (let i = 0; i < Math.min(rows.length, 20); i++) {
-                if (rows[i] && (rows[i][2] === 'USD' || rows[i][4] === 'Reach')) {
-                    headerIndex = i;
-                    break;
-                }
-            }
-            if (headerIndex === -1) headerIndex = 11; // Fallback based on raw data structure
-
-            for (let i = headerIndex + 1; i < rows.length; i++) {
-                if (!rows[i] || !rows[i][0]) continue;
-
-                const dateStr = String(rows[i][0]);
-                const fyMonth = extractFYFromISO(dateStr);
-                if (!fyMonth) continue;
-
-                const { fy, month } = fyMonth;
-
-                if (!result[fy]) {
-                    result[fy] = {
-                        months: [],
-                        spend: {},
-                        reach: {},
-                        traffic: {},
-                        leads: {},
-                        costPerLead: {}
-                    };
-                }
-
-                // Record unique months in order
-                if (!result[fy].months.includes(month)) {
-                    result[fy].months.push(month);
-                }
-
-                // Parse columns: A=date, B=empty, C=USD, D=NZD, E=Reach, F=Traffic, G=Cost/Traffic, H=Leads, I=Cost/Lead
-                result[fy].spend[month] = parseFloat(rows[i][3]) || 0; // NZD spend
-                result[fy].reach[month] = parseFloat(rows[i][4]) || 0;
-                result[fy].traffic[month] = parseFloat(rows[i][5]) || 0;
-                result[fy].leads[month] = parseFloat(rows[i][7]) || 0;
-                result[fy].costPerLead[month] = parseFloat(rows[i][8]) || 0;
-            }
-
-            return result;
-        }
-
-        function extractFYFromISO(dateStr) {
-            // Parse ISO date string to FY and month
-            // FY2024/25 = Apr 2024 to Mar 2025
-            if (!dateStr || typeof dateStr !== 'string') return null;
-            const match = dateStr.match(/(\d{4})-(\d{2})/);
-            if (!match) return null;
-
-            const year = parseInt(match[1]);
-            const monthNum = parseInt(match[2]);
-            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            const month = monthNames[monthNum - 1];
-
-            // Determine FY: Apr-Dec belongs to start year, Jan-Mar belongs to end year
-            let fy;
-            if (monthNum >= 4) {
-                fy = 'FY' + year + '/' + String(year + 1).slice(2);
-            } else {
-                fy = 'FY' + (year - 1) + '/' + String(year).slice(2);
-            }
-
-            return { fy, month };
-        }
-
-        function parseReferralData(rows) {
-            const result = { monthly: [], totals: {} };
-
-            let headerIndex = -1;
-            for (let i = 0; i < Math.min(rows.length, 5); i++) {
-                if (rows[i] && (rows[i][0] === 'Allocation' || rows[i][1] === 'NZD')) {
-                    headerIndex = i;
-                    break;
-                }
-            }
-
-            if (headerIndex === -1) headerIndex = 0;
-
-            for (let i = headerIndex + 1; i < rows.length; i++) {
-                if (rows[i] && rows[i][0]) {
-                    result.monthly.push({
-                        allocation: rows[i][0],
-                        nzd: parseFloat(rows[i][1]) || 0,
-                        traffic: parseFloat(rows[i][2]) || 0,
-                        costPerTraffic: parseFloat(rows[i][3]) || 0,
-                        leads: parseFloat(rows[i][4]) || 0,
-                        costPerLead: parseFloat(rows[i][5]) || 0,
-                        opps: parseFloat(rows[i][6]) || 0,
-                        costPerOpp: parseFloat(rows[i][7]) || 0,
-                        clients: parseFloat(rows[i][8]) || 0,
-                        costPerClient: parseFloat(rows[i][9]) || 0
-                    });
-                }
-            }
-
-            result.totals = {
-                nzd: result.monthly.reduce((sum, row) => sum + (row.nzd || 0), 0),
-                leads: result.monthly.reduce((sum, row) => sum + (row.leads || 0), 0),
-                opps: result.monthly.reduce((sum, row) => sum + (row.opps || 0), 0),
-                clients: result.monthly.reduce((sum, row) => sum + (row.clients || 0), 0)
-            };
-
-            return result;
-        }
-
-        function autoSelectBestFY() {
-            // Pick the FY with the most total sales as the default view
-            const fyKeys = Object.keys(dashboardData.sales);
-            let bestFY = fyKeys[0];
-            let bestTotal = 0;
-            fyKeys.forEach(fy => {
-                const fyData = dashboardData.sales[fy];
-                if (!fyData) return;
-                let total = 0;
-                Object.values(fyData.sources).forEach(src => {
-                    fyData.months.forEach(m => { total += src[m] || 0; });
-                });
-                if (total > bestTotal) { bestTotal = total; bestFY = fy; }
-            });
-            currentYear = bestFY;
-            // Update UI toggle buttons
-            document.querySelectorAll('.year-toggle button').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.year === currentYear);
-            });
-        }
-
-        function updateDashboard() {
-            clearCharts();
-            renderFYOverview();
-            renderMonthlyBreakdown();
-            renderChannelComparison();
-        }
-
-        function clearCharts() {
-            Object.values(charts).forEach(chart => {
-                if (chart && typeof chart.destroy === 'function') {
-                    chart.destroy();
-                }
-            });
-            charts = {};
-        }
-
-        function renderFYOverview() {
-            const fyData = dashboardData.sales[currentYear];
-            if (!fyData) { showError('No data for ' + currentYear); return; }
-            const salesData = fyData.sources;
-            const spendData = fyData.spend;
-            const leadsData = fyData.leads;
-            const months = fyData.months;
-
-            // Auto-detect active months
-            let lastActiveMonth = 11;
-            if (currentYear !== 'FY2024/25') {
-                lastActiveMonth = 0;
-                months.forEach((m, idx) => {
-                    const hasData = Object.values(salesData).some(src => (src[m] || 0) > 0);
-                    if (hasData) lastActiveMonth = idx;
-                });
-                lastActiveMonth = Math.max(lastActiveMonth, 0);
-            }
-            const displayMonths = months.slice(0, lastActiveMonth + 1);
-
-            // Calculate KPIs
-            const totalSales = Object.keys(salesData).reduce((sum, source) => {
-                return sum + displayMonths.reduce((m, month) => m + (salesData[source][month] || 0), 0);
-            }, 0);
-
-            const totalSpend = Object.keys(spendData).reduce((sum, source) => {
-                return sum + displayMonths.reduce((m, month) => m + (spendData[source][month] || 0), 0);
-            }, 0);
-
-            const totalLeads = Object.keys(leadsData).reduce((sum, source) => {
-                return sum + displayMonths.reduce((m, month) => m + (leadsData[source][month] || 0), 0);
-            }, 0);
-
-            // Get channel data for total traffic if available
-            let totalTraffic = 0;
-            const directFY = dashboardData.direct[currentYear];
-            const organicFY = dashboardData.organic[currentYear];
-            if (directFY && directFY.traffic) {
-                totalTraffic += Object.values(directFY.traffic).reduce((a, b) => a + b, 0);
-            }
-            if (organicFY && organicFY.traffic) {
-                totalTraffic += Object.values(organicFY.traffic).reduce((a, b) => a + b, 0);
-            }
-
-            const costPerSale = totalSales > 0 ? (totalSpend / totalSales).toFixed(2) : 0;
-            const leadToSaleConv = totalLeads > 0 ? ((totalSales / totalLeads) * 100).toFixed(1) : 0;
-            const avgSalesPerMonth = displayMonths.length > 0 ? (totalSales / displayMonths.length).toFixed(0) : 0;
-
-            // Source breakdown
-            const sourceBreakdown = {};
-            Object.keys(salesData).forEach(source => {
-                const sales = displayMonths.reduce((sum, month) => sum + (salesData[source][month] || 0), 0);
-                const spend = displayMonths.reduce((sum, month) => sum + (spendData[source][month] || 0), 0);
-                const leads = displayMonths.reduce((sum, month) => sum + (leadsData[source][month] || 0), 0);
-                sourceBreakdown[source] = { sales, spend, leads };
-            });
-
+        function renderSummaryTable() {
+            const sourceNames = Object.keys(appData.sources).sort();
             let html = `
-                <div class="kpi-grid">
-                    <div class="kpi-card">
-                        <div class="kpi-label">Total Sales</div>
-                        <div class="kpi-value">${formatNumber(totalSales)}</div>
-                        <div class="kpi-detail">${displayMonths.length >= 12 ? 'Full FY' : displayMonths.length + ' months'}</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Total Spend</div>
-                        <div class="kpi-value">${formatCurrency(totalSpend)}</div>
-                        <div class="kpi-detail">All channels</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Cost per Sale</div>
-                        <div class="kpi-value">${formatCurrency(costPerSale)}</div>
-                        <div class="kpi-detail">Spend ÷ Sales</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Total Leads</div>
-                        <div class="kpi-value">${formatNumber(totalLeads)}</div>
-                        <div class="kpi-detail">All sources</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Lead→Sale Conv %</div>
-                        <div class="kpi-value">${formatPercent(leadToSaleConv)}</div>
-                        <div class="kpi-detail">Leads to Sales</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Avg Sales/Month</div>
-                        <div class="kpi-value">${formatNumber(avgSalesPerMonth)}</div>
-                        <div class="kpi-detail">Monthly average</div>
-                    </div>
-                </div>
-
-                <div class="chart-grid">
-                    <div class="chart-container">
-                        <div class="chart-title">Sales by Lead Source</div>
-                        <div class="chart-wrapper">
-                            <canvas id="chart-sales-by-source"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-container">
-                        <div class="chart-title">Lead Source Share %</div>
-                        <div class="chart-wrapper">
-                            <canvas id="chart-source-share"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="table-container">
-                    <div class="chart-title">Lead Source Performance</div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Lead Source</th>
-                                <th class="numeric">Sales</th>
-                                <th class="numeric">Spend</th>
-                                <th class="numeric">Leads</th>
-                                <th class="numeric">Cost/Sale</th>
-                                <th class="numeric">Lead→Sale %</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>NZD Spend</th>
+                        <th>Traffic</th>
+                        <th>Leads</th>
+                        <th>Opps</th>
+                        <th>Clients</th>
+                        <th>Lead → Client %</th>
+                        <th>Traffic → Lead %</th>
+                    </tr>
+                </thead>
+                <tbody>
             `;
 
-            Object.keys(sourceBreakdown).forEach(source => {
-                const data = sourceBreakdown[source];
-                const costPerSaleSource = data.sales > 0 ? (data.spend / data.sales).toFixed(2) : 0;
-                const convSource = data.leads > 0 ? ((data.sales / data.leads) * 100).toFixed(1) : 0;
-                html += `<tr>
-                    <td>${source}</td>
-                    <td class="numeric">${formatNumber(data.sales)}</td>
-                    <td class="numeric">${formatCurrency(data.spend)}</td>
-                    <td class="numeric">${formatNumber(data.leads)}</td>
-                    <td class="numeric">${formatCurrency(costPerSaleSource)}</td>
-                    <td class="numeric">${formatPercent(convSource)}</td>
-                </tr>`;
+            let totalSpend = 0, totalTraffic = 0, totalLeads = 0, totalOpps = 0, totalClients = 0;
+
+            sourceNames.forEach((sourceName, idx) => {
+                const source = appData.sources[sourceName];
+                const fy = source.fiscalYears.find(f => f.label === selectedFY);
+
+                if (!fy) return;
+
+                const row = fy.totals || {};
+                const spend = row.spend || 0;
+                const traffic = row.traffic || 0;
+                const leads = row.leads || 0;
+                const opps = row.opps || 0;
+                const clients = row.clients || 0;
+
+                totalSpend += spend;
+                totalTraffic += traffic;
+                totalLeads += leads;
+                totalOpps += opps;
+                totalClients += clients;
+
+                const leadToClient = leads > 0 ? (clients / leads * 100) : 0;
+                const trafficToLead = traffic > 0 ? (leads / traffic * 100) : 0;
+
+                html += `
+                    <tr>
+                        <td>${SOURCE_DISPLAY_NAMES[sourceName] || sourceName}</td>
+                        <td class="cell-text">${formatCurrency(spend)}</td>
+                        <td class="cell-text">${formatNumber(traffic)}</td>
+                        <td class="cell-text">${formatNumber(leads)}</td>
+                        <td class="cell-text">${formatNumber(opps)}</td>
+                        <td class="cell-text">${formatNumber(clients)}</td>
+                        <td class="cell-text">${formatPercent(leadToClient)}</td>
+                        <td class="cell-text">${formatPercent(trafficToLead)}</td>
+                    </tr>
+                `;
             });
 
-            html += '</tbody></table></div>';
+            const overallLeadToClient = totalLeads > 0 ? (totalClients / totalLeads * 100) : 0;
+            const overallTrafficToLead = totalTraffic > 0 ? (totalLeads / totalTraffic * 100) : 0;
 
-            document.getElementById('overviewContent').innerHTML = html;
-
-            renderSalesBySourceChart(sourceBreakdown);
-            renderSourceShareChart(sourceBreakdown);
-        }
-
-        function renderMonthlyBreakdown() {
-            const fyData = dashboardData.sales[currentYear];
-            if (!fyData) { showError('No data for ' + currentYear); return; }
-
-            const salesData = fyData.sources;
-            const spendData = fyData.spend;
-            const leadsData = fyData.leads;
-            const months = fyData.months;
-
-            // Auto-detect active months
-            let lastActiveMonth = 11;
-            if (currentYear !== 'FY2024/25') {
-                lastActiveMonth = 0;
-                months.forEach((m, idx) => {
-                    const hasData = Object.values(salesData).some(src => (src[m] || 0) > 0);
-                    if (hasData) lastActiveMonth = idx;
-                });
-                lastActiveMonth = Math.max(lastActiveMonth, 0);
-            }
-            const displayMonths = months.slice(0, lastActiveMonth + 1);
-
-            // Build stacked bar data
-            const stackedData = {};
-            Object.keys(salesData).forEach(source => {
-                stackedData[source] = {};
-                displayMonths.forEach(month => {
-                    stackedData[source][month] = salesData[source][month] || 0;
-                });
-            });
-
-            // Build monthly totals and spend
-            const monthlyTotals = {};
-            const monthlySpend = {};
-            displayMonths.forEach(month => {
-                monthlyTotals[month] = 0;
-                monthlySpend[month] = 0;
-                Object.keys(salesData).forEach(source => {
-                    monthlyTotals[month] += salesData[source][month] || 0;
-                    monthlySpend[month] += spendData[source][month] || 0;
-                });
-            });
-
-            const sources = Object.keys(salesData);
-
-            let html = `
-                <div class="chart-grid">
-                    <div class="chart-container full-width">
-                        <div class="chart-title">Monthly Sales by Lead Source (Stacked)</div>
-                        <div class="chart-wrapper large">
-                            <canvas id="chart-stacked-monthly"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-container full-width">
-                        <div class="chart-title">Monthly Sales & Spend Trend</div>
-                        <div class="chart-wrapper large">
-                            <canvas id="chart-sales-spend-trend"></canvas>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // Monthly breakdown tables
             html += `
-                <div class="table-container">
-                    <div class="chart-title">Monthly Sales Breakdown</div>
-                    <table class="data-table">
-                        <thead><tr><th>Lead Source</th>${displayMonths.map(m => `<th class="numeric">${m}</th>`).join('')}<th class="numeric">Total</th></tr></thead>
-                        <tbody>
+                    <tr class="total-row">
+                        <td>Total</td>
+                        <td class="cell-text">${formatCurrency(totalSpend)}</td>
+                        <td class="cell-text">${formatNumber(totalTraffic)}</td>
+                        <td class="cell-text">${formatNumber(totalLeads)}</td>
+                        <td class="cell-text">${formatNumber(totalOpps)}</td>
+                        <td class="cell-text">${formatNumber(totalClients)}</td>
+                        <td class="cell-text">${formatPercent(overallLeadToClient)}</td>
+                        <td class="cell-text">${formatPercent(overallTrafficToLead)}</td>
+                    </tr>
+                </tbody>
             `;
 
-            sources.forEach(source => {
-                let total = 0;
-                html += `<tr><td>${source}</td>`;
-                displayMonths.forEach(month => {
-                    const val = salesData[source][month] || 0;
-                    total += val;
-                    html += `<td class="numeric">${formatNumber(val)}</td>`;
-                });
-                html += `<td class="numeric"><strong>${formatNumber(total)}</strong></td></tr>`;
-            });
+            return html;
+        }
 
-            html += '<tr style="background-color: #f7fafc; font-weight: bold;"><td>Total</td>';
-            displayMonths.forEach(month => {
-                html += `<td class="numeric">${formatNumber(monthlyTotals[month])}</td>`;
-            });
-            const totalAll = Object.values(monthlyTotals).reduce((a, b) => a + b, 0);
-            html += `<td class="numeric">${formatNumber(totalAll)}</td></tr></tbody></table>
-                </div>
-
-                <div class="table-container">
-                    <div class="chart-title">Monthly Spend Breakdown</div>
-                    <table class="data-table">
-                        <thead><tr><th>Lead Source</th>${displayMonths.map(m => `<th class="numeric">${m}</th>`).join('')}<th class="numeric">Total</th></tr></thead>
-                        <tbody>
+        function renderMonthlyTable(sourceName, fy) {
+            let html = `
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th>NZD Spend</th>
+                        <th>Traffic</th>
+                        <th>Leads</th>
+                        <th>Opps</th>
+                        <th>Clients</th>
+                        <th>Lead → Client %</th>
+                        <th>Opp → Client %</th>
+                        <th>Traffic → Lead %</th>
+                    </tr>
+                </thead>
+                <tbody>
             `;
 
-            sources.forEach(source => {
-                let total = 0;
-                html += `<tr><td>${source}</td>`;
-                displayMonths.forEach(month => {
-                    const val = spendData[source][month] || 0;
-                    total += val;
-                    html += `<td class="numeric">${formatCurrency(val)}</td>`;
-                });
-                html += `<td class="numeric"><strong>${formatCurrency(total)}</strong></td></tr>`;
+            const months = fy.months || [];
+            let totalSpend = 0, totalTraffic = 0, totalLeads = 0, totalOpps = 0, totalClients = 0;
+
+            months.forEach(month => {
+                const spend = month.spend || 0;
+                const traffic = month.traffic || 0;
+                const leads = month.leads || 0;
+                const opps = month.opps || 0;
+                const clients = month.clients || 0;
+
+                totalSpend += spend;
+                totalTraffic += traffic;
+                totalLeads += leads;
+                totalOpps += opps;
+                totalClients += clients;
+
+                const leadToClient = leads > 0 ? (clients / leads * 100) : 0;
+                const oppToClient = opps > 0 ? (clients / opps * 100) : 0;
+                const trafficToLead = traffic > 0 ? (leads / traffic * 100) : 0;
+
+                html += `
+                    <tr>
+                        <td>${month.month}</td>
+                        ${renderEditableCell('spend', month, sourceName, 'NZD Spend')}
+                        ${renderEditableCell('traffic', month, sourceName, 'Traffic')}
+                        ${renderEditableCell('leads', month, sourceName, 'Leads')}
+                        ${renderEditableCell('opps', month, sourceName, 'Opps')}
+                        ${renderEditableCell('clients', month, sourceName, 'Clients')}
+                        <td class="cell-text">${formatPercent(leadToClient)}</td>
+                        <td class="cell-text">${formatPercent(oppToClient)}</td>
+                        <td class="cell-text">${formatPercent(trafficToLead)}</td>
+                    </tr>
+                `;
             });
 
-            html += '<tr style="background-color: #f7fafc; font-weight: bold;"><td>Total</td>';
-            displayMonths.forEach(month => {
-                html += `<td class="numeric">${formatCurrency(monthlySpend[month])}</td>`;
-            });
-            const totalSpendAll = Object.values(monthlySpend).reduce((a, b) => a + b, 0);
-            html += `<td class="numeric">${formatCurrency(totalSpendAll)}</td></tr></tbody></table>
-                </div>
+            const avgLeadToClient = totalLeads > 0 ? (totalClients / totalLeads * 100) : 0;
+            const avgOppToClient = totalOpps > 0 ? (totalClients / totalOpps * 100) : 0;
+            const avgTrafficToLead = totalTraffic > 0 ? (totalLeads / totalTraffic * 100) : 0;
 
-                <div class="table-container">
-                    <div class="chart-title">Monthly Leads Breakdown</div>
-                    <table class="data-table">
-                        <thead><tr><th>Lead Source</th>${displayMonths.map(m => `<th class="numeric">${m}</th>`).join('')}<th class="numeric">Total</th></tr></thead>
-                        <tbody>
+            html += `
+                    <tr class="total-row">
+                        <td>Total</td>
+                        <td class="cell-text">${formatCurrency(totalSpend)}</td>
+                        <td class="cell-text">${formatNumber(totalTraffic)}</td>
+                        <td class="cell-text">${formatNumber(totalLeads)}</td>
+                        <td class="cell-text">${formatNumber(totalOpps)}</td>
+                        <td class="cell-text">${formatNumber(totalClients)}</td>
+                        <td class="cell-text">${formatPercent(avgLeadToClient)}</td>
+                        <td class="cell-text">${formatPercent(avgOppToClient)}</td>
+                        <td class="cell-text">${formatPercent(avgTrafficToLead)}</td>
+                    </tr>
+                </tbody>
             `;
 
-            sources.forEach(source => {
-                let total = 0;
-                html += `<tr><td>${source}</td>`;
-                displayMonths.forEach(month => {
-                    const val = leadsData[source][month] || 0;
-                    total += val;
-                    html += `<td class="numeric">${formatNumber(val)}</td>`;
-                });
-                html += `<td class="numeric"><strong>${formatNumber(total)}</strong></td></tr>`;
-            });
+            return html;
+        }
 
-            html += '<tr style="background-color: #f7fafc; font-weight: bold;"><td>Total</td>';
-            displayMonths.forEach(month => {
-                let monthTotal = 0;
-                sources.forEach(source => {
-                    monthTotal += leadsData[source][month] || 0;
-                });
-                html += `<td class="numeric">${formatNumber(monthTotal)}</td>`;
-            });
-            const totalLeadsAll = sources.reduce((sum, source) =>
-                sum + displayMonths.reduce((m, month) => m + (leadsData[source][month] || 0), 0), 0);
-            html += `<td class="numeric">${formatNumber(totalLeadsAll)}</td></tr></tbody></table>
-                </div>
+        function renderEditableCell(metric, month, sourceName, metricLabel) {
+            const value = month[metric] || 0;
+            const colIndex = month[metric + 'Col'] || -1;  // 1-indexed from Apps Script
+            const isDisabled = colIndex === -1;
+
+            if (isDisabled) {
+                return `
+                    <td>
+                        <input type="number" disabled value="${value}"
+                            class="tooltip-container"
+                            title="Column not in spreadsheet">
+                        <div class="tooltip">Column not in spreadsheet</div>
+                    </td>
+                `;
+            }
+
+            const cellId = `cell-${sourceName}-${month.monthKey}-${metric}`;
+            const existingUpdate = pendingUpdates.find(u =>
+                u.sheet === sourceName && u.row === month.row && u.metric === metric
+            );
+            const isDirty = existingUpdate && existingUpdate.value !== value;
+
+            return `
+                <td>
+                    <input type="number"
+                        id="${cellId}"
+                        value="${value}"
+                        class="${isDirty ? 'dirty' : ''}"
+                        data-original="${value}"
+                        data-sheet="${sourceName}"
+                        data-row="${month.row}"
+                        data-col="${colIndex}"
+                        data-metric="${metric}"
+                        data-month="${month.monthKey}">
+                </td>
             `;
+        }
 
-            document.getElementById('monthlyContent').innerHTML = html;
+        function renderClientsChart() {
+            const ctx = document.getElementById('clientsChart');
+            if (!ctx) return;
 
-            // Stacked bar chart
-            const stackedCtx = document.getElementById('chart-stacked-monthly').getContext('2d');
-            const datasets = sources.map((source, idx) => ({
-                label: source,
-                data: displayMonths.map(m => salesData[source][m] || 0),
-                backgroundColor: COLORS[idx % COLORS.length]
-            }));
+            const sourceNames = Object.keys(appData.sources).sort();
+            const fy = getSelectedFYData();
 
-            charts['stackedMonthly'] = new Chart(stackedCtx, {
+            if (!fy) {
+                return;
+            }
+
+            // Collect all months across all sources (fiscal year order)
+            const monthOrder = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+            const months = new Map();
+
+            sourceNames.forEach(sourceName => {
+                const source = appData.sources[sourceName];
+                const sourceFY = source.fiscalYears.find(f => f.label === fy.label);
+                if (sourceFY && sourceFY.months) {
+                    sourceFY.months.forEach(month => {
+                        if (!months.has(month.month)) {
+                            months.set(month.month, {});
+                        }
+                        months.get(month.month)[sourceName] = month.clients || 0;
+                    });
+                }
+            });
+
+            // Sort months in fiscal year order
+            const sortedMonths = Array.from(months.keys()).sort((a, b) => {
+                const aMonthIndex = monthOrder.indexOf(a.substring(0, 3));
+                const bMonthIndex = monthOrder.indexOf(b.substring(0, 3));
+                return aMonthIndex - bMonthIndex;
+            });
+
+            const datasets = sourceNames.map((sourceName, idx) => {
+                return {
+                    label: SOURCE_DISPLAY_NAMES[sourceName] || sourceName,
+                    data: sortedMonths.map(m => months.get(m)[sourceName] || 0),
+                    backgroundColor: COLORS[idx % COLORS.length],
+                    borderColor: COLORS[idx % COLORS.length],
+                    borderWidth: 0
+                };
+            });
+
+            new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: displayMonths,
+                    labels: sortedMonths,
                     datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                        x: { stacked: true },
-                        y: { stacked: true, ticks: { callback: v => formatNumber(v) } }
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                font: { size: 12, family: 'inherit' },
+                                color: '#718096',
+                                padding: 12,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 10,
+                            titleFont: { size: 12 },
+                            bodyFont: { size: 12 },
+                            titleColor: 'white',
+                            bodyColor: 'white'
+                        }
                     },
-                    plugins: { legend: { position: 'top' } }
-                }
-            });
-
-            // Sales & Spend trend
-            const trendCtx = document.getElementById('chart-sales-spend-trend').getContext('2d');
-            charts['salesSpendTrend'] = new Chart(trendCtx, {
-                type: 'line',
-                data: {
-                    labels: displayMonths,
-                    datasets: [
-                        {
-                            label: 'Total Sales',
-                            data: displayMonths.map(m => monthlyTotals[m]),
-                            borderColor: '#4299e1',
-                            backgroundColor: 'rgba(66, 153, 225, 0.1)',
-                            borderWidth: 2,
-                            yAxisID: 'y',
-                            tension: 0.3,
-                            pointRadius: 4,
-                            pointBackgroundColor: '#4299e1'
-                        },
-                        {
-                            label: 'Total Spend ($)',
-                            data: displayMonths.map(m => monthlySpend[m]),
-                            borderColor: '#ed8936',
-                            backgroundColor: 'rgba(237, 137, 54, 0.1)',
-                            borderWidth: 2,
-                            yAxisID: 'y1',
-                            tension: 0.3,
-                            pointRadius: 4,
-                            pointBackgroundColor: '#ed8936'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { display: true, position: 'top' } },
-                    scales: {
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            title: { display: true, text: 'Sales' },
-                            ticks: { callback: v => formatNumber(v) }
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            title: { display: true, text: 'Spend ($)' },
-                            grid: { drawOnChartArea: false },
-                            ticks: { callback: v => formatCurrency(v) }
-                        }
-                    }
-                }
-            });
-        }
-
-        function renderSalesBySourceChart(sourceBreakdown) {
-            const sortedSources = Object.keys(sourceBreakdown)
-                .sort((a, b) => sourceBreakdown[b].sales - sourceBreakdown[a].sales);
-            const values = sortedSources.map(s => sourceBreakdown[s].sales);
-
-            const ctx = document.getElementById('chart-sales-by-source').getContext('2d');
-            charts['salesBySource'] = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: sortedSources,
-                    datasets: [{
-                        label: 'Sales',
-                        data: values,
-                        backgroundColor: COLORS.slice(0, sortedSources.length),
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
                     scales: {
                         x: {
-                            beginAtZero: true,
-                            ticks: { callback: v => formatNumber(v) }
-                        }
-                    }
-                }
-            });
-        }
-
-        function renderSourceShareChart(sourceBreakdown) {
-            const sources = Object.keys(sourceBreakdown);
-            const values = sources.map(s => sourceBreakdown[s].sales);
-
-            const ctx = document.getElementById('chart-source-share').getContext('2d');
-            charts['sourceShare'] = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: sources,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: COLORS,
-                        borderColor: 'white',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'right' },
-                        tooltip: {
-                            callbacks: {
-                                label: ctx => {
-                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                                    const pct = ((ctx.parsed / total) * 100).toFixed(1);
-                                    return `${pct}%`;
-                                }
+                            stacked: true,
+                            ticks: {
+                                font: { size: 12 },
+                                color: '#718096'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            ticks: {
+                                font: { size: 12 },
+                                color: '#718096'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
                             }
                         }
                     }
@@ -1473,217 +1107,218 @@
             });
         }
 
-        function renderChannelComparison() {
-            const fyData = dashboardData.sales[currentYear];
-            if (!fyData) { showError('No data for ' + currentYear); return; }
+        function setupEventListeners() {
+            document.getElementById('refreshBtn').addEventListener('click', async () => {
+                showLoadingOverlay(true);
+                try {
+                    await fetchData();
+                    setupFYControls();
+                    renderContent();
+                    showLoadingOverlay(false);
+                    showToast('Dashboard refreshed', 'success');
+                } catch (error) {
+                    showLoadingOverlay(false);
+                    showErrorBanner('Failed to refresh data. Please try again.');
+                }
+            });
 
-            const salesData = fyData.sources;
-            const spendData = fyData.spend;
-            const leadsData = fyData.leads;
-            const months = fyData.months;
+            document.getElementById('saveBtn').addEventListener('click', saveChanges);
 
-            // Auto-detect active months
-            let lastActiveMonth = 11;
-            if (currentYear !== 'FY2024/25') {
-                lastActiveMonth = 0;
-                months.forEach((m, idx) => {
-                    const hasData = Object.values(salesData).some(src => (src[m] || 0) > 0);
-                    if (hasData) lastActiveMonth = idx;
-                });
-                lastActiveMonth = Math.max(lastActiveMonth, 0);
+            // Event delegation for editable inputs
+            document.addEventListener('change', (e) => {
+                if (e.target.type === 'number' && !e.target.disabled) {
+                    handleInputChange(e.target);
+                }
+            });
+        }
+
+        function handleInputChange(input) {
+            const originalValue = parseFloat(input.dataset.original);
+            const currentValue = parseFloat(input.value);
+            const sheet = input.dataset.sheet;
+            const row = parseInt(input.dataset.row);
+            const col = parseInt(input.dataset.col);
+            const metric = input.dataset.metric;
+            const month = input.dataset.month;
+
+            if (currentValue !== originalValue) {
+                input.classList.add('dirty');
+
+                // Add or update pending update
+                const existingIndex = pendingUpdates.findIndex(u =>
+                    u.sheet === sheet && u.row === row && u.metric === metric
+                );
+
+                if (existingIndex >= 0) {
+                    pendingUpdates[existingIndex].value = currentValue;
+                    pendingUpdates[existingIndex].col = col;
+                } else {
+                    pendingUpdates.push({ sheet, row, col, value: currentValue, metric, month });
+                }
+            } else {
+                input.classList.remove('dirty');
+                pendingUpdates = pendingUpdates.filter(u =>
+                    !(u.sheet === sheet && u.row === row && u.metric === metric)
+                );
             }
-            const displayMonths = months.slice(0, lastActiveMonth + 1);
 
-            // Build source comparison data with channel enrichment
-            const sourceData = {};
-            Object.keys(salesData).forEach(source => {
-                const sales = displayMonths.reduce((sum, m) => sum + (salesData[source][m] || 0), 0);
-                const spend = displayMonths.reduce((sum, m) => sum + (spendData[source][m] || 0), 0);
-                const leads = displayMonths.reduce((sum, m) => sum + (leadsData[source][m] || 0), 0);
-                const costPerLead = leads > 0 ? (spend / leads).toFixed(2) : 0;
-                const costPerSale = sales > 0 ? (spend / sales).toFixed(2) : 0;
-                const leadToSaleConv = leads > 0 ? ((sales / leads) * 100).toFixed(1) : 0;
+            updateSaveButton();
+        }
 
-                // Enrich with traffic data from Direct/Organic tabs if available
-                let traffic = 0;
-                let opps = 0;
-                let clients = 0;
+        function updateSaveButton() {
+            const saveBtn = document.getElementById('saveBtn');
+            const saveBtnText = document.getElementById('saveBtnText');
 
-                // Map source names to channel data
-                if (source.includes('Direct')) {
-                    const directFY = dashboardData.direct[currentYear];
-                    if (directFY && directFY.traffic) {
-                        traffic = displayMonths.reduce((sum, m) => sum + (directFY.traffic[m] || 0), 0);
-                        opps = displayMonths.reduce((sum, m) => sum + (directFY.opps[m] || 0), 0);
-                        clients = displayMonths.reduce((sum, m) => sum + (directFY.clients[m] || 0), 0);
-                    }
-                } else if (source.includes('Organic')) {
-                    const organicFY = dashboardData.organic[currentYear];
-                    if (organicFY && organicFY.traffic) {
-                        traffic = displayMonths.reduce((sum, m) => sum + (organicFY.traffic[m] || 0), 0);
-                        opps = displayMonths.reduce((sum, m) => sum + (organicFY.opps[m] || 0), 0);
-                        clients = displayMonths.reduce((sum, m) => sum + (organicFY.clients[m] || 0), 0);
-                    }
-                } else if (source.includes('Paid Social')) {
-                    const paidSocialFY = dashboardData.paidSocial[currentYear];
-                    if (paidSocialFY && paidSocialFY.traffic) {
-                        traffic = displayMonths.reduce((sum, m) => sum + (paidSocialFY.traffic[m] || 0), 0);
-                    }
+            if (pendingUpdates.length > 0) {
+                saveBtn.classList.remove('hidden');
+                saveBtnText.textContent = `Save Changes (${pendingUpdates.length})`;
+            } else {
+                saveBtn.classList.add('hidden');
+            }
+        }
+
+        async function saveChanges() {
+            if (pendingUpdates.length === 0) return;
+
+            const saveBtn = document.getElementById('saveBtn');
+            const spinner = saveBtn.querySelector('.spinner');
+            const saveBtnText = document.getElementById('saveBtnText');
+
+            saveBtn.disabled = true;
+            spinner.style.display = 'inline-block';
+            saveBtnText.textContent = 'Saving...';
+
+            try {
+                // Format updates for the Apps Script API
+                const updates = pendingUpdates.map(update => ({
+                    sheet: update.sheet,
+                    row: update.row,
+                    col: update.col,
+                    value: update.value
+                }));
+
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ updates })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
 
-                sourceData[source] = {
-                    sales, spend, leads, traffic, opps, clients,
-                    costPerLead, costPerSale, leadToSaleConv
-                };
-            });
+                // Clear pending updates
+                document.querySelectorAll('input[type="number"].dirty').forEach(input => {
+                    input.dataset.original = input.value;
+                    input.classList.remove('dirty');
+                });
 
-            const sources = Object.keys(sourceData);
+                pendingUpdates = [];
+                updateSaveButton();
+                updateLastUpdatedTime();
 
-            let html = `
-                <div class="chart-grid">
-                    <div class="chart-container full-width">
-                        <div class="chart-title">Sales vs Leads vs Spend by Channel</div>
-                        <div class="chart-wrapper large">
-                            <canvas id="chart-channel-comparison"></canvas>
-                        </div>
-                    </div>
-                </div>
+                saveBtn.disabled = false;
+                spinner.style.display = 'none';
+                saveBtnText.textContent = 'Save Changes (0)';
 
-                <div class="table-container">
-                    <div class="chart-title">Channel Comparison Details</div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Source</th>
-                                <th class="numeric">Sales</th>
-                                <th class="numeric">Leads</th>
-                                <th class="numeric">Traffic</th>
-                                <th class="numeric">Spend</th>
-                                <th class="numeric">Cost/Lead</th>
-                                <th class="numeric">Cost/Sale</th>
-                                <th class="numeric">Lead→Sale %</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-
-            sources.forEach(source => {
-                const data = sourceData[source];
-                html += `<tr>
-                    <td><strong>${source}</strong></td>
-                    <td class="numeric">${formatNumber(data.sales)}</td>
-                    <td class="numeric">${formatNumber(data.leads)}</td>
-                    <td class="numeric">${formatNumber(data.traffic)}</td>
-                    <td class="numeric">${formatCurrency(data.spend)}</td>
-                    <td class="numeric">${formatCurrency(data.costPerLead)}</td>
-                    <td class="numeric">${formatCurrency(data.costPerSale)}</td>
-                    <td class="numeric">${formatPercent(data.leadToSaleConv)}</td>
-                </tr>`;
-            });
-
-            html += '</tbody></table></div>';
-
-            document.getElementById('comparisonContent').innerHTML = html;
-
-            // Grouped bar chart
-            const ctx = document.getElementById('chart-channel-comparison').getContext('2d');
-            charts['channelComparison'] = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: sources,
-                    datasets: [
-                        {
-                            label: 'Sales',
-                            data: sources.map(s => sourceData[s].sales),
-                            backgroundColor: '#4299e1',
-                            order: 1
-                        },
-                        {
-                            label: 'Leads',
-                            data: sources.map(s => sourceData[s].leads),
-                            backgroundColor: '#48bb78',
-                            order: 1
-                        },
-                        {
-                            label: 'Spend ($)',
-                            data: sources.map(s => sourceData[s].spend),
-                            backgroundColor: '#ed8936',
-                            yAxisID: 'y1',
-                            order: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: true, position: 'top' } },
-                    scales: {
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            title: { display: true, text: 'Sales & Leads' },
-                            ticks: { callback: v => formatNumber(v) }
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            title: { display: true, text: 'Spend ($)' },
-                            grid: { drawOnChartArea: false },
-                            ticks: { callback: v => formatCurrency(v) }
-                        }
-                    }
-                }
-            });
+                showToast('Changes saved successfully', 'success');
+            } catch (error) {
+                console.error('Save error:', error);
+                saveBtn.disabled = false;
+                spinner.style.display = 'none';
+                saveBtnText.textContent = `Save Changes (${pendingUpdates.length})`;
+                showToast('Failed to save changes. Please try again.', 'error');
+            }
         }
 
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
-        }
-
-        function refreshData() {
-            const btn = document.getElementById('refreshBtn');
-            btn.classList.add('loading');
-            btn.disabled = true;
-            loadData().then(() => {
-                btn.classList.remove('loading');
-                btn.disabled = false;
-            }).catch(() => {
-                btn.classList.remove('loading');
-                btn.disabled = false;
-            });
-        }
-
-        function updateLastRefreshed() {
+        function updateLastUpdatedTime() {
             const now = new Date();
-            document.getElementById('lastUpdated').textContent = now.toLocaleString();
+            const timeStr = now.toLocaleTimeString('en-NZ', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            document.getElementById('lastUpdated').textContent = `Updated: ${timeStr}`;
         }
 
-        function formatNumber(num) {
-            if (num === null || num === undefined) return '0';
-            if (typeof num === 'string') num = parseFloat(num);
-            if (isNaN(num)) return '0';
-            return Math.round(num).toLocaleString('en-US', { maximumFractionDigits: 0 });
+        function aggregateDataByFY(fyLabel) {
+            const sourceNames = Object.keys(appData.sources);
+            let totalTraffic = 0, totalLeads = 0, totalOpps = 0, totalClients = 0, totalSpend = 0;
+
+            sourceNames.forEach(sourceName => {
+                const source = appData.sources[sourceName];
+                const fy = source.fiscalYears.find(f => f.label === fyLabel);
+                if (fy && fy.totals) {
+                    totalTraffic += fy.totals.traffic || 0;
+                    totalLeads += fy.totals.leads || 0;
+                    totalOpps += fy.totals.opps || 0;
+                    totalClients += fy.totals.clients || 0;
+                    totalSpend += fy.totals.spend || 0;
+                }
+            });
+
+            const leadToClientPercent = totalLeads > 0 ? (totalClients / totalLeads * 100) : 0;
+
+            return {
+                totalTraffic,
+                totalLeads,
+                totalOpps,
+                totalClients,
+                totalSpend,
+                leadToClientPercent
+            };
         }
 
-        function formatCurrency(num) {
-            if (num === null || num === undefined) return '$0';
-            if (typeof num === 'string') num = parseFloat(num);
-            if (isNaN(num)) return '$0';
-            return '$' + Math.round(num).toLocaleString('en-US', { maximumFractionDigits: 0 });
+        function getSelectedFYData() {
+            if (!selectedFY) return null;
+            for (const source of Object.values(appData.sources)) {
+                const fy = source.fiscalYears.find(f => f.label === selectedFY);
+                if (fy) return fy;
+            }
+            return null;
         }
 
-        function formatPercent(num) {
-            if (num === null || num === undefined) return '0.0%';
-            if (typeof num === 'string') num = parseFloat(num);
-            if (isNaN(num)) return '0.0%';
-            return parseFloat(num).toFixed(1) + '%';
+        function showLoadingOverlay(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
         }
+
+        function showErrorBanner(message) {
+            const content = document.getElementById('mainContent');
+            const banner = document.createElement('div');
+            banner.className = 'error-banner';
+            banner.textContent = message;
+            content.insertBefore(banner, content.firstChild);
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // ==================== FORMATTING UTILITIES ====================
+        function formatCurrency(value) {
+            if (value === 0 || !value) return '$0';
+            return `$${Math.round(value).toLocaleString('en-NZ')}`;
+        }
+
+        function formatNumber(value) {
+            if (!value) return '0';
+            return value.toLocaleString('en-NZ');
+        }
+
+        function formatPercent(value) {
+            if (!value || value === 0) return '—';
+            if (isNaN(value)) return '—';
+            return `${value.toFixed(1)}%`;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
