@@ -919,7 +919,12 @@
         function numVal(v) {
             if (v === null || v === undefined || v === '') return 0;
             if (typeof v === 'number') return v;
-            const n = parseFloat(String(v).replace(/[$,\s]/g, ''));
+            const s = String(v).trim();
+            // Handle error values and dashes
+            if (s === '-' || s.startsWith('#') || s === 'N/A') return 0;
+            // Strip currency prefixes (NZD, USD, $), commas, whitespace
+            const cleaned = s.replace(/^(NZD|USD|AUD|EUR|GBP)\s*/i, '').replace(/[$,\s]/g, '');
+            const n = parseFloat(cleaned);
             return isNaN(n) ? 0 : n;
         }
 
