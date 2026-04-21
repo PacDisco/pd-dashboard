@@ -38,6 +38,10 @@
     .card .conv { font-size: 12px; color: var(--muted); margin-top: 4px; }
     .card .conv b { color: #86efac; font-weight: 600; }
     .card .conv .denom { color: var(--muted); font-size: 11px; }
+    .conv-toggle { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .conv-toggle .conv-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
+    .conv-toggle .tbtn { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; user-select: none; }
+    .conv-toggle .tbtn.active { background: #86efac; color: #052e16; border-color: #86efac; font-weight: 600; }
     .card.sale { border-left: 3px solid var(--hot-sale); }
     .card.opp { border-left: 3px solid var(--hot-opp); }
     .card.app { border-left: 3px solid var(--hot-app); }
@@ -112,6 +116,14 @@
     </header>
 
     <div id="error" class="error" hidden></div>
+
+    <div class="conv-toggle" id="conv-toggle">
+      <span class="conv-label">Close rate window:</span>
+      <span class="tbtn active" data-window="all">All time</span>
+      <span class="tbtn" data-window="12m">12 months</span>
+      <span class="tbtn" data-window="6m">6 months</span>
+      <span class="tbtn" data-window="3m">3 months</span>
+    </div>
 
     <section class="metrics">
       <div class="card total">
@@ -226,6 +238,8 @@
 
     let currentSummary = null;
 
+    let activeWindow = "all";
+
     function renderSummary(s) {
       currentSummary = s || null;
       const appPipes = s?.pipelinesScanned?.applicant?.length ?? 0;
@@ -234,12 +248,14 @@
         ? `Generated ${fmtRelative(s.generatedAt)} · ${appPipes} Applicant + ${oppPipes} Opportunity pipelines · last ${s.recencyDays ?? 14} days · SQL threshold ${s.sqlThreshold ?? 30} · excludes Sale + Closed Won`
         : "Feed has not been generated yet.";
       document.getElementById("meta").textContent = meta;
-      renderConversions(s?.conversions);
+      renderConversions();
       // Counts are rendered from the filtered set by renderMetrics() — called
       // from render() on every filter/search change.
     }
 
-    function renderConversions(conv) {
+    function renderConversions() {
+      const s = currentSummary;
+      const conv = s?.conversionsByWindow?.[activeWindow] || s?.conversions || {};
       const set = (id, c) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -251,6 +267,15 @@
       set("c-app",   conv?.Applicant);
       set("c-sql",   conv?.SQL);
     }
+
+    document.getElementById("conv-toggle").addEventListener("click", e => {
+      const btn = e.target.closest(".tbtn");
+      if (!btn) return;
+      document.querySelectorAll("#conv-toggle .tbtn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeWindow = btn.dataset.window;
+      renderConversions();
+    });
 
     function renderMetrics(filtered) {
       const total = filtered.length;
