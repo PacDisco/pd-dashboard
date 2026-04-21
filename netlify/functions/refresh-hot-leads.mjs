@@ -29,26 +29,24 @@ const CONFIG = {
   // Verified against live data: 8,359 contacts match in a 14-day window.
   companyTagValue: "Pacific Discovery",
 
-  // Pre-filter contacts by lifecyclestage so the function doesn't pull
-  // newsletter subscribers / alumni / random "other" contacts.
+  // Pre-filter contacts by lifecyclestage. "customer" is excluded because
+  // this list is for mining still-to-close leads — customers have already
+  // paid a deposit.
   contactLifecycleStages: [
     "lead",
     "marketingqualifiedlead",
     "salesqualifiedlead",
     "opportunity",
-    "customer",
   ],
 
-  // Pre-filter on hs_lead_status to only pull contacts who are already in
-  // (or past) the applicant stage. This is what narrows 5,500 PD contacts
-  // down to ~hundreds and keeps the function well under HubSpot's 4 req/s
-  // search limit. Leave empty to skip this filter entirely.
+  // Pre-filter on hs_lead_status. "Converted" is excluded for the same
+  // reason — converted contacts have already paid. We want leads still in
+  // flight: Application Started, Admissions, Interview Complete, Opportunity.
   contactLeadStatuses: [
     "Application Started",
     "Admissions",
     "Interview Complete",
     "Opportunity",
-    "Converted",
   ],
 
   // Only deals in pipelines whose NAME matches one of these patterns are used
@@ -61,9 +59,10 @@ const CONFIG = {
     /summer/i,
   ],
 
-  // Stage-label classification (deal-side).
+  // Stage-label classification (deal-side). Sale + Closed Won are explicitly
+  // NOT hot — this dashboard is a mining list of leads still to close.
   dealStageBuckets: [
-    { bucket: "Sale",        hot: true,  patterns: [/deposit (received|paid|processed)/i, /awaiting deposit/i, /^deposit$/i] },
+    { bucket: "Sale",        hot: false, patterns: [/deposit (received|paid|processed)/i, /awaiting deposit/i, /^deposit$/i] },
     { bucket: "Opportunity", hot: true,  patterns: [/application fee/i, /app.*fee/i, /interview/i, /^opportunity$/i] },
     { bucket: "Applicant",   hot: true,  patterns: [/application started/i, /applicant/i, /^admissions$/i] },
     { bucket: "SQL",         hot: false, patterns: [/sales qualified/i, /^sql$/i, /qualifying/i] },
@@ -379,8 +378,8 @@ export default async () => {
     });
   }
 
-  // 6. Sort: hottest first, then freshest.
-  const bucketRank = { "Sale": 0, "Opportunity": 1, "Applicant": 2 };
+  // 6. Sort: Opportunity (closer to close) before Applicant, then freshest.
+  const bucketRank = { "Opportunity": 0, "Applicant": 1 };
   records.sort((a, b) => {
     const rd = (bucketRank[a.bucket] ?? 99) - (bucketRank[b.bucket] ?? 99);
     if (rd) return rd;
@@ -395,7 +394,6 @@ export default async () => {
     pipelinesScanned: allPipelines.filter(p => matchesPipelineName(p.label)).map(p => ({ id: p.id, label: p.label })),
     counts: {
       total: records.length,
-      Sale: records.filter(r => r.bucket === "Sale").length,
       Opportunity: records.filter(r => r.bucket === "Opportunity").length,
       Applicant: records.filter(r => r.bucket === "Applicant").length,
     },
