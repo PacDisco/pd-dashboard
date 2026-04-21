@@ -369,28 +369,35 @@ async function batchReadDeals(dealIds) {
 
 // Historical conversion rates across multiple cohorts (time windows).
 // For each window, denominator = contacts who entered the stage WITHIN window,
-// numerator = those contacts who later became customer (customer entry can be
-// any time — we care where they started, not when they closed).
+// numerator = those contacts who later became customer.
 //
-// Windows: All time, 12 months, 6 months, 3 months. Rates per-window are
-// pre-computed server-side so the dashboard toggle is instant.
+// Each query is wrapped so one failure doesn't sink the whole calculation.
+// Errors surface in result.diagnostics so the dashboard can display them.
 async function computeConversionRatesAllWindows() {
   const baseFilter = { propertyName: "company_tag", operator: "EQ", value: CONFIG.companyTagValue };
-  async function countAt(filters) {
-    const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
-      method: "POST",
-      body: JSON.stringify({
-        limit: 1,
-        filterGroups: [{ filters: [baseFilter, ...filters] }],
-      }),
-    });
-    await sleep(300);
-    return data.total || 0;
+  const diagnostics = [];
+
+  async function countAt(label, filters) {
+    try {
+      const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
+        method: "POST",
+        body: JSON.stringify({
+          limit: 1,
+          filterGroups: [{ filters: [baseFilter, ...filters] }],
+        }),
+      });
+      await sleep(300);
+      return data.total ?? 0;
+    } catch (err) {
+      diagnostics.push(`${label}: ${err.message.slice(0, 200)}`);
+      await sleep(300);
+      return null; // null signals failure so the rate becomes null, not 0
+    }
   }
 
   const HAS = name => ({ propertyName: name, operator: "HAS_PROPERTY" });
   const GTE = (name, iso) => ({ propertyName: name, operator: "GTE", value: iso });
-  const pct = (num, den) => den > 0 ? Math.round((num / den) * 1000) / 10 : null;
+  const pct = (num, den) => (den != null && num != null && den > 0) ? Math.round((num / den) * 1000) / 10 : null;
 
   const now = Date.now();
   const iso = days => new Date(now - days * 86400000).toISOString();
@@ -402,7 +409,7 @@ async function computeConversionRatesAllWindows() {
     { key: "3m",   label: "Last 3 months",  stageDateGte: iso(90) },
   ];
 
-  const results = {};
+  const results = { diagnostics };
 
   for (const w of WINDOWS) {
     const sqlEntered = w.stageDateGte
@@ -415,12 +422,12 @@ async function computeConversionRatesAllWindows() {
       ? [GTE("became_an_application_started_date", w.stageDateGte)]
       : [HAS("became_an_application_started_date")];
 
-    const everSQL   = await countAt(sqlEntered);
-    const sqlToCust = await countAt([...sqlEntered, HAS("hs_v2_date_entered_customer")]);
-    const everOpp   = await countAt(oppEntered);
-    const oppToCust = await countAt([...oppEntered, HAS("hs_v2_date_entered_customer")]);
-    const everApp   = await countAt(appEntered);
-    const appToCust = await countAt([...appEntered, HAS("hs_v2_date_entered_customer")]);
+    const everSQL   = await countAt(`${w.key}/everSQL`,   sqlEntered);
+    const sqlToCust = await countAt(`${w.key}/sqlToCust`, [...sqlEntered, HAS("hs_v2_date_entered_customer")]);
+    const everOpp   = await countAt(`${w.key}/everOpp`,   oppEntered);
+    const oppToCust = await countAt(`${w.key}/oppToCust`, [...oppEntered, HAS("hs_v2_date_entered_customer")]);
+    const everApp   = await countAt(`${w.key}/everApp`,   appEntered);
+    const appToCust = await countAt(`${w.key}/appToCust`, [...appEntered, HAS("hs_v2_date_entered_customer")]);
 
     results[w.key] = {
       label: w.label,
