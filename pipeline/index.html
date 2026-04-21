@@ -216,19 +216,34 @@
       el.hidden = false;
     }
 
+    let currentSummary = null;
+
     function renderSummary(s) {
-      if (!s) return;
-      document.getElementById("m-total").textContent = s.counts?.total ?? 0;
-      document.getElementById("m-opp").textContent = s.counts?.Opportunity ?? 0;
-      document.getElementById("m-app").textContent = s.counts?.Applicant ?? 0;
-      document.getElementById("m-sql").textContent = s.counts?.SQL ?? 0;
-      document.getElementById("m-value").textContent = fmtMoney(s.totalPipelineValue || 0);
-      const appPipes = s.pipelinesScanned?.applicant?.length ?? 0;
-      const oppPipes = s.pipelinesScanned?.opportunity?.length ?? 0;
-      const meta = s.generatedAt
+      currentSummary = s || null;
+      const appPipes = s?.pipelinesScanned?.applicant?.length ?? 0;
+      const oppPipes = s?.pipelinesScanned?.opportunity?.length ?? 0;
+      const meta = s?.generatedAt
         ? `Generated ${fmtRelative(s.generatedAt)} · ${appPipes} Applicant + ${oppPipes} Opportunity pipelines · last ${s.recencyDays ?? 14} days · SQL threshold ${s.sqlThreshold ?? 30} · excludes Sale + Closed Won`
         : "Feed has not been generated yet.";
       document.getElementById("meta").textContent = meta;
+      // Counts are rendered from the filtered set by renderMetrics() — called
+      // from render() on every filter/search change.
+    }
+
+    function renderMetrics(filtered) {
+      const total = filtered.length;
+      const opp   = filtered.filter(r => r.bucket === "Opportunity").length;
+      const app   = filtered.filter(r => r.bucket === "Applicant").length;
+      const sql   = filtered.filter(r => r.bucket === "SQL").length;
+      const value = filtered.reduce((s, r) => s + (r.amount || 0), 0);
+      const showingAll = activeBucket === "all" && !query;
+      const totalLabel = document.querySelector(".card.total .label");
+      if (totalLabel) totalLabel.textContent = showingAll ? "Active Leads" : "Filtered Leads";
+      document.getElementById("m-total").textContent = total;
+      document.getElementById("m-opp").textContent = opp;
+      document.getElementById("m-app").textContent = app;
+      document.getElementById("m-sql").textContent = sql;
+      document.getElementById("m-value").textContent = fmtMoney(value);
     }
 
     function matches(r) {
@@ -246,9 +261,10 @@
 
     function render() {
       const rows = allRecords.filter(matches);
+      renderMetrics(rows);
       const tbody = document.getElementById("tbody");
       if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty">No matching hot leads.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty">No matching hot leads.</td></tr>`;
         return;
       }
       tbody.innerHTML = rows.map(r => {
