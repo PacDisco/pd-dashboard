@@ -129,7 +129,6 @@
       <div class="card total">
         <div class="label">Active Leads</div>
         <div class="value" id="m-total">—</div>
-        <div class="conv" id="c-total"></div>
       </div>
       <div class="card opp">
         <div class="label">Opportunity (app + fee)</div>
@@ -273,7 +272,6 @@
         }
         el.innerHTML = `<b>${c.rate}%</b> → Sale <span class="denom">(${c.converted.toLocaleString()} / ${c.passed.toLocaleString()})</span>`;
       };
-      set("c-total", conv?.ActiveLeads, "ActiveLeads");
       set("c-opp",   conv?.Opportunity, "Opportunity");
       set("c-app",   conv?.Applicant,   "Applicant");
       set("c-sql",   conv?.SQL,         "SQL");
