@@ -46,6 +46,14 @@ const SALE_STAGE_PATTERNS = [
   /closed\s*won/i,
   /payment\s*complete/i,
 ];
+// Stages that disqualify a deal from Applications / Opportunities denominators.
+// Matches the excludedStagePatterns in refresh-hot-leads.mjs so the dashboard
+// tells a consistent story.
+const EXCLUDED_STAGE_PATTERNS = [
+  /closed\s*lost/i,
+  /unsuccessful/i,
+  /college\s*credit/i,
+];
 
 function hubspotHeaders() {
   const token = process.env.HUBSPOT_TOKEN;
@@ -91,14 +99,23 @@ export default async (req) => {
 
     const appFeeStages = [];
     const saleStageIdSet = new Set();
+    const excludedStageIdSet = new Set();
+    // Scan excluded stages across BOTH applicant and opportunity pipelines,
+    // because deals in either can end up at Closed Lost / College Credit.
     for (const p of pipelines) {
-      if (!matches(p.label, OPPORTUNITY_PIPELINE_PATTERNS)) continue;
+      const isOpp = matches(p.label, OPPORTUNITY_PIPELINE_PATTERNS);
+      const isApp = matches(p.label, APPLICANT_PIPELINE_PATTERNS);
+      if (!isOpp && !isApp) continue;
       for (const s of p.stages) {
-        if (matches(s.label, APP_FEE_STAGE_PATTERNS)) appFeeStages.push({ pipelineId: p.id, stageId: s.id });
-        if (matches(s.label, SALE_STAGE_PATTERNS)) saleStageIdSet.add(s.id);
+        if (matches(s.label, EXCLUDED_STAGE_PATTERNS)) excludedStageIdSet.add(s.id);
+        if (isOpp) {
+          if (matches(s.label, APP_FEE_STAGE_PATTERNS)) appFeeStages.push({ pipelineId: p.id, stageId: s.id });
+          if (matches(s.label, SALE_STAGE_PATTERNS)) saleStageIdSet.add(s.id);
+        }
       }
     }
     const saleStageIds = [...saleStageIdSet];
+    const excludedStageIds = [...excludedStageIdSet];
 
     const GTE = (name, v) => ({ propertyName: name, operator: "GTE", value: String(v) });
     const LTE = (name, v) => ({ propertyName: name, operator: "LTE", value: String(v) });
@@ -131,27 +148,35 @@ export default async (req) => {
       // 1. PD contacts created in window
       countContacts([GTE("createdate", startMs), LTE("createdate", endMs)]),
 
-      // 2. Applications (deals in PD Applications pipeline created in window)
+      // 2. Applications (deals in PD Applications pipeline created in window,
+      //    excluding deals now at Closed Lost / Unsuccessful / College Credit).
       applicantPipelineIds.length
         ? countDeals([{ filters: [
             { propertyName: "pipeline", operator: "IN", values: applicantPipelineIds },
             GTE("createdate", startMs), LTE("createdate", endMs),
+            ...(excludedStageIds.length
+              ? [{ propertyName: "dealstage", operator: "NOT_IN", values: excludedStageIds }]
+              : []),
           ]}])
         : Promise.resolve(0),
 
-      // 3. Opportunities: deals that entered App Fee Received stage in window.
+      // 3. Opportunities: deals that entered App Fee Received stage in window,
+      //    excluding deals now at Closed Lost / Unsuccessful / College Credit.
       //    One filterGroup per pipeline/stage pair (OR across groups).
-      //    HubSpot allows up to 5 filterGroups per search — we have 5 opp
-      //    pipelines with 1 app-fee stage each, so this fits in one request.
+      //    HubSpot allows up to 5 filterGroups per search.
       (async () => {
         if (!appFeeStages.length) return 0;
         let total = 0;
+        const exclusion = excludedStageIds.length
+          ? [{ propertyName: "dealstage", operator: "NOT_IN", values: excludedStageIds }]
+          : [];
         for (let i = 0; i < appFeeStages.length; i += 5) {
           const chunk = appFeeStages.slice(i, i + 5);
           const fg = chunk.map(p => ({ filters: [
             { propertyName: "pipeline", operator: "EQ", value: p.pipelineId },
             GTE(`hs_v2_date_entered_${p.stageId}`, startMs),
             LTE(`hs_v2_date_entered_${p.stageId}`, endMs),
+            ...exclusion,
           ]}));
           total += await countDeals(fg);
         }
