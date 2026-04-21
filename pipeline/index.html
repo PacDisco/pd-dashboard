@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hot Leads · Pacific Discovery / Pure Exploration</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #0b1220;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #f59e0b;
+      --hot-sale: #22c55e;
+      --hot-opp: #3b82f6;
+      --hot-app: #a78bfa;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 24px 28px 56px; }
+    header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 18px; }
+    h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+    .meta { font-size: 13px; color: var(--muted); }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .card .value { font-size: 26px; font-weight: 600; margin-top: 4px; }
+    .card.sale { border-left: 3px solid var(--hot-sale); }
+    .card.opp { border-left: 3px solid var(--hot-opp); }
+    .card.app { border-left: 3px solid var(--hot-app); }
+    .card.total { border-left: 3px solid var(--accent); }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .filters input[type=search] {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; font-size: 14px; min-width: 220px;
+    }
+    .chip {
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2);
+      color: var(--muted); cursor: pointer; font-size: 13px; user-select: none;
+    }
+    .chip.active { background: var(--accent); color: #1a1206; border-color: var(--accent); font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13.5px; vertical-align: top; }
+    th { background: var(--panel-2); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; font-weight: 600; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .bucket { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .bucket.Sale { background: rgba(34,197,94,0.15); color: var(--hot-sale); }
+    .bucket.Opportunity { background: rgba(59,130,246,0.15); color: var(--hot-opp); }
+    .bucket.Applicant { background: rgba(167,139,250,0.15); color: var(--hot-app); }
+    .urgency { font-weight: 600; }
+    .urgency.warn { color: var(--accent); }
+    .urgency.danger { color: var(--danger); }
+    .amount { font-variant-numeric: tabular-nums; text-align: right; }
+    a { color: #93c5fd; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .name-cell { font-weight: 600; }
+    .sub { color: var(--muted); font-size: 12px; }
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .error { background: rgba(239,68,68,0.15); border: 1px solid var(--danger); color: #fecaca; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
+    @media (max-width: 760px) {
+      .wrap { padding: 16px; }
+      table { font-size: 12.5px; }
+      th, td { padding: 8px; }
+      .hide-sm { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Hot Leads · Pacific Discovery</h1>
+        <div class="meta" id="meta">Loading…</div>
+      </div>
+      <div class="meta" id="refresh-info"></div>
+    </header>
+
+    <div id="error" class="error" hidden></div>
+
+    <section class="metrics">
+      <div class="card total">
+        <div class="label">Total Hot</div>
+        <div class="value" id="m-total">—</div>
+      </div>
+      <div class="card sale">
+        <div class="label">Sale (deposit in)</div>
+        <div class="value" id="m-sale">—</div>
+      </div>
+      <div class="card opp">
+        <div class="label">Opportunity (app + fee)</div>
+        <div class="value" id="m-opp">—</div>
+      </div>
+      <div class="card app">
+        <div class="label">Applicant (no fee)</div>
+        <div class="value" id="m-app">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Pipeline Value</div>
+        <div class="value" id="m-value">—</div>
+      </div>
+    </section>
+
+    <div class="filters">
+      <input id="q" type="search" placeholder="Search name, email, program, owner…" />
+      <span class="chip active" data-bucket="all">All</span>
+      <span class="chip" data-bucket="Sale">Sale</span>
+      <span class="chip" data-bucket="Opportunity">Opportunity</span>
+      <span class="chip" data-bucket="Applicant">Applicant</span>
+    </div>
+
+    <table id="table">
+      <thead>
+        <tr>
+          <th>Stage</th>
+          <th>Name</th>
+          <th class="hide-sm">Program / Pipeline</th>
+          <th>Owner</th>
+          <th class="hide-sm">Days in stage</th>
+          <th>Days since touch</th>
+          <th class="amount">Amount</th>
+          <th>HubSpot</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="8" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const FEED_URL = "/.netlify/functions/hot-leads";
+    const fmtMoney = n => n == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+    const fmtRelative = iso => {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      const diff = Math.round((Date.now() - d.getTime()) / 86400000);
+      if (diff <= 0) return "today";
+      if (diff === 1) return "1 day ago";
+      if (diff < 7) return diff + " days ago";
+      if (diff < 30) return Math.round(diff / 7) + " weeks ago";
+      return d.toLocaleDateString();
+    };
+    const urgencyClass = d => d == null ? "" : d >= 7 ? "danger" : d >= 3 ? "warn" : "";
+
+    let allRecords = [];
+    let activeBucket = "all";
+    let query = "";
+
+    async function load() {
+      try {
+        const res = await fetch(FEED_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error("Feed responded " + res.status);
+        const data = await res.json();
+        renderSummary(data.summary);
+        allRecords = data.records || [];
+        if (data.message) showError(data.message);
+        render();
+      } catch (err) {
+        showError("Could not load feed: " + err.message);
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById("error");
+      el.textContent = msg;
+      el.hidden = false;
+    }
+
+    function renderSummary(s) {
+      if (!s) return;
+      document.getElementById("m-total").textContent = s.counts?.total ?? 0;
+      document.getElementById("m-sale").textContent = s.counts?.Sale ?? 0;
+      document.getElementById("m-opp").textContent = s.counts?.Opportunity ?? 0;
+      document.getElementById("m-app").textContent = s.counts?.Applicant ?? 0;
+      document.getElementById("m-value").textContent = fmtMoney(s.totalPipelineValue || 0);
+      const meta = s.generatedAt
+        ? `Generated ${fmtRelative(s.generatedAt)} · ${s.pipelinesScanned?.length ?? 0} pipelines scanned · last ${s.recencyDays ?? 14} days of activity`
+        : "Feed has not been generated yet.";
+      document.getElementById("meta").textContent = meta;
+    }
+
+    function matches(r) {
+      if (activeBucket !== "all" && r.bucket !== activeBucket) return false;
+      if (!query) return true;
+      const hay = [
+        r.name, r.email, r.dealName, r.pipelineLabel, r.stageLabel, r.owner
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(query);
+    }
+
+    function render() {
+      const rows = allRecords.filter(matches);
+      const tbody = document.getElementById("tbody");
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty">No matching hot leads.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td><span class="bucket ${r.bucket}">${r.bucket}</span><div class="sub">${escapeHtml(r.stageLabel || "")}</div></td>
+          <td class="name-cell">${escapeHtml(r.name || "—")}<div class="sub">${escapeHtml(r.email || "")}</div></td>
+          <td class="hide-sm">${escapeHtml(r.pipelineLabel || "—")}</td>
+          <td>${escapeHtml(r.owner || "—")}</td>
+          <td class="hide-sm urgency ${urgencyClass(r.daysInStage)}">${r.daysInStage ?? "—"}</td>
+          <td class="urgency ${urgencyClass(r.daysSinceTouch)}">${r.daysSinceTouch ?? "—"}</td>
+          <td class="amount">${fmtMoney(r.amount)}</td>
+          <td>${r.contactUrl ? `<a href="${r.contactUrl}" target="_blank" rel="noopener">Contact ↗</a>` : "—"}${r.dealUrl ? ` · <a href="${r.dealUrl}" target="_blank" rel="noopener">Deal ↗</a>` : ""}</td>
+        </tr>
+      `).join("");
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+
+    document.querySelectorAll(".chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        activeBucket = chip.dataset.bucket;
+        render();
+      });
+    });
+    document.getElementById("q").addEventListener("input", e => {
+      query = e.target.value.trim().toLowerCase();
+      render();
+    });
+
+    load();
+    // Also refresh silently every 10 minutes in case the user leaves this tab open.
+    setInterval(load, 10 * 60 * 1000);
+  </script>
+</body>
+</html>
