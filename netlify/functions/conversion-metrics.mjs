@@ -47,11 +47,11 @@ const SALE_STAGE_PATTERNS = [
   /payment\s*complete/i,
 ];
 // Stages that disqualify a deal from Applications / Opportunities denominators.
-// Matches the excludedStagePatterns in refresh-hot-leads.mjs so the dashboard
-// tells a consistent story.
+// Intentionally NARROW: Closed Lost / Unsuccessful deals ARE counted in the
+// denominators (they really did apply / become opportunities — they just
+// didn't close). The rate reflects reality as a result. Only non-normal-funnel
+// stages like College Credit are dropped.
 const EXCLUDED_STAGE_PATTERNS = [
-  /closed\s*lost/i,
-  /unsuccessful/i,
   /college\s*credit/i,
 ];
 
