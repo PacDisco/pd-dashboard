@@ -255,17 +255,35 @@
 
     function renderConversions() {
       const s = currentSummary;
-      const conv = s?.conversionsByWindow?.[activeWindow] || s?.conversions || {};
-      const set = (id, c) => {
+      const byWin = s?.conversionsByWindow;
+      const conv = byWin?.[activeWindow] || s?.conversions || {};
+      const diags = byWin?.diagnostics || [];
+      const set = (id, c, labelKey) => {
         const el = document.getElementById(id);
         if (!el) return;
-        if (!c || c.rate == null) { el.innerHTML = '<span class="denom">no data</span>'; return; }
+        if (!c) { el.innerHTML = '<span class="denom">no data</span>'; return; }
+        if (c.rate == null) {
+          const numMissing = c.passed == null || c.converted == null;
+          if (numMissing) {
+            el.innerHTML = `<span class="denom" title="${escapeHtml(diags.join(' | '))}">calc failed — check function log</span>`;
+          } else {
+            el.innerHTML = `<b>0%</b> → Sale <span class="denom">(${c.converted} / ${c.passed})</span>`;
+          }
+          return;
+        }
         el.innerHTML = `<b>${c.rate}%</b> → Sale <span class="denom">(${c.converted.toLocaleString()} / ${c.passed.toLocaleString()})</span>`;
       };
-      set("c-total", conv?.ActiveLeads);
-      set("c-opp",   conv?.Opportunity);
-      set("c-app",   conv?.Applicant);
-      set("c-sql",   conv?.SQL);
+      set("c-total", conv?.ActiveLeads, "ActiveLeads");
+      set("c-opp",   conv?.Opportunity, "Opportunity");
+      set("c-app",   conv?.Applicant,   "Applicant");
+      set("c-sql",   conv?.SQL,         "SQL");
+
+      // Surface diagnostics in the error banner if any query failed.
+      if (diags.length) {
+        const el = document.getElementById("error");
+        el.hidden = false;
+        el.textContent = `Conversion query failures: ${diags.slice(0, 3).join(" | ")}${diags.length > 3 ? " …" : ""}`;
+      }
     }
 
     document.getElementById("conv-toggle").addEventListener("click", e => {
