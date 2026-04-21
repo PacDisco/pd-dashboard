@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Advisor Pipeline · Pacific Discovery</title>
+  <title>Active Leads · Pacific Discovery</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -79,7 +79,7 @@
   <div class="wrap">
     <header>
       <div>
-        <h1>Hot Leads · Pacific Discovery</h1>
+        <h1>Active Leads · Pacific Discovery</h1>
         <div class="meta" id="meta">Loading…</div>
       </div>
       <div class="meta" id="refresh-info"></div>
@@ -89,12 +89,8 @@
 
     <section class="metrics">
       <div class="card total">
-        <div class="label">Total Hot</div>
+        <div class="label">Active Leads</div>
         <div class="value" id="m-total">—</div>
-      </div>
-      <div class="card sale">
-        <div class="label">Sale (deposit in)</div>
-        <div class="value" id="m-sale">—</div>
       </div>
       <div class="card opp">
         <div class="label">Opportunity (app + fee)</div>
@@ -105,7 +101,7 @@
         <div class="value" id="m-app">—</div>
       </div>
       <div class="card">
-        <div class="label">Pipeline Value</div>
+        <div class="label">Potential Pipeline $</div>
         <div class="value" id="m-value">—</div>
       </div>
     </section>
@@ -113,7 +109,6 @@
     <div class="filters">
       <input id="q" type="search" placeholder="Search name, email, program, owner…" />
       <span class="chip active" data-bucket="all">All</span>
-      <span class="chip" data-bucket="Sale">Sale</span>
       <span class="chip" data-bucket="Opportunity">Opportunity</span>
       <span class="chip" data-bucket="Applicant">Applicant</span>
     </div>
@@ -179,12 +174,11 @@
     function renderSummary(s) {
       if (!s) return;
       document.getElementById("m-total").textContent = s.counts?.total ?? 0;
-      document.getElementById("m-sale").textContent = s.counts?.Sale ?? 0;
       document.getElementById("m-opp").textContent = s.counts?.Opportunity ?? 0;
       document.getElementById("m-app").textContent = s.counts?.Applicant ?? 0;
       document.getElementById("m-value").textContent = fmtMoney(s.totalPipelineValue || 0);
       const meta = s.generatedAt
-        ? `Generated ${fmtRelative(s.generatedAt)} · ${s.pipelinesScanned?.length ?? 0} pipelines scanned · last ${s.recencyDays ?? 14} days of activity`
+        ? `Generated ${fmtRelative(s.generatedAt)} · ${s.pipelinesScanned?.length ?? 0} pipelines scanned · last ${s.recencyDays ?? 14} days of activity · excludes Sale + Closed Won`
         : "Feed has not been generated yet.";
       document.getElementById("meta").textContent = meta;
     }
