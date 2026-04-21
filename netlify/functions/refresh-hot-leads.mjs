@@ -78,14 +78,22 @@ const CONFIG = {
   // ---- OPPORTUNITY PIPELINES ----
   // Deals in any pipeline matching these patterns count for Opportunity only
   // if the stage label also matches opportunityStagePatterns below. These are
-  // the "initial 5" program pipelines.
+  // the "initial 5" program pipelines. Patterns are deliberately tight to
+  // avoid matching archived per-term pipelines (e.g., "Hawaii High School
+  // Summer 2022") or high-school pipelines.
   opportunityPipelinePatterns: [
-    /fall.*semester/i,      // Fall Semester (gap semester variants)
-    /fall.*mini/i,          // Fall Mini Semester / Minimester
-    /spring.*semester/i,
-    /spring.*mini/i,
-    /summer/i,              // Summer Program(s)
+    /^fall\s+semester$/i,
+    /^fall\s+mini\s*(-?\s*)?semester$/i,
+    /^spring\s+semester$/i,
+    /^spring\s+mini\s*(-?\s*)?semester$/i,
+    /^summer\s+program(s)?$/i,
   ],
+
+  // If your actual pipeline names differ, override opportunityPipelinePatterns
+  // above OR set explicit pipeline IDs here (takes precedence over patterns).
+  // You can find a pipeline's ID at Settings -> Objects -> Deals -> Pipelines
+  // (it's in the URL when you click a pipeline).
+  opportunityPipelineIds: [],  // e.g., ["74958084", "74958085", "694619955"]
 
   // Stage labels that qualify as Opportunity inside the 5 program pipelines.
   opportunityStagePatterns: [
@@ -165,7 +173,13 @@ async function hubspotFetch(path, init = {}, attempt = 0) {
 
 // Pipeline / stage predicates.
 const isApplicantPipeline  = label => CONFIG.applicantPipelinePatterns.some(p => p.test(label || ""));
-const isOpportunityPipeline = label => CONFIG.opportunityPipelinePatterns.some(p => p.test(label || ""));
+// Allow explicit pipeline ID override, else fall back to name regexes.
+const isOpportunityPipeline = (label, id) => {
+  if (CONFIG.opportunityPipelineIds?.length) {
+    return CONFIG.opportunityPipelineIds.includes(String(id));
+  }
+  return CONFIG.opportunityPipelinePatterns.some(p => p.test(label || ""));
+};
 const isOpportunityStage   = label => CONFIG.opportunityStagePatterns.some(p => p.test(label || ""));
 const isExcludedStage      = label => CONFIG.excludedStagePatterns.some(p => p.test(label || ""));
 const matchesAnyWatchedPipeline = label => isApplicantPipeline(label) || isOpportunityPipeline(label);
@@ -174,10 +188,10 @@ const matchesAnyWatchedPipeline = label => isApplicantPipeline(label) || isOppor
 //   - Deal in PD Applications pipeline (non-closed stage)  => Applicant
 //   - Deal in one of the 5 program pipelines, stage is App Received / Interview / Interview Complete => Opportunity
 //   - Otherwise -> "Other" (excluded from the hot list)
-function classifyDeal(pipelineLabel, stageLabel) {
+function classifyDeal(pipelineLabel, stageLabel, pipelineId) {
   if (isExcludedStage(stageLabel)) return { bucket: "Excluded", hot: false };
   if (isApplicantPipeline(pipelineLabel)) return { bucket: "Applicant", hot: true };
-  if (isOpportunityPipeline(pipelineLabel) && isOpportunityStage(stageLabel)) {
+  if (isOpportunityPipeline(pipelineLabel, pipelineId) && isOpportunityStage(stageLabel)) {
     return { bucket: "Opportunity", hot: true };
   }
   return { bucket: "Other", hot: false };
@@ -206,7 +220,7 @@ async function searchPDContacts() {
     "firstname", "lastname", "email",
     "lifecyclestage", "hs_lead_status", "company_tag",
     "hubspot_owner_id",
-    "lastmodifieddate", "notes_last_updated", "hs_last_sales_activity_date",
+    "lastmodifieddate", "notes_last_updated", "hs_last_sales_activity_timestamp",
     "hs_object_id",
   ];
   const out = [];
@@ -452,7 +466,7 @@ function pickPrimaryDeal(dealIds, dealsById, stageById) {
     const pipelineId = deal.properties.pipeline;
     const ps = stageById.get(`${pipelineId}:${deal.properties.dealstage}`);
     if (!ps) continue;
-    const cls = classifyDeal(ps.pipeline.label, ps.stage.label);
+    const cls = classifyDeal(ps.pipeline.label, ps.stage.label, ps.pipeline.id);
     const rank = bucketRank[cls.bucket] ?? 99;
     const lastMod = new Date(deal.properties.hs_lastmodifieddate || 0).getTime();
 
@@ -556,7 +570,14 @@ export default async () => {
     if (!hot) continue;
 
     const name = `${props.firstname ?? ""} ${props.lastname ?? ""}`.trim() || props.email || `Contact ${c.id}`;
-    const lastActivity = props.hs_last_sales_activity_date || props.notes_last_updated || props.lastmodifieddate;
+    // Filter out epoch-zero dates (HubSpot sometimes returns "1970-01-01" for
+    // null timestamps instead of leaving the property empty).
+    const validDate = d => d && new Date(d).getTime() > new Date("2000-01-01").getTime();
+    const lastActivity = [
+      props.hs_last_sales_activity_timestamp,
+      props.notes_last_updated,
+      props.lastmodifieddate,
+    ].find(validDate) || null;
 
     records.push({
       contactId: c.id,
@@ -600,7 +621,7 @@ export default async () => {
     companyTag: CONFIG.companyTagValue.trim(),
     pipelinesScanned: {
       applicant: allPipelines.filter(p => isApplicantPipeline(p.label)).map(p => ({ id: p.id, label: p.label })),
-      opportunity: allPipelines.filter(p => isOpportunityPipeline(p.label)).map(p => ({ id: p.id, label: p.label })),
+      opportunity: allPipelines.filter(p => isOpportunityPipeline(p.label, p.id)).map(p => ({ id: p.id, label: p.label })),
     },
     counts: {
       total: records.length,
