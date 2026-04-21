@@ -112,6 +112,17 @@ const CONFIG = {
     /payment complete/i,
   ],
 
+  // ---- SALE DEFINITION ----
+  // A contact is counted as "sold" (the conversion-rate numerator) if they
+  // have a deal in any of the 5 opportunity pipelines at one of these stages.
+  // Matches by stage LABEL across all opp pipelines (stage IDs differ by
+  // pipeline but labels are consistent).
+  saleStagePatterns: [
+    /deposit\s*(paid|received|processed)/i,
+    /closed\s*won/i,
+    /payment\s*complete/i,
+  ],
+
   // NOTE: Applicant and Opportunity are now deal-driven only (see
   // applicantPipelinePatterns / opportunityPipelinePatterns above). There is
   // no contact-level fallback for them — a contact without a matching deal
@@ -367,13 +378,103 @@ async function batchReadDeals(dealIds) {
   return byId;
 }
 
+// Find sale stage IDs across the 5 opportunity pipelines. Stage labels are
+// consistent (Deposit Paid, Closed Won, etc.) but IDs differ per pipeline.
+function findSaleStageIds(allPipelines) {
+  const ids = [];
+  for (const p of allPipelines) {
+    if (!isOpportunityPipeline(p.label, p.id)) continue;
+    for (const s of p.stages) {
+      if (CONFIG.saleStagePatterns.some(r => r.test(s.label))) ids.push(s.id);
+    }
+  }
+  return ids;
+}
+
+// Fetch all contacts who have at least one deal at a Sale stage in the 5
+// opportunity pipelines. Returns a Map<contactId, contactProps> where props
+// include the stage-entry dates we need for windowed conversion numerators.
+async function fetchSoldContacts(allPipelines) {
+  const saleStageIds = findSaleStageIds(allPipelines);
+  if (!saleStageIds.length) return { soldMap: new Map(), saleStageIds: [], dealCount: 0 };
+
+  const opportunityPipelineIds = allPipelines
+    .filter(p => isOpportunityPipeline(p.label, p.id))
+    .map(p => p.id);
+
+  // 1. Search deals at those stages in those pipelines. Paginate.
+  const deals = [];
+  let after;
+  do {
+    const body = {
+      limit: 100,
+      after,
+      properties: ["dealname", "pipeline", "dealstage", "closedate", "hs_lastmodifieddate"],
+      filterGroups: [{
+        filters: [
+          { propertyName: "pipeline",  operator: "IN", values: opportunityPipelineIds },
+          { propertyName: "dealstage", operator: "IN", values: saleStageIds },
+        ],
+      }],
+    };
+    const data = await hubspotFetch("/crm/v3/objects/deals/search", { method: "POST", body: JSON.stringify(body) });
+    deals.push(...(data.results || []));
+    after = data.paging?.next?.after;
+    if (after) await sleep(300);
+  } while (after && deals.length < 5000);
+
+  // 2. Batch-read associations: deal -> contacts
+  const dealIds = deals.map(d => d.id);
+  const dealToContacts = {};
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const chunk = dealIds.slice(i, i + 100);
+    const data = await hubspotFetch("/crm/v4/associations/deals/contacts/batch/read", {
+      method: "POST",
+      body: JSON.stringify({ inputs: chunk.map(id => ({ id })) }),
+    });
+    for (const row of data.results || []) {
+      dealToContacts[row.from.id] = (row.to || []).map(t => String(t.toObjectId));
+    }
+  }
+  const contactIdSet = new Set(Object.values(dealToContacts).flat());
+
+  // 3. Batch-read those contacts with the stage-entry properties we need.
+  const soldMap = new Map();
+  const contactIds = [...contactIdSet];
+  const props = [
+    "firstname", "lastname", "email", "company_tag",
+    "hs_v2_date_entered_salesqualifiedlead",
+    "hs_v2_date_entered_opportunity",
+    "became_an_application_started_date",
+    "hs_v2_date_entered_customer",
+  ];
+  for (let i = 0; i < contactIds.length; i += 100) {
+    const chunk = contactIds.slice(i, i + 100);
+    const data = await hubspotFetch("/crm/v3/objects/contacts/batch/read", {
+      method: "POST",
+      body: JSON.stringify({ properties: props, inputs: chunk.map(id => ({ id })) }),
+    });
+    for (const c of data.results || []) {
+      // Only keep Pacific Discovery contacts (the deal pipelines are shared
+      // across brands so some sold contacts might be PE/Unearthed).
+      if (c.properties.company_tag === CONFIG.companyTagValue) {
+        soldMap.set(c.id, c.properties);
+      }
+    }
+  }
+
+  return { soldMap, saleStageIds, dealCount: deals.length };
+}
+
 // Historical conversion rates across multiple cohorts (time windows).
-// For each window, denominator = contacts who entered the stage WITHIN window,
-// numerator = those contacts who later became customer.
+// Denominator = contacts who entered the stage WITHIN window (HubSpot count).
+// Numerator   = of the sold contacts, how many entered that stage in window
+//               (computed locally from soldMap — no extra HubSpot calls).
 //
 // Each query is wrapped so one failure doesn't sink the whole calculation.
 // Errors surface in result.diagnostics so the dashboard can display them.
-async function computeConversionRatesAllWindows() {
+async function computeConversionRatesAllWindows(allPipelines) {
+  const { soldMap, saleStageIds, dealCount } = await fetchSoldContacts(allPipelines);
   const baseFilter = { propertyName: "company_tag", operator: "EQ", value: CONFIG.companyTagValue };
   const diagnostics = [];
 
@@ -411,7 +512,28 @@ async function computeConversionRatesAllWindows() {
     { key: "3m",   label: "Last 3 months",  stageDateGteMs: msAgo(90) },
   ];
 
-  const results = { diagnostics };
+  // Local helper: count sold contacts whose stage-entry date falls within window.
+  function countSoldInWindow(datePropName, windowStartMs) {
+    let n = 0;
+    for (const props of soldMap.values()) {
+      const raw = props[datePropName];
+      if (!raw) continue;
+      const ms = new Date(raw).getTime();
+      if (!Number.isFinite(ms) || ms <= 0) continue;
+      if (windowStartMs == null || ms >= windowStartMs) n++;
+    }
+    return n;
+  }
+
+  const results = {
+    diagnostics,
+    _meta: {
+      saleDealsFound: dealCount,
+      soldContactsFound: soldMap.size,
+      saleStageIds: saleStageIds.length,
+      saleDefinition: "Contact has a deal in one of the 5 opportunity pipelines at Deposit Paid / Closed Won stage",
+    },
+  };
 
   for (const w of WINDOWS) {
     const sqlEntered = w.stageDateGteMs
@@ -424,19 +546,22 @@ async function computeConversionRatesAllWindows() {
       ? [GTE("became_an_application_started_date", w.stageDateGteMs)]
       : [HAS("became_an_application_started_date")];
 
-    const everSQL   = await countAt(`${w.key}/everSQL`,   sqlEntered);
-    const sqlToCust = await countAt(`${w.key}/sqlToCust`, [...sqlEntered, HAS("hs_v2_date_entered_customer")]);
-    const everOpp   = await countAt(`${w.key}/everOpp`,   oppEntered);
-    const oppToCust = await countAt(`${w.key}/oppToCust`, [...oppEntered, HAS("hs_v2_date_entered_customer")]);
-    const everApp   = await countAt(`${w.key}/everApp`,   appEntered);
-    const appToCust = await countAt(`${w.key}/appToCust`, [...appEntered, HAS("hs_v2_date_entered_customer")]);
+    // Denominators: all PD contacts who entered the stage within the window.
+    const everSQL = await countAt(`${w.key}/everSQL`, sqlEntered);
+    const everOpp = await countAt(`${w.key}/everOpp`, oppEntered);
+    const everApp = await countAt(`${w.key}/everApp`, appEntered);
+
+    // Numerators: of the sold contacts, how many entered the stage in window?
+    const sqlToSale = countSoldInWindow("hs_v2_date_entered_salesqualifiedlead", w.stageDateGteMs);
+    const oppToSale = countSoldInWindow("hs_v2_date_entered_opportunity",         w.stageDateGteMs);
+    const appToSale = countSoldInWindow("became_an_application_started_date",     w.stageDateGteMs);
 
     results[w.key] = {
       label: w.label,
-      SQL:         { passed: everSQL, converted: sqlToCust, rate: pct(sqlToCust, everSQL) },
-      Applicant:   { passed: everApp, converted: appToCust, rate: pct(appToCust, everApp) },
-      Opportunity: { passed: everOpp, converted: oppToCust, rate: pct(oppToCust, everOpp) },
-      ActiveLeads: { passed: everSQL, converted: sqlToCust, rate: pct(sqlToCust, everSQL) },
+      SQL:         { passed: everSQL, converted: sqlToSale, rate: pct(sqlToSale, everSQL) },
+      Applicant:   { passed: everApp, converted: appToSale, rate: pct(appToSale, everApp) },
+      Opportunity: { passed: everOpp, converted: oppToSale, rate: pct(oppToSale, everOpp) },
+      ActiveLeads: { passed: everSQL, converted: sqlToSale, rate: pct(sqlToSale, everSQL) },
     };
   }
 
@@ -528,7 +653,7 @@ export default async () => {
   // 4b. Historical conversion rates across cohorts (independent of filter).
   let conversionsByWindow = {};
   try {
-    conversionsByWindow = await computeConversionRatesAllWindows();
+    conversionsByWindow = await computeConversionRatesAllWindows(allPipelines);
   } catch (err) {
     console.error("Conversion rate calc failed:", err.message);
   }
