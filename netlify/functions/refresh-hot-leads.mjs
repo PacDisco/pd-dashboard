@@ -103,8 +103,7 @@ const CONFIG = {
   ],
 
   // Stage patterns that disqualify a deal from being "hot" even if pipeline
-  // matches (deposit/closed are excluded; applicant-pipeline closed states).
-  // Also used to exclude deals from the Applicant conversion-rate cohort.
+  // matches (deposit/closed excluded; applicant-pipeline closed states; etc.).
   excludedStagePatterns: [
     /closed ?won/i,
     /closed ?lost/i,
@@ -114,25 +113,6 @@ const CONFIG = {
     /college\s*credit/i,  // College Credit stage is not a normal applicant/opp
   ],
 
-  // ---- SALE DEFINITION ----
-  // A contact is counted as "sold" (the conversion-rate numerator) if they
-  // have a deal in any of the 5 opportunity pipelines at one of these stages.
-  // Matches by stage LABEL across all opp pipelines (stage IDs differ by
-  // pipeline but labels are consistent).
-  saleStagePatterns: [
-    /deposit\s*(paid|received|processed)/i,
-    /closed\s*won/i,
-    /payment\s*complete/i,
-  ],
-
-  // ---- OPPORTUNITY COHORT ----
-  // "Opportunity cohort" = deals that passed through this stage label in an
-  // opportunity pipeline within the window. Used as the DENOMINATOR for
-  // Opportunity conversion rate.
-  opportunityCohortStagePatterns: [
-    /application\s*fee\s*received/i,
-    /application\s*fee\s*paid/i,  // some pipelines may use this wording
-  ],
 
   // NOTE: Applicant and Opportunity are now deal-driven only (see
   // applicantPipelinePatterns / opportunityPipelinePatterns above). There is
@@ -242,7 +222,7 @@ async function searchPDContacts() {
     "firstname", "lastname", "email",
     "lifecyclestage", "hs_lead_status", "company_tag",
     "hubspot_owner_id",
-    "lastmodifieddate", "notes_last_updated", "hs_last_sales_activity_timestamp",
+    "lastmodifieddate", "notes_last_contacted", "notes_last_updated",
     "hs_object_id",
   ];
   const out = [];
@@ -389,303 +369,6 @@ async function batchReadDeals(dealIds) {
   return byId;
 }
 
-// Find deal stage IDs matching a pattern set, scoped to a pipeline filter.
-// Returns [{ pipelineId, pipelineLabel, stageId, stageLabel }]
-function findStages(allPipelines, pipelinePredicate, stagePatterns) {
-  const out = [];
-  for (const p of allPipelines) {
-    if (!pipelinePredicate(p)) continue;
-    for (const s of p.stages) {
-      if (stagePatterns.some(r => r.test(s.label))) {
-        out.push({ pipelineId: p.id, pipelineLabel: p.label, stageId: s.id, stageLabel: s.label });
-      }
-    }
-  }
-  return out;
-}
-
-const findSaleStageIds = allPipelines =>
-  findStages(allPipelines, p => isOpportunityPipeline(p.label, p.id), CONFIG.saleStagePatterns).map(s => s.stageId);
-
-const findAppFeeStages = allPipelines =>
-  findStages(allPipelines, p => isOpportunityPipeline(p.label, p.id), CONFIG.opportunityCohortStagePatterns);
-
-const findApplicantPipelineIds = allPipelines =>
-  allPipelines.filter(p => isApplicantPipeline(p.label)).map(p => p.id);
-
-// Shared helper: paginated deal search with associations to contacts.
-// Returns: { deals: [{id, properties, contactIds: [...]}] }.
-async function searchDealsWithContacts(filterGroups, dealProperties) {
-  const deals = [];
-  let after;
-  do {
-    const body = {
-      limit: 100,
-      after,
-      properties: dealProperties,
-      filterGroups,
-    };
-    const data = await hubspotFetch("/crm/v3/objects/deals/search", { method: "POST", body: JSON.stringify(body) });
-    deals.push(...(data.results || []));
-    after = data.paging?.next?.after;
-    if (after) await sleep(300);
-  } while (after && deals.length < 5000);
-
-  // Batch-read associations
-  const dealIds = deals.map(d => d.id);
-  const dealToContacts = {};
-  for (let i = 0; i < dealIds.length; i += 100) {
-    const chunk = dealIds.slice(i, i + 100);
-    const data = await hubspotFetch("/crm/v4/associations/deals/contacts/batch/read", {
-      method: "POST",
-      body: JSON.stringify({ inputs: chunk.map(id => ({ id })) }),
-    });
-    for (const row of data.results || []) {
-      dealToContacts[row.from.id] = (row.to || []).map(t => String(t.toObjectId));
-    }
-  }
-  for (const d of deals) d.contactIds = dealToContacts[d.id] || [];
-  return deals;
-}
-
-// Batch-read a set of contact IDs, filter to Pacific Discovery only.
-async function readPDContactsByIds(contactIds, properties) {
-  const out = new Map();
-  const unique = [...new Set(contactIds)];
-  for (let i = 0; i < unique.length; i += 100) {
-    const chunk = unique.slice(i, i + 100);
-    const data = await hubspotFetch("/crm/v3/objects/contacts/batch/read", {
-      method: "POST",
-      body: JSON.stringify({ properties, inputs: chunk.map(id => ({ id })) }),
-    });
-    for (const c of data.results || []) {
-      if (c.properties.company_tag === CONFIG.companyTagValue) {
-        out.set(c.id, c.properties);
-      }
-    }
-  }
-  return out;
-}
-
-// Historical conversion rates. Definitions (per user spec):
-//   SQL         = contacts who entered SQL stage in window -> % now "sold"
-//   Applicant   = deals in PD Applications pipeline CREATED in window, count
-//                 unique contacts -> % now "sold"
-//   Opportunity = deals in opp pipelines that passed through "Application Fee
-//                 Received" stage in window, count unique contacts -> % now "sold"
-//   Sold        = contact has a deal in an opp pipeline at Deposit Paid /
-//                 Closed Won / Payment Complete (deal-based)
-async function computeConversionRatesAllWindows(allPipelines) {
-  const diagnostics = [];
-  function diag(msg, err) { diagnostics.push(`${msg}: ${err.message.slice(0, 200)}`); }
-
-  // Stage lookup so we can filter deals by their stage label (e.g., skip
-  // "College Credit" stages in the applicant cohort).
-  const stageLabelById = new Map();
-  for (const p of allPipelines) for (const s of p.stages) stageLabelById.set(s.id, s.label);
-  const dealStageExcluded = dealStageId => {
-    const label = stageLabelById.get(dealStageId);
-    return label ? isExcludedStage(label) : false;
-  };
-
-  // --- Pre-fetch universes ---
-
-  // Sold contacts (set of contactIds with a sale-stage deal in opp pipelines)
-  const saleStageIds = findSaleStageIds(allPipelines);
-  const oppPipelineIds = allPipelines.filter(p => isOpportunityPipeline(p.label, p.id)).map(p => p.id);
-  let soldContactIds = new Set();
-  let soldDealsCount = 0;
-  try {
-    if (saleStageIds.length && oppPipelineIds.length) {
-      const saleDeals = await searchDealsWithContacts(
-        [{ filters: [
-          { propertyName: "pipeline",  operator: "IN", values: oppPipelineIds },
-          { propertyName: "dealstage", operator: "IN", values: saleStageIds },
-        ]}],
-        ["pipeline", "dealstage", "closedate", "hs_lastmodifieddate"],
-      );
-      soldDealsCount = saleDeals.length;
-      // Restrict to PD contacts (some deals may link to PE/Unearthed contacts).
-      const candidateIds = saleDeals.flatMap(d => d.contactIds);
-      const pdContacts = await readPDContactsByIds(candidateIds, ["company_tag"]);
-      soldContactIds = new Set(pdContacts.keys());
-    }
-  } catch (err) { diag("fetchSold", err); }
-
-  // Applicant cohort: deals in PD Applications pipeline with createdate per deal.
-  // We'll capture each contact's EARLIEST applicant-deal-created date.
-  const applicantPipelineIds = findApplicantPipelineIds(allPipelines);
-  const applicantDatesByContact = new Map(); // contactId -> earliest createdate (ms)
-  try {
-    if (applicantPipelineIds.length) {
-      const appDeals = await searchDealsWithContacts(
-        [{ filters: [{ propertyName: "pipeline", operator: "IN", values: applicantPipelineIds }] }],
-        ["createdate", "pipeline", "dealstage"],
-      );
-      // Filter contactIds to PD only
-      const candidateIds = appDeals.flatMap(d => d.contactIds);
-      const pdContacts = await readPDContactsByIds(candidateIds, ["company_tag"]);
-      const pdSet = new Set(pdContacts.keys());
-      for (const d of appDeals) {
-        // Skip deals at excluded stages (Closed, Unsuccessful, College Credit, etc.)
-        if (dealStageExcluded(d.properties.dealstage)) continue;
-        const ms = new Date(d.properties.createdate || 0).getTime();
-        if (!Number.isFinite(ms) || ms <= 0) continue;
-        for (const cid of d.contactIds) {
-          if (!pdSet.has(cid)) continue;
-          const prev = applicantDatesByContact.get(cid);
-          if (prev == null || ms < prev) applicantDatesByContact.set(cid, ms);
-        }
-      }
-    }
-  } catch (err) { diag("fetchApplicantCohort", err); }
-
-  // Opportunity cohort: deals in opp pipelines that entered an App Fee
-  // Received stage at any time, with THAT entry date per deal.
-  const appFeeStages = findAppFeeStages(allPipelines);
-  const opportunityDatesByContact = new Map(); // contactId -> earliest app-fee-received entry ms
-  try {
-    for (const af of appFeeStages) {
-      const dateProp = `hs_v2_date_entered_${af.stageId}`;
-      let oppDeals;
-      try {
-        oppDeals = await searchDealsWithContacts(
-          [{ filters: [
-            { propertyName: "pipeline",   operator: "EQ", value: af.pipelineId },
-            { propertyName: dateProp,     operator: "HAS_PROPERTY" },
-          ]}],
-          [dateProp, "pipeline", "dealstage"],
-        );
-      } catch (err) {
-        diag(`fetchOpp[${af.pipelineLabel}/${af.stageLabel}]`, err);
-        continue;
-      }
-      const candidateIds = oppDeals.flatMap(d => d.contactIds);
-      const pdContacts = await readPDContactsByIds(candidateIds, ["company_tag"]);
-      const pdSet = new Set(pdContacts.keys());
-      for (const d of oppDeals) {
-        // Skip deals currently at excluded stages.
-        if (dealStageExcluded(d.properties.dealstage)) continue;
-        const raw = d.properties[dateProp];
-        const ms = new Date(raw || 0).getTime();
-        if (!Number.isFinite(ms) || ms <= 0) continue;
-        for (const cid of d.contactIds) {
-          if (!pdSet.has(cid)) continue;
-          const prev = opportunityDatesByContact.get(cid);
-          if (prev == null || ms < prev) opportunityDatesByContact.set(cid, ms);
-        }
-      }
-    }
-  } catch (err) { diag("fetchOpportunityCohort", err); }
-
-  // --- SQL denominator (HubSpot count) per window ---
-  const baseFilter = { propertyName: "company_tag", operator: "EQ", value: CONFIG.companyTagValue };
-  const HAS = name => ({ propertyName: name, operator: "HAS_PROPERTY" });
-  const GTE = (name, ms) => ({ propertyName: name, operator: "GTE", value: String(ms) });
-
-  async function countAt(label, filters) {
-    try {
-      const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
-        method: "POST",
-        body: JSON.stringify({ limit: 1, filterGroups: [{ filters: [baseFilter, ...filters] }] }),
-      });
-      await sleep(300);
-      return data.total ?? 0;
-    } catch (err) {
-      diag(label, err);
-      await sleep(300);
-      return null;
-    }
-  }
-
-  // --- SQL contacts who are sold: we need to count by window. ---
-  // We'll fetch PD contacts who are in soldContactIds AND have the SQL date.
-  // Simpler: for each window, HubSpot-count how many PD contacts have SQL-entry
-  // in window AND are in soldContactIds. HubSpot `associatedWith` can do this
-  // with deal IDs but it caps at ~100. Instead, do a local intersection:
-  // fetch SQL-entry dates for all sold contacts and count per window locally.
-  const sqlDatesBySoldContact = new Map();
-  try {
-    const soldIds = [...soldContactIds];
-    if (soldIds.length) {
-      const props = await readPDContactsByIds(soldIds, ["hs_v2_date_entered_salesqualifiedlead"]);
-      for (const [cid, p] of props) {
-        const ms = new Date(p.hs_v2_date_entered_salesqualifiedlead || 0).getTime();
-        if (Number.isFinite(ms) && ms > 0) sqlDatesBySoldContact.set(cid, ms);
-      }
-    }
-  } catch (err) { diag("fetchSoldSqlDates", err); }
-
-  // --- Now compute per-window numbers ---
-  const pct = (num, den) => (den != null && num != null && den > 0) ? Math.round((num / den) * 1000) / 10 : null;
-  const inWindow = (ms, startMs) => ms != null && (startMs == null || ms >= startMs);
-
-  const now = Date.now();
-  const msAgo = days => now - days * 86400000;
-  const WINDOWS = [
-    { key: "all",  label: "All time",       stageDateGteMs: null },
-    { key: "12m",  label: "Last 12 months", stageDateGteMs: msAgo(365) },
-    { key: "6m",   label: "Last 6 months",  stageDateGteMs: msAgo(180) },
-    { key: "3m",   label: "Last 3 months",  stageDateGteMs: msAgo(90) },
-  ];
-
-  const results = {
-    diagnostics,
-    _meta: {
-      saleStageIds: saleStageIds.length,
-      soldDealsCount,
-      soldContactsFound: soldContactIds.size,
-      applicantCohortContacts: applicantDatesByContact.size,
-      opportunityCohortContacts: opportunityDatesByContact.size,
-      appFeeStagesFound: appFeeStages.length,
-      applicantPipelineIds,
-      oppPipelineIds,
-      saleDefinition: "Contact has a deal in opp pipeline at Deposit Paid / Closed Won / Payment Complete",
-    },
-  };
-
-  for (const w of WINDOWS) {
-    const startMs = w.stageDateGteMs;
-
-    // SQL denominator: HubSpot count of PD contacts entered SQL in window
-    const sqlFilters = startMs
-      ? [GTE("hs_v2_date_entered_salesqualifiedlead", startMs)]
-      : [HAS("hs_v2_date_entered_salesqualifiedlead")];
-    const everSQL = await countAt(`${w.key}/everSQL`, sqlFilters);
-    // SQL numerator: sold contacts whose SQL-entry was in window
-    let sqlToSale = 0;
-    for (const ms of sqlDatesBySoldContact.values()) if (inWindow(ms, startMs)) sqlToSale++;
-
-    // Applicant denominator: cohort contacts with createdate in window
-    let everApp = 0, appToSale = 0;
-    for (const [cid, ms] of applicantDatesByContact) {
-      if (inWindow(ms, startMs)) {
-        everApp++;
-        if (soldContactIds.has(cid)) appToSale++;
-      }
-    }
-
-    // Opportunity denominator: cohort contacts with app-fee entry in window
-    let everOpp = 0, oppToSale = 0;
-    for (const [cid, ms] of opportunityDatesByContact) {
-      if (inWindow(ms, startMs)) {
-        everOpp++;
-        if (soldContactIds.has(cid)) oppToSale++;
-      }
-    }
-
-    results[w.key] = {
-      label: w.label,
-      SQL:         { passed: everSQL, converted: sqlToSale, rate: pct(sqlToSale, everSQL) },
-      Applicant:   { passed: everApp, converted: appToSale, rate: pct(appToSale, everApp) },
-      Opportunity: { passed: everOpp, converted: oppToSale, rate: pct(oppToSale, everOpp) },
-      // ActiveLeads intentionally omitted — the card now has no rate.
-    };
-  }
-
-  return results;
-}
-
 async function fetchOwners(ownerIds) {
   if (!ownerIds.size) return {};
   const map = {};
@@ -768,14 +451,6 @@ export default async () => {
   const ownerIds = new Set(contacts.map(c => c.properties.hubspot_owner_id).filter(Boolean));
   const ownerMap = await fetchOwners(ownerIds);
 
-  // 4b. Historical conversion rates across cohorts (independent of filter).
-  let conversionsByWindow = {};
-  try {
-    conversionsByWindow = await computeConversionRatesAllWindows(allPipelines);
-  } catch (err) {
-    console.error("Conversion rate calc failed:", err.message);
-  }
-
   // 5. Build lead records.
   const nowIso = startedAt.toISOString();
   const records = [];
@@ -822,11 +497,15 @@ export default async () => {
     if (!hot) continue;
 
     const name = `${props.firstname ?? ""} ${props.lastname ?? ""}`.trim() || props.email || `Contact ${c.id}`;
-    // Filter out epoch-zero dates (HubSpot sometimes returns "1970-01-01" for
-    // null timestamps instead of leaving the property empty).
+    // "Days since touch" = days since a logged, two-way communication.
+    // notes_last_contacted fires on logged calls, emails, meetings (and
+    // WhatsApp messages if your HubSpot WhatsApp integration logs them as
+    // engagement records). We fall back to notes_last_updated (adds notes
+    // and tasks) and finally to any property change, with an epoch-zero
+    // sanity filter because HubSpot sometimes returns 1970-01-01 for nulls.
     const validDate = d => d && new Date(d).getTime() > new Date("2000-01-01").getTime();
     const lastActivity = [
-      props.hs_last_sales_activity_timestamp,
+      props.notes_last_contacted,
       props.notes_last_updated,
       props.lastmodifieddate,
     ].find(validDate) || null;
@@ -884,9 +563,6 @@ export default async () => {
     totalPipelineValue: records.reduce((s, r) => s + (r.amount || 0), 0),
     contactsScanned: contacts.length,
     sqlThreshold: CONFIG.sqlThreshold,
-    conversionsByWindow,
-    // Back-compat: default to All time
-    conversions: conversionsByWindow.all || {},
   };
 
   const payload = { summary, records };
