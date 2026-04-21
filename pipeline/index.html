@@ -35,6 +35,9 @@
     .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
     .card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
     .card .value { font-size: 26px; font-weight: 600; margin-top: 4px; }
+    .card .conv { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .card .conv b { color: #86efac; font-weight: 600; }
+    .card .conv .denom { color: var(--muted); font-size: 11px; }
     .card.sale { border-left: 3px solid var(--hot-sale); }
     .card.opp { border-left: 3px solid var(--hot-opp); }
     .card.app { border-left: 3px solid var(--hot-app); }
@@ -114,22 +117,27 @@
       <div class="card total">
         <div class="label">Active Leads</div>
         <div class="value" id="m-total">—</div>
+        <div class="conv" id="c-total"></div>
       </div>
       <div class="card opp">
         <div class="label">Opportunity (app + fee)</div>
         <div class="value" id="m-opp">—</div>
+        <div class="conv" id="c-opp"></div>
       </div>
       <div class="card app">
         <div class="label">Applicant (no fee)</div>
         <div class="value" id="m-app">—</div>
+        <div class="conv" id="c-app"></div>
       </div>
       <div class="card sql">
         <div class="label">SQL (scored)</div>
         <div class="value" id="m-sql">—</div>
+        <div class="conv" id="c-sql"></div>
       </div>
       <div class="card">
         <div class="label">Potential Pipeline $</div>
         <div class="value" id="m-value">—</div>
+        <div class="conv">historical close rate ↑</div>
       </div>
     </section>
 
@@ -226,8 +234,22 @@
         ? `Generated ${fmtRelative(s.generatedAt)} · ${appPipes} Applicant + ${oppPipes} Opportunity pipelines · last ${s.recencyDays ?? 14} days · SQL threshold ${s.sqlThreshold ?? 30} · excludes Sale + Closed Won`
         : "Feed has not been generated yet.";
       document.getElementById("meta").textContent = meta;
+      renderConversions(s?.conversions);
       // Counts are rendered from the filtered set by renderMetrics() — called
       // from render() on every filter/search change.
+    }
+
+    function renderConversions(conv) {
+      const set = (id, c) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (!c || c.rate == null) { el.innerHTML = '<span class="denom">no data</span>'; return; }
+        el.innerHTML = `<b>${c.rate}%</b> → Sale <span class="denom">(${c.converted.toLocaleString()} / ${c.passed.toLocaleString()})</span>`;
+      };
+      set("c-total", conv?.ActiveLeads);
+      set("c-opp",   conv?.Opportunity);
+      set("c-app",   conv?.Applicant);
+      set("c-sql",   conv?.SQL);
     }
 
     function renderMetrics(filtered) {
