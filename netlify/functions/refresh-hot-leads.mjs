@@ -353,11 +353,14 @@ async function batchReadDeals(dealIds) {
   return byId;
 }
 
-// Historical conversion rates: for each stage, what fraction of contacts who
-// ever reached that stage ultimately became customers (= paid a deposit)?
-// Runs 7 lightweight COUNT searches (limit=1, we only need `total`).
-// Sequential with throttle to respect HubSpot's 4 req/s search limit.
-async function computeConversionRates() {
+// Historical conversion rates across multiple cohorts (time windows).
+// For each window, denominator = contacts who entered the stage WITHIN window,
+// numerator = those contacts who later became customer (customer entry can be
+// any time — we care where they started, not when they closed).
+//
+// Windows: All time, 12 months, 6 months, 3 months. Rates per-window are
+// pre-computed server-side so the dashboard toggle is instant.
+async function computeConversionRatesAllWindows() {
   const baseFilter = { propertyName: "company_tag", operator: "EQ", value: CONFIG.companyTagValue };
   async function countAt(filters) {
     const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
@@ -372,25 +375,49 @@ async function computeConversionRates() {
   }
 
   const HAS = name => ({ propertyName: name, operator: "HAS_PROPERTY" });
-
-  const everSQL       = await countAt([HAS("hs_v2_date_entered_salesqualifiedlead")]);
-  const sqlToCust     = await countAt([HAS("hs_v2_date_entered_salesqualifiedlead"), HAS("hs_v2_date_entered_customer")]);
-  const everOpp       = await countAt([HAS("hs_v2_date_entered_opportunity")]);
-  const oppToCust     = await countAt([HAS("hs_v2_date_entered_opportunity"), HAS("hs_v2_date_entered_customer")]);
-  const everApp       = await countAt([HAS("became_an_application_started_date")]);
-  const appToCust     = await countAt([HAS("became_an_application_started_date"), HAS("hs_v2_date_entered_customer")]);
-  const everCust      = await countAt([HAS("hs_v2_date_entered_customer")]);
-
+  const GTE = (name, iso) => ({ propertyName: name, operator: "GTE", value: iso });
   const pct = (num, den) => den > 0 ? Math.round((num / den) * 1000) / 10 : null;
 
-  return {
-    SQL:         { passed: everSQL, converted: sqlToCust, rate: pct(sqlToCust, everSQL) },
-    Applicant:   { passed: everApp, converted: appToCust, rate: pct(appToCust, everApp) },
-    Opportunity: { passed: everOpp, converted: oppToCust, rate: pct(oppToCust, everOpp) },
-    // Overall: customers / everSQL — proxies "any-hot-stage → close" since
-    // most customers pass through SQL at some point. Conservative estimate.
-    ActiveLeads: { passed: everSQL, converted: everCust, rate: pct(everCust, everSQL) },
-  };
+  const now = Date.now();
+  const iso = days => new Date(now - days * 86400000).toISOString();
+
+  const WINDOWS = [
+    { key: "all",  label: "All time",    stageDateGte: null },
+    { key: "12m",  label: "Last 12 months", stageDateGte: iso(365) },
+    { key: "6m",   label: "Last 6 months",  stageDateGte: iso(180) },
+    { key: "3m",   label: "Last 3 months",  stageDateGte: iso(90) },
+  ];
+
+  const results = {};
+
+  for (const w of WINDOWS) {
+    const sqlEntered = w.stageDateGte
+      ? [GTE("hs_v2_date_entered_salesqualifiedlead", w.stageDateGte)]
+      : [HAS("hs_v2_date_entered_salesqualifiedlead")];
+    const oppEntered = w.stageDateGte
+      ? [GTE("hs_v2_date_entered_opportunity", w.stageDateGte)]
+      : [HAS("hs_v2_date_entered_opportunity")];
+    const appEntered = w.stageDateGte
+      ? [GTE("became_an_application_started_date", w.stageDateGte)]
+      : [HAS("became_an_application_started_date")];
+
+    const everSQL   = await countAt(sqlEntered);
+    const sqlToCust = await countAt([...sqlEntered, HAS("hs_v2_date_entered_customer")]);
+    const everOpp   = await countAt(oppEntered);
+    const oppToCust = await countAt([...oppEntered, HAS("hs_v2_date_entered_customer")]);
+    const everApp   = await countAt(appEntered);
+    const appToCust = await countAt([...appEntered, HAS("hs_v2_date_entered_customer")]);
+
+    results[w.key] = {
+      label: w.label,
+      SQL:         { passed: everSQL, converted: sqlToCust, rate: pct(sqlToCust, everSQL) },
+      Applicant:   { passed: everApp, converted: appToCust, rate: pct(appToCust, everApp) },
+      Opportunity: { passed: everOpp, converted: oppToCust, rate: pct(oppToCust, everOpp) },
+      ActiveLeads: { passed: everSQL, converted: sqlToCust, rate: pct(sqlToCust, everSQL) },
+    };
+  }
+
+  return results;
 }
 
 async function fetchOwners(ownerIds) {
@@ -475,10 +502,10 @@ export default async () => {
   const ownerIds = new Set(contacts.map(c => c.properties.hubspot_owner_id).filter(Boolean));
   const ownerMap = await fetchOwners(ownerIds);
 
-  // 4b. Historical conversion rates (independent of the record filter).
-  let conversions = {};
+  // 4b. Historical conversion rates across cohorts (independent of filter).
+  let conversionsByWindow = {};
   try {
-    conversions = await computeConversionRates();
+    conversionsByWindow = await computeConversionRatesAllWindows();
   } catch (err) {
     console.error("Conversion rate calc failed:", err.message);
   }
@@ -584,7 +611,9 @@ export default async () => {
     totalPipelineValue: records.reduce((s, r) => s + (r.amount || 0), 0),
     contactsScanned: contacts.length,
     sqlThreshold: CONFIG.sqlThreshold,
-    conversions,
+    conversionsByWindow,
+    // Back-compat: default to All time
+    conversions: conversionsByWindow.all || {},
   };
 
   const payload = { summary, records };
