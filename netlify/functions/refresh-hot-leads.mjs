@@ -30,14 +30,25 @@ const CONFIG = {
   companyTagValue: "Pacific Discovery",
 
   // Pre-filter contacts by lifecyclestage so the function doesn't pull
-  // newsletter subscribers / alumni / random "other" contacts. Adjust if
-  // you want a wider or narrower net.
+  // newsletter subscribers / alumni / random "other" contacts.
   contactLifecycleStages: [
     "lead",
     "marketingqualifiedlead",
     "salesqualifiedlead",
     "opportunity",
     "customer",
+  ],
+
+  // Pre-filter on hs_lead_status to only pull contacts who are already in
+  // (or past) the applicant stage. This is what narrows 5,500 PD contacts
+  // down to ~hundreds and keeps the function well under HubSpot's 4 req/s
+  // search limit. Leave empty to skip this filter entirely.
+  contactLeadStatuses: [
+    "Application Started",
+    "Admissions",
+    "Interview Complete",
+    "Opportunity",
+    "Converted",
   ],
 
   // Only deals in pipelines whose NAME matches one of these patterns are used
@@ -93,9 +104,28 @@ function hubspotHeaders() {
   };
 }
 
-async function hubspotFetch(path, init = {}) {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Auto-retries 429 (rate limit) and 5xx with exponential backoff + jitter.
+// HubSpot Search API limit is 4 req/s; other endpoints are more permissive.
+async function hubspotFetch(path, init = {}, attempt = 0) {
   const url = path.startsWith("http") ? path : `${HUBSPOT_BASE}${path}`;
   const res = await fetch(url, { ...init, headers: { ...hubspotHeaders(), ...(init.headers || {}) } });
+
+  if (res.status === 429 || res.status >= 500) {
+    if (attempt >= 6) {
+      const body = await res.text();
+      throw new Error(`HubSpot ${res.status} on ${path} after ${attempt} retries: ${body.slice(0, 300)}`);
+    }
+    // Honor Retry-After if provided, else exponential backoff.
+    const retryAfter = Number(res.headers.get("retry-after"));
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(16000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250);
+    await sleep(wait);
+    return hubspotFetch(path, init, attempt + 1);
+  }
+
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`HubSpot ${res.status} on ${path}: ${body.slice(0, 500)}`);
@@ -157,6 +187,9 @@ async function searchPDContacts() {
           { propertyName: "company_tag",       operator: "EQ",  value: CONFIG.companyTagValue },
           { propertyName: "lastmodifieddate",  operator: "GTE", value: String(sinceMs) },
           { propertyName: "lifecyclestage",    operator: "IN",  values: CONFIG.contactLifecycleStages },
+          ...(CONFIG.contactLeadStatuses.length
+            ? [{ propertyName: "hs_lead_status", operator: "IN", values: CONFIG.contactLeadStatuses }]
+            : []),
         ],
       }],
     };
@@ -166,6 +199,9 @@ async function searchPDContacts() {
     });
     out.push(...(data.results || []));
     after = data.paging?.next?.after;
+    // HubSpot Search API is capped at 4 req/s; 300ms between pages keeps us
+    // well under even with burst allowances in flight.
+    if (after) await sleep(300);
   } while (after && out.length < CONFIG.maxContacts);
 
   return out;
