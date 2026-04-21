@@ -546,7 +546,7 @@ async function computeConversionRatesAllWindows(allPipelines) {
   const opportunityDatesByContact = new Map(); // contactId -> earliest app-fee-received entry ms
   try {
     for (const af of appFeeStages) {
-      const dateProp = `hs_date_entered_${af.stageId}`;
+      const dateProp = `hs_v2_date_entered_${af.stageId}`;
       let oppDeals;
       try {
         oppDeals = await searchDealsWithContacts(
