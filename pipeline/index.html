@@ -35,13 +35,41 @@
     .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
     .card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
     .card .value { font-size: 26px; font-weight: 600; margin-top: 4px; }
-    .card .conv { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .card .conv b { color: #86efac; font-weight: 600; }
-    .card .conv .denom { color: var(--muted); font-size: 11px; }
-    .conv-toggle { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-    .conv-toggle .conv-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
-    .conv-toggle .tbtn { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; user-select: none; }
-    .conv-toggle .tbtn.active { background: #86efac; color: #052e16; border-color: #86efac; font-weight: 600; }
+
+    /* Conversion metrics section */
+    .conv-section { margin: 24px 0 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+    .conv-section h2 { margin: 0 0 14px; font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
+    .conv-controls { display: flex; flex-wrap: wrap; gap: 14px 20px; align-items: flex-end; margin-bottom: 18px; }
+    .date-group { display: flex; gap: 6px; align-items: center; }
+    .date-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .date-group input[type=date] { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; color-scheme: dark; }
+    .presets-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .preset { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; user-select: none; }
+    .preset.active { background: #86efac; color: #052e16; border-color: #86efac; font-weight: 600; }
+    .compare-toggle { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+    .compare-toggle input { accent-color: #86efac; }
+    .metric-row { display: grid; grid-template-columns: 180px 1fr; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); align-items: center; }
+    .metric-row:first-of-type { border-top: none; }
+    .metric-row .metric-title { font-weight: 600; font-size: 14px; }
+    .metric-row .metric-sub { font-size: 11px; color: var(--muted); font-weight: normal; margin-top: 2px; }
+    .metric-row .periods { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .metric-row .periods.single { grid-template-columns: 1fr; }
+    .period-chunk { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; background: var(--panel-2); border-radius: 8px; padding: 10px 12px; border-left: 2px solid var(--border); }
+    .period-chunk.period-a { border-left-color: #3b82f6; }
+    .period-chunk.period-b { border-left-color: #f59e0b; }
+    .period-chunk .pk { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+    .period-chunk .nums { font-variant-numeric: tabular-nums; color: var(--text); }
+    .period-chunk .rate { font-size: 18px; font-weight: 700; color: #86efac; margin-left: auto; font-variant-numeric: tabular-nums; }
+    .period-chunk .rate.dim { color: var(--muted); }
+    .delta { font-size: 12px; font-weight: 600; margin-left: 8px; padding: 2px 6px; border-radius: 4px; }
+    .delta.up { background: rgba(34,197,94,0.15); color: #86efac; }
+    .delta.down { background: rgba(239,68,68,0.15); color: #fca5a5; }
+    .delta.flat { background: rgba(148,163,184,0.15); color: var(--muted); }
+    .conv-loading { color: var(--muted); font-size: 13px; font-style: italic; }
+    @media (max-width: 760px) {
+      .metric-row { grid-template-columns: 1fr; }
+      .metric-row .periods { grid-template-columns: 1fr; }
+    }
     .card.sale { border-left: 3px solid var(--hot-sale); }
     .card.opp { border-left: 3px solid var(--hot-opp); }
     .card.app { border-left: 3px solid var(--hot-app); }
@@ -117,14 +145,6 @@
 
     <div id="error" class="error" hidden></div>
 
-    <div class="conv-toggle" id="conv-toggle">
-      <span class="conv-label">Close rate window:</span>
-      <span class="tbtn active" data-window="all">All time</span>
-      <span class="tbtn" data-window="12m">12 months</span>
-      <span class="tbtn" data-window="6m">6 months</span>
-      <span class="tbtn" data-window="3m">3 months</span>
-    </div>
-
     <section class="metrics">
       <div class="card total">
         <div class="label">Active Leads</div>
@@ -133,22 +153,86 @@
       <div class="card opp">
         <div class="label">Opportunity (app + fee)</div>
         <div class="value" id="m-opp">—</div>
-        <div class="conv" id="c-opp"></div>
       </div>
       <div class="card app">
         <div class="label">Applicant (no fee)</div>
         <div class="value" id="m-app">—</div>
-        <div class="conv" id="c-app"></div>
       </div>
       <div class="card sql">
         <div class="label">SQL (scored)</div>
         <div class="value" id="m-sql">—</div>
-        <div class="conv" id="c-sql"></div>
       </div>
       <div class="card">
         <div class="label">Potential Pipeline $</div>
         <div class="value" id="m-value">—</div>
-        <div class="conv">historical close rate ↑</div>
+      </div>
+    </section>
+
+    <section class="conv-section" id="conv-section">
+      <h2>Conversion Metrics</h2>
+      <div class="conv-controls">
+        <div class="date-group">
+          <label>Period A start</label>
+          <input type="date" id="pa-start" />
+        </div>
+        <div class="date-group">
+          <label>end</label>
+          <input type="date" id="pa-end" />
+        </div>
+        <div class="presets-group" id="presets-a">
+          <span class="preset" data-preset="30">30d</span>
+          <span class="preset" data-preset="90">90d</span>
+          <span class="preset active" data-preset="365">12m</span>
+          <span class="preset" data-preset="mtd">MTD</span>
+          <span class="preset" data-preset="qtd">QTD</span>
+          <span class="preset" data-preset="ytd">YTD</span>
+          <span class="preset" data-preset="lastmonth">Last mo</span>
+          <span class="preset" data-preset="lastquarter">Last qtr</span>
+          <span class="preset" data-preset="lastyear">Last yr</span>
+        </div>
+        <label class="compare-toggle">
+          <input type="checkbox" id="compare-toggle" />
+          Compare to another period
+        </label>
+      </div>
+      <div class="conv-controls" id="period-b-controls" hidden>
+        <div class="date-group">
+          <label>Period B start</label>
+          <input type="date" id="pb-start" />
+        </div>
+        <div class="date-group">
+          <label>end</label>
+          <input type="date" id="pb-end" />
+        </div>
+        <div class="presets-group" id="presets-b">
+          <span class="preset" data-preset="prev">Previous period</span>
+          <span class="preset" data-preset="yoy">Same period last year</span>
+          <span class="preset" data-preset="30">30d</span>
+          <span class="preset" data-preset="90">90d</span>
+          <span class="preset" data-preset="365">12m</span>
+        </div>
+      </div>
+
+      <div class="metric-row" id="row-contacts">
+        <div>
+          <div class="metric-title">Contacts → Sales</div>
+          <div class="metric-sub">PD contacts created vs sales closed</div>
+        </div>
+        <div class="periods single" id="periods-contacts"><span class="conv-loading">Loading…</span></div>
+      </div>
+      <div class="metric-row" id="row-applications">
+        <div>
+          <div class="metric-title">Applications → Sales</div>
+          <div class="metric-sub">Deals in PD Applications pipeline vs sales closed</div>
+        </div>
+        <div class="periods single" id="periods-applications"><span class="conv-loading">Loading…</span></div>
+      </div>
+      <div class="metric-row" id="row-opportunities">
+        <div>
+          <div class="metric-title">Opportunities → Sales</div>
+          <div class="metric-sub">Deals that hit App Fee Received vs sales closed</div>
+        </div>
+        <div class="periods single" id="periods-opportunities"><span class="conv-loading">Loading…</span></div>
       </div>
     </section>
 
@@ -237,8 +321,6 @@
 
     let currentSummary = null;
 
-    let activeWindow = "all";
-
     function renderSummary(s) {
       currentSummary = s || null;
       const appPipes = s?.pipelinesScanned?.applicant?.length ?? 0;
@@ -247,51 +329,9 @@
         ? `Generated ${fmtRelative(s.generatedAt)} · ${appPipes} Applicant + ${oppPipes} Opportunity pipelines · last ${s.recencyDays ?? 14} days · SQL threshold ${s.sqlThreshold ?? 30} · excludes Sale + Closed Won`
         : "Feed has not been generated yet.";
       document.getElementById("meta").textContent = meta;
-      renderConversions();
       // Counts are rendered from the filtered set by renderMetrics() — called
       // from render() on every filter/search change.
     }
-
-    function renderConversions() {
-      const s = currentSummary;
-      const byWin = s?.conversionsByWindow;
-      const conv = byWin?.[activeWindow] || s?.conversions || {};
-      const diags = byWin?.diagnostics || [];
-      const set = (id, c, labelKey) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        if (!c) { el.innerHTML = '<span class="denom">no data</span>'; return; }
-        if (c.rate == null) {
-          const numMissing = c.passed == null || c.converted == null;
-          if (numMissing) {
-            el.innerHTML = `<span class="denom" title="${escapeHtml(diags.join(' | '))}">calc failed — check function log</span>`;
-          } else {
-            el.innerHTML = `<b>0%</b> → Sale <span class="denom">(${c.converted} / ${c.passed})</span>`;
-          }
-          return;
-        }
-        el.innerHTML = `<b>${c.rate}%</b> → Sale <span class="denom">(${c.converted.toLocaleString()} / ${c.passed.toLocaleString()})</span>`;
-      };
-      set("c-opp",   conv?.Opportunity, "Opportunity");
-      set("c-app",   conv?.Applicant,   "Applicant");
-      set("c-sql",   conv?.SQL,         "SQL");
-
-      // Surface diagnostics in the error banner if any query failed.
-      if (diags.length) {
-        const el = document.getElementById("error");
-        el.hidden = false;
-        el.textContent = `Conversion query failures: ${diags.slice(0, 3).join(" | ")}${diags.length > 3 ? " …" : ""}`;
-      }
-    }
-
-    document.getElementById("conv-toggle").addEventListener("click", e => {
-      const btn = e.target.closest(".tbtn");
-      if (!btn) return;
-      document.querySelectorAll("#conv-toggle .tbtn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      activeWindow = btn.dataset.window;
-      renderConversions();
-    });
 
     function renderMetrics(filtered) {
       const total = filtered.length;
@@ -453,6 +493,172 @@
     load();
     // Also refresh silently every 10 minutes in case the user leaves this tab open.
     setInterval(load, 10 * 60 * 1000);
+
+    // ===== CONVERSION METRICS SECTION =====
+    const CONV_METRICS_URL = "/.netlify/functions/conversion-metrics";
+    const convCache = new Map(); // `${start}-${end}` -> data
+    const pad = n => String(n).padStart(2, "0");
+    const toDateStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const fromDateStr = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    const startOfDay = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+    const endOfDay   = d => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+
+    function applyPreset(preset, startEl, endEl) {
+      const now = new Date();
+      let start, end = endOfDay(now);
+      switch (preset) {
+        case "30":  start = startOfDay(new Date(now - 30  * 86400000)); break;
+        case "90":  start = startOfDay(new Date(now - 90  * 86400000)); break;
+        case "365": start = startOfDay(new Date(now - 365 * 86400000)); break;
+        case "mtd": start = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)); break;
+        case "qtd": { const q = Math.floor(now.getMonth() / 3) * 3; start = startOfDay(new Date(now.getFullYear(), q, 1)); break; }
+        case "ytd": start = startOfDay(new Date(now.getFullYear(), 0, 1)); break;
+        case "lastmonth": {
+          start = startOfDay(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+          end   = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
+          break;
+        }
+        case "lastquarter": {
+          const thisQ = Math.floor(now.getMonth() / 3);
+          const lastQ = thisQ === 0 ? 3 : thisQ - 1;
+          const year  = thisQ === 0 ? now.getFullYear() - 1 : now.getFullYear();
+          start = startOfDay(new Date(year, lastQ * 3, 1));
+          end   = endOfDay(new Date(year, lastQ * 3 + 3, 0));
+          break;
+        }
+        case "lastyear": {
+          start = startOfDay(new Date(now.getFullYear() - 1, 0, 1));
+          end   = endOfDay(new Date(now.getFullYear() - 1, 11, 31));
+          break;
+        }
+        default: return;
+      }
+      startEl.value = toDateStr(start);
+      endEl.value   = toDateStr(end);
+    }
+
+    function applyCompareRelative(preset) {
+      const aStart = fromDateStr(document.getElementById("pa-start").value);
+      const aEnd   = fromDateStr(document.getElementById("pa-end").value);
+      const bStart = document.getElementById("pb-start");
+      const bEnd   = document.getElementById("pb-end");
+      if (preset === "prev") {
+        const spanMs = aEnd.getTime() - aStart.getTime() + 86400000;
+        bEnd.value   = toDateStr(new Date(aStart.getTime() - 86400000));
+        bStart.value = toDateStr(new Date(aStart.getTime() - spanMs));
+      } else if (preset === "yoy") {
+        const yoy = d => { const x = new Date(d); x.setFullYear(x.getFullYear() - 1); return x; };
+        bStart.value = toDateStr(yoy(aStart));
+        bEnd.value   = toDateStr(yoy(aEnd));
+      } else {
+        applyPreset(preset, bStart, bEnd);
+      }
+    }
+
+    async function fetchConvMetrics(startMs, endMs) {
+      const key = `${startMs}-${endMs}`;
+      if (convCache.has(key)) return convCache.get(key);
+      const res = await fetch(`${CONV_METRICS_URL}?start=${startMs}&end=${endMs}`);
+      if (!res.ok) throw new Error(`Metrics ${res.status}`);
+      const data = await res.json();
+      convCache.set(key, data);
+      return data;
+    }
+
+    function renderPeriodChunk(label, data, metricKey, denKey, extraClass) {
+      const m = data[metricKey];
+      const den = data[denKey];
+      const rateText = m.rate != null ? `${m.rate}%` : "—";
+      return `<div class="period-chunk ${extraClass}">
+        <span class="pk">${label}</span>
+        <span class="nums">${den.toLocaleString()} created → ${data.salesClosed.toLocaleString()} sales</span>
+        <span class="rate ${m.rate == null ? 'dim' : ''}">${rateText}</span>
+      </div>`;
+    }
+
+    function deltaPill(a, b) {
+      if (a == null || b == null) return "";
+      const d = Math.round((a - b) * 10) / 10;
+      if (d === 0) return `<span class="delta flat">→ 0pp</span>`;
+      return d > 0
+        ? `<span class="delta up">↑ ${d}pp</span>`
+        : `<span class="delta down">↓ ${Math.abs(d)}pp</span>`;
+    }
+
+    async function renderConvMetrics() {
+      const pas = document.getElementById("pa-start").value;
+      const pae = document.getElementById("pa-end").value;
+      if (!pas || !pae) return;
+      const compareOn = document.getElementById("compare-toggle").checked;
+      const pbs = document.getElementById("pb-start").value;
+      const pbe = document.getElementById("pb-end").value;
+
+      const aStartMs = startOfDay(fromDateStr(pas)).getTime();
+      const aEndMs   = endOfDay(fromDateStr(pae)).getTime();
+
+      const rows = [
+        { rowId: "periods-contacts",      metricKey: "contactsToSales",      denKey: "contactsCreated" },
+        { rowId: "periods-applications",  metricKey: "applicationsToSales",  denKey: "applicationsCreated" },
+        { rowId: "periods-opportunities", metricKey: "opportunitiesToSales", denKey: "opportunitiesCreated" },
+      ];
+
+      for (const r of rows) document.getElementById(r.rowId).innerHTML = `<span class="conv-loading">Loading…</span>`;
+
+      try {
+        const dataA = await fetchConvMetrics(aStartMs, aEndMs);
+        let dataB = null;
+        if (compareOn && pbs && pbe) {
+          const bStartMs = startOfDay(fromDateStr(pbs)).getTime();
+          const bEndMs   = endOfDay(fromDateStr(pbe)).getTime();
+          dataB = await fetchConvMetrics(bStartMs, bEndMs);
+        }
+        for (const r of rows) {
+          const container = document.getElementById(r.rowId);
+          container.classList.toggle("single", !dataB);
+          let html = renderPeriodChunk("Period A", dataA, r.metricKey, r.denKey, "period-a");
+          if (dataB) {
+            html += renderPeriodChunk("Period B", dataB, r.metricKey, r.denKey, "period-b");
+            const delta = deltaPill(dataA[r.metricKey].rate, dataB[r.metricKey].rate);
+            if (delta) html = html.replace('</span></div>', `</span> ${delta}</div>`); // append to period A rate
+          }
+          container.innerHTML = html;
+        }
+      } catch (err) {
+        for (const r of rows) {
+          document.getElementById(r.rowId).innerHTML = `<span class="conv-loading">Failed: ${escapeHtml(err.message)}</span>`;
+        }
+      }
+    }
+
+    // Wire events
+    document.getElementById("presets-a").addEventListener("click", e => {
+      const b = e.target.closest(".preset"); if (!b) return;
+      document.querySelectorAll("#presets-a .preset").forEach(p => p.classList.remove("active"));
+      b.classList.add("active");
+      applyPreset(b.dataset.preset, document.getElementById("pa-start"), document.getElementById("pa-end"));
+      renderConvMetrics();
+    });
+    document.getElementById("presets-b").addEventListener("click", e => {
+      const b = e.target.closest(".preset"); if (!b) return;
+      document.querySelectorAll("#presets-b .preset").forEach(p => p.classList.remove("active"));
+      b.classList.add("active");
+      applyCompareRelative(b.dataset.preset);
+      renderConvMetrics();
+    });
+    document.getElementById("compare-toggle").addEventListener("change", e => {
+      document.getElementById("period-b-controls").hidden = !e.target.checked;
+      if (e.target.checked && !document.getElementById("pb-start").value) {
+        applyCompareRelative("prev");
+      }
+      renderConvMetrics();
+    });
+    ["pa-start","pa-end","pb-start","pb-end"].forEach(id => {
+      document.getElementById(id).addEventListener("change", renderConvMetrics);
+    });
+
+    // Initial: default Period A to last 12 months
+    applyPreset("365", document.getElementById("pa-start"), document.getElementById("pa-end"));
+    renderConvMetrics();
   </script>
 </body>
 </html>
