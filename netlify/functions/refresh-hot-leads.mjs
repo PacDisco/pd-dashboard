@@ -10,7 +10,7 @@
 // Output: Netlify Blobs ("hot-leads" / "hot-leads.json").
 //
 // Env vars required:
-//   HUBSPOT_PRIVATE_APP_TOKEN
+//   HUBSPOT_TOKEN
 //
 // HubSpot private-app scopes:
 //   crm.objects.contacts.read
@@ -85,8 +85,8 @@ const HUBSPOT_BASE = "https://api.hubapi.com";
 // ----------------------------- HELPERS --------------------------------------
 
 function hubspotHeaders() {
-  const token = process.env.HUBSPOT_PRIVATE_APP_TOKEN;
-  if (!token) throw new Error("HUBSPOT_PRIVATE_APP_TOKEN env var is missing");
+  const token = process.env.HUBSPOT_TOKEN;
+  if (!token) throw new Error("HUBSPOT_TOKEN env var is missing");
   return {
     "Authorization": `Bearer ${token}`,
     "Content-Type": "application/json",
