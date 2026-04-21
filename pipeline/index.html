@@ -16,6 +16,7 @@
       --hot-sale: #22c55e;
       --hot-opp: #3b82f6;
       --hot-app: #a78bfa;
+      --hot-sql: #14b8a6;
       --danger: #ef4444;
     }
     * { box-sizing: border-box; }
@@ -37,6 +38,7 @@
     .card.sale { border-left: 3px solid var(--hot-sale); }
     .card.opp { border-left: 3px solid var(--hot-opp); }
     .card.app { border-left: 3px solid var(--hot-app); }
+    .card.sql { border-left: 3px solid var(--hot-sql); }
     .card.total { border-left: 3px solid var(--accent); }
     .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
     .filters input[type=search] {
@@ -57,6 +59,27 @@
     .bucket.Sale { background: rgba(34,197,94,0.15); color: var(--hot-sale); }
     .bucket.Opportunity { background: rgba(59,130,246,0.15); color: var(--hot-opp); }
     .bucket.Applicant { background: rgba(167,139,250,0.15); color: var(--hot-app); }
+    .bucket.SQL { background: rgba(20,184,166,0.15); color: var(--hot-sql); }
+    .bucket.HotLead, .bucket["Hot Lead"] { background: rgba(239,68,68,0.18); color: #fca5a5; }
+    .score-pill { display: inline-block; background: rgba(20,184,166,0.15); color: var(--hot-sql); padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 4px; }
+    .signal-tag { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+    .flag-btn { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 3px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .flag-btn:hover { color: var(--text); border-color: var(--danger); }
+    .flag-btn.flagged { background: rgba(239,68,68,0.15); color: #fca5a5; border-color: var(--danger); }
+    .flag-btn.flagged:hover { background: rgba(239,68,68,0.25); }
+    tr.flagged { background: rgba(239,68,68,0.05); }
+    tr.flagged td:first-child { border-left: 3px solid var(--danger); }
+    .hot-note { display: block; font-size: 12px; color: #fca5a5; font-style: italic; margin-top: 2px; max-width: 280px; white-space: normal; }
+    dialog.flag-dialog { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 0; max-width: 420px; }
+    dialog.flag-dialog::backdrop { background: rgba(0,0,0,0.6); }
+    .dialog-inner { padding: 18px 20px; }
+    .dialog-inner h3 { margin: 0 0 6px; font-size: 16px; }
+    .dialog-inner textarea { width: 100%; min-height: 80px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: inherit; resize: vertical; }
+    .dialog-inner input[type=text] { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: inherit; margin-bottom: 10px; }
+    .dialog-inner label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .dialog-actions button { padding: 6px 14px; border-radius: 6px; font: inherit; cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); }
+    .dialog-actions button.primary { background: var(--danger); color: white; border-color: var(--danger); }
     .urgency { font-weight: 600; }
     .urgency.warn { color: var(--accent); }
     .urgency.danger { color: var(--danger); }
@@ -100,6 +123,10 @@
         <div class="label">Applicant (no fee)</div>
         <div class="value" id="m-app">—</div>
       </div>
+      <div class="card sql">
+        <div class="label">SQL (scored)</div>
+        <div class="value" id="m-sql">—</div>
+      </div>
       <div class="card">
         <div class="label">Potential Pipeline $</div>
         <div class="value" id="m-value">—</div>
@@ -109,9 +136,26 @@
     <div class="filters">
       <input id="q" type="search" placeholder="Search name, email, program, owner…" />
       <span class="chip active" data-bucket="all">All</span>
+      <span class="chip" data-bucket="flagged">🔥 Flagged</span>
       <span class="chip" data-bucket="Opportunity">Opportunity</span>
       <span class="chip" data-bucket="Applicant">Applicant</span>
+      <span class="chip" data-bucket="SQL">SQL</span>
     </div>
+
+    <dialog class="flag-dialog" id="flag-dialog">
+      <form method="dialog" class="dialog-inner" id="flag-form">
+        <h3 id="flag-dialog-title">Flag as hot lead</h3>
+        <p class="meta" id="flag-dialog-name" style="margin:0 0 12px;"></p>
+        <label for="flag-who">Your name (for audit trail)</label>
+        <input type="text" id="flag-who" placeholder="e.g. Jake" required />
+        <label for="flag-note">Note (optional)</label>
+        <textarea id="flag-note" placeholder="Why are you flagging this lead?"></textarea>
+        <div class="dialog-actions">
+          <button type="button" value="cancel" id="flag-cancel">Cancel</button>
+          <button type="submit" class="primary" id="flag-confirm">Flag</button>
+        </div>
+      </form>
+    </dialog>
 
     <table id="table">
       <thead>
@@ -124,6 +168,7 @@
           <th>Days since touch</th>
           <th class="amount">Amount</th>
           <th>HubSpot</th>
+          <th>🔥</th>
         </tr>
       </thead>
       <tbody id="tbody">
@@ -176,18 +221,25 @@
       document.getElementById("m-total").textContent = s.counts?.total ?? 0;
       document.getElementById("m-opp").textContent = s.counts?.Opportunity ?? 0;
       document.getElementById("m-app").textContent = s.counts?.Applicant ?? 0;
+      document.getElementById("m-sql").textContent = s.counts?.SQL ?? 0;
       document.getElementById("m-value").textContent = fmtMoney(s.totalPipelineValue || 0);
+      const appPipes = s.pipelinesScanned?.applicant?.length ?? 0;
+      const oppPipes = s.pipelinesScanned?.opportunity?.length ?? 0;
       const meta = s.generatedAt
-        ? `Generated ${fmtRelative(s.generatedAt)} · ${s.pipelinesScanned?.length ?? 0} pipelines scanned · last ${s.recencyDays ?? 14} days of activity · excludes Sale + Closed Won`
+        ? `Generated ${fmtRelative(s.generatedAt)} · ${appPipes} Applicant + ${oppPipes} Opportunity pipelines · last ${s.recencyDays ?? 14} days · SQL threshold ${s.sqlThreshold ?? 30} · excludes Sale + Closed Won`
         : "Feed has not been generated yet.";
       document.getElementById("meta").textContent = meta;
     }
 
     function matches(r) {
-      if (activeBucket !== "all" && r.bucket !== activeBucket) return false;
+      if (activeBucket === "flagged") {
+        if (!r.isHotLead) return false;
+      } else if (activeBucket !== "all") {
+        if (r.bucket !== activeBucket) return false;
+      }
       if (!query) return true;
       const hay = [
-        r.name, r.email, r.dealName, r.pipelineLabel, r.stageLabel, r.owner
+        r.name, r.email, r.dealName, r.pipelineLabel, r.stageLabel, r.owner, r.hotLeadNote
       ].filter(Boolean).join(" ").toLowerCase();
       return hay.includes(query);
     }
@@ -199,9 +251,19 @@
         tbody.innerHTML = `<tr><td colspan="8" class="empty">No matching hot leads.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map(r => `
-        <tr>
-          <td><span class="bucket ${r.bucket}">${r.bucket}</span><div class="sub">${escapeHtml(r.stageLabel || "")}</div></td>
+      tbody.innerHTML = rows.map(r => {
+        const scorePill = r.sqlScore != null ? `<span class="score-pill">${r.sqlScore}</span>` : "";
+        const topSignalHint = r.sqlTopSignal ? `<div class="signal-tag">${escapeHtml(formatSignal(r.sqlTopSignal))}</div>` : "";
+        const bucketClass = r.bucket === "Hot Lead" ? "HotLead" : r.bucket;
+        const noteLine = r.isHotLead && r.hotLeadNote
+          ? `<span class="hot-note">🔥 ${escapeHtml(r.hotLeadNote)}${r.hotLeadFlaggedBy ? ` — ${escapeHtml(r.hotLeadFlaggedBy)}` : ""}</span>`
+          : r.isHotLead
+            ? `<span class="hot-note">🔥 Flagged${r.hotLeadFlaggedBy ? ` by ${escapeHtml(r.hotLeadFlaggedBy)}` : ""}</span>`
+            : "";
+        const flagBtnLabel = r.isHotLead ? "🔥 Unflag" : "🔥 Flag";
+        return `
+        <tr class="${r.isHotLead ? 'flagged' : ''}">
+          <td><span class="bucket ${bucketClass}">${r.bucket}</span>${scorePill}<div class="sub">${escapeHtml(r.stageLabel || "")}</div>${topSignalHint}${noteLine}</td>
           <td class="name-cell">${escapeHtml(r.name || "—")}<div class="sub">${escapeHtml(r.email || "")}</div></td>
           <td class="hide-sm">${escapeHtml(r.pipelineLabel || "—")}</td>
           <td>${escapeHtml(r.owner || "—")}</td>
@@ -209,8 +271,24 @@
           <td class="urgency ${urgencyClass(r.daysSinceTouch)}">${r.daysSinceTouch ?? "—"}</td>
           <td class="amount">${fmtMoney(r.amount)}</td>
           <td>${r.contactUrl ? `<a href="${r.contactUrl}" target="_blank" rel="noopener">Contact ↗</a>` : "—"}${r.dealUrl ? ` · <a href="${r.dealUrl}" target="_blank" rel="noopener">Deal ↗</a>` : ""}</td>
+          <td><button class="flag-btn ${r.isHotLead ? 'flagged' : ''}" data-contact-id="${r.contactId}" data-action="${r.isHotLead ? 'unflag' : 'flag'}" data-name="${escapeHtml(r.name || '')}">${flagBtnLabel}</button></td>
         </tr>
-      `).join("");
+      `;}).join("");
+    }
+
+    function formatSignal(key) {
+      const map = {
+        form_last_14d: "Form submitted ≤14d",
+        multi_forms: "Multiple forms",
+        meeting_booked: "Meeting booked",
+        email_replied_14d: "Replied to sales email",
+        email_clicked_14d: "Clicked sales email",
+        email_opened_7d: "Opened sales email",
+        sessions_3_14d: "3+ site visits",
+        pageview_7d: "Recent pageview",
+        has_owner: "Has owner",
+      };
+      return map[key] || key;
     }
 
     function escapeHtml(s) {
@@ -228,6 +306,69 @@
     document.getElementById("q").addEventListener("input", e => {
       query = e.target.value.trim().toLowerCase();
       render();
+    });
+
+    // ----- FLAGGING -----
+    const FLAG_URL = "/.netlify/functions/flag-lead";
+    const LAST_NAME_KEY = "hotLeadsDashboard_flaggedBy";
+    const dialog = document.getElementById("flag-dialog");
+    const titleEl = document.getElementById("flag-dialog-title");
+    const nameEl = document.getElementById("flag-dialog-name");
+    const whoEl = document.getElementById("flag-who");
+    const noteEl = document.getElementById("flag-note");
+    const confirmBtn = document.getElementById("flag-confirm");
+    const cancelBtn = document.getElementById("flag-cancel");
+    let pendingFlag = null;
+
+    // Restore last-used name so users don't retype every time.
+    try { whoEl.value = localStorage.getItem(LAST_NAME_KEY) || ""; } catch {}
+
+    document.getElementById("tbody").addEventListener("click", e => {
+      const btn = e.target.closest(".flag-btn");
+      if (!btn) return;
+      pendingFlag = {
+        contactId: btn.dataset.contactId,
+        action: btn.dataset.action,
+        name: btn.dataset.name,
+      };
+      titleEl.textContent = pendingFlag.action === "flag" ? "Flag as hot lead" : "Remove hot lead flag";
+      nameEl.textContent = pendingFlag.name;
+      confirmBtn.textContent = pendingFlag.action === "flag" ? "Flag" : "Unflag";
+      noteEl.style.display = pendingFlag.action === "flag" ? "" : "none";
+      dialog.showModal();
+    });
+
+    cancelBtn.addEventListener("click", () => dialog.close());
+
+    document.getElementById("flag-form").addEventListener("submit", async e => {
+      e.preventDefault();
+      if (!pendingFlag) return;
+      const flaggedBy = whoEl.value.trim();
+      if (!flaggedBy) { whoEl.focus(); return; }
+      try { localStorage.setItem(LAST_NAME_KEY, flaggedBy); } catch {}
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Saving…";
+      try {
+        const res = await fetch(FLAG_URL, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            contactId: pendingFlag.contactId,
+            action: pendingFlag.action,
+            note: noteEl.value.trim(),
+            flaggedBy,
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        dialog.close();
+        noteEl.value = "";
+        await load();
+      } catch (err) {
+        alert("Flag failed: " + err.message);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = pendingFlag.action === "flag" ? "Flag" : "Unflag";
+      }
     });
 
     load();
