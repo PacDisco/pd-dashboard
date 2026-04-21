@@ -353,6 +353,46 @@ async function batchReadDeals(dealIds) {
   return byId;
 }
 
+// Historical conversion rates: for each stage, what fraction of contacts who
+// ever reached that stage ultimately became customers (= paid a deposit)?
+// Runs 7 lightweight COUNT searches (limit=1, we only need `total`).
+// Sequential with throttle to respect HubSpot's 4 req/s search limit.
+async function computeConversionRates() {
+  const baseFilter = { propertyName: "company_tag", operator: "EQ", value: CONFIG.companyTagValue };
+  async function countAt(filters) {
+    const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
+      method: "POST",
+      body: JSON.stringify({
+        limit: 1,
+        filterGroups: [{ filters: [baseFilter, ...filters] }],
+      }),
+    });
+    await sleep(300);
+    return data.total || 0;
+  }
+
+  const HAS = name => ({ propertyName: name, operator: "HAS_PROPERTY" });
+
+  const everSQL       = await countAt([HAS("hs_v2_date_entered_salesqualifiedlead")]);
+  const sqlToCust     = await countAt([HAS("hs_v2_date_entered_salesqualifiedlead"), HAS("hs_v2_date_entered_customer")]);
+  const everOpp       = await countAt([HAS("hs_v2_date_entered_opportunity")]);
+  const oppToCust     = await countAt([HAS("hs_v2_date_entered_opportunity"), HAS("hs_v2_date_entered_customer")]);
+  const everApp       = await countAt([HAS("became_an_application_started_date")]);
+  const appToCust     = await countAt([HAS("became_an_application_started_date"), HAS("hs_v2_date_entered_customer")]);
+  const everCust      = await countAt([HAS("hs_v2_date_entered_customer")]);
+
+  const pct = (num, den) => den > 0 ? Math.round((num / den) * 1000) / 10 : null;
+
+  return {
+    SQL:         { passed: everSQL, converted: sqlToCust, rate: pct(sqlToCust, everSQL) },
+    Applicant:   { passed: everApp, converted: appToCust, rate: pct(appToCust, everApp) },
+    Opportunity: { passed: everOpp, converted: oppToCust, rate: pct(oppToCust, everOpp) },
+    // Overall: customers / everSQL — proxies "any-hot-stage → close" since
+    // most customers pass through SQL at some point. Conservative estimate.
+    ActiveLeads: { passed: everSQL, converted: everCust, rate: pct(everCust, everSQL) },
+  };
+}
+
 async function fetchOwners(ownerIds) {
   if (!ownerIds.size) return {};
   const map = {};
@@ -435,6 +475,14 @@ export default async () => {
   const ownerIds = new Set(contacts.map(c => c.properties.hubspot_owner_id).filter(Boolean));
   const ownerMap = await fetchOwners(ownerIds);
 
+  // 4b. Historical conversion rates (independent of the record filter).
+  let conversions = {};
+  try {
+    conversions = await computeConversionRates();
+  } catch (err) {
+    console.error("Conversion rate calc failed:", err.message);
+  }
+
   // 5. Build lead records.
   const nowIso = startedAt.toISOString();
   const records = [];
@@ -463,8 +511,10 @@ export default async () => {
       dealName = primary.deal.properties.dealname;
       amount = primary.deal.properties.amount ? Number(primary.deal.properties.amount) : null;
       daysInStage = daysBetween(primary.deal.properties.hs_date_entered_current_stage, nowIso);
-    } else if (sqlCandidateIds.has(c.id)) {
-      // Score-based SQL (no deal required).
+    } else if (sqlCandidateIds.has(c.id) && dealIds.length === 0) {
+      // Score-based SQL — a contact is only SQL if they have NO associated
+      // deals. The moment a deal exists, they belong in Applicant/Opportunity
+      // (deal-driven) or they're past the hot list entirely.
       const scored = computeSQLScore(props);
       if (scored.score >= CONFIG.sqlThreshold) {
         bucket = "SQL";
@@ -473,14 +523,6 @@ export default async () => {
         sqlScore = scored.score;
         sqlBreakdown = scored.breakdown;
         sqlTopSignal = scored.topSignal;
-        // Still surface any deal context (even a non-hot one) for the row.
-        if (primary) {
-          pipelineLabel = primary.pipeline.label;
-          pipelineId = primary.pipeline.id;
-          dealId = primary.deal.id;
-          dealName = primary.deal.properties.dealname;
-          amount = primary.deal.properties.amount ? Number(primary.deal.properties.amount) : null;
-        }
       }
     }
 
@@ -542,6 +584,7 @@ export default async () => {
     totalPipelineValue: records.reduce((s, r) => s + (r.amount || 0), 0),
     contactsScanned: contacts.length,
     sqlThreshold: CONFIG.sqlThreshold,
+    conversions,
   };
 
   const payload = { summary, records };
