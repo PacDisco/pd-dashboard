@@ -49,35 +49,66 @@ const CONFIG = {
     "Opportunity",
   ],
 
-  // Only deals in pipelines whose NAME matches one of these patterns are used
-  // to classify a lead's bucket. Contacts with no matching deal fall back to
-  // contact-level lifecyclestage / hs_lead_status.
-  pipelineNamePatterns: [
-    /semester/i,       // Fall/Spring/Gap/Mini Semester
-    /minimester/i,
-    /mini[-_ ]?mester/i,
-    /summer/i,
+  // ---- SQL SCORING ----
+  // Score-based SQL identification. A contact is flagged "SQL" if their
+  // composite engagement score meets sqlThreshold. Scoring is tuned for
+  // Pacific Discovery's sales cycle and is the easiest thing to tune as
+  // you learn which contacts are real SQLs vs noise.
+  sqlThreshold: 30,
+  sqlLifecycleStages: ["lead", "marketingqualifiedlead", "salesqualifiedlead"],
+  sqlScoring: {
+    formSubmissionLast14Days: 30,
+    multipleUniqueForms: 10,           // >= 2 unique forms submitted (lifetime)
+    meetingBookedEver: 25,
+    salesEmailRepliedLast14Days: 25,
+    salesEmailClickedLast14Days: 15,
+    salesEmailOpenedLast7Days: 10,
+    threePlusSessionsLast14Days: 15,
+    pageviewLast7Days: 10,
+    hasOwner: 5,
+  },
+
+  // ---- APPLICANT PIPELINE ----
+  // A deal in a pipeline whose name matches these patterns -> Applicant bucket
+  // (any stage except closed-won/closed-lost). Exact expected name: "PD Applications".
+  applicantPipelinePatterns: [
+    /^pd\s+applications?$/i,
   ],
 
-  // Stage-label classification (deal-side). Sale + Closed Won are explicitly
-  // NOT hot — this dashboard is a mining list of leads still to close.
-  dealStageBuckets: [
-    { bucket: "Sale",        hot: false, patterns: [/deposit (received|paid|processed)/i, /awaiting deposit/i, /^deposit$/i] },
-    { bucket: "Opportunity", hot: true,  patterns: [/application fee/i, /app.*fee/i, /interview/i, /^opportunity$/i] },
-    { bucket: "Applicant",   hot: true,  patterns: [/application started/i, /applicant/i, /^admissions$/i] },
-    { bucket: "SQL",         hot: false, patterns: [/sales qualified/i, /^sql$/i, /qualifying/i] },
-    { bucket: "MQL",         hot: false, patterns: [/marketing qualified/i, /^mql$/i, /^new lead$/i, /^new$/i] },
-    { bucket: "Closed Won",  hot: false, patterns: [/closed ?won/i, /payment complete/i] },
-    { bucket: "Closed Lost", hot: false, patterns: [/closed ?lost/i, /unsuccessful/i, /lost/i] },
+  // ---- OPPORTUNITY PIPELINES ----
+  // Deals in any pipeline matching these patterns count for Opportunity only
+  // if the stage label also matches opportunityStagePatterns below. These are
+  // the "initial 5" program pipelines.
+  opportunityPipelinePatterns: [
+    /fall.*semester/i,      // Fall Semester (gap semester variants)
+    /fall.*mini/i,          // Fall Mini Semester / Minimester
+    /spring.*semester/i,
+    /spring.*mini/i,
+    /summer/i,              // Summer Program(s)
   ],
 
-  // Contact-side fallback classification (used when contact has no matching deal).
-  contactFallbackBuckets: [
-    { bucket: "Opportunity", hot: true,  when: c => c.lifecyclestage === "opportunity" || /opportunity|interview/i.test(c.hs_lead_status || "") },
-    { bucket: "Applicant",   hot: true,  when: c => /application started|admissions|applicant/i.test(c.hs_lead_status || "") },
-    { bucket: "SQL",         hot: false, when: c => c.lifecyclestage === "salesqualifiedlead" || /sales qualified/i.test(c.hs_lead_status || "") },
-    { bucket: "MQL",         hot: false, when: c => c.lifecyclestage === "marketingqualifiedlead" || /marketing qualified/i.test(c.hs_lead_status || "") },
+  // Stage labels that qualify as Opportunity inside the 5 program pipelines.
+  opportunityStagePatterns: [
+    /^application received/i,
+    /^interview$/i,
+    /^interview complete$/i,
   ],
+
+  // Stage patterns that disqualify a deal from being "hot" even if pipeline
+  // matches (deposit/closed are excluded; applicant-pipeline closed states).
+  excludedStagePatterns: [
+    /closed ?won/i,
+    /closed ?lost/i,
+    /unsuccessful/i,
+    /deposit (received|paid|processed)/i,
+    /payment complete/i,
+  ],
+
+  // NOTE: Applicant and Opportunity are now deal-driven only (see
+  // applicantPipelinePatterns / opportunityPipelinePatterns above). There is
+  // no contact-level fallback for them — a contact without a matching deal
+  // cannot be classified as Applicant or Opportunity. Score-based SQL below
+  // still applies independently.
 
   // A contact is "recent" if lastmodifieddate is within this many days.
   recencyDays: 14,
@@ -132,18 +163,24 @@ async function hubspotFetch(path, init = {}, attempt = 0) {
   return res.json();
 }
 
-function classifyDealStage(stageLabel) {
-  for (const b of CONFIG.dealStageBuckets) if (b.patterns.some(p => p.test(stageLabel))) return b;
-  return { bucket: "Other", hot: false };
-}
+// Pipeline / stage predicates.
+const isApplicantPipeline  = label => CONFIG.applicantPipelinePatterns.some(p => p.test(label || ""));
+const isOpportunityPipeline = label => CONFIG.opportunityPipelinePatterns.some(p => p.test(label || ""));
+const isOpportunityStage   = label => CONFIG.opportunityStagePatterns.some(p => p.test(label || ""));
+const isExcludedStage      = label => CONFIG.excludedStagePatterns.some(p => p.test(label || ""));
+const matchesAnyWatchedPipeline = label => isApplicantPipeline(label) || isOpportunityPipeline(label);
 
-function classifyContactFallback(contactProps) {
-  for (const b of CONFIG.contactFallbackBuckets) if (b.when(contactProps)) return b;
+// Classify a deal by pipeline + stage label into a bucket.
+//   - Deal in PD Applications pipeline (non-closed stage)  => Applicant
+//   - Deal in one of the 5 program pipelines, stage is App Received / Interview / Interview Complete => Opportunity
+//   - Otherwise -> "Other" (excluded from the hot list)
+function classifyDeal(pipelineLabel, stageLabel) {
+  if (isExcludedStage(stageLabel)) return { bucket: "Excluded", hot: false };
+  if (isApplicantPipeline(pipelineLabel)) return { bucket: "Applicant", hot: true };
+  if (isOpportunityPipeline(pipelineLabel) && isOpportunityStage(stageLabel)) {
+    return { bucket: "Opportunity", hot: true };
+  }
   return { bucket: "Other", hot: false };
-}
-
-function matchesPipelineName(label) {
-  return CONFIG.pipelineNamePatterns.some(p => p.test(label));
 }
 
 function daysBetween(a, b) {
@@ -206,6 +243,82 @@ async function searchPDContacts() {
   return out;
 }
 
+// Pull contacts who sit earlier in the funnel (lead/MQL/SQL lifecyclestage)
+// and show at least one engagement signal. This is the candidate pool for
+// score-based SQL identification. We use 4 filterGroups (OR'd together) so
+// any ONE of form/meeting/sales-email-click/reply qualifies for evaluation.
+async function searchSQLCandidates() {
+  const sinceMs14 = Date.now() - 14 * 86400000;
+  const sinceIso14 = new Date(sinceMs14).toISOString();
+  const baseFilters = [
+    { propertyName: "company_tag",    operator: "EQ", value: CONFIG.companyTagValue },
+    { propertyName: "lifecyclestage", operator: "IN", values: CONFIG.sqlLifecycleStages },
+  ];
+  const filterGroups = [
+    { filters: [...baseFilters, { propertyName: "recent_conversion_date",      operator: "GTE", value: sinceIso14 }] },
+    { filters: [...baseFilters, { propertyName: "hs_sales_email_last_replied",  operator: "GTE", value: sinceIso14 }] },
+    { filters: [...baseFilters, { propertyName: "hs_sales_email_last_clicked",  operator: "GTE", value: sinceIso14 }] },
+    { filters: [...baseFilters, { propertyName: "engagements_last_meeting_booked_medium", operator: "HAS_PROPERTY" }] },
+  ];
+  const properties = [
+    "firstname", "lastname", "email",
+    "lifecyclestage", "hs_lead_status", "company_tag",
+    "hubspot_owner_id",
+    "lastmodifieddate", "notes_last_updated",
+    "hs_last_sales_activity_timestamp", "notes_last_contacted",
+    // Engagement signals used for scoring:
+    "recent_conversion_date", "num_conversion_events", "num_unique_conversion_events", "recent_conversion_event_name",
+    "hs_sales_email_last_replied", "hs_sales_email_last_clicked", "hs_sales_email_last_opened",
+    "hs_analytics_num_visits", "hs_analytics_last_visit_timestamp", "hs_analytics_num_page_views",
+    "engagements_last_meeting_booked_medium",
+  ];
+
+  const out = [];
+  let after = undefined;
+  do {
+    const body = {
+      limit: CONFIG.pageSize,
+      after,
+      sorts: [{ propertyName: "lastmodifieddate", direction: "DESCENDING" }],
+      properties,
+      filterGroups,
+    };
+    const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    out.push(...(data.results || []));
+    after = data.paging?.next?.after;
+    if (after) await sleep(300);
+  } while (after && out.length < CONFIG.maxContacts);
+  return out;
+}
+
+function computeSQLScore(props) {
+  const now = Date.now();
+  const within = (iso, days) => iso && (now - new Date(iso).getTime()) <= days * 86400000;
+  const weights = CONFIG.sqlScoring;
+  const breakdown = {};
+  let score = 0;
+  const add = (key, points) => { if (points > 0) { score += points; breakdown[key] = points; } };
+
+  if (within(props.recent_conversion_date, 14)) add("form_last_14d", weights.formSubmissionLast14Days);
+  if (Number(props.num_unique_conversion_events || 0) >= 2) add("multi_forms", weights.multipleUniqueForms);
+  if (props.engagements_last_meeting_booked_medium) add("meeting_booked", weights.meetingBookedEver);
+  if (within(props.hs_sales_email_last_replied, 14)) add("email_replied_14d", weights.salesEmailRepliedLast14Days);
+  if (within(props.hs_sales_email_last_clicked, 14)) add("email_clicked_14d", weights.salesEmailClickedLast14Days);
+  if (within(props.hs_sales_email_last_opened, 7))  add("email_opened_7d",   weights.salesEmailOpenedLast7Days);
+  if (Number(props.hs_analytics_num_visits || 0) >= 3 && within(props.hs_analytics_last_visit_timestamp, 14)) {
+    add("sessions_3_14d", weights.threePlusSessionsLast14Days);
+  }
+  if (within(props.hs_analytics_last_visit_timestamp, 7)) add("pageview_7d", weights.pageviewLast7Days);
+  if (props.hubspot_owner_id) add("has_owner", weights.hasOwner);
+
+  // Top contributing signal for display
+  const topSignal = Object.entries(breakdown).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  return { score, breakdown, topSignal };
+}
+
 async function batchGetDealsForContacts(contactIds) {
   const map = {};
   if (!contactIds.length) return map;
@@ -260,12 +373,11 @@ async function fetchOwners(ownerIds) {
 // ----------------------------- PICK PRIMARY DEAL ---------------------------
 
 function pickPrimaryDeal(dealIds, dealsById, stageById) {
-  // Prefer a deal that (a) is in a matched pipeline and (b) is in a hot bucket.
-  // Within that, prefer the one with the furthest-along bucket (Sale > Opp > Applicant).
-  // Ties broken by most recently modified.
-  const bucketRank = { "Sale": 0, "Opportunity": 1, "Applicant": 2, "Other": 99 };
+  // Pick the contact's most-progressed hot deal.
+  // Rank: Opportunity (0) > Applicant (1) > other (99). Ties go to most-recent.
+  const bucketRank = { "Opportunity": 0, "Applicant": 1, "Other": 99, "Excluded": 99 };
   let best = null;
-  let bestScore = [99, 99, 0]; // [bucketRank, pipelineMatched(0=yes), -lastMod]
+  let bestScore = [99, 0]; // [bucketRank, -lastMod]
 
   for (const id of dealIds) {
     const deal = dealsById[id];
@@ -273,17 +385,14 @@ function pickPrimaryDeal(dealIds, dealsById, stageById) {
     const pipelineId = deal.properties.pipeline;
     const ps = stageById.get(`${pipelineId}:${deal.properties.dealstage}`);
     if (!ps) continue;
-    const pipelineMatched = matchesPipelineName(ps.pipeline.label) ? 0 : 1;
-    const cls = classifyDealStage(ps.stage.label);
+    const cls = classifyDeal(ps.pipeline.label, ps.stage.label);
     const rank = bucketRank[cls.bucket] ?? 99;
     const lastMod = new Date(deal.properties.hs_lastmodifieddate || 0).getTime();
 
-    const score = [rank, pipelineMatched, -lastMod];
-    // Lexicographic compare
+    const score = [rank, -lastMod];
     if (score[0] < bestScore[0]
-        || (score[0] === bestScore[0] && score[1] < bestScore[1])
-        || (score[0] === bestScore[0] && score[1] === bestScore[1] && score[2] < bestScore[2])) {
-      best = { deal, pipeline: ps.pipeline, stage: ps.stage, bucket: cls.bucket, hot: cls.hot, pipelineMatched: pipelineMatched === 0 };
+        || (score[0] === bestScore[0] && score[1] < bestScore[1])) {
+      best = { deal, pipeline: ps.pipeline, stage: ps.stage, bucket: cls.bucket, hot: cls.hot };
       bestScore = score;
     }
   }
@@ -300,8 +409,21 @@ export default async () => {
   const stageById = new Map();
   for (const p of allPipelines) for (const s of p.stages) stageById.set(`${p.id}:${s.id}`, { pipeline: p, stage: s });
 
-  // 2. Search contacts with company_tag = Pacific Discovery, recently modified.
-  const contacts = await searchPDContacts();
+  // 2a. Applicant/Opportunity candidates (pre-filtered by hs_lead_status).
+  const applicantOppContacts = await searchPDContacts();
+  // 2b. SQL candidates: earlier-funnel contacts with engagement signals.
+  const sqlCandidateContacts = await searchSQLCandidates();
+
+  // Merge + dedup by contact id. If a contact appears in both searches, we
+  // keep the Applicant/Opportunity version (more authoritative classification).
+  const byId = new Map();
+  for (const c of sqlCandidateContacts) byId.set(c.id, c);
+  for (const c of applicantOppContacts) byId.set(c.id, c);
+  const contacts = [...byId.values()];
+
+  // Build a set of contact IDs that came from the SQL candidate pool so we
+  // know whether to attempt SQL scoring on fallback contacts.
+  const sqlCandidateIds = new Set(sqlCandidateContacts.map(c => c.id));
 
   // 3. Fetch their associated deals.
   const contactIds = contacts.map(c => c.id);
@@ -322,11 +444,16 @@ export default async () => {
     const dealIds = contactToDeals[c.id] || [];
     const primary = pickPrimaryDeal(dealIds, dealsById, stageById);
 
-    // Determine bucket: prefer deal-side classification when deal is in a
-    // matched (PD semester/mini/summer) pipeline. Otherwise fall back to
-    // contact-level lifecyclestage/hs_lead_status.
-    let bucket, hot, stageLabel, pipelineLabel, pipelineId, amount = null, dealId = null, dealName = null, daysInStage = null;
-    if (primary && primary.pipelineMatched && primary.hot) {
+    // Determine bucket:
+    //   1. Deal-side classification if contact has a hot deal in a matched pipeline.
+    //   2. Otherwise, contact-level fallback (Applicant/Opportunity via hs_lead_status).
+    //   3. Otherwise, try SQL scoring — if score >= threshold, bucket = "SQL".
+    let bucket, hot, stageLabel, pipelineLabel, pipelineId;
+    let amount = null, dealId = null, dealName = null, daysInStage = null;
+    let sqlScore = null, sqlBreakdown = null, sqlTopSignal = null;
+
+    if (primary && primary.hot) {
+      // Deal-based classification: Applicant or Opportunity.
       bucket = primary.bucket;
       hot = true;
       stageLabel = primary.stage.label;
@@ -336,18 +463,24 @@ export default async () => {
       dealName = primary.deal.properties.dealname;
       amount = primary.deal.properties.amount ? Number(primary.deal.properties.amount) : null;
       daysInStage = daysBetween(primary.deal.properties.hs_date_entered_current_stage, nowIso);
-    } else {
-      const cls = classifyContactFallback(props);
-      bucket = cls.bucket;
-      hot = cls.hot;
-      stageLabel = props.hs_lead_status || props.lifecyclestage || "—";
-      // If there is a deal at all, surface its pipeline/amount for context.
-      if (primary) {
-        pipelineLabel = primary.pipeline.label;
-        pipelineId = primary.pipeline.id;
-        dealId = primary.deal.id;
-        dealName = primary.deal.properties.dealname;
-        amount = primary.deal.properties.amount ? Number(primary.deal.properties.amount) : null;
+    } else if (sqlCandidateIds.has(c.id)) {
+      // Score-based SQL (no deal required).
+      const scored = computeSQLScore(props);
+      if (scored.score >= CONFIG.sqlThreshold) {
+        bucket = "SQL";
+        hot = true;
+        stageLabel = props.hs_lead_status || props.lifecyclestage || "—";
+        sqlScore = scored.score;
+        sqlBreakdown = scored.breakdown;
+        sqlTopSignal = scored.topSignal;
+        // Still surface any deal context (even a non-hot one) for the row.
+        if (primary) {
+          pipelineLabel = primary.pipeline.label;
+          pipelineId = primary.pipeline.id;
+          dealId = primary.deal.id;
+          dealName = primary.deal.properties.dealname;
+          amount = primary.deal.properties.amount ? Number(primary.deal.properties.amount) : null;
+        }
       }
     }
 
@@ -371,6 +504,9 @@ export default async () => {
       daysInStage,
       dealId,
       dealName,
+      sqlScore,
+      sqlTopSignal,
+      sqlBreakdown,
       contactUrl: `https://app.hubspot.com/contacts/${CONFIG.portalId}/record/0-1/${c.id}?utm_source=hot_leads_dashboard`,
       dealUrl: dealId
         ? `https://app.hubspot.com/contacts/${CONFIG.portalId}/record/0-3/${dealId}?utm_source=hot_leads_dashboard`
@@ -378,11 +514,13 @@ export default async () => {
     });
   }
 
-  // 6. Sort: Opportunity (closer to close) before Applicant, then freshest.
-  const bucketRank = { "Opportunity": 0, "Applicant": 1 };
+  // 6. Sort: Opportunity > Applicant > SQL (closer to close first). Inside
+  // SQL, sort by score descending. Elsewhere by freshness.
+  const bucketRank = { "Opportunity": 0, "Applicant": 1, "SQL": 2 };
   records.sort((a, b) => {
     const rd = (bucketRank[a.bucket] ?? 99) - (bucketRank[b.bucket] ?? 99);
     if (rd) return rd;
+    if (a.bucket === "SQL" && b.bucket === "SQL") return (b.sqlScore || 0) - (a.sqlScore || 0);
     return new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0);
   });
 
@@ -391,14 +529,19 @@ export default async () => {
     generatedAt: startedAt.toISOString(),
     recencyDays: CONFIG.recencyDays,
     companyTag: CONFIG.companyTagValue.trim(),
-    pipelinesScanned: allPipelines.filter(p => matchesPipelineName(p.label)).map(p => ({ id: p.id, label: p.label })),
+    pipelinesScanned: {
+      applicant: allPipelines.filter(p => isApplicantPipeline(p.label)).map(p => ({ id: p.id, label: p.label })),
+      opportunity: allPipelines.filter(p => isOpportunityPipeline(p.label)).map(p => ({ id: p.id, label: p.label })),
+    },
     counts: {
       total: records.length,
       Opportunity: records.filter(r => r.bucket === "Opportunity").length,
       Applicant: records.filter(r => r.bucket === "Applicant").length,
+      SQL: records.filter(r => r.bucket === "SQL").length,
     },
     totalPipelineValue: records.reduce((s, r) => s + (r.amount || 0), 0),
     contactsScanned: contacts.length,
+    sqlThreshold: CONFIG.sqlThreshold,
   };
 
   const payload = { summary, records };
