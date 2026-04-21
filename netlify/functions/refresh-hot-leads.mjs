@@ -396,30 +396,32 @@ async function computeConversionRatesAllWindows() {
   }
 
   const HAS = name => ({ propertyName: name, operator: "HAS_PROPERTY" });
-  const GTE = (name, iso) => ({ propertyName: name, operator: "GTE", value: iso });
+  // IMPORTANT: HubSpot "date" properties (vs "datetime") reject ISO datetime
+  // strings in GTE filters. Millisecond epoch timestamps work for both types.
+  const GTE = (name, ms) => ({ propertyName: name, operator: "GTE", value: String(ms) });
   const pct = (num, den) => (den != null && num != null && den > 0) ? Math.round((num / den) * 1000) / 10 : null;
 
   const now = Date.now();
-  const iso = days => new Date(now - days * 86400000).toISOString();
+  const msAgo = days => now - days * 86400000;
 
   const WINDOWS = [
-    { key: "all",  label: "All time",    stageDateGte: null },
-    { key: "12m",  label: "Last 12 months", stageDateGte: iso(365) },
-    { key: "6m",   label: "Last 6 months",  stageDateGte: iso(180) },
-    { key: "3m",   label: "Last 3 months",  stageDateGte: iso(90) },
+    { key: "all",  label: "All time",       stageDateGteMs: null },
+    { key: "12m",  label: "Last 12 months", stageDateGteMs: msAgo(365) },
+    { key: "6m",   label: "Last 6 months",  stageDateGteMs: msAgo(180) },
+    { key: "3m",   label: "Last 3 months",  stageDateGteMs: msAgo(90) },
   ];
 
   const results = { diagnostics };
 
   for (const w of WINDOWS) {
-    const sqlEntered = w.stageDateGte
-      ? [GTE("hs_v2_date_entered_salesqualifiedlead", w.stageDateGte)]
+    const sqlEntered = w.stageDateGteMs
+      ? [GTE("hs_v2_date_entered_salesqualifiedlead", w.stageDateGteMs)]
       : [HAS("hs_v2_date_entered_salesqualifiedlead")];
-    const oppEntered = w.stageDateGte
-      ? [GTE("hs_v2_date_entered_opportunity", w.stageDateGte)]
+    const oppEntered = w.stageDateGteMs
+      ? [GTE("hs_v2_date_entered_opportunity", w.stageDateGteMs)]
       : [HAS("hs_v2_date_entered_opportunity")];
-    const appEntered = w.stageDateGte
-      ? [GTE("became_an_application_started_date", w.stageDateGte)]
+    const appEntered = w.stageDateGteMs
+      ? [GTE("became_an_application_started_date", w.stageDateGteMs)]
       : [HAS("became_an_application_started_date")];
 
     const everSQL   = await countAt(`${w.key}/everSQL`,   sqlEntered);
