@@ -24,65 +24,117 @@
 
   header {
     background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 18px 28px; display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;
     flex-wrap: wrap; gap: 12px;
   }
-  header h1 { font-size: 20px; margin: 0; font-weight: 600; }
-  header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
-  .back { color: var(--accent); text-decoration: none; font-size: 13px; }
+  header h1 { font-size: 22px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .back { color: var(--accent); text-decoration: none; font-size: 13px; font-weight: 500; }
   .back:hover { text-decoration: underline; }
 
-  .controls {
+  .controls-wrap {
     background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 14px 28px; display: grid; gap: 14px 18px;
-    grid-template-columns: minmax(240px, 1.3fr) minmax(180px, 1fr) minmax(220px, 1.4fr) minmax(220px, 1.4fr) auto;
+    padding: 18px 32px;
+  }
+  .controls-row {
+    display: grid; gap: 16px; align-items: end;
+  }
+  .controls-row.primary {
+    grid-template-columns: minmax(280px, 2fr) minmax(180px, 1fr) auto;
+  }
+  .controls-row.secondary {
+    grid-template-columns: 1fr 1fr;
+    margin-top: 14px;
     align-items: start;
   }
-  .field label { display: block; font-size: 12px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .field > .fieldlabel {
+    display: block; font-size: 11px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+  }
+  .field > .fieldlabel .count {
+    display: inline-block; background: var(--accent-soft); color: var(--accent);
+    font-weight: 600; border-radius: 999px; padding: 1px 7px; margin-left: 6px;
+    font-size: 10px; letter-spacing: 0;
+  }
   .field select {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
-    border-radius: 6px; background: #fff; font-size: 14px; color: var(--text);
+    width: 100%; padding: 9px 11px; border: 1px solid var(--border);
+    border-radius: 7px; background: #fff; font-size: 14px; color: var(--text);
     font-family: inherit;
   }
   .field select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; min-height: 16px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; min-height: 16px; }
 
   .multi-box {
-    border: 1px solid var(--border); border-radius: 6px; background: #fff;
-    max-height: 140px; overflow-y: auto; padding: 4px;
+    border: 1px solid var(--border); border-radius: 7px; background: #fff;
+    max-height: 180px; overflow-y: auto; padding: 4px;
   }
-  .multi-box.tall { max-height: 180px; }
+  .multi-box .search-wrap { padding: 4px 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .multi-box .search-wrap input {
+    width: 100%; padding: 6px 10px; border: 1px solid var(--border);
+    border-radius: 5px; font-size: 13px; font-family: inherit;
+  }
+  .multi-box .search-wrap input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
   .multi-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center;
+    padding: 6px 8px; border-radius: 5px; cursor: pointer; font-size: 13px;
+    line-height: 1.35;
   }
   .multi-row:hover { background: var(--accent-soft); }
-  .multi-row input { margin: 0; cursor: pointer; }
+  .multi-row input[type="checkbox"] {
+    margin: 0 10px 0 0; cursor: pointer; flex-shrink: 0;
+    width: 14px; height: 14px;
+  }
   .multi-row.disabled { opacity: 0.4; cursor: not-allowed; }
-  .multi-row .label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .multi-row .meta { color: var(--muted); font-size: 11px; margin-left: 8px; }
+  .multi-row.disabled:hover { background: transparent; }
+  .multi-row .label {
+    flex: 1 1 auto; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .multi-row .meta {
+    color: var(--muted); font-size: 11px; margin-left: 10px; flex-shrink: 0;
+  }
   .multi-group-label {
-    font-size: 11px; color: var(--muted); font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.04em;
-    padding: 8px 8px 4px; border-top: 1px solid var(--border); margin-top: 4px;
+    font-size: 10px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 8px 8px 4px; margin-top: 4px;
+    border-top: 1px solid var(--border);
   }
   .multi-group-label:first-child { border-top: none; margin-top: 0; }
 
   button {
-    padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px;
+    padding: 9px 16px; border: 1px solid var(--border); border-radius: 7px;
     background: #fff; cursor: pointer; font-size: 14px; color: var(--text);
-    white-space: nowrap;
+    white-space: nowrap; font-weight: 500;
   }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:hover { filter: brightness(0.98); }
+  button:hover { filter: brightness(0.97); }
   button[disabled] { opacity: 0.5; cursor: not-allowed; }
 
   .status {
-    padding: 8px 28px; font-size: 13px; color: var(--muted);
-    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 10px 32px; font-size: 13px; color: var(--muted);
+    background: #fafbfc; border-bottom: 1px solid var(--border);
   }
-  .status.error { color: var(--danger); }
+  .status.error { color: var(--danger); background: #fef2f2; }
+
+  .chips-bar {
+    padding: 10px 32px; background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  }
+  .chips-bar .chips-label {
+    font-size: 11px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px 4px 10px; background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; font-size: 12px; font-weight: 500;
+  }
+  .chip button {
+    all: unset; cursor: pointer; width: 16px; height: 16px; line-height: 14px;
+    text-align: center; border-radius: 50%; color: var(--accent); font-size: 14px;
+  }
+  .chip button:hover { background: rgba(37, 99, 235, 0.2); }
 
   main { padding: 24px 28px; }
 
@@ -161,30 +213,38 @@
   <a class="back" href="/">&larr; All dashboards</a>
 </header>
 
-<div class="controls">
-  <div class="field">
-    <label for="versionSelect">Version</label>
-    <select id="versionSelect"></select>
-    <div class="hint" id="versionHint">&nbsp;</div>
+<div class="controls-wrap">
+  <div class="controls-row primary">
+    <div class="field">
+      <label class="fieldlabel" for="versionSelect">Version</label>
+      <select id="versionSelect"></select>
+      <div class="hint" id="versionHint">&nbsp;</div>
+    </div>
+    <div class="field">
+      <label class="fieldlabel" for="tabSelect">Sheet / Tab</label>
+      <select id="tabSelect"></select>
+      <div class="hint">&nbsp;</div>
+    </div>
+    <div class="field">
+      <button id="refreshBtn" class="primary" title="Re-fetch file list and reload">↻ Refresh</button>
+    </div>
   </div>
-  <div class="field">
-    <label for="tabSelect">Sheet / tab</label>
-    <select id="tabSelect"></select>
-    <div class="hint">&nbsp;</div>
-  </div>
-  <div class="field">
-    <label>Compare with</label>
-    <div id="compareList" class="multi-box"></div>
-  </div>
-  <div class="field">
-    <label>Chart rows</label>
-    <div id="chartRowsList" class="multi-box"></div>
-  </div>
-  <div class="field">
-    <button id="refreshBtn" class="primary" title="Re-fetch file list and reload">Refresh</button>
+  <div class="controls-row secondary">
+    <div class="field">
+      <span class="fieldlabel">Compare with <span class="count" id="compareCount" hidden>0</span></span>
+      <div id="compareList" class="multi-box">
+        <div class="search-wrap"><input id="compareSearch" type="search" placeholder="Filter versions…" /></div>
+        <div id="compareListInner"></div>
+      </div>
+    </div>
+    <div class="field">
+      <span class="fieldlabel">Chart rows <span class="count" id="chartRowsCount" hidden>0</span></span>
+      <div id="chartRowsList" class="multi-box"></div>
+    </div>
   </div>
 </div>
 
+<div id="chipsBar" class="chips-bar" hidden></div>
 <div id="status" class="status">Loading…</div>
 
 <main id="main"></main>
@@ -266,15 +326,23 @@ function buildVersionDropdown() {
 }
 
 function buildCompareList() {
-  const list = document.getElementById('compareList');
-  list.innerHTML = '';
+  const inner = document.getElementById('compareListInner');
+  inner.innerHTML = '';
+  const filter = (document.getElementById('compareSearch').value || '').trim().toLowerCase();
   groupForecastsByFolder(state.forecasts).forEach(([folder, forecasts]) => {
+    forecasts.sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime));
+    const matches = forecasts.filter(f =>
+      !filter ||
+      cleanName(f.name).toLowerCase().includes(filter) ||
+      folder.toLowerCase().includes(filter));
+    if (!matches.length) return;
+
     const gl = document.createElement('div');
     gl.className = 'multi-group-label';
     gl.textContent = folder;
-    list.appendChild(gl);
-    forecasts.sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime));
-    forecasts.forEach(f => {
+    inner.appendChild(gl);
+
+    matches.forEach(f => {
       const row = document.createElement('label');
       row.className = 'multi-row';
       const cb = document.createElement('input');
@@ -284,6 +352,7 @@ function buildCompareList() {
       const label = document.createElement('span');
       label.className = 'label';
       label.textContent = cleanName(f.name);
+      label.title = cleanName(f.name);
       const meta = document.createElement('span');
       meta.className = 'meta';
       meta.textContent = formatDate(f.modifiedTime, true);
@@ -295,8 +364,55 @@ function buildCompareList() {
         cb.disabled = true; cb.checked = false;
         row.title = 'This is the primary version';
       }
-      list.appendChild(row);
+      inner.appendChild(row);
     });
+  });
+  updateCompareCount();
+}
+
+function updateCompareCount() {
+  const n = state.compareIds.length;
+  const el = document.getElementById('compareCount');
+  el.textContent = n;
+  el.hidden = n === 0;
+}
+function updateChartRowsCount() {
+  const n = state.chartRowIndices.length;
+  const el = document.getElementById('chartRowsCount');
+  el.textContent = n;
+  el.hidden = n === 0;
+}
+
+function renderChipsBar() {
+  const bar = document.getElementById('chipsBar');
+  bar.innerHTML = '';
+  if (!state.compareIds.length) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const lbl = document.createElement('span');
+  lbl.className = 'chips-label';
+  lbl.textContent = 'Comparing with:';
+  bar.appendChild(lbl);
+  state.compareIds.forEach(id => {
+    const f = state.forecasts.find(x => x.id === id);
+    if (!f) return;
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    const txt = document.createElement('span');
+    txt.textContent = cleanName(f.name);
+    const btn = document.createElement('button');
+    btn.textContent = '×';
+    btn.title = 'Remove from compare';
+    btn.addEventListener('click', () => {
+      state.compareIds = state.compareIds.filter(x => x !== id);
+      buildCompareList();
+      render();
+    });
+    chip.appendChild(txt);
+    chip.appendChild(btn);
+    bar.appendChild(chip);
   });
 }
 
@@ -674,6 +790,7 @@ async function loadFresh() {
     state.compareIds = state.compareIds.filter(id => id !== state.selectedId && list.some(f => f.id === id));
     buildVersionDropdown();
     buildCompareList();
+    renderChipsBar();
     await render();
   } catch (err) {
     setStatus('Error loading file list: ' + err.message, true);
@@ -688,6 +805,7 @@ document.getElementById('versionSelect').addEventListener('change', async e => {
   state.selectedId = e.target.value;
   state.compareIds = state.compareIds.filter(id => id !== state.selectedId);
   buildCompareList();
+  renderChipsBar();
   updateVersionHint();
   await render();
 });
@@ -696,17 +814,21 @@ document.getElementById('tabSelect').addEventListener('change', async e => {
   await render();
 });
 function onCompareChange() {
-  const cbs = document.querySelectorAll('#compareList input[type=checkbox]');
+  const cbs = document.querySelectorAll('#compareListInner input[type=checkbox]');
   state.compareIds = Array.from(cbs).filter(cb => cb.checked && !cb.disabled).map(cb => cb.value);
+  updateCompareCount();
+  renderChipsBar();
   render();
 }
 function onChartRowsChange() {
   const cbs = document.querySelectorAll('#chartRowsList input[type=checkbox]');
   state.chartRowIndices = Array.from(cbs).filter(cb => cb.checked).map(cb => parseInt(cb.value, 10));
   state.userPickedChartRows = true;
+  updateChartRowsCount();
   render();
 }
 document.getElementById('refreshBtn').addEventListener('click', () => loadFresh());
+document.getElementById('compareSearch').addEventListener('input', () => buildCompareList());
 
 /* ========================================================================= *
  *  HELPERS
