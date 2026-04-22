@@ -92,9 +92,9 @@
     th.sortable:hover { color: var(--text); }
     th.sortable .sort-indicator { opacity: 0.3; margin-left: 4px; font-size: 10px; }
     th.sortable.active .sort-indicator { opacity: 1; color: var(--accent); }
-    .exclude-btn { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 3px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; margin-left: 4px; }
-    .exclude-btn:hover { color: #fca5a5; border-color: var(--danger); }
-    .exclude-btn.excluded { background: rgba(148,163,184,0.2); color: var(--muted); }
+    .exclude-btn:hover { color: #fca5a5; border-color: var(--danger); background: rgba(239,68,68,0.08); }
+    .exclude-btn.excluded { background: rgba(148,163,184,0.2); color: var(--muted); border-color: var(--border); }
+    .exclude-btn.excluded:hover { background: rgba(148,163,184,0.3); }
     tr.excluded { opacity: 0.55; }
     tr.excluded td { border-bottom: 1px dashed var(--border); }
     tbody tr:last-child td { border-bottom: none; }
@@ -107,8 +107,10 @@
     .bucket.HotLead, .bucket["Hot Lead"] { background: rgba(239,68,68,0.18); color: #fca5a5; }
     .score-pill { display: inline-block; background: rgba(20,184,166,0.15); color: var(--hot-sql); padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 4px; }
     .signal-tag { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-    .flag-btn { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 3px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; }
-    .flag-btn:hover { color: var(--text); border-color: var(--danger); }
+    .actions-cell { min-width: 110px; }
+    .action-btns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+    .flag-btn, .exclude-btn { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; text-align: center; white-space: nowrap; transition: background 0.1s, border-color 0.1s, color 0.1s; }
+    .flag-btn:hover { color: var(--text); border-color: var(--danger); background: rgba(239,68,68,0.08); }
     .flag-btn.flagged { background: rgba(239,68,68,0.15); color: #fca5a5; border-color: var(--danger); }
     .flag-btn.flagged:hover { background: rgba(239,68,68,0.25); }
     tr.flagged { background: rgba(239,68,68,0.05); }
@@ -429,9 +431,11 @@
           <td class="urgency ${urgencyClass(r.daysSinceTouch)}">${r.daysSinceTouch ?? "—"}</td>
           <td class="amount">${fmtMoney(r.amount)}</td>
           <td>${r.contactUrl ? `<a href="${r.contactUrl}" target="_blank" rel="noopener">Contact ↗</a>` : "—"}${r.dealUrl ? ` · <a href="${r.dealUrl}" target="_blank" rel="noopener">Deal ↗</a>` : ""}</td>
-          <td>
-            <button class="flag-btn ${r.isHotLead ? 'flagged' : ''}" data-contact-id="${r.contactId}" data-action="${r.isHotLead ? 'unflag' : 'flag'}" data-name="${escapeHtml(r.name || '')}">${flagBtnLabel}</button>
-            <button class="exclude-btn ${r.isExcluded ? 'excluded' : ''}" data-contact-id="${r.contactId}" data-action="${excludeAction}" data-name="${escapeHtml(r.name || '')}">${excludeBtnLabel}</button>
+          <td class="actions-cell">
+            <div class="action-btns">
+              <button class="flag-btn ${r.isHotLead ? 'flagged' : ''}" data-contact-id="${r.contactId}" data-action="${r.isHotLead ? 'unflag' : 'flag'}" data-name="${escapeHtml(r.name || '')}">${flagBtnLabel}</button>
+              <button class="exclude-btn ${r.isExcluded ? 'excluded' : ''}" data-contact-id="${r.contactId}" data-action="${excludeAction}" data-name="${escapeHtml(r.name || '')}">${excludeBtnLabel}</button>
+            </div>
           </td>
         </tr>
       `;}).join("");
