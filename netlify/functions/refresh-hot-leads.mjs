@@ -54,7 +54,18 @@ const CONFIG = {
   // composite engagement score meets sqlThreshold. Scoring is tuned for
   // Pacific Discovery's sales cycle and is the easiest thing to tune as
   // you learn which contacts are real SQLs vs noise.
-  sqlThreshold: 30,
+  //
+  // Threshold = 50 forces multiple engagements. No single signal hits 50 on
+  // its own (max per signal is 30), so a contact must accumulate at least
+  // two real engagement events (or one strong event + multiple weak ones).
+  // Common combinations:
+  //   Form submission (30) + email reply (25)          = 55  ✓
+  //   Meeting booked (25) + email reply (25)           = 50  ✓
+  //   Meeting (25) + form (30)                         = 55  ✓
+  //   Form (30) + email click (15) + pageview (10)     = 55  ✓
+  //   Form alone (30)                                  = 30  ✗
+  //   Meeting alone (25)                               = 25  ✗
+  sqlThreshold: 50,
   sqlLifecycleStages: ["lead", "marketingqualifiedlead", "salesqualifiedlead"],
   sqlScoring: {
     formSubmissionLast14Days: 30,
@@ -223,6 +234,7 @@ async function searchPDContacts() {
     "lifecyclestage", "hs_lead_status", "company_tag",
     "hubspot_owner_id",
     "lastmodifieddate", "notes_last_contacted", "notes_last_updated",
+    "program_interest",
     "hs_object_id",
   ];
   const out = [];
@@ -282,6 +294,7 @@ async function searchSQLCandidates() {
     "hubspot_owner_id",
     "lastmodifieddate", "notes_last_updated",
     "hs_last_sales_activity_timestamp", "notes_last_contacted",
+    "program_interest",
     // Engagement signals used for scoring:
     "recent_conversion_date", "num_conversion_events", "num_unique_conversion_events", "recent_conversion_event_name",
     "hs_sales_email_last_replied", "hs_sales_email_last_clicked", "hs_sales_email_last_opened",
@@ -357,6 +370,7 @@ async function batchReadDeals(dealIds) {
   const props = [
     "dealname", "pipeline", "dealstage", "amount",
     "hs_lastmodifieddate", "createdate", "hs_date_entered_current_stage", "closedate",
+    "pd_program",
   ];
   for (let i = 0; i < dealIds.length; i += 100) {
     const chunk = dealIds.slice(i, i + 100);
@@ -510,6 +524,13 @@ export default async () => {
       props.lastmodifieddate,
     ].find(validDate) || null;
 
+    // Program interest: prefer deal's pd_program (more specific), fall back
+    // to contact's program_interest (initial enquiry target).
+    const programInterest =
+      (primary?.deal?.properties?.pd_program || "").trim() ||
+      (props.program_interest || "").trim() ||
+      null;
+
     records.push({
       contactId: c.id,
       name,
@@ -523,6 +544,7 @@ export default async () => {
       lastActivity,
       daysSinceTouch: daysBetween(lastActivity, nowIso),
       daysInStage,
+      programInterest,
       dealId,
       dealName,
       sqlScore,
