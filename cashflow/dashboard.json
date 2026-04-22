@@ -1,0 +1,10 @@
+{
+  "title": "Cashflow Forecast",
+  "description": "Compare cashflow forecast versions — live from Google Drive.",
+  "icon": "💰",
+  "category": "Finance",
+  "colors": {
+    "accent": "#2563eb",
+    "background": "#dbeafe"
+  }
+}
