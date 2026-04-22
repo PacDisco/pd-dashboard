@@ -195,7 +195,8 @@ function buildVersionDropdowns() {
   vs.innerHTML = '';
   cs.innerHTML = '';
   state.forecasts.forEach(f => {
-    const label = f.name + '   —   ' + formatDate(f.modifiedTime);
+    const prefix = f.folderPath ? '[' + f.folderPath + ']  ' : '';
+    const label = prefix + f.name + '   —   ' + formatDate(f.modifiedTime);
     const o1 = document.createElement('option');
     o1.value = f.id; o1.textContent = label;
     vs.appendChild(o1);
@@ -423,7 +424,7 @@ async function loadFresh() {
     const list = await fetchList();
     state.forecasts = list;
     if (!list.length) {
-      setStatus('No Google Sheets found in the Drive folder.', true);
+      setStatus('No cashflow workbooks found in the Drive folder (looked for .xlsx, .xls, and Google Sheets, including subfolders).', true);
       clearMain();
       return;
     }
