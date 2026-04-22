@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoices & Payments</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --border: #e4e6eb;
+    --text: #1a1d21;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: #eff4ff;
+    --green: #16a34a;
+    --green-soft: #e6f6ea;
+    --amber: #d97706;
+    --amber-soft: #fef3c7;
+    --red: #dc2626;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  .back { color: var(--muted); text-decoration: none; font-size: 13px; }
+  .back:hover { color: var(--accent); }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab {
+    padding: 10px 16px; cursor: pointer; border: none; background: transparent;
+    font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent;
+    margin-bottom: -1px; font-family: inherit;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+
+  /* Forms */
+  .row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 180px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 14px; font-family: inherit; background: #fff;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  textarea { min-height: 60px; resize: vertical; }
+
+  button {
+    padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px;
+    background: #fff; color: var(--text); cursor: pointer; font-size: 14px; font-family: inherit;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { background: #1e55d4; }
+  button.primary:disabled { background: #93b8f5; border-color: #93b8f5; cursor: not-allowed; }
+
+  /* Drop zone */
+  .drop {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 40px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: all .15s;
+  }
+  .drop:hover, .drop.dragover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .drop input { display: none; }
+
+  /* Filters */
+  .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .filters select, .filters input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
+  .filters .spacer { flex: 1; }
+
+  /* Week groups */
+  .week-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; background: var(--accent-soft); border-radius: 6px 6px 0 0;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    border: 1px solid var(--border); border-bottom: none;
+  }
+  .week-header .total { color: var(--text); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--border); }
+  .week-header + table { border-radius: 0 0 6px 6px; margin-bottom: 16px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+  th { background: #fafbfc; font-weight: 600; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: none; }
+  tr.paid td { color: var(--muted); }
+  tr.paid td.vendor { text-decoration: line-through; }
+
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+  .chip.program { background: var(--accent-soft); color: var(--accent); }
+  .chip.source-upload { background: #f3e8ff; color: #7e22ce; }
+  .chip.source-email  { background: #e0f2fe; color: #0369a1; }
+  .chip.source-manual { background: #f3f4f6; color: var(--muted); }
+
+  .amount { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .actions { display: flex; gap: 6px; }
+  .actions label {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
+    padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none;
+  }
+  .actions label:hover { background: #f3f4f6; }
+  .actions input[type=checkbox] { margin: 0; }
+  .actions .reschedule-btn { font-size: 12px; padding: 3px 6px; color: var(--amber); border: none; background: transparent; cursor: pointer; }
+  .actions .reschedule-btn:hover { background: var(--amber-soft); border-radius: 4px; }
+
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+
+  .toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 14px; border-radius: 6px; box-shadow: var(--shadow); font-size: 13px; z-index: 100; }
+  .toast.ok { background: var(--green-soft); color: var(--green); border: 1px solid var(--green); }
+  .toast.err { background: #fee; color: var(--red); border: 1px solid var(--red); }
+
+  .parse-preview { background: var(--accent-soft); padding: 12px; border-radius: 6px; margin-top: 12px; font-size: 13px; }
+  .parse-preview strong { color: var(--accent); }
+
+  .link { color: var(--accent); text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .kpi .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .kpi .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kpi.amber .value { color: var(--amber); }
+  .kpi.green .value { color: var(--green); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>📄 Invoices & Payments</h1>
+    <a class="back" href="/">← Back to dashboard</a>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-panel="dashboard">Dashboard</button>
+    <button class="tab"          data-panel="upload">Upload Invoice</button>
+    <button class="tab"          data-panel="manual">Manual Entry</button>
+  </div>
+
+  <!-- ============================= DASHBOARD ============================= -->
+  <div class="panel active" id="panel-dashboard">
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="filters">
+      <select id="filter-status">
+        <option value="unpaid">Unpaid only</option>
+        <option value="pending">Awaiting approval</option>
+        <option value="approved">Approved, not paid</option>
+        <option value="paid">Paid</option>
+        <option value="">All</option>
+      </select>
+      <select id="filter-program"><option value="">All programs</option></select>
+      <div class="spacer"></div>
+      <button onclick="loadPayments()">↻ Refresh</button>
+    </div>
+
+    <div id="payments-list"><p class="empty">Loading…</p></div>
+  </div>
+
+  <!-- ============================= UPLOAD ============================= -->
+  <div class="panel" id="panel-upload">
+    <div class="card">
+      <h2>Upload an invoice</h2>
+      <p style="margin-top:0;color:var(--muted);">
+        Drop a PDF or image. We'll parse the vendor, amount and due date with AI,
+        save the file to Google Drive, and add it to your payment schedule.
+      </p>
+
+      <label class="drop" id="drop-zone">
+        <input type="file" id="file-input" accept=".pdf,image/*">
+        <div id="drop-text">📎 Click or drop an invoice file here</div>
+      </label>
+
+      <div class="row" style="margin-top:16px;">
+        <div class="field">
+          <label>Program (optional — you can set it after parsing)</label>
+          <select id="upload-program"><option value="">— Pick a program —</option></select>
+        </div>
+      </div>
+
+      <div id="parse-preview"></div>
+      <div style="margin-top:12px;"><button id="upload-btn" class="primary" disabled>Upload & Parse</button></div>
+    </div>
+  </div>
+
+  <!-- ============================= MANUAL ============================= -->
+  <div class="panel" id="panel-manual">
+    <div class="card">
+      <h2>Manually schedule a payment</h2>
+      <p style="margin-top:0;color:var(--muted);">For payments without an invoice file (recurring transfers, reimbursements, etc.).</p>
+      <form id="manual-form">
+        <div class="row">
+          <div class="field"><label>Vendor / Payee *</label><input required name="vendor" type="text"></div>
+          <div class="field"><label>Amount *</label><input required name="amount" type="number" step="0.01" min="0"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Due date *</label><input required name="due_date" type="date"></div>
+          <div class="field">
+            <label>Program</label>
+            <select name="program_id" id="manual-program"><option value="">— None —</option></select>
+          </div>
+          <div class="field"><label>Invoice # (optional)</label><input name="invoice_number" type="text"></div>
+        </div>
+        <div class="row">
+          <div class="field" style="flex:1 1 100%;"><label>Notes</label><textarea name="notes"></textarea></div>
+        </div>
+        <button class="primary" type="submit">Schedule payment</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="toast-host"></div>
+
+<script>
+  // ----------------------------------------------------------------------
+  // Config
+  // ----------------------------------------------------------------------
+  const API = '/api/invoices';
+
+  // ----------------------------------------------------------------------
+  // Tab switching
+  // ----------------------------------------------------------------------
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+    });
+  });
+
+  // ----------------------------------------------------------------------
+  // Toast helper
+  // ----------------------------------------------------------------------
+  function toast(msg, kind = 'ok') {
+    const el = document.createElement('div');
+    el.className = `toast ${kind}`;
+    el.textContent = msg;
+    document.getElementById('toast-host').appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  // ----------------------------------------------------------------------
+  // Programs dropdown
+  // ----------------------------------------------------------------------
+  async function loadPrograms() {
+    const res = await fetch(`${API}?action=programs`).then(r => r.json());
+    const opts = (res.programs || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    document.getElementById('filter-program').insertAdjacentHTML('beforeend', opts);
+    document.getElementById('manual-program').insertAdjacentHTML('beforeend', opts);
+    document.getElementById('upload-program').insertAdjacentHTML('beforeend', opts);
+  }
+
+  // ----------------------------------------------------------------------
+  // Payment list
+  // ----------------------------------------------------------------------
+  function fmtMoney(n, cur = 'USD') {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(n || 0);
+  }
+
+  function isoWeekKey(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const day = d.getDay() || 7;          // Mon=1..Sun=7
+    d.setDate(d.getDate() - day + 1);     // Monday of that week
+    return d.toISOString().slice(0, 10);
+  }
+
+  function weekLabel(startIso) {
+    const start = new Date(startIso + 'T00:00:00');
+    const end = new Date(start); end.setDate(end.getDate() + 6);
+    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `Week of ${fmt(start)} – ${fmt(end)}`;
+  }
+
+  async function loadPayments() {
+    const status = document.getElementById('filter-status').value;
+    const program = document.getElementById('filter-program').value;
+    const qs = new URLSearchParams({ action: 'list' });
+    if (status) qs.set('status', status);
+    if (program) qs.set('program_id', program);
+
+    document.getElementById('payments-list').innerHTML = '<p class="empty">Loading…</p>';
+    const res = await fetch(`${API}?${qs}`).then(r => r.json());
+    const payments = res.payments || [];
+
+    renderKpis(payments);
+
+    if (!payments.length) {
+      document.getElementById('payments-list').innerHTML = '<div class="card empty">No payments match these filters.</div>';
+      return;
+    }
+
+    // Group by ISO week of due_date
+    const groups = {};
+    for (const p of payments) {
+      const k = isoWeekKey(p.due_date);
+      (groups[k] ||= []).push(p);
+    }
+    const weeks = Object.keys(groups).sort();
+
+    const html = weeks.map(k => {
+      const items = groups[k];
+      const total = items.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const rows = items.map(paymentRow).join('');
+      return `
+        <div class="week-header">
+          <span>${weekLabel(k)}</span>
+          <span class="total">${items.length} payment${items.length !== 1 ? 's' : ''} · ${fmtMoney(total)}</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Vendor</th><th>Program</th><th>Due</th><th>Amount</th>
+            <th>Source</th><th>Actions</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }).join('');
+
+    document.getElementById('payments-list').innerHTML = html;
+  }
+
+  function paymentRow(p) {
+    const fileLink = p.invoice_file_url
+      ? `<a class="link" href="${p.invoice_file_url}" target="_blank" title="Open invoice in Drive">📄</a>`
+      : '';
+    return `
+      <tr class="${p.paid ? 'paid' : ''}">
+        <td class="vendor">
+          <strong>${escapeHtml(p.vendor)}</strong> ${fileLink}
+          ${p.invoice_number ? `<div style="color:var(--muted);font-size:11px;">#${escapeHtml(p.invoice_number)}</div>` : ''}
+        </td>
+        <td>${p.program_name ? `<span class="chip program">${escapeHtml(p.program_name)}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
+        <td>${p.due_date}${p.rescheduled_from ? `<div style="color:var(--muted);font-size:11px;">was ${p.rescheduled_from}</div>` : ''}</td>
+        <td class="amount">${fmtMoney(p.amount, p.currency)}</td>
+        <td><span class="chip source-${p.source}">${p.source}</span></td>
+        <td>
+          <div class="actions">
+            <label title="Approved to pay">
+              <input type="checkbox" ${p.approved_to_pay ? 'checked' : ''} onchange="toggleField(${p.id}, 'approved_to_pay', this.checked)">
+              <span>Approved</span>
+            </label>
+            <button class="reschedule-btn" onclick="reschedule(${p.id}, '${p.due_date}')">⟳ Reschedule</button>
+            <label title="Paid">
+              <input type="checkbox" ${p.paid ? 'checked' : ''} onchange="togglePaid(${p.id}, this.checked)">
+              <span>Paid</span>
+            </label>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function renderKpis(payments) {
+    const unpaid = payments.filter(p => !p.paid);
+    const nextWeek = new Date(); nextWeek.setDate(nextWeek.getDate() + 7);
+    const dueThisWeek = unpaid.filter(p => new Date(p.due_date) <= nextWeek);
+    const awaiting = unpaid.filter(p => !p.approved_to_pay);
+    const approved = unpaid.filter(p => p.approved_to_pay);
+
+    const sum = arr => arr.reduce((s, p) => s + Number(p.amount || 0), 0);
+
+    document.getElementById('kpis').innerHTML = `
+      <div class="kpi amber"><div class="label">Due within 7 days</div><div class="value">${fmtMoney(sum(dueThisWeek))}</div><div style="font-size:11px;color:var(--muted);">${dueThisWeek.length} payment${dueThisWeek.length !== 1 ? 's' : ''}</div></div>
+      <div class="kpi"><div class="label">Awaiting approval</div><div class="value">${fmtMoney(sum(awaiting))}</div><div style="font-size:11px;color:var(--muted);">${awaiting.length} payment${awaiting.length !== 1 ? 's' : ''}</div></div>
+      <div class="kpi green"><div class="label">Approved, ready to pay</div><div class="value">${fmtMoney(sum(approved))}</div><div style="font-size:11px;color:var(--muted);">${approved.length} payment${approved.length !== 1 ? 's' : ''}</div></div>
+      <div class="kpi"><div class="label">Total outstanding</div><div class="value">${fmtMoney(sum(unpaid))}</div><div style="font-size:11px;color:var(--muted);">${unpaid.length} payment${unpaid.length !== 1 ? 's' : ''}</div></div>
+    `;
+  }
+
+  // ----------------------------------------------------------------------
+  // Row actions
+  // ----------------------------------------------------------------------
+  async function toggleField(id, field, value) {
+    const res = await fetch(`${API}?action=update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch: { [field]: value } }),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast(`Updated`);
+    loadPayments();
+  }
+
+  async function togglePaid(id, checked) {
+    const patch = { paid: checked };
+    if (checked) patch.paid_date = new Date().toISOString().slice(0, 10);
+    else patch.paid_date = null;
+    const res = await fetch(`${API}?action=update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch }),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast(checked ? 'Marked paid' : 'Unmarked paid');
+    loadPayments();
+  }
+
+  async function reschedule(id, currentDate) {
+    const newDate = prompt(`New due date (YYYY-MM-DD):`, currentDate);
+    if (!newDate) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return toast('Bad date format', 'err');
+    const reason = prompt('Reason for reschedule (optional):') || null;
+    const res = await fetch(`${API}?action=update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch: { due_date: newDate, rescheduled_from: currentDate, reschedule_reason: reason } }),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast('Rescheduled');
+    loadPayments();
+  }
+
+  // ----------------------------------------------------------------------
+  // Upload
+  // ----------------------------------------------------------------------
+  const drop = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  let pendingFile = null;
+
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+
+  function setFile(f) {
+    pendingFile = f;
+    document.getElementById('drop-text').textContent = `📎 ${f.name} (${Math.round(f.size/1024)} KB)`;
+    document.getElementById('upload-btn').disabled = false;
+    document.getElementById('parse-preview').innerHTML = '';
+  }
+
+  document.getElementById('upload-btn').addEventListener('click', async () => {
+    if (!pendingFile) return;
+    const btn = document.getElementById('upload-btn');
+    btn.disabled = true; btn.textContent = 'Parsing & uploading…';
+
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(pendingFile);
+    });
+
+    const res = await fetch(`${API}?action=upload`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        filename: pendingFile.name,
+        mimeType: pendingFile.type || 'application/pdf',
+        data,
+        program_id: document.getElementById('upload-program').value || null,
+      }),
+    }).then(r => r.json());
+
+    btn.disabled = false; btn.textContent = 'Upload & Parse';
+    if (res.error) { toast(res.error, 'err'); return; }
+
+    const p = res.parsed || {};
+    document.getElementById('parse-preview').innerHTML = `
+      <div class="parse-preview">
+        <div><strong>Vendor:</strong> ${escapeHtml(p.vendor || '—')}</div>
+        <div><strong>Amount:</strong> ${fmtMoney(p.amount, p.currency || 'USD')}</div>
+        <div><strong>Due:</strong> ${p.due_date || '—'}</div>
+        <div style="margin-top:6px;color:var(--muted);font-size:12px;">Saved to Drive + payment scheduled. Edit it on the Dashboard if anything's wrong.</div>
+      </div>
+    `;
+    pendingFile = null;
+    document.getElementById('drop-text').textContent = '📎 Click or drop an invoice file here';
+    fileInput.value = '';
+    loadPayments();
+  });
+
+  // ----------------------------------------------------------------------
+  // Manual entry
+  // ----------------------------------------------------------------------
+  document.getElementById('manual-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    body.action = 'create';
+    body.amount = Number(body.amount);
+    if (!body.program_id) delete body.program_id;
+
+    const res = await fetch(`${API}?action=create`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast('Payment scheduled');
+    e.target.reset();
+    loadPayments();
+    document.querySelector('.tab[data-panel="dashboard"]').click();
+  });
+
+  // ----------------------------------------------------------------------
+  // Utils
+  // ----------------------------------------------------------------------
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  document.getElementById('filter-status').addEventListener('change', loadPayments);
+  document.getElementById('filter-program').addEventListener('change', loadPayments);
+
+  // Boot
+  loadPrograms().then(loadPayments);
+</script>
+
+</body>
+</html>
