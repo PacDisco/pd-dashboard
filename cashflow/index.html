@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cashflow Forecast Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --border: #e4e8ef;
+    --muted: #6b7280;
+    --text: #111827;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --danger: #dc2626;
+    --good: #059669;
+    --shadow: 0 1px 2px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 18px 28px; display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .back { color: var(--accent); text-decoration: none; font-size: 13px; }
+  .back:hover { text-decoration: underline; }
+
+  .controls {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 28px; display: grid; gap: 12px;
+    grid-template-columns: minmax(220px, 1fr) minmax(180px, 1fr) minmax(220px, 2fr) auto;
+    align-items: end;
+  }
+  .field label { display: block; font-size: 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .field select, .field .multi {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; font-size: 14px; color: var(--text);
+    font-family: inherit;
+  }
+  .field select:focus, .field .multi:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  button {
+    padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px;
+    background: #fff; cursor: pointer; font-size: 14px; color: var(--text);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:hover { filter: brightness(0.98); }
+  button[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+  .status {
+    padding: 8px 28px; font-size: 13px; color: var(--muted);
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .status.error { color: var(--danger); }
+
+  main { padding: 24px 28px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow); margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    font-weight: 600;
+  }
+  .card-header .meta { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .card-body { padding: 0; overflow-x: auto; }
+
+  table.cashflow {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  table.cashflow th, table.cashflow td {
+    border-bottom: 1px solid var(--border); padding: 7px 10px; text-align: right;
+    white-space: nowrap;
+  }
+  table.cashflow th:first-child, table.cashflow td:first-child {
+    text-align: left; position: sticky; left: 0; background: var(--surface);
+    font-weight: 500;
+  }
+  table.cashflow thead th {
+    background: #f8fafc; font-weight: 600; font-size: 12px;
+    text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em;
+    position: sticky; top: 0;
+  }
+  table.cashflow tr.section td { background: #f1f5f9; font-weight: 600; color: var(--text); }
+  table.cashflow td.neg { color: var(--danger); }
+  table.cashflow td.pos { color: var(--good); }
+
+  .compare-grid { display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 1100px) { .compare-grid.cols-2 { grid-template-columns: 1fr 1fr; } }
+
+  .chart-wrap { padding: 18px; }
+  .chart-wrap canvas { width: 100% !important; height: 360px !important; }
+
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); font-size: 12px;
+    font-weight: 500; margin-left: 8px;
+  }
+  .empty {
+    padding: 40px; text-align: center; color: var(--muted);
+  }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  select[multiple] { min-height: 88px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Cashflow Forecast Dashboard</h1>
+    <div class="sub">Live from Google Drive — latest files appear automatically on load.</div>
+  </div>
+  <a class="back" href="/">&larr; All dashboards</a>
+</header>
+
+<div class="controls">
+  <div class="field">
+    <label for="versionSelect">Version</label>
+    <select id="versionSelect"></select>
+    <div class="hint" id="versionHint">&nbsp;</div>
+  </div>
+  <div class="field">
+    <label for="tabSelect">Sheet / tab</label>
+    <select id="tabSelect"></select>
+  </div>
+  <div class="field">
+    <label for="compareSelect">Compare with (hold Ctrl / Cmd)</label>
+    <select id="compareSelect" class="multi" multiple></select>
+  </div>
+  <div class="field">
+    <button id="refreshBtn" class="primary" title="Re-fetch file list and reload">Refresh</button>
+  </div>
+</div>
+
+<div id="status" class="status">Loading…</div>
+
+<main id="main"></main>
+
+<script>
+/* ========================================================================= *
+ *  CONFIG
+ * ========================================================================= */
+// Paste your Apps Script web-app /exec URL here after deploying AppsScript_Cashflow.js
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzHUB29SzozQ02CwVD5o9NUqCzhLyZD-e8mwfFWFKsSlIQLxZZsD-LyFyk-s8zZIEiS/exec";
+
+/* ========================================================================= *
+ *  STATE
+ * ========================================================================= */
+const state = {
+  forecasts: [],          // [{id, name, modifiedTime}]
+  selectedId: null,       // primary version id
+  selectedTab: null,      // tab name
+  compareIds: [],         // ids of compare versions
+  cache: new Map()        // fileId -> full forecast payload
+};
+
+/* ========================================================================= *
+ *  API
+ * ========================================================================= */
+async function api(params) {
+  const url = new URL(APPS_SCRIPT_URL);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Unknown API error');
+  return json.data;
+}
+
+async function fetchList() {
+  return api({ action: 'list' });
+}
+async function fetchForecast(fileId) {
+  if (state.cache.has(fileId)) return state.cache.get(fileId);
+  const data = await api({ action: 'get', fileId });
+  state.cache.set(fileId, data);
+  return data;
+}
+
+/* ========================================================================= *
+ *  UI – CONTROLS
+ * ========================================================================= */
+function buildVersionDropdowns() {
+  const vs = document.getElementById('versionSelect');
+  const cs = document.getElementById('compareSelect');
+  vs.innerHTML = '';
+  cs.innerHTML = '';
+  state.forecasts.forEach(f => {
+    const label = f.name + '   —   ' + formatDate(f.modifiedTime);
+    const o1 = document.createElement('option');
+    o1.value = f.id; o1.textContent = label;
+    vs.appendChild(o1);
+    const o2 = document.createElement('option');
+    o2.value = f.id; o2.textContent = label;
+    cs.appendChild(o2);
+  });
+  if (state.forecasts.length) {
+    vs.value = state.selectedId || state.forecasts[0].id;
+    state.selectedId = vs.value;
+    updateCompareDisabled();
+    updateVersionHint();
+  }
+}
+function updateCompareDisabled() {
+  const cs = document.getElementById('compareSelect');
+  Array.from(cs.options).forEach(o => {
+    o.disabled = (o.value === state.selectedId);
+  });
+}
+function updateVersionHint() {
+  const f = state.forecasts.find(x => x.id === state.selectedId);
+  document.getElementById('versionHint').textContent =
+    f ? ('Modified ' + formatDate(f.modifiedTime) + '  •  ' + state.forecasts.length + ' total versions') : '';
+}
+function buildTabDropdown(forecast) {
+  const ts = document.getElementById('tabSelect');
+  ts.innerHTML = '';
+  forecast.tabs.forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.name; o.textContent = t.name;
+    ts.appendChild(o);
+  });
+  // default to existing selection if still present, else first tab
+  if (state.selectedTab && forecast.tabs.some(t => t.name === state.selectedTab)) {
+    ts.value = state.selectedTab;
+  } else {
+    ts.value = forecast.tabs[0].name;
+    state.selectedTab = ts.value;
+  }
+}
+
+/* ========================================================================= *
+ *  RENDER
+ * ========================================================================= */
+function clearMain() { document.getElementById('main').innerHTML = ''; }
+
+function renderForecastCard(forecast, tabName) {
+  const tab = forecast.tabs.find(t => t.name === tabName) || forecast.tabs[0];
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-header">
+      <div>${escapeHtml(forecast.name)} <span class="pill">${escapeHtml(tab.name)}</span></div>
+      <div class="meta">${tab.rows} rows × ${tab.cols} cols</div>
+    </div>
+    <div class="card-body"></div>
+  `;
+  card.querySelector('.card-body').appendChild(buildTable(tab.values));
+  return card;
+}
+
+function buildTable(values) {
+  const table = document.createElement('table');
+  table.className = 'cashflow';
+  if (!values || !values.length) {
+    table.innerHTML = '<tbody><tr><td class="empty">No data in this tab.</td></tr></tbody>';
+    return table;
+  }
+  const thead = document.createElement('thead');
+  const hrow = document.createElement('tr');
+  values[0].forEach(cell => {
+    const th = document.createElement('th');
+    th.textContent = cell;
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const tr = document.createElement('tr');
+    const first = row[0];
+    const isSection = row.slice(1).every(c => c === '' || c == null) && first;
+    if (isSection) tr.className = 'section';
+    row.forEach((cell, j) => {
+      const td = document.createElement('td');
+      td.textContent = cell == null ? '' : cell;
+      if (j > 0) {
+        const n = parseLikelyNumber(cell);
+        if (n !== null) {
+          if (n < 0) td.classList.add('neg');
+          else if (n > 0 && /balance|net|total/i.test(String(row[0] || ''))) td.classList.add('pos');
+        }
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  return table;
+}
+
+function renderOverlayChart(forecasts, tabName) {
+  // Choose the first numeric row whose label contains "balance" or "net cashflow"
+  // Fallback: the last numeric row in the tab.
+  const prepared = forecasts.map(f => {
+    const tab = f.tabs.find(t => t.name === tabName) || f.tabs[0];
+    const raw = tab.raw || tab.values;
+    return { forecast: f, tab, raw };
+  }).filter(p => p.tab);
+
+  if (!prepared.length) return null;
+
+  // Use first forecast's header row (tabs share structure)
+  const header = prepared[0].raw[0] || [];
+  const labels = header.slice(1).map(String);
+
+  // pick best matching row label per forecast (should be same for all if schema matches)
+  function pickRow(raw) {
+    const rx = /(ending balance|net cash ?flow|cash ?flow|balance|net)/i;
+    let best = -1;
+    for (let i = 1; i < raw.length; i++) {
+      const label = String(raw[i][0] || '');
+      if (rx.test(label) && raw[i].slice(1).some(c => parseLikelyNumber(c) !== null)) {
+        best = i; break;
+      }
+    }
+    if (best === -1) {
+      for (let i = raw.length - 1; i >= 1; i--) {
+        if (raw[i].slice(1).some(c => parseLikelyNumber(c) !== null)) { best = i; break; }
+      }
+    }
+    return best === -1 ? null : raw[best];
+  }
+
+  const datasets = prepared.map((p, idx) => {
+    const row = pickRow(p.raw);
+    if (!row) return null;
+    return {
+      label: p.forecast.name + ' — ' + row[0],
+      data: row.slice(1).map(c => parseLikelyNumber(c)),
+      borderColor: palette(idx),
+      backgroundColor: palette(idx, 0.15),
+      tension: 0.25,
+      spanGaps: true,
+      pointRadius: 3
+    };
+  }).filter(Boolean);
+
+  if (!datasets.length) return null;
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-header">
+      <div>Overlay chart <span class="pill">${escapeHtml(tabName)}</span></div>
+      <div class="meta">Auto-selected row: ${escapeHtml(datasets[0].label.split(' — ').slice(1).join(' — '))}</div>
+    </div>
+    <div class="chart-wrap"><canvas></canvas></div>
+  `;
+  const canvas = card.querySelector('canvas');
+  new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        y: { ticks: { callback: v => formatCurrency(v) } }
+      }
+    }
+  });
+  return card;
+}
+
+/* ========================================================================= *
+ *  ORCHESTRATION
+ * ========================================================================= */
+async function render() {
+  clearMain();
+  setStatus('Loading selected version…');
+  try {
+    const primary = await fetchForecast(state.selectedId);
+    buildTabDropdown(primary);
+    const tabName = state.selectedTab;
+
+    const compareForecasts = await Promise.all(
+      state.compareIds.map(id => fetchForecast(id))
+    );
+
+    const allForecasts = [primary, ...compareForecasts];
+    const main = document.getElementById('main');
+
+    // Overlay chart first when comparing
+    if (allForecasts.length > 1) {
+      const chart = renderOverlayChart(allForecasts, tabName);
+      if (chart) main.appendChild(chart);
+    } else {
+      const chart = renderOverlayChart([primary], tabName);
+      if (chart) main.appendChild(chart);
+    }
+
+    // Side-by-side tables
+    const grid = document.createElement('div');
+    grid.className = 'compare-grid' + (allForecasts.length === 2 ? ' cols-2' : '');
+    allForecasts.forEach(f => grid.appendChild(renderForecastCard(f, tabName)));
+    main.appendChild(grid);
+
+    setStatus('Showing ' + primary.name +
+      (compareForecasts.length ? ' vs ' + compareForecasts.map(f => f.name).join(', ') : '') +
+      '  •  tab: ' + tabName);
+  } catch (err) {
+    setStatus('Error: ' + err.message, true);
+    console.error(err);
+  }
+}
+
+async function loadFresh() {
+  state.cache.clear();
+  setStatus('Fetching latest file list from Drive…');
+  try {
+    const list = await fetchList();
+    state.forecasts = list;
+    if (!list.length) {
+      setStatus('No Google Sheets found in the Drive folder.', true);
+      clearMain();
+      return;
+    }
+    if (!state.selectedId || !list.some(f => f.id === state.selectedId)) {
+      state.selectedId = list[0].id;
+    }
+    state.compareIds = state.compareIds.filter(id => id !== state.selectedId && list.some(f => f.id === id));
+    buildVersionDropdowns();
+    // sync compare select to state
+    const cs = document.getElementById('compareSelect');
+    Array.from(cs.options).forEach(o => { o.selected = state.compareIds.includes(o.value); });
+    await render();
+  } catch (err) {
+    setStatus('Error loading file list: ' + err.message, true);
+    console.error(err);
+  }
+}
+
+/* ========================================================================= *
+ *  HELPERS
+ * ========================================================================= */
+function setStatus(msg, isError) {
+  const s = document.getElementById('status');
+  s.textContent = msg;
+  s.className = 'status' + (isError ? ' error' : '');
+}
+function formatDate(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+function parseLikelyNumber(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number' && isFinite(v)) return v;
+  const s = String(v).trim();
+  if (!s) return null;
+  // Match "$1,234.56", "(1,234)", "45%", "-12"
+  let neg = false;
+  let str = s;
+  if (/^\(.*\)$/.test(str)) { neg = true; str = str.slice(1, -1); }
+  str = str.replace(/[,$\s]/g, '').replace(/%$/, '');
+  if (str === '' || str === '-' || isNaN(Number(str))) return null;
+  return (neg ? -1 : 1) * Number(str);
+}
+function formatCurrency(v) {
+  if (typeof v !== 'number' || !isFinite(v)) return v;
+  const abs = Math.abs(v);
+  if (abs >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (abs >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+  return v.toFixed(0);
+}
+function palette(i, alpha) {
+  const colors = [
+    [37, 99, 235],   // blue
+    [5, 150, 105],   // green
+    [220, 38, 38],   // red
+    [217, 119, 6],   // amber
+    [139, 92, 246],  // violet
+    [14, 165, 233],  // sky
+    [236, 72, 153]   // pink
+  ];
+  const c = colors[i % colors.length];
+  return alpha != null
+    ? `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`
+    : `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ========================================================================= *
+ *  EVENTS
+ * ========================================================================= */
+document.getElementById('versionSelect').addEventListener('change', async e => {
+  state.selectedId = e.target.value;
+  // If primary matches a previously selected compare, remove it
+  state.compareIds = state.compareIds.filter(id => id !== state.selectedId);
+  const cs = document.getElementById('compareSelect');
+  Array.from(cs.options).forEach(o => { o.selected = state.compareIds.includes(o.value); });
+  updateCompareDisabled();
+  updateVersionHint();
+  await render();
+});
+document.getElementById('tabSelect').addEventListener('change', async e => {
+  state.selectedTab = e.target.value;
+  await render();
+});
+document.getElementById('compareSelect').addEventListener('change', async e => {
+  const sel = Array.from(e.target.selectedOptions).map(o => o.value);
+  state.compareIds = sel.filter(id => id !== state.selectedId);
+  await render();
+});
+document.getElementById('refreshBtn').addEventListener('click', () => loadFresh());
+
+/* ========================================================================= *
+ *  BOOT
+ * ========================================================================= */
+(function boot() {
+  if (APPS_SCRIPT_URL.startsWith('REPLACE_')) {
+    setStatus('Setup needed: open /cashflow/index.html and set APPS_SCRIPT_URL to your deployed Apps Script /exec URL.', true);
+    return;
+  }
+  loadFresh();
+})();
+</script>
+</body>
+</html>
