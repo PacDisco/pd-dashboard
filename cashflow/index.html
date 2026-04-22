@@ -21,6 +21,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
   header {
     background: var(--surface); border-bottom: 1px solid var(--border);
     padding: 18px 28px; display: flex; align-items: center; justify-content: space-between;
@@ -33,21 +34,45 @@
 
   .controls {
     background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 14px 28px; display: grid; gap: 12px;
-    grid-template-columns: minmax(220px, 1fr) minmax(180px, 1fr) minmax(220px, 2fr) auto;
-    align-items: end;
+    padding: 14px 28px; display: grid; gap: 14px 18px;
+    grid-template-columns: minmax(240px, 1.3fr) minmax(180px, 1fr) minmax(220px, 1.4fr) minmax(220px, 1.4fr) auto;
+    align-items: start;
   }
   .field label { display: block; font-size: 12px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
-  .field select, .field .multi {
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .field select {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border);
     border-radius: 6px; background: #fff; font-size: 14px; color: var(--text);
     font-family: inherit;
   }
-  .field select:focus, .field .multi:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .field select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; min-height: 16px; }
+
+  .multi-box {
+    border: 1px solid var(--border); border-radius: 6px; background: #fff;
+    max-height: 140px; overflow-y: auto; padding: 4px;
+  }
+  .multi-box.tall { max-height: 180px; }
+  .multi-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  .multi-row:hover { background: var(--accent-soft); }
+  .multi-row input { margin: 0; cursor: pointer; }
+  .multi-row.disabled { opacity: 0.4; cursor: not-allowed; }
+  .multi-row .label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .multi-row .meta { color: var(--muted); font-size: 11px; margin-left: 8px; }
+  .multi-group-label {
+    font-size: 11px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 8px 8px 4px; border-top: 1px solid var(--border); margin-top: 4px;
+  }
+  .multi-group-label:first-child { border-top: none; margin-top: 0; }
+
   button {
     padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px;
     background: #fff; cursor: pointer; font-size: 14px; color: var(--text);
+    white-space: nowrap;
   }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:hover { filter: brightness(0.98); }
@@ -83,33 +108,47 @@
   }
   table.cashflow th:first-child, table.cashflow td:first-child {
     text-align: left; position: sticky; left: 0; background: var(--surface);
-    font-weight: 500;
+    font-weight: 500; z-index: 1;
   }
   table.cashflow thead th {
     background: #f8fafc; font-weight: 600; font-size: 12px;
     text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em;
-    position: sticky; top: 0;
+    position: sticky; top: 0; z-index: 2;
   }
-  table.cashflow tr.section td { background: #f1f5f9; font-weight: 600; color: var(--text); }
+  table.cashflow thead th:first-child { z-index: 3; }
+  table.cashflow tr.section td {
+    background: #f1f5f9; font-weight: 600; color: var(--text); cursor: pointer;
+    user-select: none;
+  }
+  table.cashflow tr.section td:first-child::before {
+    content: "▾ "; color: var(--muted); display: inline-block; width: 14px;
+    transition: transform 0.15s;
+  }
+  table.cashflow tr.section.collapsed td:first-child::before {
+    content: "▸ ";
+  }
+  table.cashflow tr.collapsed-row { display: none; }
   table.cashflow td.neg { color: var(--danger); }
   table.cashflow td.pos { color: var(--good); }
+  table.cashflow td.delta-pos { color: var(--good); font-weight: 500; }
+  table.cashflow td.delta-neg { color: var(--danger); font-weight: 500; }
 
   .compare-grid { display: grid; gap: 20px; grid-template-columns: 1fr; }
   @media (min-width: 1100px) { .compare-grid.cols-2 { grid-template-columns: 1fr 1fr; } }
 
   .chart-wrap { padding: 18px; }
-  .chart-wrap canvas { width: 100% !important; height: 360px !important; }
+  .chart-wrap canvas { width: 100% !important; height: 380px !important; }
 
   .pill {
     display: inline-block; padding: 2px 8px; border-radius: 999px;
     background: var(--accent-soft); color: var(--accent); font-size: 12px;
     font-weight: 500; margin-left: 8px;
   }
-  .empty {
-    padding: 40px; text-align: center; color: var(--muted);
+  .pill.variance {
+    background: #fef3c7; color: #92400e;
   }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  select[multiple] { min-height: 88px; }
+
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -131,10 +170,15 @@
   <div class="field">
     <label for="tabSelect">Sheet / tab</label>
     <select id="tabSelect"></select>
+    <div class="hint">&nbsp;</div>
   </div>
   <div class="field">
-    <label for="compareSelect">Compare with (hold Ctrl / Cmd)</label>
-    <select id="compareSelect" class="multi" multiple></select>
+    <label>Compare with</label>
+    <div id="compareList" class="multi-box"></div>
+  </div>
+  <div class="field">
+    <label>Chart rows</label>
+    <div id="chartRowsList" class="multi-box"></div>
   </div>
   <div class="field">
     <button id="refreshBtn" class="primary" title="Re-fetch file list and reload">Refresh</button>
@@ -149,18 +193,20 @@
 /* ========================================================================= *
  *  CONFIG
  * ========================================================================= */
-// Paste your Apps Script web-app /exec URL here after deploying AppsScript_Cashflow.js
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz5pwmLqNGqPbNEWqoWT2iIqByVlLn-K7G-iezI6CBShc-p31UIWsMBGdj1T2tWzS5n/exec";
 
 /* ========================================================================= *
  *  STATE
  * ========================================================================= */
 const state = {
-  forecasts: [],          // [{id, name, modifiedTime}]
+  forecasts: [],          // [{id, name, folderPath, modifiedTime, mimeType}]
   selectedId: null,       // primary version id
-  selectedTab: null,      // tab name
-  compareIds: [],         // ids of compare versions
-  cache: new Map()        // fileId -> full forecast payload
+  selectedTab: null,      // tab name (applies to primary + compare)
+  compareIds: [],         // ids of compare versions (primary excluded)
+  chartRowIndices: [],    // indices (into primary tab's rows) the user wants charted
+  userPickedChartRows: false,  // once true, we stop auto-picking on tab change
+  cache: new Map(),       // fileId -> full forecast payload
+  currentChart: null      // Chart.js instance (destroyed on re-render)
 };
 
 /* ========================================================================= *
@@ -175,10 +221,7 @@ async function api(params) {
   if (!json.ok) throw new Error(json.error || 'Unknown API error');
   return json.data;
 }
-
-async function fetchList() {
-  return api({ action: 'list' });
-}
+async function fetchList() { return api({ action: 'list' }); }
 async function fetchForecast(fileId) {
   if (state.cache.has(fileId)) return state.cache.get(fileId);
   const data = await api({ action: 'get', fileId });
@@ -189,39 +232,74 @@ async function fetchForecast(fileId) {
 /* ========================================================================= *
  *  UI – CONTROLS
  * ========================================================================= */
-function buildVersionDropdowns() {
+function groupForecastsByFolder(forecasts) {
+  const groups = new Map();
+  forecasts.forEach(f => {
+    const key = f.folderPath || '(root)';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  });
+  // Sort groups: FY26/27 style paths first, alphabetical otherwise.
+  const entries = Array.from(groups.entries());
+  entries.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+  return entries;
+}
+
+function buildVersionDropdown() {
   const vs = document.getElementById('versionSelect');
-  const cs = document.getElementById('compareSelect');
   vs.innerHTML = '';
-  cs.innerHTML = '';
-  state.forecasts.forEach(f => {
-    const prefix = f.folderPath ? '[' + f.folderPath + ']  ' : '';
-    const label = prefix + f.name + '   —   ' + formatDate(f.modifiedTime);
-    const o1 = document.createElement('option');
-    o1.value = f.id; o1.textContent = label;
-    vs.appendChild(o1);
-    const o2 = document.createElement('option');
-    o2.value = f.id; o2.textContent = label;
-    cs.appendChild(o2);
+  groupForecastsByFolder(state.forecasts).forEach(([folder, list]) => {
+    const og = document.createElement('optgroup');
+    og.label = folder;
+    // within a group, newest first
+    list.sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime));
+    list.forEach(f => {
+      const o = document.createElement('option');
+      o.value = f.id;
+      o.textContent = cleanName(f.name) + '  —  ' + formatDate(f.modifiedTime);
+      og.appendChild(o);
+    });
+    vs.appendChild(og);
   });
-  if (state.forecasts.length) {
-    vs.value = state.selectedId || state.forecasts[0].id;
-    state.selectedId = vs.value;
-    updateCompareDisabled();
-    updateVersionHint();
-  }
+  vs.value = state.selectedId;
+  updateVersionHint();
 }
-function updateCompareDisabled() {
-  const cs = document.getElementById('compareSelect');
-  Array.from(cs.options).forEach(o => {
-    o.disabled = (o.value === state.selectedId);
+
+function buildCompareList() {
+  const list = document.getElementById('compareList');
+  list.innerHTML = '';
+  groupForecastsByFolder(state.forecasts).forEach(([folder, forecasts]) => {
+    const gl = document.createElement('div');
+    gl.className = 'multi-group-label';
+    gl.textContent = folder;
+    list.appendChild(gl);
+    forecasts.sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime));
+    forecasts.forEach(f => {
+      const row = document.createElement('label');
+      row.className = 'multi-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = f.id;
+      cb.checked = state.compareIds.includes(f.id);
+      cb.addEventListener('change', onCompareChange);
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = cleanName(f.name);
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = formatDate(f.modifiedTime, true);
+      row.appendChild(cb);
+      row.appendChild(label);
+      row.appendChild(meta);
+      if (f.id === state.selectedId) {
+        row.classList.add('disabled');
+        cb.disabled = true; cb.checked = false;
+        row.title = 'This is the primary version';
+      }
+      list.appendChild(row);
+    });
   });
 }
-function updateVersionHint() {
-  const f = state.forecasts.find(x => x.id === state.selectedId);
-  document.getElementById('versionHint').textContent =
-    f ? ('Modified ' + formatDate(f.modifiedTime) + '  •  ' + state.forecasts.length + ' total versions') : '';
-}
+
 function buildTabDropdown(forecast) {
   const ts = document.getElementById('tabSelect');
   ts.innerHTML = '';
@@ -230,7 +308,6 @@ function buildTabDropdown(forecast) {
     o.value = t.name; o.textContent = t.name;
     ts.appendChild(o);
   });
-  // default to existing selection if still present, else first tab
   if (state.selectedTab && forecast.tabs.some(t => t.name === state.selectedTab)) {
     ts.value = state.selectedTab;
   } else {
@@ -239,27 +316,89 @@ function buildTabDropdown(forecast) {
   }
 }
 
+function buildChartRowsList(primaryForecast) {
+  const box = document.getElementById('chartRowsList');
+  box.innerHTML = '';
+  const tab = primaryForecast.tabs.find(t => t.name === state.selectedTab) || primaryForecast.tabs[0];
+  const raw = tab.raw || tab.values;
+
+  // Which row indices are numeric and have a label?
+  const candidates = [];
+  for (let i = 1; i < raw.length; i++) {
+    const label = String(raw[i][0] || '').trim();
+    if (!label) continue;
+    const hasNumeric = raw[i].slice(1).some(c => parseLikelyNumber(c) !== null);
+    if (hasNumeric) candidates.push({ index: i, label });
+  }
+
+  if (!candidates.length) {
+    box.innerHTML = '<div class="empty" style="padding:14px">No numeric rows found in this tab.</div>';
+    state.chartRowIndices = [];
+    return;
+  }
+
+  // If the user hasn't picked manually, auto-select a best default.
+  if (!state.userPickedChartRows) {
+    const rx = /(ending balance|net cash ?flow|cash ?flow|^balance$|^net$)/i;
+    const hit = candidates.find(c => rx.test(c.label));
+    state.chartRowIndices = hit ? [hit.index] : [candidates[candidates.length - 1].index];
+  } else {
+    // Drop any row indices that no longer exist in the new tab
+    state.chartRowIndices = state.chartRowIndices.filter(i =>
+      candidates.some(c => c.index === i));
+    if (!state.chartRowIndices.length && candidates.length) {
+      state.chartRowIndices = [candidates[candidates.length - 1].index];
+    }
+  }
+
+  candidates.forEach(c => {
+    const row = document.createElement('label');
+    row.className = 'multi-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.value = String(c.index);
+    cb.checked = state.chartRowIndices.includes(c.index);
+    cb.addEventListener('change', onChartRowsChange);
+    const label = document.createElement('span');
+    label.className = 'label'; label.textContent = c.label;
+    row.appendChild(cb); row.appendChild(label);
+    box.appendChild(row);
+  });
+}
+
+function updateVersionHint() {
+  const f = state.forecasts.find(x => x.id === state.selectedId);
+  document.getElementById('versionHint').textContent =
+    f ? ('Modified ' + formatDate(f.modifiedTime) + '  •  ' + state.forecasts.length + ' total versions') : '';
+}
+
 /* ========================================================================= *
  *  RENDER
  * ========================================================================= */
-function clearMain() { document.getElementById('main').innerHTML = ''; }
+function clearMain() {
+  if (state.currentChart) { state.currentChart.destroy(); state.currentChart = null; }
+  document.getElementById('main').innerHTML = '';
+}
 
-function renderForecastCard(forecast, tabName) {
+function renderForecastCard(forecast, tabName, extraPillClass) {
   const tab = forecast.tabs.find(t => t.name === tabName) || forecast.tabs[0];
   const card = document.createElement('div');
   card.className = 'card';
   card.innerHTML = `
     <div class="card-header">
-      <div>${escapeHtml(forecast.name)} <span class="pill">${escapeHtml(tab.name)}</span></div>
+      <div>${escapeHtml(cleanName(forecast.name))} <span class="pill ${extraPillClass||''}">${escapeHtml(tab.name)}</span></div>
       <div class="meta">${tab.rows} rows × ${tab.cols} cols</div>
     </div>
     <div class="card-body"></div>
   `;
-  card.querySelector('.card-body').appendChild(buildTable(tab.values));
+  card.querySelector('.card-body').appendChild(buildTable(tab.values, tab.raw));
   return card;
 }
 
-function buildTable(values) {
+/**
+ * Build the main cashflow table. Detects "section" rows (column A has text, all
+ * other columns empty) and makes them click-to-collapse.
+ */
+function buildTable(values, raw) {
   const table = document.createElement('table');
   table.className = 'cashflow';
   if (!values || !values.length) {
@@ -277,76 +416,180 @@ function buildTable(values) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+
+  // Track which section each row belongs to, so collapsing one hides all its
+  // children (and un-hides on toggle).
+  let currentSection = null;
+  const sectionBuckets = new Map(); // sectionKey -> [tr...]
+
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
+    const rawRow = raw ? raw[i] : row;
+    const first = String(row[0] || '').trim();
+    const restEmpty = row.slice(1).every(c => c === '' || c == null);
     const tr = document.createElement('tr');
-    const first = row[0];
-    const isSection = row.slice(1).every(c => c === '' || c == null) && first;
-    if (isSection) tr.className = 'section';
-    row.forEach((cell, j) => {
-      const td = document.createElement('td');
-      td.textContent = cell == null ? '' : cell;
-      if (j > 0) {
-        const n = parseLikelyNumber(cell);
-        if (n !== null) {
-          if (n < 0) td.classList.add('neg');
-          else if (n > 0 && /balance|net|total/i.test(String(row[0] || ''))) td.classList.add('pos');
+
+    if (first && restEmpty) {
+      // Section header — entire row labels, no data
+      const secKey = 's' + i;
+      currentSection = secKey;
+      sectionBuckets.set(secKey, []);
+      tr.className = 'section';
+      tr.dataset.sectionKey = secKey;
+      tr.addEventListener('click', () => toggleSection(tr, sectionBuckets.get(secKey)));
+
+      row.forEach((cell, j) => {
+        const td = document.createElement('td');
+        if (j === 0) td.colSpan = row.length;
+        td.textContent = cell == null ? '' : cell;
+        if (j === 0) tr.appendChild(td);
+      });
+    } else {
+      row.forEach((cell, j) => {
+        const td = document.createElement('td');
+        td.textContent = cell == null ? '' : cell;
+        if (j > 0) {
+          const n = parseLikelyNumber(cell);
+          if (n !== null) {
+            if (n < 0) td.classList.add('neg');
+            else if (n > 0 && /balance|net|total/i.test(first)) td.classList.add('pos');
+          }
         }
+        tr.appendChild(td);
+      });
+      if (currentSection) {
+        tr.dataset.sectionParent = currentSection;
+        sectionBuckets.get(currentSection).push(tr);
       }
-      tr.appendChild(td);
-    });
+    }
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
   return table;
 }
 
-function renderOverlayChart(forecasts, tabName) {
-  // Choose the first numeric row whose label contains "balance" or "net cashflow"
-  // Fallback: the last numeric row in the tab.
-  const prepared = forecasts.map(f => {
-    const tab = f.tabs.find(t => t.name === tabName) || f.tabs[0];
-    const raw = tab.raw || tab.values;
-    return { forecast: f, tab, raw };
-  }).filter(p => p.tab);
+function toggleSection(headerTr, childRows) {
+  const collapsed = headerTr.classList.toggle('collapsed');
+  childRows.forEach(tr => tr.classList.toggle('collapsed-row', collapsed));
+}
 
-  if (!prepared.length) return null;
+/**
+ * Variance table: exactly 2 forecasts (primary + 1 compare). Renders row
+ * labels in column A, then "Δ = compare − primary" for every data column.
+ */
+function buildVarianceCard(primary, other, tabName) {
+  const pTab = primary.tabs.find(t => t.name === tabName) || primary.tabs[0];
+  const oTab = other.tabs.find(t => t.name === tabName) || other.tabs[0];
+  const pRaw = pTab.raw || pTab.values;
+  const oRaw = oTab.raw || oTab.values;
 
-  // Use first forecast's header row (tabs share structure)
-  const header = prepared[0].raw[0] || [];
-  const labels = header.slice(1).map(String);
-
-  // pick best matching row label per forecast (should be same for all if schema matches)
-  function pickRow(raw) {
-    const rx = /(ending balance|net cash ?flow|cash ?flow|balance|net)/i;
-    let best = -1;
-    for (let i = 1; i < raw.length; i++) {
-      const label = String(raw[i][0] || '');
-      if (rx.test(label) && raw[i].slice(1).some(c => parseLikelyNumber(c) !== null)) {
-        best = i; break;
-      }
-    }
-    if (best === -1) {
-      for (let i = raw.length - 1; i >= 1; i--) {
-        if (raw[i].slice(1).some(c => parseLikelyNumber(c) !== null)) { best = i; break; }
-      }
-    }
-    return best === -1 ? null : raw[best];
+  // Index compare rows by label for forgiving alignment.
+  const oByLabel = new Map();
+  for (let i = 1; i < oRaw.length; i++) {
+    const lbl = String(oRaw[i][0] || '').trim();
+    if (lbl) oByLabel.set(lbl.toLowerCase(), oRaw[i]);
   }
 
-  const datasets = prepared.map((p, idx) => {
-    const row = pickRow(p.raw);
-    if (!row) return null;
-    return {
-      label: p.forecast.name + ' — ' + row[0],
-      data: row.slice(1).map(c => parseLikelyNumber(c)),
-      borderColor: palette(idx),
-      backgroundColor: palette(idx, 0.15),
-      tension: 0.25,
-      spanGaps: true,
-      pointRadius: 3
-    };
-  }).filter(Boolean);
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-header">
+      <div>Variance: <em>${escapeHtml(cleanName(other.name))}</em> minus <em>${escapeHtml(cleanName(primary.name))}</em>
+        <span class="pill variance">${escapeHtml(tabName)} · Δ</span></div>
+      <div class="meta">Rows aligned by label (column A)</div>
+    </div>
+    <div class="card-body"></div>
+  `;
+
+  const table = document.createElement('table');
+  table.className = 'cashflow';
+  const thead = document.createElement('thead');
+  const hrow = document.createElement('tr');
+  pRaw[0].forEach(cell => {
+    const th = document.createElement('th');
+    th.textContent = cell == null ? '' : cell;
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (let i = 1; i < pRaw.length; i++) {
+    const pRow = pRaw[i];
+    const label = String(pRow[0] || '').trim();
+    const restEmpty = pRow.slice(1).every(c => c === '' || c == null);
+    const tr = document.createElement('tr');
+    if (label && restEmpty) {
+      tr.className = 'section';
+      const td = document.createElement('td');
+      td.colSpan = pRow.length;
+      td.textContent = label;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      continue;
+    }
+    const oRow = oByLabel.get(label.toLowerCase()) || [];
+    for (let j = 0; j < pRow.length; j++) {
+      const td = document.createElement('td');
+      if (j === 0) {
+        td.textContent = label;
+      } else {
+        const p = parseLikelyNumber(pRow[j]);
+        const o = parseLikelyNumber(oRow[j]);
+        if (p === null || o === null) {
+          td.textContent = '';
+        } else {
+          const delta = o - p;
+          td.textContent = formatDeltaNumber(delta);
+          if (delta > 0) td.classList.add('delta-pos');
+          else if (delta < 0) td.classList.add('delta-neg');
+        }
+      }
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  card.querySelector('.card-body').appendChild(table);
+  return card;
+}
+
+function renderOverlayChart(forecasts, tabName) {
+  if (!state.chartRowIndices.length) return null;
+
+  const primary = forecasts[0];
+  const pTab = primary.tabs.find(t => t.name === tabName) || primary.tabs[0];
+  const pRaw = pTab.raw || pTab.values;
+  const labels = (pRaw[0] || []).slice(1).map(String);
+
+  // Build datasets: one per (forecast, rowIndex) pair.
+  const datasets = [];
+  let colorIdx = 0;
+  state.chartRowIndices.forEach(rowIdx => {
+    const rowLabel = String((pRaw[rowIdx] || [])[0] || ('Row ' + rowIdx));
+    forecasts.forEach(f => {
+      const tab = f.tabs.find(t => t.name === tabName) || f.tabs[0];
+      const raw = tab.raw || tab.values;
+
+      // Match by label so compare versions align even if row order shifts slightly
+      let r = raw[rowIdx];
+      if (!r || String(r[0] || '').trim().toLowerCase() !== rowLabel.trim().toLowerCase()) {
+        r = raw.find(x => String(x[0] || '').trim().toLowerCase() === rowLabel.trim().toLowerCase());
+      }
+      if (!r) return;
+
+      datasets.push({
+        label: cleanName(f.name) + ' — ' + rowLabel,
+        data: r.slice(1).map(c => parseLikelyNumber(c)),
+        borderColor: palette(colorIdx),
+        backgroundColor: palette(colorIdx, 0.15),
+        tension: 0.25,
+        spanGaps: true,
+        pointRadius: 3
+      });
+      colorIdx++;
+    });
+  });
 
   if (!datasets.length) return null;
 
@@ -354,22 +597,20 @@ function renderOverlayChart(forecasts, tabName) {
   card.className = 'card';
   card.innerHTML = `
     <div class="card-header">
-      <div>Overlay chart <span class="pill">${escapeHtml(tabName)}</span></div>
-      <div class="meta">Auto-selected row: ${escapeHtml(datasets[0].label.split(' — ').slice(1).join(' — '))}</div>
+      <div>Chart <span class="pill">${escapeHtml(tabName)}</span></div>
+      <div class="meta">${datasets.length} series · ${state.chartRowIndices.length} row${state.chartRowIndices.length===1?'':'s'} × ${forecasts.length} version${forecasts.length===1?'':'s'}</div>
     </div>
     <div class="chart-wrap"><canvas></canvas></div>
   `;
   const canvas = card.querySelector('canvas');
-  new Chart(canvas, {
+  state.currentChart = new Chart(canvas, {
     type: 'line',
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'bottom' } },
-      scales: {
-        y: { ticks: { callback: v => formatCurrency(v) } }
-      }
+      scales: { y: { ticks: { callback: v => formatCurrency(v) } } }
     }
   });
   return card;
@@ -384,33 +625,30 @@ async function render() {
   try {
     const primary = await fetchForecast(state.selectedId);
     buildTabDropdown(primary);
+    buildChartRowsList(primary);
+
     const tabName = state.selectedTab;
-
-    const compareForecasts = await Promise.all(
-      state.compareIds.map(id => fetchForecast(id))
-    );
-
+    const compareForecasts = await Promise.all(state.compareIds.map(id => fetchForecast(id)));
     const allForecasts = [primary, ...compareForecasts];
-    const main = document.getElementById('main');
+    const mainEl = document.getElementById('main');
 
-    // Overlay chart first when comparing
-    if (allForecasts.length > 1) {
-      const chart = renderOverlayChart(allForecasts, tabName);
-      if (chart) main.appendChild(chart);
-    } else {
-      const chart = renderOverlayChart([primary], tabName);
-      if (chart) main.appendChild(chart);
-    }
+    const chart = renderOverlayChart(allForecasts, tabName);
+    if (chart) mainEl.appendChild(chart);
 
-    // Side-by-side tables
     const grid = document.createElement('div');
     grid.className = 'compare-grid' + (allForecasts.length === 2 ? ' cols-2' : '');
     allForecasts.forEach(f => grid.appendChild(renderForecastCard(f, tabName)));
-    main.appendChild(grid);
+    mainEl.appendChild(grid);
 
-    setStatus('Showing ' + primary.name +
-      (compareForecasts.length ? ' vs ' + compareForecasts.map(f => f.name).join(', ') : '') +
-      '  •  tab: ' + tabName);
+    if (compareForecasts.length === 1) {
+      mainEl.appendChild(buildVarianceCard(primary, compareForecasts[0], tabName));
+    }
+
+    setStatus(
+      'Showing ' + cleanName(primary.name) +
+      (compareForecasts.length ? '  vs  ' + compareForecasts.map(f => cleanName(f.name)).join(', ') : '') +
+      '  •  tab: ' + tabName
+    );
   } catch (err) {
     setStatus('Error: ' + err.message, true);
     console.error(err);
@@ -429,19 +667,46 @@ async function loadFresh() {
       return;
     }
     if (!state.selectedId || !list.some(f => f.id === state.selectedId)) {
-      state.selectedId = list[0].id;
+      // Default to newest
+      const newest = list.slice().sort((a,b) => b.modifiedTime.localeCompare(a.modifiedTime))[0];
+      state.selectedId = newest.id;
     }
     state.compareIds = state.compareIds.filter(id => id !== state.selectedId && list.some(f => f.id === id));
-    buildVersionDropdowns();
-    // sync compare select to state
-    const cs = document.getElementById('compareSelect');
-    Array.from(cs.options).forEach(o => { o.selected = state.compareIds.includes(o.value); });
+    buildVersionDropdown();
+    buildCompareList();
     await render();
   } catch (err) {
     setStatus('Error loading file list: ' + err.message, true);
     console.error(err);
   }
 }
+
+/* ========================================================================= *
+ *  EVENT HANDLERS
+ * ========================================================================= */
+document.getElementById('versionSelect').addEventListener('change', async e => {
+  state.selectedId = e.target.value;
+  state.compareIds = state.compareIds.filter(id => id !== state.selectedId);
+  buildCompareList();
+  updateVersionHint();
+  await render();
+});
+document.getElementById('tabSelect').addEventListener('change', async e => {
+  state.selectedTab = e.target.value;
+  await render();
+});
+function onCompareChange() {
+  const cbs = document.querySelectorAll('#compareList input[type=checkbox]');
+  state.compareIds = Array.from(cbs).filter(cb => cb.checked && !cb.disabled).map(cb => cb.value);
+  render();
+}
+function onChartRowsChange() {
+  const cbs = document.querySelectorAll('#chartRowsList input[type=checkbox]');
+  state.chartRowIndices = Array.from(cbs).filter(cb => cb.checked).map(cb => parseInt(cb.value, 10));
+  state.userPickedChartRows = true;
+  render();
+}
+document.getElementById('refreshBtn').addEventListener('click', () => loadFresh());
 
 /* ========================================================================= *
  *  HELPERS
@@ -451,10 +716,16 @@ function setStatus(msg, isError) {
   s.textContent = msg;
   s.className = 'status' + (isError ? ' error' : '');
 }
-function formatDate(iso) {
+function cleanName(name) {
+  // Strip trailing .xlsx / .xls / .xlsm and surrounding whitespace
+  return String(name || '').replace(/\.(xlsx|xls|xlsm)$/i, '').trim();
+}
+function formatDate(iso, short) {
   try {
     const d = new Date(iso);
-    return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleString(undefined, short
+      ? { year: '2-digit', month: 'short', day: 'numeric' }
+      : { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   } catch { return iso; }
 }
 function parseLikelyNumber(v) {
@@ -462,9 +733,7 @@ function parseLikelyNumber(v) {
   if (typeof v === 'number' && isFinite(v)) return v;
   const s = String(v).trim();
   if (!s) return null;
-  // Match "$1,234.56", "(1,234)", "45%", "-12"
-  let neg = false;
-  let str = s;
+  let neg = false, str = s;
   if (/^\(.*\)$/.test(str)) { neg = true; str = str.slice(1, -1); }
   str = str.replace(/[,$\s]/g, '').replace(/%$/, '');
   if (str === '' || str === '-' || isNaN(Number(str))) return null;
@@ -477,50 +746,27 @@ function formatCurrency(v) {
   if (abs >= 1e3) return (v / 1e3).toFixed(1) + 'k';
   return v.toFixed(0);
 }
+function formatDeltaNumber(v) {
+  if (v === 0) return '0';
+  const sign = v > 0 ? '+' : '−';
+  const abs = Math.abs(v);
+  if (abs >= 1e6) return sign + (abs / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + 'k';
+  return sign + abs.toFixed(abs < 10 ? 2 : 0);
+}
 function palette(i, alpha) {
   const colors = [
-    [37, 99, 235],   // blue
-    [5, 150, 105],   // green
-    [220, 38, 38],   // red
-    [217, 119, 6],   // amber
-    [139, 92, 246],  // violet
-    [14, 165, 233],  // sky
-    [236, 72, 153]   // pink
+    [37, 99, 235], [5, 150, 105], [220, 38, 38], [217, 119, 6],
+    [139, 92, 246], [14, 165, 233], [236, 72, 153], [16, 185, 129]
   ];
   const c = colors[i % colors.length];
-  return alpha != null
-    ? `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`
-    : `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+  return alpha != null ? `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})` : `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 }
 function escapeHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-
-/* ========================================================================= *
- *  EVENTS
- * ========================================================================= */
-document.getElementById('versionSelect').addEventListener('change', async e => {
-  state.selectedId = e.target.value;
-  // If primary matches a previously selected compare, remove it
-  state.compareIds = state.compareIds.filter(id => id !== state.selectedId);
-  const cs = document.getElementById('compareSelect');
-  Array.from(cs.options).forEach(o => { o.selected = state.compareIds.includes(o.value); });
-  updateCompareDisabled();
-  updateVersionHint();
-  await render();
-});
-document.getElementById('tabSelect').addEventListener('change', async e => {
-  state.selectedTab = e.target.value;
-  await render();
-});
-document.getElementById('compareSelect').addEventListener('change', async e => {
-  const sel = Array.from(e.target.selectedOptions).map(o => o.value);
-  state.compareIds = sel.filter(id => id !== state.selectedId);
-  await render();
-});
-document.getElementById('refreshBtn').addEventListener('click', () => loadFresh());
 
 /* ========================================================================= *
  *  BOOT
