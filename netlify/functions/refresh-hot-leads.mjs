@@ -66,6 +66,12 @@ const CONFIG = {
   //   Form alone (30)                                  = 30  ✗
   //   Meeting alone (25)                               = 25  ✗
   sqlThreshold: 50,
+
+  // "Near-SQL" triage band. Contacts scoring >= this but < sqlThreshold show
+  // up in a separate bucket — they're MQLs who are accumulating real signals
+  // and are candidates for admissions to push over the line. Hidden from the
+  // main "All" view in the dashboard; surfaced via a dedicated chip.
+  nearSqlMinThreshold: 30,
   sqlLifecycleStages: ["lead", "marketingqualifiedlead", "salesqualifiedlead"],
   sqlScoring: {
     formSubmissionLast14Days: 30,
@@ -494,13 +500,18 @@ export default async () => {
       amount = primary.deal.properties.amount ? Number(primary.deal.properties.amount) : null;
       daysInStage = daysBetween(primary.deal.properties.hs_date_entered_current_stage, nowIso);
     } else if (sqlCandidateIds.has(c.id) && dealIds.length === 0) {
-      // Score-based SQL — a contact is only SQL if they have NO associated
-      // deals. The moment a deal exists, they belong in Applicant/Opportunity
-      // (deal-driven) or they're past the hot list entirely.
+      // Score-based classification — a contact is only eligible if they have
+      // NO associated deals. The moment a deal exists, they belong in
+      // Applicant/Opportunity (deal-driven) or they're past the hot list.
       const scored = computeSQLScore(props);
       if (scored.score >= CONFIG.sqlThreshold) {
         bucket = "SQL";
         hot = true;
+      } else if (scored.score >= CONFIG.nearSqlMinThreshold) {
+        bucket = "Near-SQL";  // MQL triage band — real signals, not yet SQL
+        hot = true;
+      }
+      if (hot) {
         stageLabel = props.hs_lead_status || props.lifecyclestage || "—";
         sqlScore = scored.score;
         sqlBreakdown = scored.breakdown;
@@ -557,13 +568,15 @@ export default async () => {
     });
   }
 
-  // 6. Sort: Opportunity > Applicant > SQL (closer to close first). Inside
-  // SQL, sort by score descending. Elsewhere by freshness.
-  const bucketRank = { "Opportunity": 0, "Applicant": 1, "SQL": 2 };
+  // 6. Sort: Opportunity > Applicant > SQL > Near-SQL (closer to close first).
+  // Within SQL/Near-SQL, sort by score descending. Elsewhere by freshness.
+  const bucketRank = { "Opportunity": 0, "Applicant": 1, "SQL": 2, "Near-SQL": 3 };
   records.sort((a, b) => {
     const rd = (bucketRank[a.bucket] ?? 99) - (bucketRank[b.bucket] ?? 99);
     if (rd) return rd;
-    if (a.bucket === "SQL" && b.bucket === "SQL") return (b.sqlScore || 0) - (a.sqlScore || 0);
+    if ((a.bucket === "SQL" || a.bucket === "Near-SQL") && a.bucket === b.bucket) {
+      return (b.sqlScore || 0) - (a.sqlScore || 0);
+    }
     return new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0);
   });
 
@@ -581,6 +594,7 @@ export default async () => {
       Opportunity: records.filter(r => r.bucket === "Opportunity").length,
       Applicant: records.filter(r => r.bucket === "Applicant").length,
       SQL: records.filter(r => r.bucket === "SQL").length,
+      "Near-SQL": records.filter(r => r.bucket === "Near-SQL").length,
     },
     totalPipelineValue: records.reduce((s, r) => s + (r.amount || 0), 0),
     contactsScanned: contacts.length,
