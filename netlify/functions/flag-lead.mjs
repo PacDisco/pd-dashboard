@@ -72,46 +72,59 @@ export default async (req) => {
   if (!contactId || !/^\d+$/.test(String(contactId))) {
     return new Response(JSON.stringify({ error: "contactId (numeric) required" }), { status: 400, headers: { "content-type": "application/json" } });
   }
-  if (!["flag", "unflag"].includes(action)) {
-    return new Response(JSON.stringify({ error: "action must be 'flag' or 'unflag'" }), { status: 400, headers: { "content-type": "application/json" } });
+  const validActions = ["flag", "unflag", "exclude", "unexclude"];
+  if (!validActions.includes(action)) {
+    return new Response(JSON.stringify({ error: `action must be one of ${validActions.join(", ")}` }), { status: 400, headers: { "content-type": "application/json" } });
   }
 
   const store = getStore({ name: "hot-leads", consistency: "strong" });
-  const flags = (await store.get("flags.json", { type: "json" })) || {};
+  const [flags, exclusions] = await Promise.all([
+    store.get("flags.json",      { type: "json" }),
+    store.get("exclusions.json", { type: "json" }),
+  ]);
+  const flagMap = flags || {};
+  const exclMap = exclusions || {};
 
   const nowIso = new Date().toISOString();
+  const by = flaggedBy || "Dashboard user";
+  const trimmedNote = note.slice(0, 500);
+
+  let noteBody = null;
 
   if (action === "flag") {
-    // Store flag state
-    flags[contactId] = {
-      flaggedAt: nowIso,
-      flaggedBy,
-      note: note.slice(0, 500), // cap length
-    };
-    // Create HubSpot note for visibility in the contact timeline.
-    // Prefix makes it greppable if you ever want to aggregate.
-    const body = `<b>[HOT LEAD FLAG]</b> Flagged via dashboard by ${escapeHtml(flaggedBy)}${note ? `<br>${escapeHtml(note)}` : ""}`;
-    try {
-      await createHubSpotNote(contactId, body);
-    } catch (err) {
-      // Non-fatal: still save the flag locally so dashboard reflects it.
-      console.error("HubSpot note failed:", err.message);
-    }
-  } else {
-    // Unflag: also drop a HubSpot note recording the unflag.
-    delete flags[contactId];
-    const body = `<b>[HOT LEAD FLAG REMOVED]</b> Unflagged via dashboard by ${escapeHtml(flaggedBy)}`;
-    try {
-      await createHubSpotNote(contactId, body);
-    } catch (err) {
-      console.error("HubSpot note failed:", err.message);
-    }
+    flagMap[contactId] = { flaggedAt: nowIso, flaggedBy: by, note: trimmedNote };
+    noteBody = `<b>[HOT LEAD FLAG]</b> Flagged via dashboard by ${escapeHtml(by)}${trimmedNote ? `<br>${escapeHtml(trimmedNote)}` : ""}`;
+  } else if (action === "unflag") {
+    delete flagMap[contactId];
+    noteBody = `<b>[HOT LEAD FLAG REMOVED]</b> Unflagged via dashboard by ${escapeHtml(by)}`;
+  } else if (action === "exclude") {
+    exclMap[contactId] = { excludedAt: nowIso, excludedBy: by, reason: trimmedNote };
+    noteBody = `<b>[DASHBOARD EXCLUSION]</b> Excluded from Active Leads dashboard by ${escapeHtml(by)}${trimmedNote ? `<br>Reason: ${escapeHtml(trimmedNote)}` : ""}`;
+  } else if (action === "unexclude") {
+    delete exclMap[contactId];
+    noteBody = `<b>[DASHBOARD EXCLUSION REMOVED]</b> Re-included in Active Leads dashboard by ${escapeHtml(by)}`;
   }
 
-  await store.setJSON("flags.json", flags);
+  // Create the HubSpot note (non-fatal if it fails — we still update Blobs).
+  if (noteBody) {
+    try { await createHubSpotNote(contactId, noteBody); }
+    catch (err) { console.error("HubSpot note failed:", err.message); }
+  }
+
+  // Persist only the store that changed (minor cost savings).
+  if (action === "flag" || action === "unflag") await store.setJSON("flags.json",      flagMap);
+  if (action === "exclude" || action === "unexclude") await store.setJSON("exclusions.json", exclMap);
 
   return new Response(
-    JSON.stringify({ ok: true, contactId, action, flagged: action === "flag", flagCount: Object.keys(flags).length }),
+    JSON.stringify({
+      ok: true,
+      contactId,
+      action,
+      flagged:  action === "flag",
+      excluded: action === "exclude",
+      flagCount:      Object.keys(flagMap).length,
+      exclusionCount: Object.keys(exclMap).length,
+    }),
     { status: 200, headers: { "content-type": "application/json" } }
   );
 };
