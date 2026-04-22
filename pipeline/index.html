@@ -279,7 +279,7 @@
           <th class="sortable" data-sort="name">Name<span class="sort-indicator">↕</span></th>
           <th class="sortable hide-sm" data-sort="pipelineLabel">Program / Pipeline<span class="sort-indicator">↕</span></th>
           <th class="sortable" data-sort="owner">Owner<span class="sort-indicator">↕</span></th>
-          <th class="sortable hide-sm" data-sort="daysInStage">Days in stage<span class="sort-indicator">↕</span></th>
+          <th class="sortable hide-sm" data-sort="programInterest">Program Interest<span class="sort-indicator">↕</span></th>
           <th class="sortable" data-sort="daysSinceTouch">Days since touch<span class="sort-indicator">↕</span></th>
           <th class="sortable amount" data-sort="amount">Amount<span class="sort-indicator">↕</span></th>
           <th>HubSpot</th>
@@ -425,7 +425,7 @@
           <td class="name-cell">${escapeHtml(r.name || "—")}<div class="sub">${escapeHtml(r.email || "")}</div>${r.isExcluded ? `<div class="sub">✖ excluded${r.excludedBy ? ` by ${escapeHtml(r.excludedBy)}` : ''}${r.exclusionReason ? `: ${escapeHtml(r.exclusionReason)}` : ''}</div>` : ''}</td>
           <td class="hide-sm">${escapeHtml(r.pipelineLabel || "—")}</td>
           <td>${escapeHtml(r.owner || "—")}</td>
-          <td class="hide-sm urgency ${urgencyClass(r.daysInStage)}">${r.daysInStage ?? "—"}</td>
+          <td class="hide-sm">${escapeHtml(r.programInterest || "—")}</td>
           <td class="urgency ${urgencyClass(r.daysSinceTouch)}">${r.daysSinceTouch ?? "—"}</td>
           <td class="amount">${fmtMoney(r.amount)}</td>
           <td>${r.contactUrl ? `<a href="${r.contactUrl}" target="_blank" rel="noopener">Contact ↗</a>` : "—"}${r.dealUrl ? ` · <a href="${r.dealUrl}" target="_blank" rel="noopener">Deal ↗</a>` : ""}</td>
