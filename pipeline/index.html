@@ -17,6 +17,7 @@
       --hot-opp: #3b82f6;
       --hot-app: #a78bfa;
       --hot-sql: #14b8a6;
+      --hot-near-sql: #64748b;
       --danger: #ef4444;
     }
     * { box-sizing: border-box; }
@@ -104,6 +105,7 @@
     .bucket.Opportunity { background: rgba(59,130,246,0.15); color: var(--hot-opp); }
     .bucket.Applicant { background: rgba(167,139,250,0.15); color: var(--hot-app); }
     .bucket.SQL { background: rgba(20,184,166,0.15); color: var(--hot-sql); }
+    .bucket.NearSQL { background: rgba(100,116,139,0.15); color: var(--hot-near-sql); }
     .bucket.HotLead, .bucket["Hot Lead"] { background: rgba(239,68,68,0.18); color: #fca5a5; }
     .score-pill { display: inline-block; background: rgba(20,184,166,0.15); color: var(--hot-sql); padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 4px; }
     .signal-tag { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
@@ -254,6 +256,7 @@
       <span class="chip" data-bucket="Opportunity">Opportunity</span>
       <span class="chip" data-bucket="Applicant">Applicant</span>
       <span class="chip" data-bucket="SQL">SQL</span>
+      <span class="chip" data-bucket="Near-SQL" title="MQLs scoring 30–49 (just below SQL threshold) — triage candidates">Near-SQL</span>
       <label class="compare-toggle" style="margin-left:auto;">
         <input type="checkbox" id="show-excluded" /> Show excluded
       </label>
@@ -389,6 +392,10 @@
     function matches(r) {
       if (activeBucket === "flagged") {
         if (!r.isHotLead) return false;
+      } else if (activeBucket === "all") {
+        // Keep Near-SQL out of the main "All" view so it doesn't drown out
+        // the active hot leads. Surfaces only when its own chip is selected.
+        if (r.bucket === "Near-SQL") return false;
       } else if (activeBucket !== "all") {
         if (r.bucket !== activeBucket) return false;
       }
@@ -411,7 +418,9 @@
       tbody.innerHTML = rows.map(r => {
         const scorePill = r.sqlScore != null ? `<span class="score-pill">${r.sqlScore}</span>` : "";
         const topSignalHint = r.sqlTopSignal ? `<div class="signal-tag">${escapeHtml(formatSignal(r.sqlTopSignal))}</div>` : "";
-        const bucketClass = r.bucket === "Hot Lead" ? "HotLead" : r.bucket;
+        const bucketClass = r.bucket === "Hot Lead" ? "HotLead"
+          : r.bucket === "Near-SQL" ? "NearSQL"
+          : r.bucket;
         const noteLine = r.isHotLead && r.hotLeadNote
           ? `<span class="hot-note">🔥 ${escapeHtml(r.hotLeadNote)}${r.hotLeadFlaggedBy ? ` — ${escapeHtml(r.hotLeadFlaggedBy)}` : ""}</span>`
           : r.isHotLead
