@@ -88,6 +88,15 @@
     table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; }
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13.5px; vertical-align: top; }
     th { background: var(--panel-2); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; font-weight: 600; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: var(--text); }
+    th.sortable .sort-indicator { opacity: 0.3; margin-left: 4px; font-size: 10px; }
+    th.sortable.active .sort-indicator { opacity: 1; color: var(--accent); }
+    .exclude-btn { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 3px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; margin-left: 4px; }
+    .exclude-btn:hover { color: #fca5a5; border-color: var(--danger); }
+    .exclude-btn.excluded { background: rgba(148,163,184,0.2); color: var(--muted); }
+    tr.excluded { opacity: 0.55; }
+    tr.excluded td { border-bottom: 1px dashed var(--border); }
     tbody tr:last-child td { border-bottom: none; }
     tbody tr:hover { background: rgba(255,255,255,0.03); }
     .bucket { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -243,6 +252,9 @@
       <span class="chip" data-bucket="Opportunity">Opportunity</span>
       <span class="chip" data-bucket="Applicant">Applicant</span>
       <span class="chip" data-bucket="SQL">SQL</span>
+      <label class="compare-toggle" style="margin-left:auto;">
+        <input type="checkbox" id="show-excluded" /> Show excluded
+      </label>
     </div>
 
     <dialog class="flag-dialog" id="flag-dialog">
@@ -263,15 +275,15 @@
     <table id="table">
       <thead>
         <tr>
-          <th>Stage</th>
-          <th>Name</th>
-          <th class="hide-sm">Program / Pipeline</th>
-          <th>Owner</th>
-          <th class="hide-sm">Days in stage</th>
-          <th>Days since touch</th>
-          <th class="amount">Amount</th>
+          <th class="sortable" data-sort="bucket">Stage<span class="sort-indicator">↕</span></th>
+          <th class="sortable" data-sort="name">Name<span class="sort-indicator">↕</span></th>
+          <th class="sortable hide-sm" data-sort="pipelineLabel">Program / Pipeline<span class="sort-indicator">↕</span></th>
+          <th class="sortable" data-sort="owner">Owner<span class="sort-indicator">↕</span></th>
+          <th class="sortable hide-sm" data-sort="daysInStage">Days in stage<span class="sort-indicator">↕</span></th>
+          <th class="sortable" data-sort="daysSinceTouch">Days since touch<span class="sort-indicator">↕</span></th>
+          <th class="sortable amount" data-sort="amount">Amount<span class="sort-indicator">↕</span></th>
           <th>HubSpot</th>
-          <th>🔥</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="tbody">
@@ -298,10 +310,14 @@
     let allRecords = [];
     let activeBucket = "all";
     let query = "";
+    let sortColumn = null;    // null means "natural" order (server-supplied)
+    let sortDirection = "asc"; // "asc" | "desc"
+    let showExcluded = false;
 
     async function load() {
       try {
-        const res = await fetch(FEED_URL, { cache: "no-store" });
+        const qs = showExcluded ? "?include_excluded=true" : "";
+        const res = await fetch(FEED_URL + qs, { cache: "no-store" });
         if (!res.ok) throw new Error("Feed responded " + res.status);
         const data = await res.json();
         renderSummary(data.summary);
@@ -311,6 +327,25 @@
       } catch (err) {
         showError("Could not load feed: " + err.message);
       }
+    }
+
+    function compareRecords(a, b, col, dir) {
+      const va = a?.[col];
+      const vb = b?.[col];
+      const aNull = va == null || va === "";
+      const bNull = vb == null || vb === "";
+      if (aNull && bNull) return 0;
+      if (aNull) return 1;  // nulls always last
+      if (bNull) return -1;
+      let cmp;
+      if (typeof va === "number" && typeof vb === "number") cmp = va - vb;
+      else cmp = String(va).localeCompare(String(vb), undefined, { sensitivity: "base", numeric: true });
+      return dir === "desc" ? -cmp : cmp;
+    }
+
+    function applySort(rows) {
+      if (!sortColumn) return rows;
+      return [...rows].sort((a, b) => compareRecords(a, b, sortColumn, sortDirection));
     }
 
     function showError(msg) {
@@ -363,8 +398,9 @@
     }
 
     function render() {
-      const rows = allRecords.filter(matches);
+      const rows = applySort(allRecords.filter(matches));
       renderMetrics(rows);
+      renderSortIndicators();
       const tbody = document.getElementById("tbody");
       if (!rows.length) {
         tbody.innerHTML = `<tr><td colspan="9" class="empty">No matching hot leads.</td></tr>`;
@@ -380,20 +416,57 @@
             ? `<span class="hot-note">🔥 Flagged${r.hotLeadFlaggedBy ? ` by ${escapeHtml(r.hotLeadFlaggedBy)}` : ""}</span>`
             : "";
         const flagBtnLabel = r.isHotLead ? "🔥 Unflag" : "🔥 Flag";
+        const excludeBtnLabel = r.isExcluded ? "↩ Include" : "✖ Exclude";
+        const excludeAction = r.isExcluded ? "unexclude" : "exclude";
+        const rowClasses = [r.isHotLead ? 'flagged' : '', r.isExcluded ? 'excluded' : ''].filter(Boolean).join(' ');
         return `
-        <tr class="${r.isHotLead ? 'flagged' : ''}">
+        <tr class="${rowClasses}">
           <td><span class="bucket ${bucketClass}">${r.bucket}</span>${scorePill}<div class="sub">${escapeHtml(r.stageLabel || "")}</div>${topSignalHint}${noteLine}</td>
-          <td class="name-cell">${escapeHtml(r.name || "—")}<div class="sub">${escapeHtml(r.email || "")}</div></td>
+          <td class="name-cell">${escapeHtml(r.name || "—")}<div class="sub">${escapeHtml(r.email || "")}</div>${r.isExcluded ? `<div class="sub">✖ excluded${r.excludedBy ? ` by ${escapeHtml(r.excludedBy)}` : ''}${r.exclusionReason ? `: ${escapeHtml(r.exclusionReason)}` : ''}</div>` : ''}</td>
           <td class="hide-sm">${escapeHtml(r.pipelineLabel || "—")}</td>
           <td>${escapeHtml(r.owner || "—")}</td>
           <td class="hide-sm urgency ${urgencyClass(r.daysInStage)}">${r.daysInStage ?? "—"}</td>
           <td class="urgency ${urgencyClass(r.daysSinceTouch)}">${r.daysSinceTouch ?? "—"}</td>
           <td class="amount">${fmtMoney(r.amount)}</td>
           <td>${r.contactUrl ? `<a href="${r.contactUrl}" target="_blank" rel="noopener">Contact ↗</a>` : "—"}${r.dealUrl ? ` · <a href="${r.dealUrl}" target="_blank" rel="noopener">Deal ↗</a>` : ""}</td>
-          <td><button class="flag-btn ${r.isHotLead ? 'flagged' : ''}" data-contact-id="${r.contactId}" data-action="${r.isHotLead ? 'unflag' : 'flag'}" data-name="${escapeHtml(r.name || '')}">${flagBtnLabel}</button></td>
+          <td>
+            <button class="flag-btn ${r.isHotLead ? 'flagged' : ''}" data-contact-id="${r.contactId}" data-action="${r.isHotLead ? 'unflag' : 'flag'}" data-name="${escapeHtml(r.name || '')}">${flagBtnLabel}</button>
+            <button class="exclude-btn ${r.isExcluded ? 'excluded' : ''}" data-contact-id="${r.contactId}" data-action="${excludeAction}" data-name="${escapeHtml(r.name || '')}">${excludeBtnLabel}</button>
+          </td>
         </tr>
       `;}).join("");
     }
+
+    function renderSortIndicators() {
+      document.querySelectorAll("th.sortable").forEach(th => {
+        const ind = th.querySelector(".sort-indicator");
+        if (!ind) return;
+        if (th.dataset.sort === sortColumn) {
+          th.classList.add("active");
+          ind.textContent = sortDirection === "asc" ? "↑" : "↓";
+        } else {
+          th.classList.remove("active");
+          ind.textContent = "↕";
+        }
+      });
+    }
+
+    // Click handler on column headers: first click = asc, second = desc, third = clear.
+    document.querySelector("thead").addEventListener("click", e => {
+      const th = e.target.closest("th.sortable");
+      if (!th) return;
+      const col = th.dataset.sort;
+      if (sortColumn !== col) {
+        sortColumn = col;
+        sortDirection = "asc";
+      } else if (sortDirection === "asc") {
+        sortDirection = "desc";
+      } else {
+        sortColumn = null;
+        sortDirection = "asc";
+      }
+      render();
+    });
 
     function formatSignal(key) {
       const map = {
@@ -443,17 +516,36 @@
     try { whoEl.value = localStorage.getItem(LAST_NAME_KEY) || ""; } catch {}
 
     document.getElementById("tbody").addEventListener("click", e => {
-      const btn = e.target.closest(".flag-btn");
+      const btn = e.target.closest(".flag-btn, .exclude-btn");
       if (!btn) return;
       pendingFlag = {
         contactId: btn.dataset.contactId,
         action: btn.dataset.action,
         name: btn.dataset.name,
       };
-      titleEl.textContent = pendingFlag.action === "flag" ? "Flag as hot lead" : "Remove hot lead flag";
+      // Reuse the flag dialog for all 4 actions.
+      const isExclude = pendingFlag.action === "exclude";
+      const isUnexclude = pendingFlag.action === "unexclude";
+      const isUnflag = pendingFlag.action === "unflag";
+      const titles = {
+        flag:      "Flag as hot lead",
+        unflag:    "Remove hot lead flag",
+        exclude:   "Exclude from dashboard",
+        unexclude: "Re-include in dashboard",
+      };
+      const btnLabels = {
+        flag: "Flag", unflag: "Unflag",
+        exclude: "Exclude", unexclude: "Include",
+      };
+      titleEl.textContent = titles[pendingFlag.action];
       nameEl.textContent = pendingFlag.name;
-      confirmBtn.textContent = pendingFlag.action === "flag" ? "Flag" : "Unflag";
-      noteEl.style.display = pendingFlag.action === "flag" ? "" : "none";
+      confirmBtn.textContent = btnLabels[pendingFlag.action];
+      // Hide the note field for "undo" actions — no reason needed.
+      noteEl.style.display = (isUnflag || isUnexclude) ? "none" : "";
+      // Update note placeholder depending on action
+      noteEl.placeholder = isExclude
+        ? "Why are you excluding this lead? (optional)"
+        : "Why are you flagging this lead?";
       dialog.showModal();
     });
 
@@ -466,6 +558,7 @@
       if (!flaggedBy) { whoEl.focus(); return; }
       try { localStorage.setItem(LAST_NAME_KEY, flaggedBy); } catch {}
       confirmBtn.disabled = true;
+      const origLabel = confirmBtn.textContent;
       confirmBtn.textContent = "Saving…";
       try {
         const res = await fetch(FLAG_URL, {
@@ -483,11 +576,17 @@
         noteEl.value = "";
         await load();
       } catch (err) {
-        alert("Flag failed: " + err.message);
+        alert("Action failed: " + err.message);
       } finally {
         confirmBtn.disabled = false;
-        confirmBtn.textContent = pendingFlag.action === "flag" ? "Flag" : "Unflag";
+        confirmBtn.textContent = origLabel;
       }
+    });
+
+    // Show-excluded toggle
+    document.getElementById("show-excluded").addEventListener("change", async e => {
+      showExcluded = e.target.checked;
+      await load();
     });
 
     load();
