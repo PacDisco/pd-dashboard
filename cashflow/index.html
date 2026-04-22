@@ -272,14 +272,28 @@ const state = {
 /* ========================================================================= *
  *  API
  * ========================================================================= */
-async function api(params) {
+async function api(params, attempt) {
+  attempt = attempt || 0;
+  const maxAttempts = 3;
   const url = new URL(APPS_SCRIPT_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Unknown API error');
-  return json.data;
+  try {
+    const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Unknown API error');
+    return json.data;
+  } catch (err) {
+    const msg = String(err && err.message || err);
+    const transient = /Service error|HTTP 5\d\d|Failed to fetch|NetworkError/i.test(msg);
+    if (transient && attempt < maxAttempts - 1) {
+      const delay = 750 * Math.pow(2, attempt);
+      setStatus(`Transient error, retrying in ${delay}ms…  (${msg})`, false);
+      await new Promise(r => setTimeout(r, delay));
+      return api(params, attempt + 1);
+    }
+    throw err;
+  }
 }
 async function fetchList() { return api({ action: 'list' }); }
 async function fetchForecast(fileId) {
