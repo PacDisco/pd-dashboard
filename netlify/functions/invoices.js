@@ -2,12 +2,15 @@
  * Invoice tool — single Netlify Function with action routing.
  *
  * Routes (query ?action=... or JSON body { action }):
- *   - list      GET   -> list payments (optional: status, program_id, from, to)
- *   - programs  GET   -> list active programs for the dropdown
- *   - create    POST  -> manual entry (vendor, amount, due_date, program_id, notes)
- *   - upload    POST  -> multipart or base64 PDF -> Drive + Claude + DB
- *   - update    POST  -> { id, patch: { approved_to_pay, paid, due_date, ... } }
- *   - inbound   POST  -> Gmail Apps Script webhook (see apps-script/Code.gs)
+ *   - list              GET   -> list payments (optional: status, program_id, from, to)
+ *   - programs          GET   -> list active programs (add ?include_inactive=1 for admin view)
+ *   - create            POST  -> manual entry (vendor, amount, due_date, program_id, notes)
+ *   - upload            POST  -> multipart or base64 PDF -> Drive + Claude + DB
+ *   - update            POST  -> { id, patch: { approved_to_pay, paid, due_date, ... } }
+ *   - inbound           POST  -> Gmail Apps Script webhook (see apps-script/Code.gs)
+ *   - programs-create   POST  -> { name, sort_order? }
+ *   - programs-update   POST  -> { id, patch: { name, sort_order, is_active } }
+ *   - programs-delete   POST  -> { id }  (fails if any payment references it)
  *
  * Required env vars:
  *   NETLIFY_DATABASE_URL          (auto-injected when Netlify DB is provisioned)
@@ -143,11 +146,76 @@ async function handleList(params) {
   return ok({ payments: rows });
 }
 
-async function handlePrograms() {
-  const rows = await sql()`
-    SELECT id, name FROM programs WHERE is_active = TRUE ORDER BY sort_order, name
-  `;
+async function handlePrograms(params) {
+  const includeInactive = params.include_inactive === '1' || params.include_inactive === 'true';
+  const rows = includeInactive
+    ? await sql()`
+        SELECT p.id, p.name, p.sort_order, p.is_active, p.created_at,
+               (SELECT COUNT(*) FROM payments WHERE program_id = p.id)::int AS payment_count
+        FROM programs p
+        ORDER BY p.sort_order, p.name
+      `
+    : await sql()`
+        SELECT id, name FROM programs WHERE is_active = TRUE ORDER BY sort_order, name
+      `;
   return ok({ programs: rows });
+}
+
+async function handleProgramCreate(body) {
+  const name = (body.name || '').trim();
+  const sortOrder = Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 100;
+  if (!name) return bad('name required');
+  try {
+    const rows = await sql()`
+      INSERT INTO programs (name, sort_order)
+      VALUES (${name}, ${sortOrder})
+      RETURNING *
+    `;
+    return ok({ program: rows[0] });
+  } catch (e) {
+    if (/duplicate key/i.test(e.message)) return bad(`Program "${name}" already exists`, 409);
+    throw e;
+  }
+}
+
+async function handleProgramUpdate(body) {
+  const { id, patch } = body;
+  if (!id || !patch) return bad('id and patch required');
+
+  const sets = [];
+  const args = [];
+  const allow = ['name', 'sort_order', 'is_active'];
+  for (const k of Object.keys(patch)) {
+    if (!allow.includes(k)) continue;
+    args.push(k === 'name' ? String(patch[k]).trim() : patch[k]);
+    sets.push(`${k} = $${args.length}`);
+  }
+  if (!sets.length) return bad('no updatable fields in patch');
+
+  args.push(Number(id));
+  try {
+    const rows = await sql().query(
+      `UPDATE programs SET ${sets.join(', ')} WHERE id = $${args.length} RETURNING *`,
+      args
+    );
+    if (!rows.length) return bad('not found', 404);
+    return ok({ program: rows[0] });
+  } catch (e) {
+    if (/duplicate key/i.test(e.message)) return bad(`That program name already exists`, 409);
+    throw e;
+  }
+}
+
+async function handleProgramDelete(body) {
+  const id = Number(body.id);
+  if (!id) return bad('id required');
+  const ref = await sql()`SELECT COUNT(*)::int AS n FROM payments WHERE program_id = ${id}`;
+  if (ref[0].n > 0) {
+    return bad(`Can't delete — ${ref[0].n} payment(s) use this program. Deactivate it instead.`, 409);
+  }
+  const rows = await sql()`DELETE FROM programs WHERE id = ${id} RETURNING id`;
+  if (!rows.length) return bad('not found', 404);
+  return ok({ deleted: id });
 }
 
 async function handleCreate(body) {
@@ -269,12 +337,15 @@ exports.handler = async (event) => {
     const body = event.body ? (event.isBase64Encoded ? JSON.parse(Buffer.from(event.body, 'base64').toString('utf8')) : JSON.parse(event.body)) : {};
     const action = qs.action || body.action;
 
-    if (method === 'GET' && action === 'list')     return await handleList(qs);
-    if (method === 'GET' && action === 'programs') return await handlePrograms();
-    if (method === 'POST' && action === 'create')  return await handleCreate(body);
-    if (method === 'POST' && action === 'upload')  return await handleUpload(body);
-    if (method === 'POST' && action === 'update')  return await handleUpdate(body);
-    if (method === 'POST' && action === 'inbound') return await handleInbound(body, event.headers || {});
+    if (method === 'GET'  && action === 'list')             return await handleList(qs);
+    if (method === 'GET'  && action === 'programs')         return await handlePrograms(qs);
+    if (method === 'POST' && action === 'create')           return await handleCreate(body);
+    if (method === 'POST' && action === 'upload')           return await handleUpload(body);
+    if (method === 'POST' && action === 'update')           return await handleUpdate(body);
+    if (method === 'POST' && action === 'inbound')          return await handleInbound(body, event.headers || {});
+    if (method === 'POST' && action === 'programs-create')  return await handleProgramCreate(body);
+    if (method === 'POST' && action === 'programs-update')  return await handleProgramUpdate(body);
+    if (method === 'POST' && action === 'programs-delete')  return await handleProgramDelete(body);
 
     return bad(`unknown action '${action}' for method ${method}`);
   } catch (err) {
