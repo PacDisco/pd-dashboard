@@ -153,6 +153,7 @@
     <button class="tab active" data-panel="dashboard">Dashboard</button>
     <button class="tab"          data-panel="upload">Upload Invoice</button>
     <button class="tab"          data-panel="manual">Manual Entry</button>
+    <button class="tab"          data-panel="programs">Programs</button>
   </div>
 
   <!-- ============================= DASHBOARD ============================= -->
@@ -202,6 +203,26 @@
     </div>
   </div>
 
+  <!-- ============================= PROGRAMS ============================= -->
+  <div class="panel" id="panel-programs">
+    <div class="card">
+      <h2>Add a program</h2>
+      <p style="margin-top:0;color:var(--muted);">Programs appear in the dropdown when uploading or scheduling a payment. Keep names short and consistent (e.g. "Semester Programs - Peru" rather than "Peru Semester '26").</p>
+      <form id="program-form">
+        <div class="row">
+          <div class="field" style="flex:3;"><label>Program name *</label><input required name="name" type="text" placeholder="e.g. Semester Programs - Peru"></div>
+          <div class="field" style="flex:1;"><label>Sort order</label><input name="sort_order" type="number" value="100"><div style="font-size:11px;color:var(--muted);margin-top:2px;">Lower = higher in the list</div></div>
+          <div class="field" style="flex:0 0 auto;align-self:flex-end;"><button class="primary" type="submit">Add</button></div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>All programs</h2>
+      <div id="programs-list"><p class="empty">Loading…</p></div>
+    </div>
+  </div>
+
   <!-- ============================= MANUAL ============================= -->
   <div class="panel" id="panel-manual">
     <div class="card">
@@ -246,6 +267,7 @@
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+      if (btn.dataset.panel === 'programs') loadProgramsAdmin();
     });
   });
 
@@ -265,11 +287,88 @@
   // ----------------------------------------------------------------------
   async function loadPrograms() {
     const res = await fetch(`${API}?action=programs`).then(r => r.json());
-    const opts = (res.programs || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-    document.getElementById('filter-program').insertAdjacentHTML('beforeend', opts);
-    document.getElementById('manual-program').insertAdjacentHTML('beforeend', opts);
-    document.getElementById('upload-program').insertAdjacentHTML('beforeend', opts);
+    const opts = (res.programs || []).map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    // Rebuild each dropdown preserving the first (placeholder) option
+    for (const id of ['filter-program', 'manual-program', 'upload-program']) {
+      const sel = document.getElementById(id);
+      const keep = sel.options[0]?.outerHTML || '';
+      sel.innerHTML = keep + opts;
+    }
   }
+
+  async function loadProgramsAdmin() {
+    const host = document.getElementById('programs-list');
+    host.innerHTML = '<p class="empty">Loading…</p>';
+    const res = await fetch(`${API}?action=programs&include_inactive=1`).then(r => r.json());
+    const progs = res.programs || [];
+    if (!progs.length) { host.innerHTML = '<p class="empty">No programs yet. Add one above.</p>'; return; }
+
+    host.innerHTML = `
+      <table>
+        <thead><tr>
+          <th style="width:50%;">Name</th>
+          <th>Sort</th>
+          <th>Payments</th>
+          <th>Active</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${progs.map(programRow).join('')}</tbody>
+      </table>
+    `;
+  }
+
+  function programRow(p) {
+    const inactive = !p.is_active ? 'style="opacity:0.55;"' : '';
+    return `
+      <tr data-id="${p.id}" ${inactive}>
+        <td><input class="prog-name-input" value="${escapeHtml(p.name)}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;font-size:13px;" onchange="saveProgramField(${p.id}, 'name', this.value)"></td>
+        <td><input type="number" value="${p.sort_order}" style="width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;font-size:13px;" onchange="saveProgramField(${p.id}, 'sort_order', Number(this.value))"></td>
+        <td style="color:var(--muted);">${p.payment_count}</td>
+        <td><label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;"><input type="checkbox" ${p.is_active ? 'checked' : ''} onchange="saveProgramField(${p.id}, 'is_active', this.checked)">${p.is_active ? 'Active' : 'Hidden'}</label></td>
+        <td>${p.payment_count === 0 ? `<button onclick="deleteProgram(${p.id}, '${escapeHtml(p.name).replace(/'/g,"\\'")}')" style="color:var(--red);border-color:#fcc;font-size:12px;">Delete</button>` : `<span style="font-size:11px;color:var(--muted);">in use</span>`}</td>
+      </tr>
+    `;
+  }
+
+  async function saveProgramField(id, field, value) {
+    const res = await fetch(`${API}?action=programs-update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch: { [field]: value } }),
+    }).then(r => r.json());
+    if (res.error) { toast(res.error, 'err'); loadProgramsAdmin(); return; }
+    toast('Saved');
+    // Dropdowns elsewhere need refreshing if name or active changed
+    if (field === 'name' || field === 'is_active' || field === 'sort_order') loadPrograms();
+    if (field === 'is_active') loadProgramsAdmin(); // re-render with new opacity
+  }
+
+  async function deleteProgram(id, name) {
+    if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
+    const res = await fetch(`${API}?action=programs-delete`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id }),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast('Deleted');
+    loadProgramsAdmin();
+    loadPrograms();
+  }
+
+  document.getElementById('program-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = { name: fd.get('name'), sort_order: Number(fd.get('sort_order')) || 100 };
+    const res = await fetch(`${API}?action=programs-create`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast('Program added');
+    e.target.reset();
+    e.target.querySelector('[name=sort_order]').value = 100;
+    loadProgramsAdmin();
+    loadPrograms();
+  });
 
   // ----------------------------------------------------------------------
   // Payment list
