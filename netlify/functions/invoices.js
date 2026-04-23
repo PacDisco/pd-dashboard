@@ -338,11 +338,51 @@ async function handleDebug() {
 
   try {
     const d = await drive();
+
+    // 1. List test — confirms read access
     const list = await d.files.list({
       q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents`,
-      pageSize: 1, fields: 'files(id,name)', supportsAllDrives: true,
+      pageSize: 1, fields: 'files(id,name)',
+      supportsAllDrives: true, includeItemsFromAllDrives: true,
     });
-    report.drive_test = { ok: true, folder_accessible: true, sample_file: list.data.files?.[0]?.name || '(folder empty)' };
+    report.drive_list = { ok: true, sample_file: list.data.files?.[0]?.name || '(folder empty)' };
+
+    // 2. Metadata test — fetches info about the folder itself
+    try {
+      const meta = await d.files.get({
+        fileId: process.env.GOOGLE_DRIVE_FOLDER_ID,
+        fields: 'id,name,mimeType,driveId,parents,capabilities',
+        supportsAllDrives: true,
+      });
+      report.drive_folder = {
+        name: meta.data.name,
+        mimeType: meta.data.mimeType,
+        driveId: meta.data.driveId || '(not in a shared drive)',
+        parents: meta.data.parents,
+        can_add_children: meta.data.capabilities?.canAddChildren ?? 'unknown',
+        can_edit:         meta.data.capabilities?.canEdit ?? 'unknown',
+      };
+    } catch (e) {
+      report.drive_folder = { error: e.message };
+    }
+
+    // 3. Upload test — tries to create a tiny file
+    try {
+      const testRes = await d.files.create({
+        requestBody: {
+          name: `netlify-debug-${Date.now()}.txt`,
+          parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
+        },
+        media: { mimeType: 'text/plain', body: 'ok' },
+        fields: 'id,webViewLink',
+        supportsAllDrives: true,
+      });
+      report.drive_upload = { ok: true, created_id: testRes.data.id, view_link: testRes.data.webViewLink };
+    } catch (e) {
+      report.drive_upload = { ok: false, error: e.message };
+    }
+
+    report.drive_test = { ok: true };
   } catch (e) {
     report.drive_test = { ok: false, error: e.message };
   }
