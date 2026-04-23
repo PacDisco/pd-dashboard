@@ -34,16 +34,27 @@ function sql() {
 }
 
 let _drive;
-function drive() {
+async function drive() {
   if (!_drive) {
-    const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-    const auth = new google.auth.JWT(
-      creds.client_email,
-      null,
-      creds.private_key,
-      ['https://www.googleapis.com/auth/drive.file']
-    );
-    _drive = google.drive({ version: 'v3', auth });
+    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON env var is not set');
+
+    let creds;
+    try { creds = JSON.parse(raw); }
+    catch (e) { throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: ' + e.message); }
+
+    // Common env-var gotcha: private_key sometimes arrives with literal "\n"
+    // (two characters) instead of real newlines. Normalize.
+    if (creds.private_key && creds.private_key.includes('\\n')) {
+      creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+    }
+
+    const auth = new google.auth.GoogleAuth({
+      credentials: creds,
+      scopes: ['https://www.googleapis.com/auth/drive.file'],
+    });
+    const client = await auth.getClient();    // throws LOUDLY on bad creds
+    _drive = google.drive({ version: 'v3', auth: client });
   }
   return _drive;
 }
@@ -70,7 +81,8 @@ function bad(msg, code = 400) {
 // Drive upload
 // --------------------------------------------------------------------------
 async function uploadToDrive({ filename, mimeType, buffer }) {
-  const res = await drive().files.create({
+  const d = await drive();
+  const res = await d.files.create({
     requestBody: {
       name: filename,
       parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
@@ -292,6 +304,50 @@ async function handleUpdate(body) {
   return ok({ payment: rows[0] });
 }
 
+async function handleDebug() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  const report = {
+    env: {
+      GOOGLE_SERVICE_ACCOUNT_JSON: raw ? `present (${raw.length} chars)` : 'MISSING',
+      GOOGLE_DRIVE_FOLDER_ID:      process.env.GOOGLE_DRIVE_FOLDER_ID ? 'present' : 'MISSING',
+      ANTHROPIC_API_KEY:           process.env.ANTHROPIC_API_KEY ? `present (starts ${String(process.env.ANTHROPIC_API_KEY).slice(0, 7)}…)` : 'MISSING',
+      NETLIFY_DATABASE_URL:        process.env.NETLIFY_DATABASE_URL ? 'present' : 'MISSING',
+      INVOICES_INBOUND_SECRET:     process.env.INVOICES_INBOUND_SECRET ? 'present' : 'MISSING',
+    },
+  };
+
+  if (raw) {
+    try {
+      const creds = JSON.parse(raw);
+      report.service_account = {
+        client_email:      creds.client_email || 'missing field',
+        project_id:        creds.project_id || 'missing field',
+        private_key_looks_ok:
+          typeof creds.private_key === 'string' &&
+          creds.private_key.includes('BEGIN PRIVATE KEY') &&
+          creds.private_key.includes('END PRIVATE KEY'),
+        private_key_has_real_newlines: creds.private_key && creds.private_key.includes('\n'),
+        private_key_has_escaped_newlines: creds.private_key && creds.private_key.includes('\\n'),
+      };
+    } catch (e) {
+      report.service_account = { error: 'Failed to JSON.parse: ' + e.message };
+    }
+  }
+
+  try {
+    const d = await drive();
+    const list = await d.files.list({
+      q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents`,
+      pageSize: 1, fields: 'files(id,name)', supportsAllDrives: true,
+    });
+    report.drive_test = { ok: true, folder_accessible: true, sample_file: list.data.files?.[0]?.name || '(folder empty)' };
+  } catch (e) {
+    report.drive_test = { ok: false, error: e.message };
+  }
+
+  return ok(report);
+}
+
 async function handleInbound(body, headers) {
   // Apps Script POSTs:
   //   X-Shared-Secret: <INVOICES_INBOUND_SECRET>
@@ -337,6 +393,7 @@ exports.handler = async (event) => {
     const body = event.body ? (event.isBase64Encoded ? JSON.parse(Buffer.from(event.body, 'base64').toString('utf8')) : JSON.parse(event.body)) : {};
     const action = qs.action || body.action;
 
+    if (method === 'GET'  && action === 'debug')           return await handleDebug();
     if (method === 'GET'  && action === 'list')             return await handleList(qs);
     if (method === 'GET'  && action === 'programs')         return await handlePrograms(qs);
     if (method === 'POST' && action === 'create')           return await handleCreate(body);
