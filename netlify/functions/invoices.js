@@ -7,6 +7,7 @@
  *   - create            POST  -> manual entry (vendor, amount, due_date, program_id, notes)
  *   - upload            POST  -> multipart or base64 PDF -> Drive + Claude + DB
  *   - update            POST  -> { id, patch: { approved_to_pay, paid, due_date, ... } }
+ *   - delete            POST  -> { id }  (removes payment row; Drive file stays)
  *   - inbound           POST  -> Gmail Apps Script webhook (see apps-script/Code.gs)
  *   - programs-create   POST  -> { name, sort_order? }
  *   - programs-update   POST  -> { id, patch: { name, sort_order, is_active } }
@@ -103,17 +104,24 @@ async function uploadToDrive({ filename, mimeType, buffer }) {
 // Claude invoice parsing
 // --------------------------------------------------------------------------
 async function parseInvoiceWithClaude(buffer, mimeType) {
-  const prompt = `You are reading an invoice. Extract the following fields and return ONLY valid JSON, no markdown fences, no commentary:
+  const prompt = `You are reading an invoice. Extract the following fields and return ONLY valid JSON, no markdown fences, no commentary.
 
-{
-  "vendor": string,            // The company/person being paid
-  "invoice_number": string|null,
-  "amount": number,            // Total due as a number, no currency symbol
-  "currency": string,          // 3-letter code, default "USD"
-  "due_date": string           // ISO date YYYY-MM-DD. If only an issue date, add 30 days.
-}
+Return an ARRAY of invoice line-groups:
 
-If any field is unreadable, use null (except amount/due_date/vendor which are required).`;
+[
+  {
+    "vendor": string,            // The company/person being paid
+    "invoice_number": string|null,
+    "amount": number,            // Total due FOR THIS CURRENCY (no symbol)
+    "currency": string,          // 3-letter ISO code. Only set this if a currency symbol or code is clearly shown (e.g. "$NZ", "USD", "EUR", "£"). If ambiguous, default to "NZD".
+    "due_date": string           // ISO YYYY-MM-DD. If only an issue date is shown, add 30 days.
+  }
+]
+
+Rules:
+- If the whole invoice is in ONE currency, return a single-element array.
+- If the invoice contains items billed in DIFFERENT currencies (e.g. some items in USD and some in EUR on the same document), return one element PER currency, with each element's "amount" being that currency's subtotal. Vendor / invoice_number / due_date are the same across the array.
+- If any required field (vendor/amount/due_date) is unreadable, use your best guess based on the document.`;
 
   const content = mimeType === 'application/pdf'
     ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }]
@@ -125,10 +133,12 @@ If any field is unreadable, use null (except amount/due_date/vendor which are re
     messages: [{ role: 'user', content: [...content, { type: 'text', text: prompt }] }],
   });
 
-  const text = msg.content.find(c => c.type === 'text')?.text?.trim() || '{}';
+  const text = msg.content.find(c => c.type === 'text')?.text?.trim() || '[]';
   // Strip any stray code fences just in case
   const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  return JSON.parse(clean);
+  const parsed = JSON.parse(clean);
+  // Always normalize to array. Old callers can still do result[0] for single-currency invoices.
+  return Array.isArray(parsed) ? parsed : [parsed];
 }
 
 // Text-only variant for emails that arrive without an attachment.
@@ -160,7 +170,7 @@ Return ONLY valid JSON, no markdown, no commentary:
   "vendor": string|null,
   "invoice_number": string|null,
   "amount": number|null,
-  "currency": string,       // 3-letter code, default "USD"
+  "currency": string,       // 3-letter ISO code. Only fill in if clearly shown. If ambiguous, default to "NZD"
   "due_date": string|null   // ISO YYYY-MM-DD; if only an issue date is shown, add 30 days
 }`;
 
@@ -294,31 +304,41 @@ async function handleUpload(body) {
   const buffer = Buffer.from(body.data, 'base64');
   const mimeType = body.mimeType || 'application/pdf';
 
-  // 1. Parse with Claude
-  let parsed;
+  // 1. Parse with Claude — always returns an array (one entry per currency)
+  let lineGroups;
   try {
-    parsed = await parseInvoiceWithClaude(buffer, mimeType);
+    lineGroups = await parseInvoiceWithClaude(buffer, mimeType);
   } catch (e) {
     return bad(`Claude parse failed: ${e.message}`, 502);
   }
+  if (!lineGroups.length) return bad('Claude did not return any line items', 502);
 
-  // 2. Upload to Drive
-  const safeName = `${parsed.due_date || 'unknown'}_${(parsed.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}_${parsed.amount || ''}.${(mimeType.split('/')[1] || 'pdf')}`;
+  // 2. Upload to Drive ONCE — all rows share the same file
+  const first = lineGroups[0];
+  const safeName = `${first.due_date || 'unknown'}_${(first.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}.${(mimeType.split('/')[1] || 'pdf')}`;
   const driveFile = await uploadToDrive({ filename: safeName, mimeType, buffer });
 
-  // 3. Insert DB row
-  const rows = await sql()`
-    INSERT INTO payments
-      (vendor, amount, currency, invoice_number, due_date, program_id,
-       invoice_file_url, invoice_file_id, source, notes)
-    VALUES
-      (${parsed.vendor || 'Unknown'}, ${parsed.amount || 0}, ${parsed.currency || 'USD'},
-       ${parsed.invoice_number || null}, ${parsed.due_date || new Date().toISOString().slice(0,10)},
-       ${body.program_id || null},
-       ${driveFile.url}, ${driveFile.id}, 'upload', ${body.notes || null})
-    RETURNING *
-  `;
-  return ok({ payment: rows[0], parsed });
+  // 3. Insert one row per line group
+  const multi = lineGroups.length > 1;
+  const created = [];
+  for (let i = 0; i < lineGroups.length; i++) {
+    const lg = lineGroups[i];
+    const noteExtra = multi ? `(Line ${i + 1} of ${lineGroups.length} — multi-currency invoice)` : '';
+    const note = [body.notes, noteExtra].filter(Boolean).join('\n') || null;
+    const rows = await sql()`
+      INSERT INTO payments
+        (vendor, amount, currency, invoice_number, due_date, program_id,
+         invoice_file_url, invoice_file_id, source, notes)
+      VALUES
+        (${lg.vendor || 'Unknown'}, ${lg.amount || 0}, ${lg.currency || 'NZD'},
+         ${lg.invoice_number || null}, ${lg.due_date || new Date().toISOString().slice(0,10)},
+         ${body.program_id || null},
+         ${driveFile.url}, ${driveFile.id}, 'upload', ${note})
+      RETURNING *
+    `;
+    created.push(rows[0]);
+  }
+  return ok({ payments: created, parsed: lineGroups });
 }
 
 async function handleUpdate(body) {
@@ -349,6 +369,14 @@ async function handleUpdate(body) {
   );
   if (!rows.length) return bad('not found', 404);
   return ok({ payment: rows[0] });
+}
+
+async function handleDelete(body) {
+  const id = Number(body.id);
+  if (!id) return bad('id required');
+  const rows = await sql()`DELETE FROM payments WHERE id = ${id} RETURNING id, vendor, amount`;
+  if (!rows.length) return bad('not found', 404);
+  return ok({ deleted: rows[0] });
 }
 
 async function handleDebug() {
@@ -453,30 +481,48 @@ async function handleInbound(body, headers) {
 
   const created = [];
 
-  // --- Attachment path (unchanged) --------------------------------------
+  // --- Attachment path --------------------------------------------------
   if (hasAttachments) {
     for (const att of body.attachments) {
       const mimeType = att.mimeType || 'application/pdf';
       const buffer = Buffer.from(att.data, 'base64');
-      let parsed;
-      try { parsed = await parseInvoiceWithClaude(buffer, mimeType); }
-      catch (e) { parsed = { vendor: body.from || 'Unknown (email)', amount: 0, due_date: new Date().toISOString().slice(0,10) }; }
 
-      const safeName = `${parsed.due_date || 'unknown'}_${(parsed.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}_${parsed.amount || ''}.${(mimeType.split('/')[1] || 'pdf')}`;
+      let lineGroups;
+      try {
+        lineGroups = await parseInvoiceWithClaude(buffer, mimeType);
+      } catch (e) {
+        lineGroups = [{
+          vendor: body.from || 'Unknown (email)',
+          amount: 0,
+          currency: 'NZD',
+          due_date: new Date().toISOString().slice(0, 10),
+        }];
+      }
+      if (!lineGroups.length) lineGroups = [{ vendor: 'Unknown', amount: 0, currency: 'NZD', due_date: new Date().toISOString().slice(0, 10) }];
+
+      // Upload once per attachment
+      const first = lineGroups[0];
+      const safeName = `${first.due_date || 'unknown'}_${(first.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}.${(mimeType.split('/')[1] || 'pdf')}`;
       const driveFile = await uploadToDrive({ filename: safeName, mimeType, buffer });
 
-      const rows = await sql()`
-        INSERT INTO payments
-          (vendor, amount, currency, invoice_number, due_date,
-           invoice_file_url, invoice_file_id, source, notes)
-        VALUES
-          (${parsed.vendor || 'Unknown'}, ${parsed.amount || 0}, ${parsed.currency || 'USD'},
-           ${parsed.invoice_number || null}, ${parsed.due_date || new Date().toISOString().slice(0,10)},
-           ${driveFile.url}, ${driveFile.id}, 'email',
-           ${`From: ${body.from || ''}\nSubject: ${body.subject || ''}`})
-        RETURNING *
-      `;
-      created.push(rows[0]);
+      const multi = lineGroups.length > 1;
+      for (let i = 0; i < lineGroups.length; i++) {
+        const lg = lineGroups[i];
+        const base = `From: ${body.from || ''}\nSubject: ${body.subject || ''}`;
+        const extra = multi ? `\n(Line ${i + 1} of ${lineGroups.length} — multi-currency invoice)` : '';
+        const rows = await sql()`
+          INSERT INTO payments
+            (vendor, amount, currency, invoice_number, due_date,
+             invoice_file_url, invoice_file_id, source, notes)
+          VALUES
+            (${lg.vendor || 'Unknown'}, ${lg.amount || 0}, ${lg.currency || 'NZD'},
+             ${lg.invoice_number || null}, ${lg.due_date || new Date().toISOString().slice(0,10)},
+             ${driveFile.url}, ${driveFile.id}, 'email',
+             ${base + extra})
+          RETURNING *
+        `;
+        created.push(rows[0]);
+      }
     }
     return ok({ created });
   }
@@ -504,7 +550,7 @@ async function handleInbound(body, headers) {
       (vendor, amount, currency, invoice_number, due_date,
        source, notes)
     VALUES
-      (${parsed.vendor}, ${parsed.amount}, ${parsed.currency || 'USD'},
+      (${parsed.vendor}, ${parsed.amount}, ${parsed.currency || 'NZD'},
        ${parsed.invoice_number || null}, ${parsed.due_date},
        'email',
        ${`From: ${body.from || ''}\nSubject: ${body.subject || ''}\n\n(Parsed from email body — no attachment.)`})
@@ -530,6 +576,7 @@ exports.handler = async (event) => {
     if (method === 'POST' && action === 'create')           return await handleCreate(body);
     if (method === 'POST' && action === 'upload')           return await handleUpload(body);
     if (method === 'POST' && action === 'update')           return await handleUpdate(body);
+    if (method === 'POST' && action === 'delete')           return await handleDelete(body);
     if (method === 'POST' && action === 'inbound')          return await handleInbound(body, event.headers || {});
     if (method === 'POST' && action === 'programs-create')  return await handleProgramCreate(body);
     if (method === 'POST' && action === 'programs-update')  return await handleProgramUpdate(body);
