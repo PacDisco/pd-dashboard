@@ -106,6 +106,21 @@
 
   .chip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
   .chip.program { background: var(--accent-soft); color: var(--accent); }
+
+  select.row-program {
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    max-width: 180px;
+  }
+  select.row-program:hover { border-color: var(--accent); background: #fff; }
+  select.row-program:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px var(--accent-soft); }
   .chip.source-upload { background: #f3e8ff; color: #7e22ce; }
   .chip.source-email  { background: #e0f2fe; color: #0369a1; }
   .chip.source-manual { background: #f3f4f6; color: var(--muted); }
@@ -285,15 +300,46 @@
   // ----------------------------------------------------------------------
   // Programs dropdown
   // ----------------------------------------------------------------------
+  let programsCache = [];   // active programs, used for inline row dropdowns
+
   async function loadPrograms() {
     const res = await fetch(`${API}?action=programs`).then(r => r.json());
-    const opts = (res.programs || []).map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    programsCache = res.programs || [];
+    const opts = programsCache.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
     // Rebuild each dropdown preserving the first (placeholder) option
     for (const id of ['filter-program', 'manual-program', 'upload-program']) {
       const sel = document.getElementById(id);
       const keep = sel.options[0]?.outerHTML || '';
       sel.innerHTML = keep + opts;
     }
+  }
+
+  function programSelectHtml(selectedId, selectedName) {
+    const opts = programsCache.map(p =>
+      `<option value="${p.id}"${Number(p.id) === Number(selectedId) ? ' selected' : ''}>${escapeHtml(p.name)}</option>`
+    ).join('');
+    // If this payment's program was deactivated, still show its name so the user can see it.
+    let stale = '';
+    if (selectedId && !programsCache.some(p => Number(p.id) === Number(selectedId))) {
+      stale = `<option value="${selectedId}" selected>${escapeHtml(selectedName || '(inactive)')} (inactive)</option>`;
+    }
+    return `<select class="row-program" onchange="updateProgram(this)">
+      <option value=""${!selectedId ? ' selected' : ''}>— None —</option>
+      ${stale}
+      ${opts}
+    </select>`;
+  }
+
+  async function updateProgram(selectEl) {
+    const id = Number(selectEl.closest('tr').dataset.paymentId);
+    const newProgramId = selectEl.value ? Number(selectEl.value) : null;
+    const res = await fetch(`${API}?action=update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch: { program_id: newProgramId } }),
+    }).then(r => r.json());
+    if (res.error) { toast(res.error, 'err'); loadPayments(); return; }
+    toast('Program updated');
+    // Don't full-reload — the row is already showing the new value
   }
 
   async function loadProgramsAdmin() {
@@ -451,12 +497,12 @@
       ? `<a class="link" href="${p.invoice_file_url}" target="_blank" title="Open invoice in Drive">📄</a>`
       : '';
     return `
-      <tr class="${p.paid ? 'paid' : ''}">
+      <tr class="${p.paid ? 'paid' : ''}" data-payment-id="${p.id}">
         <td class="vendor">
           <strong>${escapeHtml(p.vendor)}</strong> ${fileLink}
           ${p.invoice_number ? `<div style="color:var(--muted);font-size:11px;">#${escapeHtml(p.invoice_number)}</div>` : ''}
         </td>
-        <td>${p.program_name ? `<span class="chip program">${escapeHtml(p.program_name)}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
+        <td>${programSelectHtml(p.program_id, p.program_name)}</td>
         <td>${toDateOnly(p.due_date)}${p.rescheduled_from ? `<div style="color:var(--muted);font-size:11px;">was ${toDateOnly(p.rescheduled_from)}</div>` : ''}</td>
         <td class="amount">${fmtMoney(p.amount, p.currency)}</td>
         <td><span class="chip source-${p.source}">${p.source}</span></td>
