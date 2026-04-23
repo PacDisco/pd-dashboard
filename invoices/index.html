@@ -221,6 +221,7 @@
       </select>
       <select id="filter-program"><option value="">All programs</option></select>
       <div class="spacer"></div>
+      <button onclick="exportCSV()" title="Export the filtered rows as CSV">⬇ Export CSV</button>
       <button onclick="loadPayments()">↻ Refresh</button>
     </div>
 
@@ -460,10 +461,11 @@
     host.innerHTML = `
       <table>
         <thead><tr>
-          <th style="width:50%;">Name</th>
+          <th style="width:45%;">Name</th>
           <th>Sort</th>
           <th>Payments</th>
           <th>Active</th>
+          <th>Export</th>
           <th></th>
         </tr></thead>
         <tbody>${progs.map(programRow).join('')}</tbody>
@@ -473,13 +475,17 @@
 
   function programRow(p) {
     const inactive = !p.is_active ? 'style="opacity:0.55;"' : '';
+    const safeName = escapeHtml(p.name).replace(/'/g, "\\'");
     return `
       <tr data-id="${p.id}" ${inactive}>
         <td><input class="prog-name-input" value="${escapeHtml(p.name)}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;font-size:13px;" onchange="saveProgramField(${p.id}, 'name', this.value)"></td>
         <td><input type="number" value="${p.sort_order}" style="width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;font-size:13px;" onchange="saveProgramField(${p.id}, 'sort_order', Number(this.value))"></td>
         <td style="color:var(--muted);">${p.payment_count}</td>
         <td><label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;"><input type="checkbox" ${p.is_active ? 'checked' : ''} onchange="saveProgramField(${p.id}, 'is_active', this.checked)">${p.is_active ? 'Active' : 'Hidden'}</label></td>
-        <td>${p.payment_count === 0 ? `<button onclick="deleteProgram(${p.id}, '${escapeHtml(p.name).replace(/'/g,"\\'")}')" style="color:var(--red);border-color:#fcc;font-size:12px;">Delete</button>` : `<span style="font-size:11px;color:var(--muted);">in use</span>`}</td>
+        <td>${p.payment_count > 0
+          ? `<button onclick="exportProgramCSV(${p.id}, '${safeName}')" style="font-size:12px;" title="Download all ${p.payment_count} payment${p.payment_count !== 1 ? 's' : ''} as CSV">⬇ CSV</button>`
+          : `<span style="font-size:11px;color:var(--muted);">—</span>`}</td>
+        <td>${p.payment_count === 0 ? `<button onclick="deleteProgram(${p.id}, '${safeName}')" style="color:var(--red);border-color:#fcc;font-size:12px;">Delete</button>` : `<span style="font-size:11px;color:var(--muted);">in use</span>`}</td>
       </tr>
     `;
   }
@@ -823,6 +829,91 @@
     loadPayments();
     document.querySelector('.tab[data-panel="dashboard"]').click();
   });
+
+  // ----------------------------------------------------------------------
+  // CSV export
+  // ----------------------------------------------------------------------
+  const CSV_COLUMNS = [
+    { header: 'ID',                 get: p => p.id },
+    { header: 'Vendor',             get: p => p.vendor },
+    { header: 'Invoice Number',     get: p => p.invoice_number || '' },
+    { header: 'Amount',             get: p => Number(p.amount || 0).toFixed(2) },
+    { header: 'Currency',           get: p => (p.currency || 'NZD').toUpperCase() },
+    { header: 'NZD Equivalent',     get: p => toNZD(p.amount, p.currency).toFixed(2) },
+    { header: 'Due Date',           get: p => toDateOnly(p.due_date) },
+    { header: 'Program',             get: p => p.program_name || '' },
+    { header: 'Source',             get: p => p.source || '' },
+    { header: 'Approved',           get: p => p.approved_to_pay ? 'Yes' : 'No' },
+    { header: 'Approved At',        get: p => p.approved_at ? toDateOnly(p.approved_at) : '' },
+    { header: 'Paid',               get: p => p.paid ? 'Yes' : 'No' },
+    { header: 'Paid Date',          get: p => p.paid_date ? toDateOnly(p.paid_date) : '' },
+    { header: 'Rescheduled From',   get: p => p.rescheduled_from ? toDateOnly(p.rescheduled_from) : '' },
+    { header: 'Drive Link',         get: p => p.invoice_file_url || '' },
+    { header: 'Notes',              get: p => (p.notes || '').replace(/\s+/g, ' ').trim() },
+    { header: 'Created At',         get: p => p.created_at ? toDateOnly(p.created_at) : '' },
+  ];
+
+  function csvCell(v) {
+    const s = String(v ?? '');
+    // RFC 4180: quote if it contains comma, quote, newline, or leading/trailing whitespace
+    if (/[",\n\r]/.test(s) || /^\s|\s$/.test(s)) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  }
+
+  function paymentsToCSV(payments) {
+    const header = CSV_COLUMNS.map(c => csvCell(c.header)).join(',');
+    const lines = payments.map(p => CSV_COLUMNS.map(c => csvCell(c.get(p))).join(','));
+    return [header, ...lines].join('\r\n');
+  }
+
+  function downloadCSV(filename, csv) {
+    // Prepend UTF-8 BOM so Excel opens it correctly
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  }
+
+  async function exportCSV() {
+    // Respect current dashboard filters
+    const status = document.getElementById('filter-status').value;
+    const program = document.getElementById('filter-program').value;
+    const qs = new URLSearchParams({ action: 'list' });
+    if (status) qs.set('status', status);
+    if (program) qs.set('program_id', program);
+
+    toast('Preparing CSV…');
+    const res = await fetch(`${API}?${qs}`).then(r => r.json());
+    const payments = res.payments || [];
+    if (!payments.length) return toast('No rows to export', 'err');
+
+    const today = new Date().toISOString().slice(0, 10);
+    const progLabel = program
+      ? `_${(programsCache.find(p => Number(p.id) === Number(program))?.name || 'program').replace(/[^a-z0-9]+/gi, '-')}`
+      : '';
+    const statusLabel = status ? `_${status}` : '';
+    downloadCSV(`invoices${progLabel}${statusLabel}_${today}.csv`, paymentsToCSV(payments));
+    toast(`Exported ${payments.length} row${payments.length !== 1 ? 's' : ''}`);
+  }
+
+  async function exportProgramCSV(programId, programName) {
+    toast('Preparing CSV…');
+    const res = await fetch(`${API}?action=list&program_id=${programId}`).then(r => r.json());
+    const payments = res.payments || [];
+    if (!payments.length) return toast('No rows to export', 'err');
+
+    const today = new Date().toISOString().slice(0, 10);
+    const safeName = (programName || 'program').replace(/[^a-z0-9]+/gi, '-');
+    downloadCSV(`invoices_${safeName}_${today}.csv`, paymentsToCSV(payments));
+    toast(`Exported ${payments.length} row${payments.length !== 1 ? 's' : ''}`);
+  }
 
   // ----------------------------------------------------------------------
   // Utils
