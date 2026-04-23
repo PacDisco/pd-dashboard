@@ -277,11 +277,12 @@ async function handleProgramDelete(body) {
 }
 
 async function handleCreate(body) {
-  const { vendor, amount, due_date, program_id, invoice_number, notes } = body;
+  const { vendor, amount, due_date, program_id, invoice_number, notes, currency } = body;
   if (!vendor || !amount || !due_date) return bad('vendor, amount, due_date required');
+  const cur = (currency || 'NZD').toUpperCase().slice(0, 3);
   const rows = await sql()`
-    INSERT INTO payments (vendor, amount, due_date, program_id, invoice_number, notes, source)
-    VALUES (${vendor}, ${amount}, ${due_date}, ${program_id || null}, ${invoice_number || null}, ${notes || null}, 'manual')
+    INSERT INTO payments (vendor, amount, currency, due_date, program_id, invoice_number, notes, source)
+    VALUES (${vendor}, ${amount}, ${cur}, ${due_date}, ${program_id || null}, ${invoice_number || null}, ${notes || null}, 'manual')
     RETURNING *
   `;
   return ok({ payment: rows[0] });
