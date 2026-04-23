@@ -51,7 +51,9 @@ async function drive() {
 
     const auth = new google.auth.GoogleAuth({
       credentials: creds,
-      scopes: ['https://www.googleapis.com/auth/drive.file'],
+      // Use full drive scope — the service account still only sees folders
+      // explicitly shared with it, but can write into them.
+      scopes: ['https://www.googleapis.com/auth/drive'],
     });
     const client = await auth.getClient();    // throws LOUDLY on bad creds
     _drive = google.drive({ version: 'v3', auth: client });
