@@ -125,7 +125,22 @@
   .chip.source-email  { background: #e0f2fe; color: #0369a1; }
   .chip.source-manual { background: #f3f4f6; color: var(--muted); }
 
-  .amount { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .amount { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
+  .amount input {
+    width: 90px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px;
+    background: transparent; font-size: 13px; font-family: inherit; font-weight: 500;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .amount input:hover  { border-color: var(--border); background: #fff; }
+  .amount input:focus  { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px var(--accent-soft); }
+  .amount .ccy { color: var(--muted); font-size: 11px; margin-left: 2px; font-weight: 500; text-transform: uppercase; }
+  td.nzd-col { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+  .delete-btn {
+    border: none; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 4px;
+    color: var(--muted); font-size: 14px;
+  }
+  .delete-btn:hover { background: #fee; color: var(--red); }
   .actions { display: flex; gap: 6px; }
   .actions label {
     display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
@@ -371,6 +386,50 @@
     // Don't full-reload — the row is already showing the new value
   }
 
+  async function updateAmount(id, inputEl) {
+    const newAmount = Number(inputEl.value);
+    const original  = Number(inputEl.dataset.original);
+    if (!Number.isFinite(newAmount) || newAmount < 0) {
+      toast('Enter a valid amount', 'err');
+      inputEl.value = original.toFixed(2);
+      return;
+    }
+    if (Math.abs(newAmount - original) < 0.005) return;  // no change
+
+    const res = await fetch(`${API}?action=update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch: { amount: newAmount } }),
+    }).then(r => r.json());
+    if (res.error) {
+      toast(res.error, 'err');
+      inputEl.value = original.toFixed(2);
+      return;
+    }
+    inputEl.dataset.original = newAmount.toFixed(2);
+    toast('Amount updated');
+    // Reload to refresh KPIs and week totals
+    loadPayments();
+  }
+
+  async function deletePayment(id, vendor, amount, currency) {
+    const fmt = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: currency || 'NZD' }).format(amount || 0);
+    const ok = confirm(
+      `Delete this payment?\n\n` +
+      `  ${vendor}\n` +
+      `  ${fmt}\n\n` +
+      `The invoice file (if any) will remain in Drive as an archive. This cannot be undone.`
+    );
+    if (!ok) return;
+
+    const res = await fetch(`${API}?action=delete`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id }),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast(`Deleted ${vendor}`);
+    loadPayments();
+  }
+
   async function loadProgramsAdmin() {
     const host = document.getElementById('programs-list');
     host.innerHTML = '<p class="empty">Loading…</p>';
@@ -476,8 +535,8 @@
   // ----------------------------------------------------------------------
   // Payment list
   // ----------------------------------------------------------------------
-  function fmtMoney(n, cur = 'USD') {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(n || 0);
+  function fmtMoney(n, cur = 'NZD') {
+    return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: cur }).format(n || 0);
   }
 
   function fmtNZD(n) {
@@ -544,7 +603,7 @@
         </div>
         <table>
           <thead><tr>
-            <th>Vendor</th><th>Program</th><th>Due</th><th>Amount</th>
+            <th>Vendor</th><th>Program</th><th>Due</th><th>Amount</th><th>NZD</th>
             <th>Source</th><th>Actions</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -567,7 +626,8 @@
         </td>
         <td>${programSelectHtml(p.program_id, p.program_name)}</td>
         <td>${toDateOnly(p.due_date)}${p.rescheduled_from ? `<div style="color:var(--muted);font-size:11px;">was ${toDateOnly(p.rescheduled_from)}</div>` : ''}</td>
-        <td class="amount">${fmtMoney(p.amount, p.currency)}</td>
+        <td class="amount"><input type="number" step="0.01" min="0" value="${Number(p.amount).toFixed(2)}" data-original="${Number(p.amount).toFixed(2)}" onchange="updateAmount(${p.id}, this)"><span class="ccy">${escapeHtml(p.currency || 'NZD')}</span></td>
+        <td class="amount nzd-col">${(p.currency || 'NZD').toUpperCase() === 'NZD' ? '<span style="color:var(--muted);">—</span>' : fmtNZD(toNZD(p.amount, p.currency))}</td>
         <td><span class="chip source-${p.source}">${p.source}</span></td>
         <td>
           <div class="actions">
@@ -580,6 +640,7 @@
               <input type="checkbox" ${p.paid ? 'checked' : ''} onchange="togglePaid(${p.id}, this.checked)">
               <span>Paid</span>
             </label>
+            <button class="delete-btn" onclick="deletePayment(${p.id}, ${JSON.stringify(p.vendor).replace(/"/g, '&quot;')}, ${Number(p.amount)}, ${JSON.stringify(p.currency || 'NZD').replace(/"/g, '&quot;')})" title="Delete this payment">🗑️</button>
           </div>
         </td>
       </tr>
@@ -700,7 +761,7 @@
     document.getElementById('parse-preview').innerHTML = `
       <div class="parse-preview">
         <div><strong>Vendor:</strong> ${escapeHtml(p.vendor || '—')}</div>
-        <div><strong>Amount:</strong> ${fmtMoney(p.amount, p.currency || 'USD')}</div>
+        <div><strong>Amount:</strong> ${fmtMoney(p.amount, p.currency || 'NZD')}</div>
         <div><strong>Due:</strong> ${p.due_date || '—'}</div>
         <div style="margin-top:6px;color:var(--muted);font-size:12px;">Saved to Drive + payment scheduled. Edit it on the Dashboard if anything's wrong.</div>
       </div>
