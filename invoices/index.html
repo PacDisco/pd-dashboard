@@ -377,8 +377,15 @@
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(n || 0);
   }
 
+  // Normalize any date input (YYYY-MM-DD or full ISO) to just 'YYYY-MM-DD'
+  function toDateOnly(dateStr) {
+    if (!dateStr) return '';
+    return String(dateStr).slice(0, 10);
+  }
+
   function isoWeekKey(dateStr) {
-    const d = new Date(dateStr + 'T00:00:00');
+    const d = new Date(toDateOnly(dateStr) + 'T00:00:00');
+    if (isNaN(d)) return '1970-01-01';
     const day = d.getDay() || 7;          // Mon=1..Sun=7
     d.setDate(d.getDate() - day + 1);     // Monday of that week
     return d.toISOString().slice(0, 10);
@@ -450,7 +457,7 @@
           ${p.invoice_number ? `<div style="color:var(--muted);font-size:11px;">#${escapeHtml(p.invoice_number)}</div>` : ''}
         </td>
         <td>${p.program_name ? `<span class="chip program">${escapeHtml(p.program_name)}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
-        <td>${p.due_date}${p.rescheduled_from ? `<div style="color:var(--muted);font-size:11px;">was ${p.rescheduled_from}</div>` : ''}</td>
+        <td>${toDateOnly(p.due_date)}${p.rescheduled_from ? `<div style="color:var(--muted);font-size:11px;">was ${toDateOnly(p.rescheduled_from)}</div>` : ''}</td>
         <td class="amount">${fmtMoney(p.amount, p.currency)}</td>
         <td><span class="chip source-${p.source}">${p.source}</span></td>
         <td>
@@ -459,7 +466,7 @@
               <input type="checkbox" ${p.approved_to_pay ? 'checked' : ''} onchange="toggleField(${p.id}, 'approved_to_pay', this.checked)">
               <span>Approved</span>
             </label>
-            <button class="reschedule-btn" onclick="reschedule(${p.id}, '${p.due_date}')">⟳ Reschedule</button>
+            <button class="reschedule-btn" onclick="reschedule(${p.id}, '${toDateOnly(p.due_date)}')">⟳ Reschedule</button>
             <label title="Paid">
               <input type="checkbox" ${p.paid ? 'checked' : ''} onchange="togglePaid(${p.id}, this.checked)">
               <span>Paid</span>
