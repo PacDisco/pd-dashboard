@@ -131,6 +131,50 @@ If any field is unreadable, use null (except amount/due_date/vendor which are re
   return JSON.parse(clean);
 }
 
+// Text-only variant for emails that arrive without an attachment.
+// Includes an `is_invoice` escape hatch so marketing/confirmation emails
+// that slip through filters don't get turned into phantom payments.
+async function parseInvoiceTextWithClaude({ from, subject, body }) {
+  const prompt = `You are reading an email that MAY or MAY NOT be an invoice / bill to pay.
+
+From: ${from || '(unknown)'}
+Subject: ${subject || '(no subject)'}
+
+Body:
+${(body || '').slice(0, 8000)}
+
+---
+
+Decide whether this email clearly represents a NEW bill or invoice that someone needs to pay.
+
+Set is_invoice=true ONLY if the email:
+  - Specifies (or clearly implies) a vendor, an amount owed, and either a due date or enough context to infer one,
+  - AND represents a genuine new payment obligation (not a receipt for something already paid, not a quote, not a reminder without specific numbers, not marketing).
+
+Otherwise set is_invoice=false and null out the other fields.
+
+Return ONLY valid JSON, no markdown, no commentary:
+
+{
+  "is_invoice": boolean,
+  "vendor": string|null,
+  "invoice_number": string|null,
+  "amount": number|null,
+  "currency": string,       // 3-letter code, default "USD"
+  "due_date": string|null   // ISO YYYY-MM-DD; if only an issue date is shown, add 30 days
+}`;
+
+  const msg = await anthropic().messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 500,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = msg.content.find(c => c.type === 'text')?.text?.trim() || '{}';
+  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  return JSON.parse(clean);
+}
+
 // --------------------------------------------------------------------------
 // Action handlers
 // --------------------------------------------------------------------------
@@ -393,36 +437,80 @@ async function handleDebug() {
 async function handleInbound(body, headers) {
   // Apps Script POSTs:
   //   X-Shared-Secret: <INVOICES_INBOUND_SECRET>
-  //   Body: { from, subject, attachments: [{ filename, mimeType, data (base64) }] }
+  //   Body: {
+  //     from, subject,
+  //     attachments: [{ filename, mimeType, data (base64) }]   // preferred
+  //     body: "..."                                             // fallback when no attachments
+  //   }
   const secret = headers['x-shared-secret'] || headers['X-Shared-Secret'];
   if (secret !== process.env.INVOICES_INBOUND_SECRET) return bad('unauthorized', 401);
-  if (!body.attachments || !body.attachments.length) return bad('no attachments');
+
+  const hasAttachments = Array.isArray(body.attachments) && body.attachments.length > 0;
+  const hasBody        = typeof body.body === 'string' && body.body.trim().length > 20;
+
+  if (!hasAttachments && !hasBody) return bad('no attachments and no body text to parse');
 
   const created = [];
-  for (const att of body.attachments) {
-    const mimeType = att.mimeType || 'application/pdf';
-    const buffer = Buffer.from(att.data, 'base64');
-    let parsed;
-    try { parsed = await parseInvoiceWithClaude(buffer, mimeType); }
-    catch (e) { parsed = { vendor: body.from || 'Unknown (email)', amount: 0, due_date: new Date().toISOString().slice(0,10) }; }
 
-    const safeName = `${parsed.due_date || 'unknown'}_${(parsed.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}_${parsed.amount || ''}.${(mimeType.split('/')[1] || 'pdf')}`;
-    const driveFile = await uploadToDrive({ filename: safeName, mimeType, buffer });
+  // --- Attachment path (unchanged) --------------------------------------
+  if (hasAttachments) {
+    for (const att of body.attachments) {
+      const mimeType = att.mimeType || 'application/pdf';
+      const buffer = Buffer.from(att.data, 'base64');
+      let parsed;
+      try { parsed = await parseInvoiceWithClaude(buffer, mimeType); }
+      catch (e) { parsed = { vendor: body.from || 'Unknown (email)', amount: 0, due_date: new Date().toISOString().slice(0,10) }; }
 
-    const rows = await sql()`
-      INSERT INTO payments
-        (vendor, amount, currency, invoice_number, due_date,
-         invoice_file_url, invoice_file_id, source, notes)
-      VALUES
-        (${parsed.vendor || 'Unknown'}, ${parsed.amount || 0}, ${parsed.currency || 'USD'},
-         ${parsed.invoice_number || null}, ${parsed.due_date || new Date().toISOString().slice(0,10)},
-         ${driveFile.url}, ${driveFile.id}, 'email',
-         ${`From: ${body.from || ''}\nSubject: ${body.subject || ''}`})
-      RETURNING *
-    `;
-    created.push(rows[0]);
+      const safeName = `${parsed.due_date || 'unknown'}_${(parsed.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}_${parsed.amount || ''}.${(mimeType.split('/')[1] || 'pdf')}`;
+      const driveFile = await uploadToDrive({ filename: safeName, mimeType, buffer });
+
+      const rows = await sql()`
+        INSERT INTO payments
+          (vendor, amount, currency, invoice_number, due_date,
+           invoice_file_url, invoice_file_id, source, notes)
+        VALUES
+          (${parsed.vendor || 'Unknown'}, ${parsed.amount || 0}, ${parsed.currency || 'USD'},
+           ${parsed.invoice_number || null}, ${parsed.due_date || new Date().toISOString().slice(0,10)},
+           ${driveFile.url}, ${driveFile.id}, 'email',
+           ${`From: ${body.from || ''}\nSubject: ${body.subject || ''}`})
+        RETURNING *
+      `;
+      created.push(rows[0]);
+    }
+    return ok({ created });
   }
-  return ok({ created });
+
+  // --- Body-only path (new) ---------------------------------------------
+  let parsed;
+  try {
+    parsed = await parseInvoiceTextWithClaude({ from: body.from, subject: body.subject, body: body.body });
+  } catch (e) {
+    return bad(`Failed to parse email body: ${e.message}`, 502);
+  }
+
+  if (!parsed.is_invoice) {
+    // Tells Apps Script to label the thread Failed — this email isn't a real invoice.
+    return bad('Email does not appear to be an invoice', 422);
+  }
+
+  // Require at least vendor + amount + due_date for body-only rows to avoid garbage inserts.
+  if (!parsed.vendor || !parsed.amount || !parsed.due_date) {
+    return bad(`Invoice detected but missing required fields (vendor/amount/due_date)`, 422);
+  }
+
+  const rows = await sql()`
+    INSERT INTO payments
+      (vendor, amount, currency, invoice_number, due_date,
+       source, notes)
+    VALUES
+      (${parsed.vendor}, ${parsed.amount}, ${parsed.currency || 'USD'},
+       ${parsed.invoice_number || null}, ${parsed.due_date},
+       'email',
+       ${`From: ${body.from || ''}\nSubject: ${body.subject || ''}\n\n(Parsed from email body — no attachment.)`})
+    RETURNING *
+  `;
+  created.push(rows[0]);
+  return ok({ created, parsed_from: 'body' });
 }
 
 // --------------------------------------------------------------------------
