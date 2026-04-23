@@ -417,10 +417,42 @@
   });
 
   // ----------------------------------------------------------------------
+  // Live FX rates (NZD as base). Loaded once on page boot, refreshed daily.
+  // Source: open.er-api.com — free, no key, CORS-enabled, ~160 currencies.
+  // ----------------------------------------------------------------------
+  let fxRates = { NZD: 1 };   // default fallback; overwritten on success
+  let fxDate  = null;
+
+  async function loadRates() {
+    try {
+      const res  = await fetch('https://open.er-api.com/v6/latest/NZD').then(r => r.json());
+      if (res && res.rates && res.result === 'success') {
+        fxRates = res.rates;
+        fxRates.NZD = 1;
+        fxDate  = res.time_last_update_utc || res.time_last_update_unix || null;
+      }
+    } catch (e) {
+      console.warn('FX load failed, totals will treat all currencies as 1:1', e);
+    }
+  }
+
+  function toNZD(amount, currency) {
+    const cur = (currency || 'NZD').toUpperCase();
+    if (cur === 'NZD') return Number(amount) || 0;
+    const rate = fxRates[cur];
+    if (!rate) return Number(amount) || 0;   // unknown currency → no conversion
+    return (Number(amount) || 0) / rate;
+  }
+
+  // ----------------------------------------------------------------------
   // Payment list
   // ----------------------------------------------------------------------
   function fmtMoney(n, cur = 'USD') {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(n || 0);
+  }
+
+  function fmtNZD(n) {
+    return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(n || 0);
   }
 
   // Normalize any date input (YYYY-MM-DD or full ISO) to just 'YYYY-MM-DD'
@@ -472,12 +504,14 @@
 
     const html = weeks.map(k => {
       const items = groups[k];
-      const total = items.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const totalNZD = items.reduce((s, p) => s + toNZD(p.amount, p.currency), 0);
+      const currencies = Array.from(new Set(items.map(p => (p.currency || 'NZD').toUpperCase())));
+      const mixed = currencies.length > 1 || (currencies[0] && currencies[0] !== 'NZD');
       const rows = items.map(paymentRow).join('');
       return `
         <div class="week-header">
           <span>${weekLabel(k)}</span>
-          <span class="total">${items.length} payment${items.length !== 1 ? 's' : ''} · ${fmtMoney(total)}</span>
+          <span class="total">${items.length} payment${items.length !== 1 ? 's' : ''} · ${fmtNZD(totalNZD)}${mixed ? ' (NZD)' : ''}</span>
         </div>
         <table>
           <thead><tr>
@@ -530,13 +564,18 @@
     const awaiting = unpaid.filter(p => !p.approved_to_pay);
     const approved = unpaid.filter(p => p.approved_to_pay);
 
-    const sum = arr => arr.reduce((s, p) => s + Number(p.amount || 0), 0);
+    // Sum in NZD using live FX
+    const sumNZD = arr => arr.reduce((s, p) => s + toNZD(p.amount, p.currency), 0);
+
+    const ratesNote = fxDate
+      ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">NZD · rates ${new Date(fxDate).toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' })}</div>`
+      : `<div style="font-size:11px;color:var(--red);margin-top:2px;">NZD · rates unavailable</div>`;
 
     document.getElementById('kpis').innerHTML = `
-      <div class="kpi amber"><div class="label">Due within 7 days</div><div class="value">${fmtMoney(sum(dueThisWeek))}</div><div style="font-size:11px;color:var(--muted);">${dueThisWeek.length} payment${dueThisWeek.length !== 1 ? 's' : ''}</div></div>
-      <div class="kpi"><div class="label">Awaiting approval</div><div class="value">${fmtMoney(sum(awaiting))}</div><div style="font-size:11px;color:var(--muted);">${awaiting.length} payment${awaiting.length !== 1 ? 's' : ''}</div></div>
-      <div class="kpi green"><div class="label">Approved, ready to pay</div><div class="value">${fmtMoney(sum(approved))}</div><div style="font-size:11px;color:var(--muted);">${approved.length} payment${approved.length !== 1 ? 's' : ''}</div></div>
-      <div class="kpi"><div class="label">Total outstanding</div><div class="value">${fmtMoney(sum(unpaid))}</div><div style="font-size:11px;color:var(--muted);">${unpaid.length} payment${unpaid.length !== 1 ? 's' : ''}</div></div>
+      <div class="kpi amber"><div class="label">Due within 7 days</div><div class="value">${fmtNZD(sumNZD(dueThisWeek))}</div><div style="font-size:11px;color:var(--muted);">${dueThisWeek.length} payment${dueThisWeek.length !== 1 ? 's' : ''}</div></div>
+      <div class="kpi"><div class="label">Awaiting approval</div><div class="value">${fmtNZD(sumNZD(awaiting))}</div><div style="font-size:11px;color:var(--muted);">${awaiting.length} payment${awaiting.length !== 1 ? 's' : ''}</div></div>
+      <div class="kpi green"><div class="label">Approved, ready to pay</div><div class="value">${fmtNZD(sumNZD(approved))}</div><div style="font-size:11px;color:var(--muted);">${approved.length} payment${approved.length !== 1 ? 's' : ''}</div></div>
+      <div class="kpi"><div class="label">Total outstanding</div><div class="value">${fmtNZD(sumNZD(unpaid))}</div>${ratesNote}</div>
     `;
   }
 
@@ -675,8 +714,8 @@
   document.getElementById('filter-status').addEventListener('change', loadPayments);
   document.getElementById('filter-program').addEventListener('change', loadPayments);
 
-  // Boot
-  loadPrograms().then(loadPayments);
+  // Boot — load rates + programs in parallel, then load payments (which uses both)
+  Promise.all([loadRates(), loadPrograms()]).then(loadPayments);
 </script>
 
 </body>
