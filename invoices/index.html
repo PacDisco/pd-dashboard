@@ -141,15 +141,35 @@
     color: var(--muted); font-size: 14px;
   }
   .delete-btn:hover { background: #fee; color: var(--red); }
-  .actions { display: flex; gap: 6px; }
-  .actions label {
-    display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
-    padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none;
+  .actions { display: flex; gap: 4px; align-items: center; justify-content: flex-end; }
+  .act-btn {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--text);
+    white-space: nowrap;
+    transition: all .12s;
+    user-select: none;
   }
-  .actions label:hover { background: #f3f4f6; }
-  .actions input[type=checkbox] { margin: 0; }
-  .actions .reschedule-btn { font-size: 12px; padding: 3px 6px; color: var(--amber); border: none; background: transparent; cursor: pointer; }
-  .actions .reschedule-btn:hover { background: var(--amber-soft); border-radius: 4px; }
+  .act-btn:hover { background: #f3f4f6; }
+  .act-btn.is-on-approve {
+    background: var(--green-soft); border-color: var(--green); color: var(--green); font-weight: 500;
+  }
+  .act-btn.is-on-approve:hover { background: #d4f0db; }
+  .act-btn.is-on-paid {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 500;
+  }
+  .act-btn.is-on-paid:hover { background: #dde9ff; }
+  .act-btn .check { font-size: 10px; }
+  .act-btn.danger {
+    border-color: transparent; color: var(--muted); padding: 4px 6px; margin-left: 4px;
+  }
+  .act-btn.danger:hover { background: #fee; color: var(--red); }
 
   .empty { padding: 40px; text-align: center; color: var(--muted); }
 
@@ -631,16 +651,24 @@
         <td><span class="chip source-${p.source}">${p.source}</span></td>
         <td>
           <div class="actions">
-            <label title="Approved to pay">
-              <input type="checkbox" ${p.approved_to_pay ? 'checked' : ''} onchange="toggleField(${p.id}, 'approved_to_pay', this.checked)">
-              <span>Approved</span>
-            </label>
-            <button class="reschedule-btn" onclick="reschedule(${p.id}, '${toDateOnly(p.due_date)}')">⟳ Reschedule</button>
-            <label title="Paid">
-              <input type="checkbox" ${p.paid ? 'checked' : ''} onchange="togglePaid(${p.id}, this.checked)">
-              <span>Paid</span>
-            </label>
-            <button class="delete-btn" onclick="deletePayment(${p.id}, ${JSON.stringify(p.vendor).replace(/"/g, '&quot;')}, ${Number(p.amount)}, ${JSON.stringify(p.currency || 'NZD').replace(/"/g, '&quot;')})" title="Delete this payment">🗑️</button>
+            <button class="act-btn ${p.approved_to_pay ? 'is-on-approve' : ''}"
+                    onclick="toggleField(${p.id}, 'approved_to_pay', ${!p.approved_to_pay})"
+                    title="${p.approved_to_pay ? 'Approved — click to unapprove' : 'Approve for payment'}">
+              ${p.approved_to_pay ? '<span class="check">✓</span> Approved' : 'Approve'}
+            </button>
+            <button class="act-btn"
+                    onclick="reschedule(${p.id}, '${toDateOnly(p.due_date)}')"
+                    title="Change due date">
+              Reschedule
+            </button>
+            <button class="act-btn ${p.paid ? 'is-on-paid' : ''}"
+                    onclick="togglePaid(${p.id}, ${!p.paid})"
+                    title="${p.paid ? 'Paid — click to unmark' : 'Mark as paid'}">
+              ${p.paid ? '<span class="check">✓</span> Paid' : 'Mark paid'}
+            </button>
+            <button class="act-btn danger"
+                    onclick="deletePayment(${p.id}, ${JSON.stringify(p.vendor).replace(/"/g, '&quot;')}, ${Number(p.amount)}, ${JSON.stringify(p.currency || 'NZD').replace(/"/g, '&quot;')})"
+                    title="Delete this payment">🗑</button>
           </div>
         </td>
       </tr>
