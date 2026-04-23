@@ -245,8 +245,37 @@
       <p style="margin-top:0;color:var(--muted);">For payments without an invoice file (recurring transfers, reimbursements, etc.).</p>
       <form id="manual-form">
         <div class="row">
-          <div class="field"><label>Vendor / Payee *</label><input required name="vendor" type="text"></div>
-          <div class="field"><label>Amount *</label><input required name="amount" type="number" step="0.01" min="0"></div>
+          <div class="field" style="flex:3;"><label>Vendor / Payee *</label><input required name="vendor" type="text"></div>
+          <div class="field" style="flex:2;"><label>Amount *</label><input required name="amount" type="number" step="0.01" min="0"></div>
+          <div class="field" style="flex:1;min-width:100px;">
+            <label>Currency</label>
+            <input name="currency" type="text" list="currency-options" value="NZD" maxlength="3" style="text-transform:uppercase;">
+            <datalist id="currency-options">
+              <option value="NZD">New Zealand Dollar</option>
+              <option value="AUD">Australian Dollar</option>
+              <option value="USD">US Dollar</option>
+              <option value="EUR">Euro</option>
+              <option value="GBP">British Pound</option>
+              <option value="CAD">Canadian Dollar</option>
+              <option value="JPY">Japanese Yen</option>
+              <option value="CHF">Swiss Franc</option>
+              <option value="SGD">Singapore Dollar</option>
+              <option value="HKD">Hong Kong Dollar</option>
+              <option value="THB">Thai Baht</option>
+              <option value="IDR">Indonesian Rupiah</option>
+              <option value="VND">Vietnamese Dong</option>
+              <option value="PHP">Philippine Peso</option>
+              <option value="MYR">Malaysian Ringgit</option>
+              <option value="INR">Indian Rupee</option>
+              <option value="CNY">Chinese Yuan</option>
+              <option value="MXN">Mexican Peso</option>
+              <option value="BRL">Brazilian Real</option>
+              <option value="CLP">Chilean Peso</option>
+              <option value="PEN">Peruvian Sol</option>
+              <option value="FJD">Fijian Dollar</option>
+              <option value="ZAR">South African Rand</option>
+            </datalist>
+          </div>
         </div>
         <div class="row">
           <div class="field"><label>Due date *</label><input required name="due_date" type="date"></div>
@@ -691,6 +720,7 @@
     const body = Object.fromEntries(fd.entries());
     body.action = 'create';
     body.amount = Number(body.amount);
+    body.currency = (body.currency || 'NZD').toUpperCase().slice(0, 3);
     if (!body.program_id) delete body.program_id;
 
     const res = await fetch(`${API}?action=create`, {
@@ -700,6 +730,7 @@
     if (res.error) return toast(res.error, 'err');
     toast('Payment scheduled');
     e.target.reset();
+    e.target.querySelector('[name=currency]').value = 'NZD';   // restore default
     loadPayments();
     document.querySelector('.tab[data-panel="dashboard"]').click();
   });
