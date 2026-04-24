@@ -98,7 +98,8 @@ async function fetchPropertySchema(token) {
       label: p.label || p.name,
       type: p.type || "string",
       fieldType: p.fieldType || "",
-      groupName: p.groupName || "other"
+      groupName: p.groupName || "other",
+      options: (p.options || []).map(o => ({ value: o.value, label: o.label || o.value }))
     }));
 }
 
