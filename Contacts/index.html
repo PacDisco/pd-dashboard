@@ -58,6 +58,25 @@
   .dir-toggle button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
   .sidebar h3 .hint{text-transform:none;font-weight:400;letter-spacing:0;color:var(--muted);font-size:11px;margin-left:4px}
 
+  .filter-list{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+  .filter-row{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;position:relative}
+  .filter-row select,.filter-row input{padding:5px 7px;font-size:12px;border:1px solid var(--border);border-radius:5px;background:#fff;width:100%}
+  .filter-row select:focus,.filter-row input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+  .filter-row .row-prop{font-weight:500}
+  .filter-row .row-ops{display:flex;gap:6px}
+  .filter-row .row-ops select{flex:1}
+  .filter-row .row-ops .remove{background:transparent;border:1px solid var(--border);color:var(--muted);width:26px;padding:0;cursor:pointer;border-radius:5px;font-size:14px;line-height:1;flex-shrink:0}
+  .filter-row .row-ops .remove:hover{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
+  .filter-row .row-values{display:flex;gap:6px;flex-wrap:wrap}
+  .filter-row .row-values input{flex:1}
+  .filter-row .row-values .multi{max-height:140px;overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:5px;padding:4px;width:100%}
+  .filter-row .row-values .multi label{display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:12px;cursor:pointer;border-radius:3px}
+  .filter-row .row-values .multi label:hover{background:#f1f5f9}
+  .filter-row .row-values .multi input[type="checkbox"]{width:auto;margin:0}
+  .filter-row .row-values .muted-note{color:var(--muted);font-size:11px;padding:4px 2px;font-style:italic}
+  .btn-add-filter{width:100%;padding:8px;font-size:13px;border:1px dashed #94a3b8;background:transparent;color:var(--muted);border-radius:6px;cursor:pointer;font-weight:500}
+  .btn-add-filter:hover{border-color:var(--accent);color:var(--accent);background:#f0fdfa}
+
   .views-bar{background:#f1f5f9;border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .views-bar .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
   .view-pill{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:999px;font-size:12px;cursor:pointer;font-weight:500;white-space:nowrap}
@@ -173,44 +192,9 @@
       </div>
     </div>
 
-    <h3>Has Deals</h3>
-    <div class="toggle" id="deals-toggle">
-      <button data-val="any" class="active">Any</button>
-      <button data-val="yes">Has deals</button>
-      <button data-val="no">No deals</button>
-    </div>
-
-    <h3>Min Total Revenue (USD)</h3>
-    <div class="range">
-      <input type="number" id="rev-min" placeholder="0" min="0" step="1000">
-      <span>to</span>
-      <input type="number" id="rev-max" placeholder="max" min="0" step="1000">
-    </div>
-
-    <h3>Last Engagement</h3>
-    <div class="toggle" id="engagement-toggle">
-      <button data-val="any" class="active">Any</button>
-      <button data-val="30">&lt;30d</button>
-      <button data-val="90">&lt;90d</button>
-      <button data-val="365">&lt;1y</button>
-      <button data-val="stale">&gt;1y</button>
-      <button data-val="none">Never</button>
-    </div>
-
-    <h3>Lifecycle Stage</h3>
-    <ul class="facet-list" id="facet-lifecycle"></ul>
-
-    <h3>Owner</h3>
-    <ul class="facet-list" id="facet-owner"></ul>
-
-    <h3>Country</h3>
-    <ul class="facet-list" id="facet-country"></ul>
-
-    <h3>Program Joined / Interest</h3>
-    <ul class="facet-list" id="facet-program"></ul>
-
-    <h3>Outreach Group</h3>
-    <ul class="facet-list" id="facet-outreach"></ul>
+    <h3>Filters <span class="hint" id="filter-count"></span></h3>
+    <div id="filter-list" class="filter-list"></div>
+    <button class="btn-add-filter" id="btn-add-filter">+ Add filter</button>
   </aside>
 
   <main class="main">
@@ -283,34 +267,210 @@
 
   const state = {
     q: "",
-    lifecycle: new Set(),
-    owner: new Set(),
-    country: new Set(),
-    program: new Set(),
-    outreach: new Set(),
-    deals: "any",
-    engagement: "any",
-    revMin: null,
-    revMax: null,
+    filters: [],         // [{id, prop, op, value, value2}]
     sortKey: "createdate",
     sortDir: "desc",
     selectedId: null,
     activeView: null
   };
 
+  // ---- Filter operators --------------------------------------------------
+  // `noValue`: op takes no value input (e.g. is_empty)
+  // `multi`:   op takes a list of values (checkbox list, for enums)
+  // `second`:  op takes a second value (for "between")
+  const OPS = {
+    text: [
+      {op:"contains",     label:"contains"},
+      {op:"not_contains", label:"does not contain"},
+      {op:"equals",       label:"equals"},
+      {op:"starts_with",  label:"starts with"},
+      {op:"ends_with",    label:"ends with"},
+      {op:"is_empty",     label:"is empty", noValue:true},
+      {op:"is_not_empty", label:"is not empty", noValue:true}
+    ],
+    enum: [
+      {op:"is_any_of",    label:"is any of", multi:true},
+      {op:"is_none_of",   label:"is none of", multi:true},
+      {op:"is_empty",     label:"is empty", noValue:true},
+      {op:"is_not_empty", label:"is not empty", noValue:true}
+    ],
+    number: [
+      {op:"eq",  label:"equals"},
+      {op:"ne",  label:"is not"},
+      {op:"gt",  label:"greater than"},
+      {op:"gte", label:"\u2265"},
+      {op:"lt",  label:"less than"},
+      {op:"lte", label:"\u2264"},
+      {op:"between", label:"between", second:true},
+      {op:"is_empty",     label:"is empty / 0", noValue:true},
+      {op:"is_not_empty", label:"has a value", noValue:true}
+    ],
+    date: [
+      {op:"after",  label:"after"},
+      {op:"before", label:"before"},
+      {op:"between", label:"between", second:true},
+      {op:"in_last_days",    label:"within last N days"},
+      {op:"older_than_days", label:"older than N days"},
+      {op:"is_empty",     label:"is empty / never", noValue:true},
+      {op:"is_not_empty", label:"has a value", noValue:true}
+    ],
+    bool: [
+      {op:"is_true",  label:"is true", noValue:true},
+      {op:"is_false", label:"is false", noValue:true},
+      {op:"is_empty", label:"is empty", noValue:true}
+    ]
+  };
+
+  function kindOf(type){
+    if(type === "number") return "number";
+    if(type === "datetime" || type === "date") return "date";
+    if(type === "bool" || type === "boolean") return "bool";
+    if(type === "enumeration") return "enum";
+    return "text";
+  }
+
+  function opDef(kind, opName){
+    return (OPS[kind] || OPS.text).find(o=>o.op===opName);
+  }
+
+  function defaultOpFor(kind){
+    if(kind === "enum") return "is_any_of";
+    if(kind === "number") return "gte";
+    if(kind === "date") return "in_last_days";
+    if(kind === "bool") return "is_true";
+    return "contains";
+  }
+
+  function getRowValue(row, prop){
+    if(row == null) return undefined;
+    if(Object.prototype.hasOwnProperty.call(row, prop)) return row[prop];
+    return row.props ? row.props[prop] : undefined;
+  }
+
+  function asNumber(v){ if(v===null||v===undefined||v==="") return null; const n=parseFloat(v); return isNaN(n)?null:n; }
+  function asDate(v){ if(!v) return null; const d=new Date(v); return isNaN(d)?null:d; }
+  function asBool(v){ if(v===true||v==="true"||v===1||v==="1") return true; if(v===false||v==="false"||v===0||v==="0") return false; return null; }
+  function asArrayStr(v){
+    if(v==null||v==="") return [];
+    if(Array.isArray(v)) return v.map(String);
+    return String(v).split(";").map(s=>s.trim()).filter(Boolean);
+  }
+
+  function evalFilter(row, f){
+    if(!f.prop || !f.op) return true;
+    const schema = SCHEMA.find(s=>s.name===f.prop);
+    const kind = kindOf(schema?.type);
+    const raw = getRowValue(row, f.prop);
+    const def = opDef(kind, f.op) || opDef("text", f.op);
+    const isEmpty = raw === null || raw === undefined || raw === "";
+
+    switch(f.op){
+      case "is_empty":     return isEmpty;
+      case "is_not_empty": return !isEmpty;
+      case "is_true":  return asBool(raw) === true;
+      case "is_false": return asBool(raw) === false;
+    }
+
+    if(kind === "number"){
+      const n = asNumber(raw);
+      const v = asNumber(f.value);
+      const v2 = asNumber(f.value2);
+      if(v === null && f.op !== "between") return true; // no value entered yet -> no-op
+      if(n === null) return false;
+      switch(f.op){
+        case "eq":  return n === v;
+        case "ne":  return n !== v;
+        case "gt":  return n >  v;
+        case "gte": return n >= v;
+        case "lt":  return n <  v;
+        case "lte": return n <= v;
+        case "between":
+          if(v === null || v2 === null) return true;
+          return n >= Math.min(v,v2) && n <= Math.max(v,v2);
+      }
+      return true;
+    }
+
+    if(kind === "date"){
+      const d = asDate(raw);
+      switch(f.op){
+        case "after":  { const v = asDate(f.value); return v && d ? d.getTime() >  v.getTime() : (v ? false : true); }
+        case "before": { const v = asDate(f.value); return v && d ? d.getTime() <  v.getTime() : (v ? false : true); }
+        case "between": {
+          const v = asDate(f.value), v2 = asDate(f.value2);
+          if(!v || !v2) return true;
+          if(!d) return false;
+          const lo = Math.min(v.getTime(), v2.getTime());
+          const hi = Math.max(v.getTime(), v2.getTime());
+          return d.getTime() >= lo && d.getTime() <= hi;
+        }
+        case "in_last_days": {
+          const days = asNumber(f.value);
+          if(days === null) return true;
+          if(!d) return false;
+          return (Date.now() - d.getTime()) <= days*86400000;
+        }
+        case "older_than_days": {
+          const days = asNumber(f.value);
+          if(days === null) return true;
+          if(!d) return false;
+          return (Date.now() - d.getTime()) > days*86400000;
+        }
+      }
+      return true;
+    }
+
+    if(kind === "bool"){
+      return true; // handled in noValue ops above
+    }
+
+    if(kind === "enum"){
+      const values = Array.isArray(f.value) ? f.value : (f.value ? [f.value] : []);
+      if(!values.length) return true;
+      // For multi-value enumerations stored as semi-colon separated strings, split
+      const raws = asArrayStr(raw);
+      if(f.op === "is_any_of")  return raws.some(x => values.includes(x));
+      if(f.op === "is_none_of") return !raws.some(x => values.includes(x));
+      return true;
+    }
+
+    // text
+    const needle = (f.value == null ? "" : String(f.value)).toLowerCase().trim();
+    if(!needle) return true;
+    const hay = (raw == null ? "" : String(raw)).toLowerCase();
+    switch(f.op){
+      case "contains":     return hay.includes(needle);
+      case "not_contains": return !hay.includes(needle);
+      case "equals":       return hay === needle;
+      case "starts_with":  return hay.startsWith(needle);
+      case "ends_with":    return hay.endsWith(needle);
+    }
+    return true;
+  }
+
   // --- Saved Views ---------------------------------------------------------
   // Built-in views ship with the file; everyone who opens it sees them.
+  function mkFilter(prop, op, value, value2){ return {id: "f"+Math.random().toString(36).slice(2,8), prop, op, value, value2}; }
   const BUILTIN_VIEWS = [
-    {id:"all", name:"All New Leads", filters:{}},
-    {id:"has-deals", name:"Has deals", filters:{deals:"yes", sortKey:"total_revenue", sortDir:"desc"}},
-    {id:"customers", name:"Customers", filters:{lifecycle:["customer"]}},
-    {id:"sql-mql", name:"SQL + MQL", filters:{lifecycle:["salesqualifiedlead","marketingqualifiedlead"]}},
-    {id:"evangelist-alumni", name:"Evangelists & Alumni", filters:{lifecycle:["evangelist","177210199"]}},
-    {id:"recent-30", name:"Active <30d", filters:{engagement:"30", sortKey:"hs_last_sales_activity_timestamp", sortDir:"desc"}},
-    {id:"stale", name:"Stale (>1y)", filters:{engagement:"stale", sortKey:"hs_last_sales_activity_timestamp", sortDir:"asc"}},
-    {id:"never", name:"Never engaged", filters:{engagement:"none"}},
-    {id:"high-value", name:"High-value ($10k+)", filters:{revMin:10000, sortKey:"total_revenue", sortDir:"desc"}},
-    {id:"unassigned", name:"Unassigned", filters:{owner:[""]}},
+    {id:"all", name:"All New Leads", filters:{filters:[]}},
+    {id:"has-deals", name:"Has deals",
+      filters:{filters:[mkFilter("num_associated_deals","gte",1)], sortKey:"prop:total_revenue", sortDir:"desc"}},
+    {id:"customers", name:"Customers",
+      filters:{filters:[mkFilter("lifecyclestage","is_any_of",["customer"])]}},
+    {id:"sql-mql", name:"SQL + MQL",
+      filters:{filters:[mkFilter("lifecyclestage","is_any_of",["salesqualifiedlead","marketingqualifiedlead"])]}},
+    {id:"evangelist-alumni", name:"Evangelists & Alumni",
+      filters:{filters:[mkFilter("lifecyclestage","is_any_of",["evangelist","177210199"])]}},
+    {id:"recent-30", name:"Active <30d",
+      filters:{filters:[mkFilter("hs_last_sales_activity_timestamp","in_last_days",30)], sortKey:"prop:hs_last_sales_activity_timestamp", sortDir:"desc"}},
+    {id:"stale", name:"Stale (>1y)",
+      filters:{filters:[mkFilter("hs_last_sales_activity_timestamp","older_than_days",365)], sortKey:"prop:hs_last_sales_activity_timestamp", sortDir:"asc"}},
+    {id:"never", name:"Never engaged",
+      filters:{filters:[mkFilter("hs_last_sales_activity_timestamp","is_empty")]}},
+    {id:"high-value", name:"High-value ($10k+)",
+      filters:{filters:[mkFilter("total_revenue","gte",10000)], sortKey:"prop:total_revenue", sortDir:"desc"}},
+    {id:"unassigned", name:"Unassigned",
+      filters:{filters:[mkFilter("hubspot_owner_id","is_empty")]}},
   ];
 
   const STORAGE_KEY = "pd_contacts_user_views";
@@ -323,15 +483,7 @@
   function currentFilters(){
     return {
       q: state.q || undefined,
-      lifecycle: state.lifecycle.size ? Array.from(state.lifecycle) : undefined,
-      owner: state.owner.size ? Array.from(state.owner) : undefined,
-      country: state.country.size ? Array.from(state.country) : undefined,
-      program: state.program.size ? Array.from(state.program) : undefined,
-      outreach: state.outreach.size ? Array.from(state.outreach) : undefined,
-      deals: state.deals !== "any" ? state.deals : undefined,
-      engagement: state.engagement !== "any" ? state.engagement : undefined,
-      revMin: state.revMin != null ? state.revMin : undefined,
-      revMax: state.revMax != null ? state.revMax : undefined,
+      filters: state.filters.length ? state.filters.map(f=>({prop:f.prop, op:f.op, value:f.value, value2:f.value2})) : undefined,
       sortKey: state.sortKey !== "createdate" ? state.sortKey : undefined,
       sortDir: state.sortDir !== "desc" ? state.sortDir : undefined,
     };
@@ -340,24 +492,10 @@
 
   function applyFilters(f){
     state.q = f.q || "";
-    state.lifecycle = new Set(f.lifecycle || []);
-    state.owner = new Set(f.owner || []);
-    state.country = new Set(f.country || []);
-    state.program = new Set(f.program || []);
-    state.outreach = new Set(f.outreach || []);
-    state.deals = f.deals || "any";
-    state.engagement = f.engagement || "any";
-    state.revMin = f.revMin != null ? f.revMin : null;
-    state.revMax = f.revMax != null ? f.revMax : null;
+    state.filters = (f.filters || []).map(x => ({id: "f"+Math.random().toString(36).slice(2,8), ...x}));
     state.sortKey = f.sortKey || "createdate";
     state.sortDir = f.sortDir || "desc";
-
-    // Sync UI controls
     const si = document.getElementById("search-input"); if(si) si.value = state.q;
-    const rmin = document.getElementById("rev-min"); if(rmin) rmin.value = state.revMin ?? "";
-    const rmax = document.getElementById("rev-max"); if(rmax) rmax.value = state.revMax ?? "";
-    document.querySelectorAll("#deals-toggle button").forEach(b=>b.classList.toggle("active",b.dataset.val===state.deals));
-    document.querySelectorAll("#engagement-toggle button").forEach(b=>b.classList.toggle("active",b.dataset.val===state.engagement));
   }
 
   function renderViews(){
@@ -523,23 +661,8 @@
       const hay=[r.name,r.email,r.phone,r.company,r.owner_name,r.program_joined,r.program_interest,r.jobtitle,r.country,r.city,r.state].filter(Boolean).join(" ").toLowerCase();
       if(!hay.includes(q))return false;
     }
-    if(state.lifecycle.size && !state.lifecycle.has(r.lifecyclestage||""))return false;
-    if(state.owner.size && !state.owner.has(r.owner_id||""))return false;
-    if(state.country.size && !state.country.has(r.country||""))return false;
-    if(state.program.size){
-      const key=(r.program_joined||r.program_interest||"");
-      if(!state.program.has(key))return false;
-    }
-    if(state.outreach.size && !state.outreach.has(r.outreach_group||""))return false;
-    if(state.deals==="yes" && !r.num_associated_deals)return false;
-    if(state.deals==="no" && r.num_associated_deals)return false;
-    if(state.revMin!=null && (r.total_revenue||0)<state.revMin)return false;
-    if(state.revMax!=null && (r.total_revenue||0)>state.revMax)return false;
-    if(state.engagement!=="any"){
-      const d=daysAgo(r.hs_last_sales_activity_timestamp);
-      if(state.engagement==="none"){if(d!=null)return false;}
-      else if(state.engagement==="stale"){if(d==null||d<=365)return false;}
-      else {const limit=parseInt(state.engagement,10);if(d==null||d>limit)return false;}
+    for(const f of state.filters){
+      if(!evalFilter(r, f)) return false;
     }
     return true;
   }
@@ -712,59 +835,160 @@
     });
   }
 
-  function renderFacet(elId, counts, selectedSet, labelMap){
-    const ul=document.getElementById(elId);
-    const items=Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]);
-    ul.innerHTML=items.map(([val,count])=>{
-      const active=selectedSet.has(val);
-      const label=labelMap&&labelMap[val]?labelMap[val]:(val||"(none)");
-      return `<li data-val="${escapeHtml(val)}" class="${active?'active':''}"><span class="label">${escapeHtml(label)}</span><span class="count">${count}</span></li>`;
-    }).join("");
-    ul.querySelectorAll("li").forEach(li=>{
-      li.addEventListener("click",()=>{
-        const v=li.dataset.val;
-        if(selectedSet.has(v))selectedSet.delete(v);else selectedSet.add(v);
-        clearView();
-        renderAll();
+  // ---- Filter builder UI -------------------------------------------------
+  function propertyChoicesHtml(selectedName){
+    // Returns optgroup'd options for the property-picker dropdown, drawn from SCHEMA.
+    if(!SCHEMA || !SCHEMA.length) return '<option value="">(schema loading...)</option>';
+    const byGroup = {};
+    for(const s of SCHEMA) (byGroup[s.groupName] = byGroup[s.groupName] || []).push(s);
+    const groupNames = Object.keys(byGroup).sort((a,b)=>{
+      const oa = GROUPS[a]?.order ?? 999, ob = GROUPS[b]?.order ?? 999;
+      if(oa !== ob) return oa - ob;
+      return prettyGroupLabel(a).localeCompare(prettyGroupLabel(b));
+    });
+    let html = '<option value="" disabled ' + (selectedName?"":"selected") + '>Pick a property...</option>';
+    for(const g of groupNames){
+      const items = byGroup[g].slice().sort((a,b)=>a.label.localeCompare(b.label));
+      const opts = items.map(s => `<option value="${escapeHtml(s.name)}"${s.name===selectedName?" selected":""}>${escapeHtml(s.label)}</option>`).join("");
+      html += `<optgroup label="${escapeHtml(prettyGroupLabel(g))}">${opts}</optgroup>`;
+    }
+    return html;
+  }
+
+  function renderFilterRow(f){
+    const schema = SCHEMA.find(s=>s.name===f.prop);
+    const kind   = kindOf(schema?.type);
+    const ops    = OPS[kind] || OPS.text;
+    const def    = opDef(kind, f.op);
+    const opOpts = ops.map(o => `<option value="${o.op}"${o.op===f.op?" selected":""}>${escapeHtml(o.label)}</option>`).join("");
+
+    // Value control(s)
+    let valueHtml = "";
+    if(f.prop && def && !def.noValue){
+      if(def.multi && kind === "enum"){
+        // Build option list. Prefer schema.options; fall back to distinct values observed in data.
+        let options = (schema?.options || []).map(o => ({value: o.value, label: o.label}));
+        if(!options.length){
+          const seen = new Map();
+          ROWS.forEach(r => { const v = getRowValue(r, f.prop); asArrayStr(v).forEach(x => seen.set(x, (seen.get(x)||0)+1)); });
+          options = Array.from(seen.keys()).sort().map(v => ({value: v, label: v}));
+        }
+        if(!options.length){
+          valueHtml = '<div class="muted-note">No values found in current dataset.</div>';
+        } else {
+          const selectedSet = new Set(Array.isArray(f.value) ? f.value : (f.value ? [f.value] : []));
+          valueHtml = '<div class="multi">' + options.map(o =>
+            `<label><input type="checkbox" value="${escapeHtml(o.value)}"${selectedSet.has(o.value)?" checked":""}><span>${escapeHtml(o.label)}</span></label>`
+          ).join("") + '</div>';
+        }
+      } else if(kind === "date" && (def.op === "in_last_days" || def.op === "older_than_days")){
+        valueHtml = `<input type="number" min="0" step="1" placeholder="Days" value="${f.value ?? ""}">`;
+      } else if(kind === "date"){
+        const dv = f.value ? new Date(f.value).toISOString().slice(0,10) : "";
+        const dv2 = f.value2 ? new Date(f.value2).toISOString().slice(0,10) : "";
+        valueHtml = `<input type="date" value="${dv}">`;
+        if(def.second) valueHtml += `<input type="date" value="${dv2}">`;
+      } else if(kind === "number"){
+        valueHtml = `<input type="number" step="any" placeholder="Value" value="${f.value ?? ""}">`;
+        if(def.second) valueHtml += `<input type="number" step="any" placeholder="and" value="${f.value2 ?? ""}">`;
+      } else {
+        valueHtml = `<input type="text" placeholder="Value" value="${escapeHtml(f.value ?? "")}">`;
+      }
+    }
+
+    return `
+      <div class="filter-row" data-id="${f.id}">
+        <select class="row-prop">${propertyChoicesHtml(f.prop)}</select>
+        <div class="row-ops">
+          <select class="row-op"${f.prop ? "" : " disabled"}>${opOpts}</select>
+          <button class="remove" title="Remove filter">&times;</button>
+        </div>
+        <div class="row-values">${valueHtml}</div>
+      </div>
+    `;
+  }
+
+  function renderFilters(){
+    const host = document.getElementById("filter-list");
+    if(!host) return;
+    host.innerHTML = state.filters.length
+      ? state.filters.map(renderFilterRow).join("")
+      : '<div class="muted-note" style="color:var(--muted);font-size:12px;padding:4px 2px">No filters. Click "+ Add filter" to start.</div>';
+
+    const countEl = document.getElementById("filter-count");
+    if(countEl) countEl.textContent = state.filters.length ? `(${state.filters.length})` : "";
+
+    host.querySelectorAll(".filter-row").forEach(row => {
+      const id = row.dataset.id;
+      const f = state.filters.find(x => x.id === id);
+      if(!f) return;
+
+      // Property change → set default op, clear value
+      row.querySelector(".row-prop").addEventListener("change", e => {
+        f.prop = e.target.value;
+        const s = SCHEMA.find(x=>x.name===f.prop);
+        const k = kindOf(s?.type);
+        f.op = defaultOpFor(k);
+        f.value = undefined; f.value2 = undefined;
+        clearView(); renderAll();
       });
+      // Op change
+      const opSel = row.querySelector(".row-op");
+      if(opSel){
+        opSel.addEventListener("change", e => {
+          f.op = e.target.value;
+          f.value = undefined; f.value2 = undefined;
+          clearView(); renderAll();
+        });
+      }
+      // Remove
+      row.querySelector(".remove").addEventListener("click", () => {
+        state.filters = state.filters.filter(x => x.id !== id);
+        clearView(); renderAll();
+      });
+      // Value input(s)
+      const valueWrap = row.querySelector(".row-values");
+      if(valueWrap){
+        const schema = SCHEMA.find(s=>s.name===f.prop);
+        const kind   = kindOf(schema?.type);
+        const def    = opDef(kind, f.op);
+        if(def && def.multi){
+          valueWrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener("change", () => {
+              const sel = Array.from(valueWrap.querySelectorAll('input[type="checkbox"]:checked')).map(x => x.value);
+              f.value = sel;
+              clearView(); scheduleRender();
+            });
+          });
+        } else {
+          const inputs = valueWrap.querySelectorAll("input");
+          if(inputs[0]) inputs[0].addEventListener("input", e => { f.value = e.target.value; clearView(); scheduleRender(); });
+          if(inputs[1]) inputs[1].addEventListener("input", e => { f.value2 = e.target.value; clearView(); scheduleRender(); });
+        }
+      }
     });
   }
 
-  function buildFacets(rows){
-    const count=(key)=>{const m=new Map();rows.forEach(r=>{const v=r[key]||"";m.set(v,(m.get(v)||0)+1);});return m;};
-    const lifecycleLabels={};
-    ROWS.forEach(r=>{if(r.lifecyclestage)lifecycleLabels[r.lifecyclestage]=r.lifecycle_label;});
-    renderFacet("facet-lifecycle",count("lifecyclestage"),state.lifecycle,lifecycleLabels);
-
-    const ownerLabels={};
-    ROWS.forEach(r=>{ownerLabels[r.owner_id||""]=r.owner_name||"(unassigned)";});
-    renderFacet("facet-owner",count("owner_id"),state.owner,ownerLabels);
-
-    renderFacet("facet-country",count("country"),state.country);
-
-    const progMap=new Map();
-    rows.forEach(r=>{const k=r.program_joined||r.program_interest||"";progMap.set(k,(progMap.get(k)||0)+1);});
-    renderFacet("facet-program",progMap,state.program);
-
-    renderFacet("facet-outreach",count("outreach_group"),state.outreach);
+  // Debounced re-render for free-text value inputs so we don't thrash the whole panel on every keypress
+  let _renderTimer = null;
+  function scheduleRender(){
+    clearTimeout(_renderTimer);
+    _renderTimer = setTimeout(() => {
+      // Only re-render the table + view pills + header, NOT the filter rows
+      // (rebuilding filter rows would blow away the focused input)
+      const rows = filteredRows();
+      document.getElementById("result-count").textContent = rows.length.toLocaleString();
+      document.getElementById("total-count").textContent = ROWS.length.toLocaleString();
+      renderHeader();
+      renderTable(rows);
+      renderViews();
+      updateHash();
+    }, 150);
   }
 
-  function renderActiveFilters(){
-    const el=document.getElementById("active-filters");
-    const pills=[];
-    const addMany=(label,set,map)=>set.forEach(v=>pills.push({label:`${label}: ${map&&map[v]?map[v]:(v||"(none)")}`,clear:()=>set.delete(v)}));
-    addMany("Lifecycle",state.lifecycle,Object.fromEntries(ROWS.map(r=>[r.lifecyclestage,r.lifecycle_label])));
-    addMany("Owner",state.owner,Object.fromEntries(ROWS.map(r=>[r.owner_id,r.owner_name])));
-    addMany("Country",state.country);
-    addMany("Program",state.program);
-    addMany("Outreach",state.outreach);
-    if(state.deals!=="any")pills.push({label:`Deals: ${state.deals}`,clear:()=>state.deals="any"});
-    if(state.engagement!=="any")pills.push({label:`Engagement: ${state.engagement}`,clear:()=>state.engagement="any"});
-    if(state.revMin!=null)pills.push({label:`Min rev $${state.revMin}`,clear:()=>state.revMin=null});
-    if(state.revMax!=null)pills.push({label:`Max rev $${state.revMax}`,clear:()=>state.revMax=null});
-    if(state.q)pills.push({label:`"${state.q}"`,clear:()=>{state.q="";document.getElementById("search-input").value="";}});
-    el.innerHTML=pills.map((p,i)=>`<span class="pill">${escapeHtml(p.label)}<span class="x" data-i="${i}">&times;</span></span>`).join("");
-    el.querySelectorAll(".x").forEach(x=>x.addEventListener("click",()=>{pills[parseInt(x.dataset.i,10)].clear();renderAll();}));
+  function addFilter(){
+    state.filters.push({id:"f"+Math.random().toString(36).slice(2,8), prop:"", op:"", value:undefined, value2:undefined});
+    clearView(); renderAll();
   }
 
   function renderAll(){
@@ -773,8 +997,7 @@
     document.getElementById("total-count").textContent=ROWS.length.toLocaleString();
     renderHeader();
     renderTable(rows);
-    buildFacets(rows);
-    renderActiveFilters();
+    renderFilters();
     renderViews();
     renderSortControls();
     updateHash();
@@ -856,11 +1079,7 @@
 
   function resetFilters(){
     state.q="";document.getElementById("search-input").value="";
-    state.lifecycle.clear();state.owner.clear();state.country.clear();state.program.clear();state.outreach.clear();
-    state.deals="any";state.engagement="any";state.revMin=null;state.revMax=null;
-    document.getElementById("rev-min").value="";document.getElementById("rev-max").value="";
-    document.querySelectorAll("#deals-toggle button").forEach(b=>b.classList.toggle("active",b.dataset.val==="any"));
-    document.querySelectorAll("#engagement-toggle button").forEach(b=>b.classList.toggle("active",b.dataset.val==="any"));
+    state.filters = [];
     renderAll();
   }
 
@@ -869,14 +1088,7 @@
 
   // Wire up events
   document.getElementById("search-input").addEventListener("input",e=>{state.q=e.target.value.trim();clearView();renderAll();});
-  document.getElementById("rev-min").addEventListener("input",e=>{const v=parseFloat(e.target.value);state.revMin=isNaN(v)?null:v;clearView();renderAll();});
-  document.getElementById("rev-max").addEventListener("input",e=>{const v=parseFloat(e.target.value);state.revMax=isNaN(v)?null:v;clearView();renderAll();});
-  document.querySelectorAll("#deals-toggle button").forEach(b=>{
-    b.addEventListener("click",()=>{state.deals=b.dataset.val;document.querySelectorAll("#deals-toggle button").forEach(x=>x.classList.toggle("active",x===b));clearView();renderAll();});
-  });
-  document.querySelectorAll("#engagement-toggle button").forEach(b=>{
-    b.addEventListener("click",()=>{state.engagement=b.dataset.val;document.querySelectorAll("#engagement-toggle button").forEach(x=>x.classList.toggle("active",x===b));clearView();renderAll();});
-  });
+  document.getElementById("btn-add-filter").addEventListener("click",addFilter);
   document.getElementById("btn-reset").addEventListener("click",()=>{clearView();resetFilters();});
   document.getElementById("btn-csv").addEventListener("click",toCSV);
   document.getElementById("btn-share").addEventListener("click",copyShareLink);
