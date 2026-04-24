@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contacts & Lists</title>
+<title>Pacific Discovery - New Lead Contacts</title>
 <style>
   :root{
     --bg:#f6f7f9; --panel:#ffffff; --border:#e4e7ec; --text:#0f172a; --muted:#64748b;
@@ -47,6 +47,23 @@
   .toggle{display:flex;gap:6px;margin:4px 0 6px;flex-wrap:wrap}
   .toggle button{padding:4px 9px;font-size:12px;border:1px solid var(--border);background:#fff;border-radius:14px;cursor:pointer;color:var(--muted)}
   .toggle button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  .views-bar{background:#f1f5f9;border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .views-bar .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
+  .view-pill{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:999px;font-size:12px;cursor:pointer;font-weight:500;white-space:nowrap}
+  .view-pill:hover{border-color:var(--accent);color:var(--accent)}
+  .view-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .view-pill.active:hover{color:#fff}
+  .view-pill .tag{font-size:10px;opacity:.6;margin-left:2px;font-weight:400}
+  .view-pill.personal{border-style:dashed}
+  .view-pill .x{cursor:pointer;opacity:.5;font-size:14px;line-height:1;margin-left:2px}
+  .view-pill .x:hover{opacity:1}
+  .views-bar .divider{width:1px;height:18px;background:var(--border);margin:0 4px}
+  .views-bar .new-view{background:transparent;border:1px dashed #94a3b8;color:var(--muted);padding:4px 10px;border-radius:999px;font-size:12px;cursor:pointer}
+  .views-bar .new-view:hover{border-color:var(--accent);color:var(--accent)}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+  .toast.show{opacity:1}
 
   .main{padding:0;overflow:hidden;display:flex;flex-direction:column}
   .toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -111,9 +128,18 @@
   </div>
   <div class="spacer"></div>
   <div class="actions">
+    <button class="btn ghost" id="btn-share">Copy share link</button>
     <button class="btn ghost" id="btn-reset">Reset filters</button>
     <button class="btn ghost" id="btn-csv">Export CSV</button>
   </div>
+</div>
+
+<div class="views-bar" id="views-bar">
+  <span class="label">Views</span>
+  <span id="builtin-views"></span>
+  <span class="divider" id="views-divider" style="display:none"></span>
+  <span id="user-views"></span>
+  <button class="new-view" id="btn-save-view">+ Save current view</button>
 </div>
 
 <div class="layout">
@@ -236,8 +262,160 @@
     revMax: null,
     sortKey: "createdate",
     sortDir: "desc",
-    selectedId: null
+    selectedId: null,
+    activeView: null
   };
+
+  // --- Saved Views ---------------------------------------------------------
+  // Built-in views ship with the file; everyone who opens it sees them.
+  const BUILTIN_VIEWS = [
+    {id:"all", name:"All New Leads", filters:{}},
+    {id:"has-deals", name:"Has deals", filters:{deals:"yes", sortKey:"total_revenue", sortDir:"desc"}},
+    {id:"customers", name:"Customers", filters:{lifecycle:["customer"]}},
+    {id:"sql-mql", name:"SQL + MQL", filters:{lifecycle:["salesqualifiedlead","marketingqualifiedlead"]}},
+    {id:"evangelist-alumni", name:"Evangelists & Alumni", filters:{lifecycle:["evangelist","177210199"]}},
+    {id:"recent-30", name:"Active <30d", filters:{engagement:"30", sortKey:"hs_last_sales_activity_timestamp", sortDir:"desc"}},
+    {id:"stale", name:"Stale (>1y)", filters:{engagement:"stale", sortKey:"hs_last_sales_activity_timestamp", sortDir:"asc"}},
+    {id:"never", name:"Never engaged", filters:{engagement:"none"}},
+    {id:"high-value", name:"High-value ($10k+)", filters:{revMin:10000, sortKey:"total_revenue", sortDir:"desc"}},
+    {id:"unassigned", name:"Unassigned", filters:{owner:[""]}},
+  ];
+
+  const STORAGE_KEY = "pd_contacts_user_views";
+  function loadUserViews(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");}catch(e){return [];}}
+  function saveUserViews(list){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch(e){}}
+
+  function currentFilters(){
+    return {
+      q: state.q || undefined,
+      lifecycle: state.lifecycle.size ? Array.from(state.lifecycle) : undefined,
+      owner: state.owner.size ? Array.from(state.owner) : undefined,
+      country: state.country.size ? Array.from(state.country) : undefined,
+      program: state.program.size ? Array.from(state.program) : undefined,
+      outreach: state.outreach.size ? Array.from(state.outreach) : undefined,
+      deals: state.deals !== "any" ? state.deals : undefined,
+      engagement: state.engagement !== "any" ? state.engagement : undefined,
+      revMin: state.revMin != null ? state.revMin : undefined,
+      revMax: state.revMax != null ? state.revMax : undefined,
+      sortKey: state.sortKey !== "createdate" ? state.sortKey : undefined,
+      sortDir: state.sortDir !== "desc" ? state.sortDir : undefined,
+    };
+  }
+  function isEmptyFilters(f){return Object.keys(f).every(k=>f[k]===undefined);}
+
+  function applyFilters(f){
+    state.q = f.q || "";
+    state.lifecycle = new Set(f.lifecycle || []);
+    state.owner = new Set(f.owner || []);
+    state.country = new Set(f.country || []);
+    state.program = new Set(f.program || []);
+    state.outreach = new Set(f.outreach || []);
+    state.deals = f.deals || "any";
+    state.engagement = f.engagement || "any";
+    state.revMin = f.revMin != null ? f.revMin : null;
+    state.revMax = f.revMax != null ? f.revMax : null;
+    state.sortKey = f.sortKey || "createdate";
+    state.sortDir = f.sortDir || "desc";
+
+    // Sync UI controls
+    const si = document.getElementById("search-input"); if(si) si.value = state.q;
+    const rmin = document.getElementById("rev-min"); if(rmin) rmin.value = state.revMin ?? "";
+    const rmax = document.getElementById("rev-max"); if(rmax) rmax.value = state.revMax ?? "";
+    document.querySelectorAll("#deals-toggle button").forEach(b=>b.classList.toggle("active",b.dataset.val===state.deals));
+    document.querySelectorAll("#engagement-toggle button").forEach(b=>b.classList.toggle("active",b.dataset.val===state.engagement));
+  }
+
+  function renderViews(){
+    const bi = document.getElementById("builtin-views");
+    const uv = document.getElementById("user-views");
+    const divider = document.getElementById("views-divider");
+    const user = loadUserViews();
+
+    bi.innerHTML = BUILTIN_VIEWS.map(v=>{
+      const active = state.activeView===v.id ? ' active' : '';
+      return `<button class="view-pill${active}" data-kind="builtin" data-id="${v.id}">${escapeHtml(v.name)}</button>`;
+    }).join(" ");
+
+    divider.style.display = user.length ? "inline-block" : "none";
+    uv.innerHTML = user.map(v=>{
+      const active = state.activeView===("user:"+v.id) ? ' active' : '';
+      return `<span class="view-pill personal${active}" data-kind="user" data-id="${escapeHtml(v.id)}"><span class="pill-label">${escapeHtml(v.name)}</span><span class="tag">mine</span><span class="x" data-kind="delete" data-id="${escapeHtml(v.id)}" title="Delete">&times;</span></span>`;
+    }).join(" ");
+
+    // Wire events
+    document.querySelectorAll('.view-pill[data-kind="builtin"]').forEach(el=>{
+      el.addEventListener("click",()=>{
+        const v = BUILTIN_VIEWS.find(x=>x.id===el.dataset.id);
+        if(v){applyFilters(v.filters);state.activeView=v.id;renderAll();updateHash();}
+      });
+    });
+    document.querySelectorAll('.view-pill[data-kind="user"]').forEach(el=>{
+      el.addEventListener("click",(e)=>{
+        if(e.target.classList.contains("x"))return;
+        const v = loadUserViews().find(x=>x.id===el.dataset.id);
+        if(v){applyFilters(v.filters);state.activeView="user:"+v.id;renderAll();updateHash();}
+      });
+    });
+    document.querySelectorAll('.view-pill .x').forEach(el=>{
+      el.addEventListener("click",(e)=>{
+        e.stopPropagation();
+        const id = el.dataset.id;
+        const list = loadUserViews().filter(v=>v.id!==id);
+        saveUserViews(list);
+        if(state.activeView==="user:"+id)state.activeView=null;
+        renderAll();
+      });
+    });
+  }
+
+  function saveCurrentView(){
+    const name = prompt("Name this view:");
+    if(!name || !name.trim())return;
+    const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").slice(0,40) + "-" + Date.now().toString(36).slice(-4);
+    const list = loadUserViews();
+    list.push({id, name: name.trim(), filters: currentFilters()});
+    saveUserViews(list);
+    state.activeView = "user:"+id;
+    renderAll();
+  }
+
+  // URL hash serialization for shareable links
+  function updateHash(){
+    const f = currentFilters();
+    if(isEmptyFilters(f) && !state.activeView){history.replaceState(null,"",location.pathname+location.search);return;}
+    const payload = {v:state.activeView, f};
+    try{
+      const str = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+      history.replaceState(null,"","#view="+str);
+    }catch(e){}
+  }
+  function readHash(){
+    const m = location.hash.match(/#view=([^&]+)/);
+    if(!m)return null;
+    try{return JSON.parse(decodeURIComponent(escape(atob(m[1]))));}catch(e){return null;}
+  }
+  function copyShareLink(){
+    const f = currentFilters();
+    const payload = {v:state.activeView, f};
+    let url = location.origin + location.pathname;
+    if(location.pathname.startsWith("/") || location.protocol==="file:")url = location.href.split("#")[0];
+    try{
+      const str = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+      url += "#view="+str;
+    }catch(e){}
+    navigator.clipboard.writeText(url).then(()=>toast("Share link copied to clipboard")).catch(()=>{
+      // Fallback
+      prompt("Copy this link:", url);
+    });
+  }
+  function toast(msg){
+    let t = document.getElementById("toast");
+    if(!t){t=document.createElement("div");t.id="toast";t.className="toast";document.body.appendChild(t);}
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(t._h);
+    t._h = setTimeout(()=>t.classList.remove("show"),1800);
+  }
 
   // Columns (key, label, width, numeric, formatter)
   const COLUMNS = [
@@ -333,6 +511,7 @@
         const k=th.dataset.key;
         if(state.sortKey===k)state.sortDir=state.sortDir==="asc"?"desc":"asc";
         else{state.sortKey=k;state.sortDir="asc";}
+        clearView();
         renderAll();
       });
     });
@@ -372,6 +551,7 @@
       li.addEventListener("click",()=>{
         const v=li.dataset.val;
         if(selectedSet.has(v))selectedSet.delete(v);else selectedSet.add(v);
+        clearView();
         renderAll();
       });
     });
@@ -422,6 +602,8 @@
     renderTable(rows);
     buildFacets(rows);
     renderActiveFilters();
+    renderViews();
+    updateHash();
   }
 
   function openDetail(id){
@@ -508,18 +690,23 @@
     renderAll();
   }
 
+  // When user changes any filter manually, clear the "active view" highlight
+  function clearView(){state.activeView=null;}
+
   // Wire up events
-  document.getElementById("search-input").addEventListener("input",e=>{state.q=e.target.value.trim();renderAll();});
-  document.getElementById("rev-min").addEventListener("input",e=>{const v=parseFloat(e.target.value);state.revMin=isNaN(v)?null:v;renderAll();});
-  document.getElementById("rev-max").addEventListener("input",e=>{const v=parseFloat(e.target.value);state.revMax=isNaN(v)?null:v;renderAll();});
+  document.getElementById("search-input").addEventListener("input",e=>{state.q=e.target.value.trim();clearView();renderAll();});
+  document.getElementById("rev-min").addEventListener("input",e=>{const v=parseFloat(e.target.value);state.revMin=isNaN(v)?null:v;clearView();renderAll();});
+  document.getElementById("rev-max").addEventListener("input",e=>{const v=parseFloat(e.target.value);state.revMax=isNaN(v)?null:v;clearView();renderAll();});
   document.querySelectorAll("#deals-toggle button").forEach(b=>{
-    b.addEventListener("click",()=>{state.deals=b.dataset.val;document.querySelectorAll("#deals-toggle button").forEach(x=>x.classList.toggle("active",x===b));renderAll();});
+    b.addEventListener("click",()=>{state.deals=b.dataset.val;document.querySelectorAll("#deals-toggle button").forEach(x=>x.classList.toggle("active",x===b));clearView();renderAll();});
   });
   document.querySelectorAll("#engagement-toggle button").forEach(b=>{
-    b.addEventListener("click",()=>{state.engagement=b.dataset.val;document.querySelectorAll("#engagement-toggle button").forEach(x=>x.classList.toggle("active",x===b));renderAll();});
+    b.addEventListener("click",()=>{state.engagement=b.dataset.val;document.querySelectorAll("#engagement-toggle button").forEach(x=>x.classList.toggle("active",x===b));clearView();renderAll();});
   });
-  document.getElementById("btn-reset").addEventListener("click",resetFilters);
+  document.getElementById("btn-reset").addEventListener("click",()=>{clearView();resetFilters();});
   document.getElementById("btn-csv").addEventListener("click",toCSV);
+  document.getElementById("btn-share").addEventListener("click",copyShareLink);
+  document.getElementById("btn-save-view").addEventListener("click",saveCurrentView);
   document.getElementById("d-close").addEventListener("click",closeDetail);
   document.getElementById("detail-backdrop").addEventListener("click",closeDetail);
   document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDetail();});
@@ -529,7 +716,20 @@
   const gen=new Date(raw.generatedAt);
   document.getElementById("meta-generated").textContent=`Generated ${gen.toISOString().slice(0,16).replace("T"," ")} UTC`;
 
+  // Restore state from URL hash if present (so share links work)
+  const restored = readHash();
+  if(restored){
+    applyFilters(restored.f || {});
+    state.activeView = restored.v || null;
+  }
+
   renderAll();
+
+  // React to hash changes (e.g., user pastes a new share link)
+  window.addEventListener("hashchange",()=>{
+    const r = readHash();
+    if(r){applyFilters(r.f || {}); state.activeView = r.v || null; renderAll();}
+  });
 })();
 </script>
 </body>
