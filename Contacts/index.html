@@ -48,6 +48,16 @@
   .toggle button{padding:4px 9px;font-size:12px;border:1px solid var(--border);background:#fff;border-radius:14px;cursor:pointer;color:var(--muted)}
   .toggle button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
+  .sort-wrap{display:flex;flex-direction:column;gap:6px}
+  .sort-wrap input[type="search"]{width:100%;padding:5px 8px;font-size:12.5px;border:1px solid var(--border);border-radius:6px;background:#fff}
+  .sort-wrap input[type="search"]:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+  .sort-wrap select{width:100%;padding:6px 8px;font-size:12.5px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer}
+  .sort-wrap select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+  .dir-toggle{display:flex;gap:6px}
+  .dir-toggle button{flex:1;padding:5px 9px;font-size:12px;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;color:var(--muted);font-weight:500}
+  .dir-toggle button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .sidebar h3 .hint{text-transform:none;font-weight:400;letter-spacing:0;color:var(--muted);font-size:11px;margin-left:4px}
+
   .views-bar{background:#f1f5f9;border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .views-bar .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
   .view-pill{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:999px;font-size:12px;cursor:pointer;font-weight:500;white-space:nowrap}
@@ -78,7 +88,8 @@
 
   .table-wrap{overflow:auto;flex:1;background:var(--panel)}
   table.data{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:1200px}
-  table.data thead th{background:#f8fafc;padding:8px 10px;text-align:left;font-weight:600;font-size:12px;border-bottom:2px solid var(--border);border-right:1px solid var(--border);position:sticky;top:0;z-index:1;cursor:pointer;user-select:none;white-space:nowrap;color:#334155}
+  table.data thead th{background:#f8fafc;padding:8px 10px;text-align:left;font-weight:600;font-size:12px;border-bottom:2px solid var(--border);border-right:1px solid var(--border);position:sticky;top:0;z-index:1;cursor:pointer;user-select:none;white-space:nowrap;color:#334155;transition:background .12s}
+  table.data thead th:hover{background:#e2e8f0;color:var(--accent)}
   table.data thead th:last-child{border-right:none}
   table.data thead th .sort-indicator{color:var(--accent);margin-left:4px;font-weight:700}
   table.data tbody td{padding:7px 10px;border-bottom:1px solid #f1f5f9;border-right:1px solid #f8fafc;vertical-align:top;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
@@ -150,6 +161,16 @@
     <h3>Search</h3>
     <div class="search-wrap">
       <input type="search" id="search-input" placeholder="Name, email, phone, company...">
+    </div>
+
+    <h3>Sort by <span class="hint" id="sort-count"></span></h3>
+    <div class="sort-wrap">
+      <input type="search" id="sort-search" placeholder="Filter properties...">
+      <select id="sort-key" size="1"></select>
+      <div class="dir-toggle">
+        <button data-dir="asc" id="dir-asc" title="Ascending">&#8593; Asc</button>
+        <button data-dir="desc" id="dir-desc" class="active" title="Descending">&#8595; Desc</button>
+      </div>
     </div>
 
     <h3>Has Deals</h3>
@@ -254,9 +275,11 @@
   const REFRESH_URL = "/.netlify/functions/refresh-contacts";
 
   // Populated after the initial fetch.
-  let raw = { rows: [], portalId: 0, generatedAt: null, total: 0 };
+  let raw = { rows: [], portalId: 0, generatedAt: null, total: 0, schema: [], groups: {} };
   let ROWS = [];
   let PORTAL = 0;
+  let SCHEMA = [];    // [{name,label,type,fieldType,groupName}, ...]
+  let GROUPS = {};    // { groupName: {label, order} }
 
   const state = {
     q: "",
@@ -521,21 +544,56 @@
     return true;
   }
 
+  function sortValue(row, key){
+    // "prop:<name>" reads from the raw HubSpot properties bag
+    if(key && key.indexOf("prop:") === 0){
+      const name = key.slice(5);
+      return row.props ? row.props[name] : undefined;
+    }
+    return row[key];
+  }
+  function sortTypeFor(key){
+    if(key && key.indexOf("prop:") === 0){
+      const name = key.slice(5);
+      const s = SCHEMA.find(x=>x.name===name);
+      return s ? s.type : "string";
+    }
+    // Known column types
+    if(["createdate","lastmodifieddate","hs_last_sales_activity_timestamp","recent_deal_close_date"].includes(key)) return "datetime";
+    const col = (typeof COLUMNS !== "undefined") ? COLUMNS.find(c=>c.key===key) : null;
+    if(col && col.num) return "number";
+    return "string";
+  }
   function compare(a,b){
-    const k=state.sortKey,dir=state.sortDir==="asc"?1:-1;
-    let va=a[k],vb=b[k];
-    if(va==null||va==="")va=null;
-    if(vb==null||vb==="")vb=null;
-    if(va==null&&vb==null)return 0;
-    if(va==null)return 1;
-    if(vb==null)return -1;
-    // Date keys
-    if(["createdate","lastmodifieddate","hs_last_sales_activity_timestamp","recent_deal_close_date"].includes(k)){
-      const da=new Date(va).getTime(), db=new Date(vb).getTime();
+    const k=state.sortKey, dir=state.sortDir==="asc"?1:-1;
+    let va=sortValue(a,k), vb=sortValue(b,k);
+    if(va===""||va===undefined)va=null;
+    if(vb===""||vb===undefined)vb=null;
+    if(va==null && vb==null) return 0;
+    if(va==null) return 1;   // nulls always sort last
+    if(vb==null) return -1;
+    const t = sortTypeFor(k);
+    if(t === "datetime" || t === "date"){
+      const da = new Date(va).getTime(), db = new Date(vb).getTime();
+      if(isNaN(da) && isNaN(db)) return 0;
+      if(isNaN(da)) return 1;
+      if(isNaN(db)) return -1;
       return (da-db)*dir;
     }
-    if(typeof va==="number"&&typeof vb==="number")return (va-vb)*dir;
-    return String(va).localeCompare(String(vb))*dir;
+    if(t === "number"){
+      const na = typeof va === "number" ? va : parseFloat(va);
+      const nb = typeof vb === "number" ? vb : parseFloat(vb);
+      if(isNaN(na) && isNaN(nb)) return 0;
+      if(isNaN(na)) return 1;
+      if(isNaN(nb)) return -1;
+      return (na-nb)*dir;
+    }
+    if(t === "bool" || t === "boolean"){
+      const ba = (va===true || va==="true") ? 1 : 0;
+      const bb = (vb===true || vb==="true") ? 1 : 0;
+      return (ba-bb)*dir;
+    }
+    return String(va).localeCompare(String(vb), undefined, {numeric:true, sensitivity:"base"}) * dir;
   }
 
   function filteredRows(){return ROWS.filter(matches).sort(compare);}
@@ -545,16 +603,90 @@
     tr.innerHTML=COLUMNS.map(c=>{
       const active=state.sortKey===c.key;
       const arrow=active?(state.sortDir==="asc"?"\u2191":"\u2193"):"";
-      return `<th data-key="${c.key}" style="${c.align==='right'?'text-align:right':''}">${escapeHtml(c.label)}<span class="sort-indicator">${arrow}</span></th>`;
+      return `<th data-key="${c.key}" title="Click to sort by ${escapeHtml(c.label)}" style="${c.align==='right'?'text-align:right':''}">${escapeHtml(c.label)}<span class="sort-indicator">${arrow}</span></th>`;
     }).join("");
     tr.querySelectorAll("th").forEach(th=>{
       th.addEventListener("click",()=>{
         const k=th.dataset.key;
         if(state.sortKey===k)state.sortDir=state.sortDir==="asc"?"desc":"asc";
-        else{state.sortKey=k;state.sortDir="asc";}
+        else{state.sortKey=k;state.sortDir=defaultDirFor(k);}
         clearView();
         renderAll();
       });
+    });
+  }
+
+  // Numeric and date keys default to descending (most recent / highest first).
+  function defaultDirFor(key){
+    const t = sortTypeFor(key);
+    if(t === "number" || t === "datetime" || t === "date") return "desc";
+    return "asc";
+  }
+
+  function prettyGroupLabel(groupName){
+    if(GROUPS && GROUPS[groupName] && GROUPS[groupName].label) return GROUPS[groupName].label;
+    return (groupName || "other").replace(/_/g," ").replace(/\b\w/g, m=>m.toUpperCase());
+  }
+
+  function renderSortControls(){
+    const sel = document.getElementById("sort-key");
+    const search = document.getElementById("sort-search");
+    if(!sel) return;
+
+    // Rebuild options (schema may have just loaded)
+    const filter = (search && search.value || "").toLowerCase().trim();
+
+    let html = "";
+
+    // Group 1: Display columns (what the table shows)
+    const col1 = COLUMNS
+      .filter(c => !filter || c.label.toLowerCase().includes(filter) || c.key.toLowerCase().includes(filter))
+      .map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join("");
+    if(col1) html += `<optgroup label="Displayed columns">${col1}</optgroup>`;
+
+    // Group 2+: all contact properties, grouped by HubSpot property group
+    if(SCHEMA && SCHEMA.length){
+      const byGroup = {};
+      for(const s of SCHEMA){
+        (byGroup[s.groupName] = byGroup[s.groupName] || []).push(s);
+      }
+      // Sort group names by HubSpot displayOrder if available, else alphabetically
+      const groupNames = Object.keys(byGroup).sort((a,b)=>{
+        const oa = GROUPS[a]?.order ?? 999;
+        const ob = GROUPS[b]?.order ?? 999;
+        if(oa !== ob) return oa - ob;
+        return prettyGroupLabel(a).localeCompare(prettyGroupLabel(b));
+      });
+      for(const g of groupNames){
+        const items = byGroup[g]
+          .filter(s => !filter || s.label.toLowerCase().includes(filter) || s.name.toLowerCase().includes(filter))
+          .sort((a,b)=>a.label.localeCompare(b.label));
+        if(!items.length) continue;
+        const opts = items.map(s=>{
+          return `<option value="prop:${escapeHtml(s.name)}" title="${escapeHtml(s.name)} (${escapeHtml(s.type||'string')})">${escapeHtml(s.label)}</option>`;
+        }).join("");
+        html += `<optgroup label="${escapeHtml(prettyGroupLabel(g))}">${opts}</optgroup>`;
+      }
+    }
+
+    sel.innerHTML = html || '<option disabled>No properties available</option>';
+    const countEl = document.getElementById("sort-count");
+    if(countEl){
+      const n = (SCHEMA ? SCHEMA.length : 0) + COLUMNS.length;
+      countEl.textContent = n ? `(${n} fields)` : "";
+    }
+    // Try to preserve the current selection
+    sel.value = state.sortKey;
+    if(sel.value !== state.sortKey){
+      // Selected key got filtered out — pick it anyway so state stays consistent
+      const opt = document.createElement("option");
+      opt.value = state.sortKey;
+      opt.textContent = state.sortKey;
+      sel.appendChild(opt);
+      sel.value = state.sortKey;
+    }
+    document.querySelectorAll(".dir-toggle button").forEach(b=>{
+      b.classList.toggle("active", b.dataset.dir===state.sortDir);
     });
   }
 
@@ -644,6 +776,7 @@
     buildFacets(rows);
     renderActiveFilters();
     renderViews();
+    renderSortControls();
     updateHash();
   }
 
@@ -772,6 +905,8 @@
       raw = data;
       ROWS = data.rows || [];
       PORTAL = data.portalId || 0;
+      SCHEMA = data.schema || [];
+      GROUPS = data.groups || {};
       setMeta();
       if(!ROWS.length && data.note){ toast(data.note); }
       renderAll();
@@ -799,6 +934,29 @@
   }
 
   document.getElementById("btn-refresh").addEventListener("click",refreshNow);
+
+  // Sort controls in sidebar
+  document.getElementById("sort-key").addEventListener("change",e=>{
+    state.sortKey = e.target.value;
+    state.sortDir = defaultDirFor(state.sortKey);
+    clearView();
+    renderAll();
+  });
+  const sortSearch = document.getElementById("sort-search");
+  if(sortSearch){
+    let t;
+    sortSearch.addEventListener("input",()=>{
+      clearTimeout(t);
+      t = setTimeout(renderSortControls, 80); // debounce; only rebuilds the options
+    });
+  }
+  document.querySelectorAll(".dir-toggle button").forEach(b=>{
+    b.addEventListener("click",()=>{
+      state.sortDir = b.dataset.dir;
+      clearView();
+      renderAll();
+    });
+  });
 
   // Restore state from URL hash so share links work, BEFORE data loads so sort/filter is applied on first render.
   const restored = readHash();
