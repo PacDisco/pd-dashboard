@@ -76,6 +76,7 @@
   .filter-row .row-values .muted-note{color:var(--muted);font-size:11px;padding:4px 2px;font-style:italic}
   .btn-add-filter{width:100%;padding:8px;font-size:13px;border:1px dashed #94a3b8;background:transparent;color:var(--muted);border-radius:6px;cursor:pointer;font-weight:500}
   .btn-add-filter:hover{border-color:var(--accent);color:var(--accent);background:#f0fdfa}
+  .schema-warning{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:7px 9px;border-radius:6px;font-size:11.5px;line-height:1.4;margin-bottom:6px}
 
   .views-bar{background:#f1f5f9;border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .views-bar .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
@@ -837,8 +838,20 @@
 
   // ---- Filter builder UI -------------------------------------------------
   function propertyChoicesHtml(selectedName){
-    // Returns optgroup'd options for the property-picker dropdown, drawn from SCHEMA.
-    if(!SCHEMA || !SCHEMA.length) return '<option value="">(schema loading...)</option>';
+    // Returns optgroup'd options for the property-picker dropdown.
+    // Uses full SCHEMA when available; falls back to COLUMNS when the snapshot
+    // doesn't include a schema yet (e.g., before the updated refresh function
+    // has been deployed and run).
+    const hasSchema = SCHEMA && SCHEMA.length;
+    const head = selectedName ? '' : '<option value="" disabled selected>Pick a property...</option>';
+
+    if(!hasSchema){
+      const cols = COLUMNS
+        .map(c => `<option value="${escapeHtml(c.key)}"${c.key===selectedName?" selected":""}>${escapeHtml(c.label)}</option>`)
+        .join("");
+      return head + `<optgroup label="Available columns (full schema not loaded)">${cols}</optgroup>`;
+    }
+
     const byGroup = {};
     for(const s of SCHEMA) (byGroup[s.groupName] = byGroup[s.groupName] || []).push(s);
     const groupNames = Object.keys(byGroup).sort((a,b)=>{
@@ -846,7 +859,7 @@
       if(oa !== ob) return oa - ob;
       return prettyGroupLabel(a).localeCompare(prettyGroupLabel(b));
     });
-    let html = '<option value="" disabled ' + (selectedName?"":"selected") + '>Pick a property...</option>';
+    let html = head;
     for(const g of groupNames){
       const items = byGroup[g].slice().sort((a,b)=>a.label.localeCompare(b.label));
       const opts = items.map(s => `<option value="${escapeHtml(s.name)}"${s.name===selectedName?" selected":""}>${escapeHtml(s.label)}</option>`).join("");
@@ -911,9 +924,13 @@
   function renderFilters(){
     const host = document.getElementById("filter-list");
     if(!host) return;
-    host.innerHTML = state.filters.length
+    const schemaWarning = (!SCHEMA || !SCHEMA.length) && raw.generatedAt
+      ? '<div class="schema-warning">Full property schema not in the snapshot. Click <strong>Refresh now</strong> after deploying the updated function to load all HubSpot fields.</div>'
+      : '';
+    const content = state.filters.length
       ? state.filters.map(renderFilterRow).join("")
       : '<div class="muted-note" style="color:var(--muted);font-size:12px;padding:4px 2px">No filters. Click "+ Add filter" to start.</div>';
+    host.innerHTML = schemaWarning + content;
 
     const countEl = document.getElementById("filter-count");
     if(countEl) countEl.textContent = state.filters.length ? `(${state.filters.length})` : "";
