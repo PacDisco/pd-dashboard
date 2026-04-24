@@ -4,15 +4,15 @@
  * Pulls Pacific Discovery "New Lead" contacts from HubSpot and writes the
  * normalized dataset to Netlify Blobs under the key "snapshot".
  *
+ * Fetches EVERY non-archived HubSpot contact property so the dashboard can
+ * sort/filter on any field. Heavy properties are pulled in chunked batch
+ * reads (100 IDs x 100 properties per call).
+ *
  * Runs:
- *   - Automatically every 4 hours (cron "0 * / 4 * * *")   [see config below]
+ *   - Scheduled every 4 hours (config.schedule "0 * / 4 * * *")
  *   - On demand via HTTP GET/POST to /.netlify/functions/refresh-contacts
  *
  * Env required: HUBSPOT_TOKEN (Private App access token).
- *
- * Returns JSON:
- *   { ok: true, total, generatedAt, durationMs }
- * on success, or { ok: false, error } on failure.
  */
 
 import { getStore } from "@netlify/blobs";
@@ -25,19 +25,8 @@ const PORTAL_ID = 3855728;
 const STORE_NAME = "pd-dashboard";
 const BLOB_KEY = "snapshot";
 
-const CONTACT_PROPERTIES = [
-  "firstname", "lastname", "email", "phone", "hubspot_owner_id",
-  "lifecyclestage", "hs_lead_status", "createdate", "lastmodifieddate",
-  "jobtitle", "company", "country", "city", "state",
-  "which_pacific_discovery_program_did_you_join_", "program_interest",
-  "program_dates", "pacific_discovery_outreach_group",
-  "how_did_you_hear_about_pacific_discovery",
-  "num_associated_deals", "total_revenue", "recent_deal_amount",
-  "recent_deal_close_date", "hs_last_sales_activity_timestamp",
-  "num_notes", "num_contacted_notes", "hs_analytics_num_visits",
-  "hs_full_name_or_email"
-];
-
+// Only used for the normalized display fields on each row; the raw "props"
+// bag on each row contains every property fetched from HubSpot.
 const LIFECYCLE_LABELS = {
   subscriber: "Subscriber",
   lead: "Lead",
@@ -87,24 +76,73 @@ async function hsFetch(url, options = {}, token) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`HubSpot ${res.status} ${res.statusText}: ${body.slice(0, 400)}`);
+    throw new Error(`HubSpot ${res.status} ${res.statusText} (${url}): ${body.slice(0, 400)}`);
   }
   return res.json();
 }
 
-async function searchContacts(token) {
-  const all = [];
+/**
+ * All non-archived contact property definitions.
+ * Returns: [{ name, label, type, fieldType, groupName }]
+ */
+async function fetchPropertySchema(token) {
+  const data = await hsFetch(
+    "https://api.hubapi.com/crm/v3/properties/contacts",
+    {},
+    token
+  );
+  return (data.results || [])
+    .filter(p => !p.archived)
+    .map(p => ({
+      name: p.name,
+      label: p.label || p.name,
+      type: p.type || "string",
+      fieldType: p.fieldType || "",
+      groupName: p.groupName || "other"
+    }));
+}
+
+/**
+ * Property group definitions for pretty section labels in the sort UI.
+ * Returns: { groupName: { label, order } }
+ */
+async function fetchPropertyGroups(token) {
+  try {
+    const data = await hsFetch(
+      "https://api.hubapi.com/crm/v3/properties/contacts/groups",
+      {},
+      token
+    );
+    const map = {};
+    for (const g of data.results || []) {
+      map[g.name] = {
+        label: g.label || g.name,
+        order: typeof g.displayOrder === "number" ? g.displayOrder : 999
+      };
+    }
+    return map;
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Paginated search: returns just the IDs of matching contacts (light payload).
+ */
+async function searchContactIds(token) {
+  const filterGroups = [{
+    filters: [
+      { propertyName: "company_tag", operator: "EQ", value: "Pacific Discovery" },
+      { propertyName: "hs_lead_status", operator: "EQ", value: "NEW" }
+    ]
+  }];
+  const ids = [];
   let after = "0";
   let total = null;
   while (true) {
     const body = {
-      filterGroups: [{
-        filters: [
-          { propertyName: "company_tag", operator: "EQ", value: "Pacific Discovery" },
-          { propertyName: "hs_lead_status", operator: "EQ", value: "NEW" }
-        ]
-      }],
-      properties: CONTACT_PROPERTIES,
+      filterGroups,
+      properties: ["hs_object_id"],
       sorts: [{ propertyName: "createdate", direction: "DESCENDING" }],
       limit: 100,
       after
@@ -115,12 +153,43 @@ async function searchContacts(token) {
       token
     );
     if (total === null) total = data.total;
-    all.push(...(data.results || []));
+    for (const r of data.results || []) ids.push(String(r.id));
     if (!data.paging?.next?.after) break;
     after = data.paging.next.after;
-    if (total != null && all.length >= total) break;
+    if (total != null && ids.length >= total) break;
   }
-  return all;
+  return ids;
+}
+
+/**
+ * Batch-read every contact with the given property list.
+ * Chunks both IDs (100 per call) and properties (100 per call),
+ * merging results by contact id.
+ */
+async function batchReadContacts(token, ids, propertyNames) {
+  const ID_CHUNK = 100;
+  const PROP_CHUNK = 100;
+  const propChunks = [];
+  for (let i = 0; i < propertyNames.length; i += PROP_CHUNK) {
+    propChunks.push(propertyNames.slice(i, i + PROP_CHUNK));
+  }
+  const merged = {};
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const idChunk = ids.slice(i, i + ID_CHUNK);
+    const inputs = idChunk.map(id => ({ id }));
+    for (const props of propChunks) {
+      const data = await hsFetch(
+        "https://api.hubapi.com/crm/v3/objects/contacts/batch/read",
+        { method: "POST", body: JSON.stringify({ inputs, properties: props }) },
+        token
+      );
+      for (const r of data.results || []) {
+        if (!merged[r.id]) merged[r.id] = { id: r.id, properties: {} };
+        Object.assign(merged[r.id].properties, r.properties || {});
+      }
+    }
+  }
+  return Object.values(merged);
 }
 
 async function fetchOwners(token) {
@@ -147,6 +216,12 @@ const toInt = v => { if (v == null || v === "") return 0; const n = parseInt(v, 
 const toFloat = v => { if (v == null || v === "") return 0; const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const toFloatOrNull = v => { if (v == null || v === "") return null; const n = parseFloat(v); return isNaN(n) ? null : n; };
 
+/**
+ * Produces both:
+ *   - The normalized display fields used by the current table columns.
+ *   - A `props` bag containing every raw HubSpot property value so the
+ *     dashboard can sort on any one of them.
+ */
 function normalize(contact, owners) {
   const p = contact.properties || {};
   const ownerId = p.hubspot_owner_id || "";
@@ -184,8 +259,37 @@ function normalize(contact, owners) {
     hs_last_sales_activity_timestamp: p.hs_last_sales_activity_timestamp || "",
     num_notes: toInt(p.num_notes),
     num_contacted_notes: toInt(p.num_contacted_notes),
-    hs_analytics_num_visits: toInt(p.hs_analytics_num_visits)
+    hs_analytics_num_visits: toInt(p.hs_analytics_num_visits),
+    // Raw properties bag — every field HubSpot returned, verbatim.
+    props: p
   };
+}
+
+/**
+ * Trims properties that are empty/null for every contact, so the sort UI
+ * doesn't show useless options and the payload stays lean.
+ */
+function trimEmptyProps(schema, rows) {
+  const hasValue = new Set();
+  for (const r of rows) {
+    const p = r.props || {};
+    for (const k of Object.keys(p)) {
+      const v = p[k];
+      if (v != null && v !== "") hasValue.add(k);
+    }
+  }
+  // Filter schema to only properties with at least one value somewhere.
+  const trimmedSchema = schema.filter(s => hasValue.has(s.name));
+  // Also drop empties from each row's props bag.
+  for (const r of rows) {
+    const p = r.props || {};
+    const cleaned = {};
+    for (const k of Object.keys(p)) {
+      if (hasValue.has(k)) cleaned[k] = p[k];
+    }
+    r.props = cleaned;
+  }
+  return trimmedSchema;
 }
 
 // ---- Handler ---------------------------------------------------------------
@@ -194,16 +298,33 @@ export default async (req, context) => {
   const started = Date.now();
   try {
     const token = requireToken();
-    const contacts = await searchContacts(token);
+
+    const [schemaAll, groups] = await Promise.all([
+      fetchPropertySchema(token),
+      fetchPropertyGroups(token)
+    ]);
+
+    const ids = await searchContactIds(token);
+    if (ids.length === 0) {
+      throw new Error("No contacts matched the Pacific Discovery / New Lead filter.");
+    }
+
+    const propertyNames = schemaAll.map(s => s.name);
+    const contacts = await batchReadContacts(token, ids, propertyNames);
+
     const owners = await fetchOwners(token);
     const rows = contacts.map(c => normalize(c, owners));
+
+    const schema = trimEmptyProps(schemaAll, rows);
 
     const payload = {
       generatedAt: new Date().toISOString(),
       filters: { company_tag: "Pacific Discovery", hs_lead_status: "NEW" },
       total: rows.length,
       portalId: PORTAL_ID,
-      rows
+      groups,     // { groupName: { label, order } }
+      schema,     // [{ name, label, type, fieldType, groupName }, ...]
+      rows        // each row has normalized fields + a `props` bag
     };
 
     const store = getStore(STORE_NAME);
@@ -212,6 +333,7 @@ export default async (req, context) => {
     const out = {
       ok: true,
       total: rows.length,
+      propertiesCount: schema.length,
       generatedAt: payload.generatedAt,
       durationMs: Date.now() - started
     };
