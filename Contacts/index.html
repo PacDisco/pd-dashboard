@@ -17,6 +17,9 @@
   .topbar h1{font-size:16px;margin:0;font-weight:600;letter-spacing:-0.01em}
   .topbar .meta{font-size:12px;color:#cbd5e1;display:flex;gap:14px;flex-wrap:wrap}
   .topbar .meta .chip{background:rgba(255,255,255,.08);padding:3px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.08)}
+  .topbar .loading-chip{display:none;background:#fef3c7;color:#92400e;border-color:#fcd34d;font-weight:500}
+  .topbar .loading-chip.on{display:inline-block;animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
   .topbar .spacer{flex:1}
   .topbar .actions{display:flex;gap:8px}
   .btn{background:#fff;color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500}
@@ -159,6 +162,7 @@
     <span class="chip" id="meta-total">Loading...</span>
     <span class="chip" id="meta-source">company_tag = Pacific Discovery &amp; hs_lead_status = New Lead</span>
     <span class="chip" id="meta-generated"></span>
+    <span class="chip loading-chip" id="loading-chip">Loading&hellip;</span>
   </div>
   <div class="spacer"></div>
   <div class="actions">
@@ -259,6 +263,7 @@
   // Endpoints (relative paths, so it works on any Netlify deploy domain)
   const DATA_URL    = "/.netlify/functions/contacts";
   const REFRESH_URL = "/.netlify/functions/refresh-contacts";
+  const SEARCH_URL  = "/.netlify/functions/search-contacts";
 
   // Populated after the initial fetch.
   let raw = { rows: [], portalId: 0, generatedAt: null, total: 0, schema: [], groups: {} };
@@ -526,7 +531,7 @@
       el.addEventListener("click",(e)=>{
         if(e.target.classList.contains("x"))return;
         const v = BUILTIN_VIEWS.find(x=>x.id===el.dataset.id);
-        if(v){applyFilters(v.filters);state.activeView=v.id;renderAll();updateHash();}
+        if(v){applyFilters(v.filters);state.activeView=v.id;renderAll();updateHash();scheduleLoad(100);}
       });
     });
     // Click a personal pill to activate
@@ -534,7 +539,7 @@
       el.addEventListener("click",(e)=>{
         if(e.target.classList.contains("x"))return;
         const v = loadUserViews().find(x=>x.id===el.dataset.id);
-        if(v){applyFilters(v.filters);state.activeView="user:"+v.id;renderAll();updateHash();}
+        if(v){applyFilters(v.filters);state.activeView="user:"+v.id;renderAll();updateHash();scheduleLoad(100);}
       });
     });
     // × on built-in: hide for this browser only
@@ -941,7 +946,7 @@
       const f = state.filters.find(x => x.id === id);
       if(!f) return;
 
-      // Property change → set default op, clear value
+      // Property change → set default op, clear value, and (re)load
       row.querySelector(".row-prop").addEventListener("change", e => {
         f.prop = e.target.value;
         const s = SCHEMA.find(x=>x.name===f.prop);
@@ -949,6 +954,8 @@
         f.op = defaultOpFor(k);
         f.value = undefined; f.value2 = undefined;
         clearView(); renderAll();
+        // For noValue ops (is_empty/is_not_empty/is_true/etc.) we can fetch right away
+        if(opDef(k, f.op)?.noValue) scheduleLoad(200);
       });
       // Op change
       const opSel = row.querySelector(".row-op");
@@ -957,12 +964,16 @@
           f.op = e.target.value;
           f.value = undefined; f.value2 = undefined;
           clearView(); renderAll();
+          const s = SCHEMA.find(x=>x.name===f.prop);
+          const k = kindOf(s?.type);
+          if(opDef(k, f.op)?.noValue) scheduleLoad(200);
         });
       }
       // Remove
       row.querySelector(".remove").addEventListener("click", () => {
         state.filters = state.filters.filter(x => x.id !== id);
         clearView(); renderAll();
+        scheduleLoad(100);
       });
       // Value input(s)
       const valueWrap = row.querySelector(".row-values");
@@ -976,12 +987,14 @@
               const sel = Array.from(valueWrap.querySelectorAll('input[type="checkbox"]:checked')).map(x => x.value);
               f.value = sel;
               clearView(); scheduleRender();
+              scheduleLoad();
             });
           });
         } else {
           const inputs = valueWrap.querySelectorAll("input");
-          if(inputs[0]) inputs[0].addEventListener("input", e => { f.value = e.target.value; clearView(); scheduleRender(); });
-          if(inputs[1]) inputs[1].addEventListener("input", e => { f.value2 = e.target.value; clearView(); scheduleRender(); });
+          const onInput = () => { clearView(); scheduleRender(); scheduleLoad(500); };
+          if(inputs[0]) inputs[0].addEventListener("input", e => { f.value = e.target.value; onInput(); });
+          if(inputs[1]) inputs[1].addEventListener("input", e => { f.value2 = e.target.value; onInput(); });
         }
       }
     });
@@ -1007,6 +1020,7 @@
   function addFilter(){
     state.filters.push({id:"f"+Math.random().toString(36).slice(2,8), prop:"", op:"", value:undefined, value2:undefined});
     clearView(); renderAll();
+    // Don't trigger a load yet — incomplete filter (no prop/op/value) would produce no-op
   }
 
   function renderAll(){
@@ -1105,9 +1119,14 @@
   function clearView(){state.activeView=null;}
 
   // Wire up events
-  document.getElementById("search-input").addEventListener("input",e=>{state.q=e.target.value.trim();clearView();renderAll();});
+  document.getElementById("search-input").addEventListener("input",e=>{
+    state.q=e.target.value.trim();
+    clearView();
+    renderAll();
+    // The free-text search box does client-side filtering only, so no reload needed.
+  });
   document.getElementById("btn-add-filter").addEventListener("click",addFilter);
-  document.getElementById("btn-reset").addEventListener("click",()=>{clearView();resetFilters();});
+  document.getElementById("btn-reset").addEventListener("click",()=>{clearView();resetFilters();scheduleLoad(100);});
   document.getElementById("btn-csv").addEventListener("click",toCSV);
   document.getElementById("btn-share").addEventListener("click",copyShareLink);
   document.getElementById("btn-save-view").addEventListener("click",saveCurrentView);
@@ -1127,24 +1146,80 @@
     }
   }
 
+  let _inflight = null;   // AbortController for the current data fetch, if any
+  let _loadTimer = null;  // debounce handle
+  let _mode = "snapshot"; // "snapshot" (from blob) or "live" (search-contacts)
+
+  function setLoading(on, note){
+    const el = document.getElementById("loading-chip");
+    if(!el) return;
+    if(on){
+      el.textContent = note || "Loading\u2026";
+      el.classList.add("on");
+    } else {
+      el.classList.remove("on");
+    }
+  }
+
   async function loadData(){
+    // Cancel any in-flight fetch so we don't race
+    if(_inflight){ try{ _inflight.abort(); }catch(e){} _inflight = null; }
+
+    const hasFilter = state.filters.length > 0;
+    const useLive   = hasFilter; // any filter → live search
+    const controller = new AbortController();
+    _inflight = controller;
+
     try{
-      const res = await fetch(DATA_URL, {cache:"no-store"});
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const data = await res.json();
+      setLoading(true, useLive ? "Searching HubSpot\u2026" : "Loading snapshot\u2026");
+      let data;
+      if(useLive){
+        const res = await fetch(SEARCH_URL, {
+          method:"POST",
+          headers:{"content-type":"application/json"},
+          body: JSON.stringify({filters: state.filters, q: state.q}),
+          cache:"no-store",
+          signal: controller.signal
+        });
+        if(!res.ok){
+          const body = await res.json().catch(()=>({}));
+          throw new Error(body.error || ("HTTP "+res.status));
+        }
+        data = await res.json();
+        _mode = "live";
+      } else {
+        const res = await fetch(DATA_URL, {cache:"no-store", signal: controller.signal});
+        if(!res.ok) throw new Error("HTTP "+res.status);
+        data = await res.json();
+        _mode = "snapshot";
+      }
+
       raw = data;
       ROWS = data.rows || [];
-      PORTAL = data.portalId || 0;
-      SCHEMA = data.schema || [];
-      GROUPS = data.groups || {};
+      PORTAL = data.portalId || PORTAL || 0;
+      // Schema/Groups come from both endpoints; keep what we had if new payload didn't include them.
+      if(Array.isArray(data.schema) && data.schema.length) SCHEMA = data.schema;
+      if(data.groups) GROUPS = data.groups;
+
       setMeta();
       if(!ROWS.length && data.note){ toast(data.note); }
+      if(data.truncated){
+        toast(`Showing first ${data.total} of ${data.hubspotMatching} HubSpot matches. Narrow your filters to see more.`);
+      }
       renderAll();
     }catch(err){
-      toast("Could not load contacts: "+err.message);
-      setMeta();
+      if(err.name === "AbortError") return; // superseded by a newer request
+      toast((useLive ? "Live search failed: " : "Could not load: ") + (err.message || err));
       renderAll();
+    }finally{
+      if(_inflight === controller){ _inflight = null; setLoading(false); }
     }
+  }
+
+  // Debounced data reload — call on any filter/search change.
+  function scheduleLoad(delayMs){
+    clearTimeout(_loadTimer);
+    _loadTimer = setTimeout(loadData, typeof delayMs === "number" ? delayMs : 350);
   }
 
   async function refreshNow(){
@@ -1198,7 +1273,7 @@
   // React to hash changes (e.g., user pastes a new share link)
   window.addEventListener("hashchange",()=>{
     const r = readHash();
-    if(r){applyFilters(r.f || {}); state.activeView = r.v || null; renderAll();}
+    if(r){applyFilters(r.f || {}); state.activeView = r.v || null; renderAll(); scheduleLoad(100);}
   });
 
   // Initial render with empty rows, then fetch
