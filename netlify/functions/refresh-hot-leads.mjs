@@ -76,13 +76,21 @@ const CONFIG = {
   sqlScoring: {
     formSubmissionLast14Days: 30,
     multipleUniqueForms: 10,           // >= 2 unique forms submitted (lifetime)
-    meetingBookedEver: 25,
-    salesEmailRepliedLast14Days: 25,
+    meetingBookedEver: 35,             // Bumped from 25 — by far the most predictive
+                                       // signal in real "hot lead" data. Detects via
+                                       // engagements_last_meeting_booked_medium OR a
+                                       // "Meetings Link:" conversion event.
+    applyNowFormBonus: 15,             // Apply Now / Registration form is high-intent.
+                                       // Stacks on top of formSubmissionLast14Days.
+    salesEmailRepliedLast14Days: 30,   // Bumped from 25 — replies are rare and decisive.
     salesEmailClickedLast14Days: 15,
     salesEmailOpenedLast7Days: 10,
     threePlusSessionsLast14Days: 15,
     pageviewLast7Days: 10,
     hasOwner: 5,
+    householdLastnameMatch: 20,        // Shared lastname with a contact in the current
+                                       // pull who has a deal. Catches parents whose
+                                       // student is actively progressing.
   },
 
   // ---- APPLICANT PIPELINE ----
@@ -302,7 +310,8 @@ async function searchSQLCandidates() {
     "hs_last_sales_activity_timestamp", "notes_last_contacted",
     "program_interest",
     // Engagement signals used for scoring:
-    "recent_conversion_date", "num_conversion_events", "num_unique_conversion_events", "recent_conversion_event_name",
+    "recent_conversion_date", "num_conversion_events", "num_unique_conversion_events",
+    "recent_conversion_event_name", "first_conversion_event_name",
     "hs_sales_email_last_replied", "hs_sales_email_last_clicked", "hs_sales_email_last_opened",
     "hs_analytics_num_visits", "hs_analytics_last_visit_timestamp", "hs_analytics_num_page_views",
     "engagements_last_meeting_booked_medium",
@@ -329,7 +338,7 @@ async function searchSQLCandidates() {
   return out;
 }
 
-function computeSQLScore(props) {
+function computeSQLScore(props, context = {}) {
   const now = Date.now();
   const within = (iso, days) => iso && (now - new Date(iso).getTime()) <= days * 86400000;
   const weights = CONFIG.sqlScoring;
@@ -337,17 +346,45 @@ function computeSQLScore(props) {
   let score = 0;
   const add = (key, points) => { if (points > 0) { score += points; breakdown[key] = points; } };
 
+  // Form submitted in last 14 days
   if (within(props.recent_conversion_date, 14)) add("form_last_14d", weights.formSubmissionLast14Days);
   if (Number(props.num_unique_conversion_events || 0) >= 2) add("multi_forms", weights.multipleUniqueForms);
-  if (props.engagements_last_meeting_booked_medium) add("meeting_booked", weights.meetingBookedEver);
+
+  // Meeting booked — checks both the engagement property AND the conversion-
+  // event name (which is what HubSpot's Meetings tool actually populates for
+  // most leads in this data set).
+  const recentConv = props.recent_conversion_event_name || "";
+  const firstConv  = props.first_conversion_event_name || "";
+  const isMeetingsLinkConv = /meetings link/i.test(recentConv) || /meetings link/i.test(firstConv);
+  if (props.engagements_last_meeting_booked_medium || isMeetingsLinkConv) {
+    add("meeting_booked", weights.meetingBookedEver);
+  }
+
+  // Apply Now / Registration form (high-intent) — bonus on top of any form submission.
+  const isApplyNow = /apply now|registration form/i.test(recentConv) || /apply now|registration form/i.test(firstConv);
+  if (isApplyNow) add("apply_now_form", weights.applyNowFormBonus);
+
+  // Sales email engagement
   if (within(props.hs_sales_email_last_replied, 14)) add("email_replied_14d", weights.salesEmailRepliedLast14Days);
   if (within(props.hs_sales_email_last_clicked, 14)) add("email_clicked_14d", weights.salesEmailClickedLast14Days);
   if (within(props.hs_sales_email_last_opened, 7))  add("email_opened_7d",   weights.salesEmailOpenedLast7Days);
+
+  // Web behavior
   if (Number(props.hs_analytics_num_visits || 0) >= 3 && within(props.hs_analytics_last_visit_timestamp, 14)) {
     add("sessions_3_14d", weights.threePlusSessionsLast14Days);
   }
   if (within(props.hs_analytics_last_visit_timestamp, 7)) add("pageview_7d", weights.pageviewLast7Days);
+
+  // Has an admissions owner
   if (props.hubspot_owner_id) add("has_owner", weights.hasOwner);
+
+  // Household signal — same lastname as a contact in this data pull who has a
+  // deal. Catches parents like Boris Lieberman / Laura Keller whose own
+  // engagement looks light but whose student is in the funnel.
+  const lastname = (props.lastname || "").trim().toLowerCase();
+  if (lastname && context.householdLastnames?.has(lastname)) {
+    add("household_match", weights.householdLastnameMatch);
+  }
 
   // Top contributing signal for display
   const topSignal = Object.entries(breakdown).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
@@ -475,6 +512,18 @@ export default async () => {
   const nowIso = startedAt.toISOString();
   const records = [];
 
+  // Pre-build household lastname set: contacts in the current pull who have
+  // at least one associated deal. SQL candidates sharing a lastname with this
+  // set get a "parent of an active student" bonus during scoring.
+  const householdLastnames = new Set();
+  for (const c of contacts) {
+    const ids = contactToDeals[c.id] || [];
+    if (ids.length > 0) {
+      const ln = (c.properties.lastname || "").trim().toLowerCase();
+      if (ln && ln.length >= 2) householdLastnames.add(ln);
+    }
+  }
+
   for (const c of contacts) {
     const props = c.properties;
     const dealIds = contactToDeals[c.id] || [];
@@ -503,7 +552,7 @@ export default async () => {
       // Score-based classification — a contact is only eligible if they have
       // NO associated deals. The moment a deal exists, they belong in
       // Applicant/Opportunity (deal-driven) or they're past the hot list.
-      const scored = computeSQLScore(props);
+      const scored = computeSQLScore(props, { householdLastnames });
       if (scored.score >= CONFIG.sqlThreshold) {
         bucket = "SQL";
         hot = true;
