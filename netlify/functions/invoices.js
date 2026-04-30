@@ -415,13 +415,15 @@ async function handleUpdate(body) {
   const sets = [];
   const args = [];
   const allow = [
-    'vendor', 'amount', 'due_date', 'program_id', 'invoice_number', 'notes',
+    'vendor', 'amount', 'currency', 'due_date', 'program_id', 'invoice_number', 'notes',
     'approved_to_pay', 'approved_by', 'paid', 'paid_date', 'paid_by',
     'rescheduled_from', 'reschedule_reason',
   ];
   for (const k of Object.keys(patch)) {
     if (!allow.includes(k)) continue;
-    args.push(patch[k]);
+    let v = patch[k];
+    if (k === 'currency') v = String(v || '').toUpperCase().slice(0, 3);
+    args.push(v);
     sets.push(`${k} = $${args.length}`);
   }
   if (patch.approved_to_pay === true && !patch.approved_at) {
