@@ -8,6 +8,7 @@
  *   - upload            POST  -> multipart or base64 PDF -> Drive + Claude + DB
  *   - update            POST  -> { id, patch: { approved_to_pay, paid, due_date, ... } }
  *   - delete            POST  -> { id }  (removes payment row; Drive file stays)
+ *   - delete-bulk       POST  -> { ids: [1,2,3] }  (bulk remove)
  *   - inbound           POST  -> Gmail Apps Script webhook (see apps-script/Code.gs)
  *   - programs-create   POST  -> { name, sort_order? }
  *   - programs-update   POST  -> { id, patch: { name, sort_order, is_active } }
@@ -103,25 +104,61 @@ async function uploadToDrive({ filename, mimeType, buffer }) {
 // --------------------------------------------------------------------------
 // Claude invoice parsing
 // --------------------------------------------------------------------------
-async function parseInvoiceWithClaude(buffer, mimeType) {
-  const prompt = `You are reading an invoice. Extract the following fields and return ONLY valid JSON, no markdown fences, no commentary.
 
-Return an ARRAY of invoice line-groups:
+// Extract a JSON value from a response that might have prose around it.
+// Tries strict JSON first, then code-fence stripping, then bracket-bounded extraction.
+function extractJSON(text) {
+  if (!text) return null;
+  const tries = [
+    text.trim(),
+    text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim(),
+  ];
+  // First [ ... last ]
+  const firstBracket = text.indexOf('[');
+  const lastBracket  = text.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    tries.push(text.slice(firstBracket, lastBracket + 1));
+  }
+  // First { ... last }
+  const firstBrace = text.indexOf('{');
+  const lastBrace  = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    tries.push(text.slice(firstBrace, lastBrace + 1));
+  }
+  for (const candidate of tries) {
+    try { return JSON.parse(candidate); } catch (_) { /* keep trying */ }
+  }
+  return null;
+}
+
+async function parseInvoiceWithClaude(buffer, mimeType) {
+  const prompt = `You are reading an invoice. Return ONLY a JSON array, no markdown fences, no commentary, no leading or trailing text.
+
+Each array element represents one currency on the invoice:
 
 [
   {
-    "vendor": string,            // The company/person being paid
+    "vendor": string,            // The party being paid (NOT the customer being billed)
     "invoice_number": string|null,
-    "amount": number,            // Total due FOR THIS CURRENCY (no symbol)
-    "currency": string,          // 3-letter ISO code. Only set this if a currency symbol or code is clearly shown (e.g. "$NZ", "USD", "EUR", "£"). If ambiguous, default to "NZD".
+    "amount": number,            // Total due FOR THIS CURRENCY, after subtracting credits/refunds. NEVER negative.
+    "currency": string,          // 3-letter ISO code (USD, NZD, EUR, AUD, etc.). If ambiguous, default to "NZD".
     "due_date": string           // ISO YYYY-MM-DD. If only an issue date is shown, add 30 days.
   }
 ]
 
-Rules:
-- If the whole invoice is in ONE currency, return a single-element array.
-- If the invoice contains items billed in DIFFERENT currencies (e.g. some items in USD and some in EUR on the same document), return one element PER currency, with each element's "amount" being that currency's subtotal. Vendor / invoice_number / due_date are the same across the array.
-- If any required field (vendor/amount/due_date) is unreadable, use your best guess based on the document.`;
+Rules for "amount":
+  - If the invoice has a clearly labelled "Total Amount Due", "Balance Due", "Amount Due", "Total Owed" or similar — USE THAT NUMBER for the predominant currency. Ignore the line-by-line subtotal calculation.
+  - If line items have DIFFERENT currencies (some USD, some EUR), produce one array element per currency. The "amount" for each currency is the sum of its lines (subtracting any negative/credit lines for that currency). If a single overall total is given without splitting by currency, put the bulk in the predominant currency and the smaller-currency lines as their own element.
+  - Negative line items are credits (already paid, refunds). Subtract them, don't include them as separate items.
+  - Skip header rows, footers, "Total" row labels, and bank-detail sections — these aren't payable items.
+
+Rules for "vendor":
+  - The party who should RECEIVE money (the contractor/instructor/supplier name on the invoice). NOT the customer being invoiced.
+
+Rules for "currency":
+  - Use codes shown next to amounts. If the invoice mixes "$" without country qualifier, prefer "NZD" unless the rest of the invoice strongly implies otherwise.
+
+If the document is genuinely not an invoice or you can't extract anything meaningful, return [] (empty array). Otherwise return at least one element.`;
 
   const content = mimeType === 'application/pdf'
     ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }]
@@ -129,16 +166,19 @@ Rules:
 
   const msg = await anthropic().messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 500,
+    max_tokens: 1500,
     messages: [{ role: 'user', content: [...content, { type: 'text', text: prompt }] }],
   });
 
-  const text = msg.content.find(c => c.type === 'text')?.text?.trim() || '[]';
-  // Strip any stray code fences just in case
-  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const parsed = JSON.parse(clean);
-  // Always normalize to array. Old callers can still do result[0] for single-currency invoices.
-  return Array.isArray(parsed) ? parsed : [parsed];
+  const text = msg.content.find(c => c.type === 'text')?.text || '';
+  const parsed = extractJSON(text);
+  if (parsed === null) {
+    // Surface the raw response so we can iterate on the prompt later
+    const err = new Error(`Claude returned unparseable response: ${text.slice(0, 400)}`);
+    err.rawResponse = text;
+    throw err;
+  }
+  return Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' ? [parsed] : []);
 }
 
 // Text-only variant for emails that arrive without an attachment.
@@ -190,9 +230,12 @@ Return the array, nothing else.`;
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const text = msg.content.find(c => c.type === 'text')?.text?.trim() || '[]';
-  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const parsed = JSON.parse(clean);
+  const text = msg.content.find(c => c.type === 'text')?.text || '';
+  const parsed = extractJSON(text);
+  if (parsed === null) {
+    console.error('Body-text Claude parse failed. Raw response:', text.slice(0, 800));
+    return [];
+  }
   return Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' ? [parsed] : []);
 }
 
@@ -213,16 +256,29 @@ async function handleList(params) {
   if (params.from) { args.push(params.from); where.push(`due_date >= $${args.length}`); }
   if (params.to)   { args.push(params.to);   where.push(`due_date <= $${args.length}`); }
 
+  // Sort options. Allow-listed for safety since this is interpolated into SQL.
+  const sortMap = {
+    'due_asc':       'p.due_date ASC, p.id ASC',
+    'due_desc':      'p.due_date DESC, p.id DESC',
+    'created_asc':   'p.created_at ASC, p.id ASC',
+    'created_desc':  'p.created_at DESC, p.id DESC',
+    'amount_asc':    'p.amount ASC, p.id ASC',
+    'amount_desc':   'p.amount DESC, p.id DESC',
+    'vendor_asc':    'lower(p.vendor) ASC, p.id ASC',
+  };
+  const sortKey = sortMap[params.sort] ? params.sort : 'due_asc';
+  const orderClause = `p.paid ASC, ${sortMap[sortKey]}`;
+
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const rows = await sql().query(
     `SELECT p.*, pr.name AS program_name
      FROM payments p
      LEFT JOIN programs pr ON pr.id = p.program_id
      ${whereSql}
-     ORDER BY p.paid ASC, p.due_date ASC, p.id ASC`,
+     ORDER BY ${orderClause}`,
     args
   );
-  return ok({ payments: rows });
+  return ok({ payments: rows, sort: sortKey });
 }
 
 async function handlePrograms(params) {
@@ -390,6 +446,13 @@ async function handleDelete(body) {
   return ok({ deleted: rows[0] });
 }
 
+async function handleDeleteBulk(body) {
+  const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
+  if (!ids.length) return bad('ids array required');
+  const rows = await sql()`DELETE FROM payments WHERE id = ANY(${ids}::int[]) RETURNING id, vendor, amount`;
+  return ok({ deleted: rows, count: rows.length });
+}
+
 async function handleDebug() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   const report = {
@@ -499,17 +562,29 @@ async function handleInbound(body, headers) {
       const buffer = Buffer.from(att.data, 'base64');
 
       let lineGroups;
+      let parseError = null;
       try {
         lineGroups = await parseInvoiceWithClaude(buffer, mimeType);
       } catch (e) {
+        parseError = e.message || String(e);
+        console.error(`Claude parse failed for attachment "${att.filename}":`, parseError);
+        if (e.rawResponse) console.error('Raw Claude output:', e.rawResponse.slice(0, 800));
         lineGroups = [{
-          vendor: body.from || 'Unknown (email)',
+          vendor: `⚠ Parse failed — ${body.from || 'Unknown'}`,
           amount: 0,
           currency: 'NZD',
           due_date: new Date().toISOString().slice(0, 10),
         }];
       }
-      if (!lineGroups.length) lineGroups = [{ vendor: 'Unknown', amount: 0, currency: 'NZD', due_date: new Date().toISOString().slice(0, 10) }];
+      if (!lineGroups.length) {
+        parseError = parseError || 'Claude returned an empty array';
+        lineGroups = [{
+          vendor: `⚠ Parse failed — ${body.from || 'Unknown'}`,
+          amount: 0,
+          currency: 'NZD',
+          due_date: new Date().toISOString().slice(0, 10),
+        }];
+      }
 
       // Upload once per attachment
       const first = lineGroups[0];
@@ -520,7 +595,9 @@ async function handleInbound(body, headers) {
       for (let i = 0; i < lineGroups.length; i++) {
         const lg = lineGroups[i];
         const base = `From: ${body.from || ''}\nSubject: ${body.subject || ''}`;
-        const extra = multi ? `\n(Line ${i + 1} of ${lineGroups.length} — multi-currency invoice)` : '';
+        const extra = parseError
+          ? `\n\n⚠ Auto-parse failed. Please open the Drive file and edit this row.\nReason: ${parseError.slice(0, 300)}`
+          : (multi ? `\n(Line ${i + 1} of ${lineGroups.length} — multi-currency invoice)` : '');
         const rows = await sql()`
           INSERT INTO payments
             (vendor, amount, currency, invoice_number, due_date,
@@ -594,6 +671,7 @@ exports.handler = async (event) => {
     if (method === 'POST' && action === 'upload')           return await handleUpload(body);
     if (method === 'POST' && action === 'update')           return await handleUpdate(body);
     if (method === 'POST' && action === 'delete')           return await handleDelete(body);
+    if (method === 'POST' && action === 'delete-bulk')      return await handleDeleteBulk(body);
     if (method === 'POST' && action === 'inbound')          return await handleInbound(body, event.headers || {});
     if (method === 'POST' && action === 'programs-create')  return await handleProgramCreate(body);
     if (method === 'POST' && action === 'programs-update')  return await handleProgramUpdate(body);
