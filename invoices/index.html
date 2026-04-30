@@ -134,6 +134,17 @@
   .amount input:hover  { border-color: var(--border); background: #fff; }
   .amount input:focus  { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px var(--accent-soft); }
   .amount .ccy { color: var(--muted); font-size: 11px; margin-left: 2px; font-weight: 500; text-transform: uppercase; }
+  .amount .ccy-input {
+    width: 46px; padding: 4px 4px;
+    border: 1px solid transparent; border-radius: 4px;
+    background: transparent; font-size: 11px; font-family: inherit;
+    color: var(--muted); text-transform: uppercase; font-weight: 500;
+    text-align: center; margin-left: 2px;
+  }
+  .amount .ccy-input:hover { border-color: var(--border); background: #fff; color: var(--text); }
+  .amount .ccy-input:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px var(--accent-soft); color: var(--text); }
+  .row-select { cursor: pointer; }
+  tr.row-checked { background: var(--accent-soft) !important; }
   td.nzd-col { color: var(--muted); font-weight: 400; font-size: 12px; }
 
   .delete-btn {
@@ -220,7 +231,17 @@
         <option value="">All</option>
       </select>
       <select id="filter-program"><option value="">All programs</option></select>
+      <select id="filter-sort" title="Sort order">
+        <option value="due_asc">Due date · earliest first</option>
+        <option value="due_desc">Due date · latest first</option>
+        <option value="created_desc">Date added · newest first</option>
+        <option value="created_asc">Date added · oldest first</option>
+        <option value="amount_desc">Amount · highest first</option>
+        <option value="amount_asc">Amount · lowest first</option>
+        <option value="vendor_asc">Vendor · A → Z</option>
+      </select>
       <div class="spacer"></div>
+      <button id="bulk-delete-btn" onclick="bulkDelete()" style="display:none;background:#fee;color:var(--red);border-color:#fcc;">🗑 Delete selected</button>
       <button onclick="exportCSV()" title="Export the filtered rows as CSV">⬇ Export CSV</button>
       <button onclick="loadPayments()">↻ Refresh</button>
     </div>
@@ -432,6 +453,95 @@
     loadPayments();
   }
 
+  async function updateCurrency(id, inputEl) {
+    const newCurrency = (inputEl.value || '').trim().toUpperCase().slice(0, 3);
+    const original = inputEl.dataset.original;
+    if (!/^[A-Z]{3}$/.test(newCurrency)) {
+      toast('Currency must be 3 letters (e.g. NZD, USD)', 'err');
+      inputEl.value = original;
+      return;
+    }
+    if (newCurrency === original) return;
+    inputEl.value = newCurrency;
+    const res = await fetch(`${API}?action=update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch: { currency: newCurrency } }),
+    }).then(r => r.json());
+    if (res.error) {
+      toast(res.error, 'err');
+      inputEl.value = original;
+      return;
+    }
+    inputEl.dataset.original = newCurrency;
+    toast('Currency updated');
+    loadPayments();   // refresh KPIs / NZD column
+  }
+
+  // ----------------------------------------------------------------------
+  // Bulk selection + delete
+  // ----------------------------------------------------------------------
+  const selectedIds = new Set();
+
+  function onRowSelect() {
+    selectedIds.clear();
+    document.querySelectorAll('.row-select:checked').forEach(cb => {
+      selectedIds.add(Number(cb.dataset.id));
+      cb.closest('tr').classList.add('row-checked');
+    });
+    document.querySelectorAll('.row-select:not(:checked)').forEach(cb => {
+      cb.closest('tr').classList.remove('row-checked');
+    });
+    syncWeekSelectAll();
+    updateBulkBar();
+  }
+
+  function syncWeekSelectAll() {
+    document.querySelectorAll('.week-select-all').forEach(master => {
+      const week = master.dataset.week;
+      const rows = document.querySelectorAll(`tr[data-week="${week}"] .row-select`);
+      const checked = document.querySelectorAll(`tr[data-week="${week}"] .row-select:checked`);
+      master.checked = rows.length > 0 && checked.length === rows.length;
+      master.indeterminate = checked.length > 0 && checked.length < rows.length;
+    });
+  }
+
+  function toggleWeekSelect(masterCb) {
+    const week = masterCb.dataset.week;
+    document.querySelectorAll(`tr[data-week="${week}"] .row-select`).forEach(cb => {
+      cb.checked = masterCb.checked;
+    });
+    onRowSelect();
+  }
+
+  function updateBulkBar() {
+    const btn = document.getElementById('bulk-delete-btn');
+    if (!btn) return;
+    if (selectedIds.size > 0) {
+      btn.style.display = '';
+      btn.textContent = `🗑 Delete ${selectedIds.size} selected`;
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  async function bulkDelete() {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    const ok = confirm(
+      `Delete ${ids.length} payment${ids.length !== 1 ? 's' : ''}?\n\n` +
+      `Invoice files in Drive will remain as archives. This cannot be undone.`
+    );
+    if (!ok) return;
+    const res = await fetch(`${API}?action=delete-bulk`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ids }),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast(`Deleted ${res.count} payment${res.count !== 1 ? 's' : ''}`);
+    selectedIds.clear();
+    loadPayments();
+  }
+
   async function deletePayment(id, vendor, amount, currency) {
     const fmt = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: currency || 'NZD' }).format(amount || 0);
     const ok = confirm(
@@ -593,9 +703,13 @@
   async function loadPayments() {
     const status = document.getElementById('filter-status').value;
     const program = document.getElementById('filter-program').value;
+    const sort   = document.getElementById('filter-sort').value;
     const qs = new URLSearchParams({ action: 'list' });
     if (status) qs.set('status', status);
     if (program) qs.set('program_id', program);
+    if (sort) qs.set('sort', sort);
+    selectedIds.clear();
+    updateBulkBar();
 
     document.getElementById('payments-list').innerHTML = '<p class="empty">Loading…</p>';
     const res = await fetch(`${API}?${qs}`).then(r => r.json());
@@ -629,6 +743,7 @@
         </div>
         <table>
           <thead><tr>
+            <th style="width:24px;"><input type="checkbox" class="week-select-all" data-week="${k}" onchange="toggleWeekSelect(this)" title="Select all in this week"></th>
             <th>Vendor</th><th>Program</th><th>Due</th><th>Amount</th><th>NZD</th>
             <th>Source</th><th>Actions</th>
           </tr></thead>
@@ -645,14 +760,18 @@
       ? `<a class="link" href="${p.invoice_file_url}" target="_blank" title="Open invoice in Drive">📄</a>`
       : '';
     return `
-      <tr class="${p.paid ? 'paid' : ''}" data-payment-id="${p.id}">
+      <tr class="${p.paid ? 'paid' : ''}" data-payment-id="${p.id}" data-week="${isoWeekKey(p.due_date)}">
+        <td><input type="checkbox" class="row-select" data-id="${p.id}" onchange="onRowSelect()"></td>
         <td class="vendor">
           <strong>${escapeHtml(p.vendor)}</strong> ${fileLink}
           ${p.invoice_number ? `<div style="color:var(--muted);font-size:11px;">#${escapeHtml(p.invoice_number)}</div>` : ''}
         </td>
         <td>${programSelectHtml(p.program_id, p.program_name)}</td>
         <td>${toDateOnly(p.due_date)}${p.rescheduled_from ? `<div style="color:var(--muted);font-size:11px;">was ${toDateOnly(p.rescheduled_from)}</div>` : ''}</td>
-        <td class="amount"><input type="number" step="0.01" min="0" value="${Number(p.amount).toFixed(2)}" data-original="${Number(p.amount).toFixed(2)}" onchange="updateAmount(${p.id}, this)"><span class="ccy">${escapeHtml(p.currency || 'NZD')}</span></td>
+        <td class="amount">
+          <input type="number" step="0.01" min="0" value="${Number(p.amount).toFixed(2)}" data-original="${Number(p.amount).toFixed(2)}" onchange="updateAmount(${p.id}, this)">
+          <input class="ccy-input" list="currency-options" maxlength="3" value="${escapeHtml((p.currency || 'NZD').toUpperCase())}" data-original="${escapeHtml((p.currency || 'NZD').toUpperCase())}" onchange="updateCurrency(${p.id}, this)" title="Click to change currency">
+        </td>
         <td class="amount nzd-col">${(p.currency || 'NZD').toUpperCase() === 'NZD' ? '<span style="color:var(--muted);">—</span>' : fmtNZD(toNZD(p.amount, p.currency))}</td>
         <td><span class="chip source-${p.source}">${p.source}</span></td>
         <td>
@@ -924,6 +1043,7 @@
 
   document.getElementById('filter-status').addEventListener('change', loadPayments);
   document.getElementById('filter-program').addEventListener('change', loadPayments);
+  document.getElementById('filter-sort').addEventListener('change', loadPayments);
 
   // Boot — load rates + programs in parallel, then load payments (which uses both)
   Promise.all([loadRates(), loadPrograms()]).then(loadPayments);
