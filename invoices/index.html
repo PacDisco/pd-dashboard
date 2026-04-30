@@ -240,6 +240,18 @@
         <option value="amount_asc">Amount · lowest first</option>
         <option value="vendor_asc">Vendor · A → Z</option>
       </select>
+      <select id="filter-range" title="Date range">
+        <option value="">Any date</option>
+        <option value="7">Due in next 7 days</option>
+        <option value="14">Due in next 14 days</option>
+        <option value="30">Due in next 30 days</option>
+        <option value="60">Due in next 60 days</option>
+        <option value="90">Due in next 90 days</option>
+        <option value="overdue">Overdue</option>
+        <option value="custom">Custom…</option>
+      </select>
+      <input type="date" id="filter-from" style="display:none;" title="From">
+      <input type="date" id="filter-to"   style="display:none;" title="To">
       <div class="spacer"></div>
       <button id="bulk-delete-btn" onclick="bulkDelete()" style="display:none;background:#fee;color:var(--red);border-color:#fcc;">🗑 Delete selected</button>
       <button onclick="exportCSV()" title="Export the filtered rows as CSV">⬇ Export CSV</button>
@@ -700,14 +712,35 @@
     return `Week of ${fmt(start)} – ${fmt(end)}`;
   }
 
+  function resolveDateRange() {
+    const range = document.getElementById('filter-range').value;
+    const from  = document.getElementById('filter-from');
+    const to    = document.getElementById('filter-to');
+    from.style.display = (range === 'custom') ? '' : 'none';
+    to.style.display   = (range === 'custom') ? '' : 'none';
+
+    const today = new Date();
+    const iso = d => d.toISOString().slice(0, 10);
+    if (range === 'custom') return { from: from.value || null, to: to.value || null };
+    if (range === 'overdue') return { from: null, to: iso(today) };
+    if (/^\d+$/.test(range)) {
+      const end = new Date(today); end.setDate(end.getDate() + Number(range));
+      return { from: iso(today), to: iso(end) };
+    }
+    return { from: null, to: null };
+  }
+
   async function loadPayments() {
     const status = document.getElementById('filter-status').value;
     const program = document.getElementById('filter-program').value;
     const sort   = document.getElementById('filter-sort').value;
+    const range  = resolveDateRange();
     const qs = new URLSearchParams({ action: 'list' });
     if (status) qs.set('status', status);
     if (program) qs.set('program_id', program);
     if (sort) qs.set('sort', sort);
+    if (range.from) qs.set('from', range.from);
+    if (range.to)   qs.set('to', range.to);
     selectedIds.clear();
     updateBulkBar();
 
@@ -1044,6 +1077,9 @@
   document.getElementById('filter-status').addEventListener('change', loadPayments);
   document.getElementById('filter-program').addEventListener('change', loadPayments);
   document.getElementById('filter-sort').addEventListener('change', loadPayments);
+  document.getElementById('filter-range').addEventListener('change', loadPayments);
+  document.getElementById('filter-from').addEventListener('change', loadPayments);
+  document.getElementById('filter-to').addEventListener('change', loadPayments);
 
   // Boot — load rates + programs in parallel, then load payments (which uses both)
   Promise.all([loadRates(), loadPrograms()]).then(loadPayments);
