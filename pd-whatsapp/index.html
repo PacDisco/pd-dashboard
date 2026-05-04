@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pacific Discovery - Add Google Contact</title>
+<meta name="description" content="Quickly save a new contact to your Google address book.">
+
+<!-- Google Identity Services (token client) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --border:#e4e7ec; --text:#0f172a; --muted:#64748b;
+    --accent:#0f766e; --accent-soft:#ccfbf1; --accent-strong:#115e59;
+    --chip:#eef2ff; --chip-border:#c7d2fe;
+    --red:#b91c1c; --red-soft:#fee2e2; --green:#15803d; --green-soft:#dcfce7;
+    --amber:#b45309; --amber-soft:#fef3c7;
+    --header-bg:#0f172a; --header-text:#f8fafc;
+    --row-hover:#f8fafc;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:13px;line-height:1.4}
+
+  /* Topbar (matches Contacts dashboard) */
+  .topbar{background:var(--header-bg);color:var(--header-text);padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .topbar h1{font-size:16px;margin:0;font-weight:600;letter-spacing:-0.01em}
+  .topbar .meta{font-size:12px;color:#cbd5e1;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .topbar .chip{background:rgba(255,255,255,.08);padding:3px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.08);display:inline-flex;align-items:center;gap:6px}
+  .topbar .chip .dot{width:7px;height:7px;border-radius:50%;background:#94a3b8}
+  .topbar .chip.connected .dot{background:#4ade80;box-shadow:0 0 8px rgba(74,222,128,.5)}
+  .topbar .spacer{flex:1}
+  .topbar .actions{display:flex;gap:8px}
+  .btn{background:#fff;color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500;font-family:inherit}
+  .btn:hover:not(:disabled){background:#f1f5f9}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn.primary:hover:not(:disabled){background:var(--accent-strong)}
+  .btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.2)}
+  .btn.ghost:hover:not(:disabled){background:rgba(255,255,255,.08)}
+  .btn.danger{color:var(--red);border-color:#fca5a5}
+  .btn.danger:hover:not(:disabled){background:var(--red-soft)}
+
+  /* Layout */
+  .layout{max-width:1100px;margin:0 auto;padding:24px 20px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
+  @media (max-width:880px){.layout{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .card .card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .card .card-header h2{margin:0;font-size:14px;font-weight:600}
+  .card .card-header .sub{color:var(--muted);font-size:12px}
+  .card .card-body{padding:18px}
+
+  /* Form */
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+  .field input{width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:6px;font-size:13.5px;font-family:inherit;background:#fff;color:var(--text);transition:border-color .15s,box-shadow .15s}
+  .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.15)}
+  .field input:disabled{background:#f8fafc;color:var(--muted);cursor:not-allowed}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .form-actions{margin-top:18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .form-actions .spacer{flex:1}
+
+  /* Status */
+  .status{margin-top:14px;padding:10px 12px;border-radius:6px;font-size:13px;display:none}
+  .status.show{display:block}
+  .status.success{background:var(--green-soft);color:var(--green);border:1px solid #86efac}
+  .status.error{background:var(--red-soft);color:var(--red);border:1px solid #fca5a5}
+  .status.info{background:var(--amber-soft);color:var(--amber);border:1px solid #fcd34d}
+
+  /* Side card */
+  .side-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .side-card h3{margin:0 0 8px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .side-card p{margin:0 0 8px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+  .side-card ul{margin:0 0 8px;padding-left:18px;font-size:12.5px;line-height:1.6;color:var(--muted)}
+  .side-card a{color:var(--accent);text-decoration:none}
+  .side-card a:hover{text-decoration:underline}
+  .side-card code{background:#f1f5f9;padding:1px 5px;border-radius:3px;font-size:11.5px;font-family:ui-monospace,Menlo,monospace}
+
+  .recent{margin-top:14px}
+  .recent-item{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12.5px}
+  .recent-item:last-child{border-bottom:none}
+  .recent-item .name{font-weight:500;color:var(--text)}
+  .recent-item .when{color:var(--muted);font-size:11px}
+  .recent-empty{font-size:12px;color:var(--muted);font-style:italic;padding:6px 0}
+
+  .config-banner{margin:0 20px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:9px 12px;border-radius:6px;font-size:12.5px}
+  .config-banner code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px;font-size:11.5px}
+
+  /* Toast */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Pacific Discovery - Add Google Contact</h1>
+  <div class="meta">
+    <span class="chip" id="auth-chip"><span class="dot"></span><span id="auth-label">Not signed in</span></span>
+    <span class="chip" id="account-chip" style="display:none"></span>
+  </div>
+  <div class="spacer"></div>
+  <div class="actions">
+    <button class="btn ghost" id="btn-signin">Sign in with Google</button>
+    <button class="btn ghost" id="btn-signout" style="display:none">Sign out</button>
+    <a class="btn ghost" href="/" style="text-decoration:none;display:inline-flex;align-items:center">← Back to dashboards</a>
+  </div>
+</div>
+
+<div id="config-banner" class="config-banner" style="display:none;margin-top:12px">
+  Set your Google OAuth Web Client ID — edit <code>window.GOOGLE_CLIENT_ID</code> at the bottom of this file. See <strong>oauth-setup.md</strong> in the repo for the 5-minute setup.
+</div>
+
+<div class="layout">
+
+  <!-- Main: Add Contact form -->
+  <div class="card">
+    <div class="card-header">
+      <h2>New contact</h2>
+      <span class="sub">Saves directly to Google Contacts</span>
+    </div>
+    <div class="card-body">
+      <form id="contact-form" autocomplete="off" novalidate>
+        <div class="field-row">
+          <div class="field">
+            <label for="firstName">First name *</label>
+            <input id="firstName" type="text" required disabled />
+          </div>
+          <div class="field">
+            <label for="lastName">Last name</label>
+            <input id="lastName" type="text" disabled />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" disabled placeholder="name@example.com" />
+        </div>
+
+        <div class="field">
+          <label for="phone">Phone</label>
+          <input id="phone" type="tel" disabled placeholder="+1 555 123 4567" />
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn primary" id="btn-save" disabled>Save contact</button>
+          <button type="button" class="btn" id="btn-clear" disabled>Clear</button>
+          <div class="spacer"></div>
+          <a class="btn" href="https://contacts.google.com/" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">Open Google Contacts ↗</a>
+        </div>
+
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sidebar: Help + recent adds -->
+  <div>
+    <div class="side-card">
+      <h3>How it works</h3>
+      <p>This page uses Google Identity Services to authorize your Google account, then writes the contact via the People API <code>people.createContact</code> endpoint. Nothing is stored on the server — the access token lives only in this browser tab.</p>
+      <ul>
+        <li>Sign in with Google (top right)</li>
+        <li>Fill in at least a name, email, or phone</li>
+        <li>Click <strong>Save contact</strong></li>
+      </ul>
+      <p style="margin-top:8px"><strong>First-time setup:</strong> see <code>add-contact/oauth-setup.md</code> for creating the Google Cloud OAuth Client ID.</p>
+    </div>
+
+    <div class="side-card recent">
+      <h3>Recently added (this session)</h3>
+      <div id="recent-list">
+        <div class="recent-empty">No contacts added yet.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ============================================================
+  // CONFIG
+  // Replace this with the OAuth 2.0 Web Client ID from your
+  // Google Cloud project. See oauth-setup.md in this folder.
+  // ============================================================
+  window.GOOGLE_CLIENT_ID = "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+  // ============================================================
+
+  const SCOPE = "https://www.googleapis.com/auth/contacts";
+  const PEOPLE_API = "https://people.googleapis.com/v1/people:createContact";
+  const USERINFO_API = "https://www.googleapis.com/oauth2/v3/userinfo";
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    authChip: $("auth-chip"),
+    authLabel: $("auth-label"),
+    accountChip: $("account-chip"),
+    signin: $("btn-signin"),
+    signout: $("btn-signout"),
+    save: $("btn-save"),
+    clear: $("btn-clear"),
+    form: $("contact-form"),
+    status: $("status"),
+    toast: $("toast"),
+    configBanner: $("config-banner"),
+    recentList: $("recent-list"),
+    inputs: ["firstName","lastName","email","phone"].map($)
+  };
+
+  let tokenClient = null;
+  let accessToken = null;
+  let signedInEmail = null;
+  const recent = [];
+
+  function isClientConfigured() {
+    const id = window.GOOGLE_CLIENT_ID || "";
+    return id && !id.startsWith("YOUR_") && id.endsWith(".apps.googleusercontent.com");
+  }
+
+  function setEnabled(enabled) {
+    els.inputs.forEach(i => { i.disabled = !enabled; });
+    els.save.disabled = !enabled;
+    els.clear.disabled = !enabled;
+  }
+
+  function setSignedIn(email) {
+    signedInEmail = email || null;
+    els.authChip.classList.add("connected");
+    els.authLabel.textContent = "Signed in";
+    if (email) {
+      els.accountChip.style.display = "inline-flex";
+      els.accountChip.textContent = email;
+    }
+    els.signin.style.display = "none";
+    els.signout.style.display = "inline-block";
+    setEnabled(true);
+  }
+
+  function setSignedOut() {
+    accessToken = null;
+    signedInEmail = null;
+    els.authChip.classList.remove("connected");
+    els.authLabel.textContent = "Not signed in";
+    els.accountChip.style.display = "none";
+    els.accountChip.textContent = "";
+    els.signin.style.display = "inline-block";
+    els.signout.style.display = "none";
+    setEnabled(false);
+  }
+
+  function showStatus(msg, type) {
+    els.status.textContent = msg;
+    els.status.className = "status show " + type;
+  }
+  function clearStatus() {
+    els.status.className = "status";
+    els.status.textContent = "";
+  }
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add("show");
+    setTimeout(() => els.toast.classList.remove("show"), 1800);
+  }
+
+  function renderRecent() {
+    if (!recent.length) {
+      els.recentList.innerHTML = '<div class="recent-empty">No contacts added yet.</div>';
+      return;
+    }
+    els.recentList.innerHTML = recent.map(r => `
+      <div class="recent-item">
+        <div>
+          <div class="name">${escapeHtml(r.name)}</div>
+          <div class="when">${escapeHtml(r.detail)}</div>
+        </div>
+        <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" title="Open in Google Contacts">↗</a>
+      </div>
+    `).join("");
+  }
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+  }
+
+  async function fetchUserEmail(token) {
+    try {
+      const res = await fetch(USERINFO_API, { headers: { Authorization: "Bearer " + token } });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.email || null;
+    } catch (_) { return null; }
+  }
+
+  function initTokenClient() {
+    if (!window.google || !google.accounts || !google.accounts.oauth2) {
+      setTimeout(initTokenClient, 200);
+      return;
+    }
+    if (!isClientConfigured()) return;
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: window.GOOGLE_CLIENT_ID,
+      scope: SCOPE,
+      callback: async (response) => {
+        if (response.error) {
+          showStatus("Sign-in failed: " + response.error, "error");
+          return;
+        }
+        accessToken = response.access_token;
+        const email = await fetchUserEmail(accessToken);
+        setSignedIn(email);
+        clearStatus();
+        toast("Signed in" + (email ? " as " + email : ""));
+      }
+    });
+  }
+
+  els.signin.addEventListener("click", () => {
+    if (!isClientConfigured()) {
+      showStatus("OAuth Client ID not configured. See oauth-setup.md.", "info");
+      return;
+    }
+    if (!tokenClient) initTokenClient();
+    if (!tokenClient) {
+      showStatus("Google Identity Services still loading — try again in a moment.", "info");
+      return;
+    }
+    tokenClient.requestAccessToken({ prompt: signedInEmail ? "" : "consent" });
+  });
+
+  els.signout.addEventListener("click", () => {
+    if (accessToken && window.google && google.accounts && google.accounts.oauth2) {
+      google.accounts.oauth2.revoke(accessToken, () => {});
+    }
+    setSignedOut();
+    clearStatus();
+    toast("Signed out");
+  });
+
+  els.clear.addEventListener("click", () => {
+    els.form.reset();
+    clearStatus();
+  });
+
+  function buildPersonPayload({ firstName, lastName, email, phone }) {
+    const person = {};
+    if (firstName || lastName) {
+      person.names = [{ givenName: firstName || "", familyName: lastName || "" }];
+    }
+    if (email) person.emailAddresses = [{ value: email }];
+    if (phone) person.phoneNumbers = [{ value: phone }];
+    return person;
+  }
+
+  els.form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!accessToken) { showStatus("Please sign in first.", "error"); return; }
+
+    const data = {
+      firstName: $("firstName").value.trim(),
+      lastName: $("lastName").value.trim(),
+      email: $("email").value.trim(),
+      phone: $("phone").value.trim()
+    };
+    if (!data.firstName && !data.lastName && !data.email && !data.phone) {
+      showStatus("Add at least a name, email, or phone.", "error");
+      return;
+    }
+
+    const payload = buildPersonPayload(data);
+    els.save.disabled = true;
+    const originalLabel = els.save.textContent;
+    els.save.textContent = "Saving…";
+    clearStatus();
+
+    try {
+      const res = await fetch(PEOPLE_API, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = "Failed to add contact (HTTP " + res.status + ")";
+        try {
+          const j = JSON.parse(text);
+          if (j.error && j.error.message) msg = j.error.message;
+        } catch(_) {}
+        if (res.status === 401) {
+          setSignedOut();
+          msg = "Session expired. Please sign in again.";
+        } else if (res.status === 403) {
+          msg += " — make sure People API is enabled and the contacts scope was granted.";
+        }
+        throw new Error(msg);
+      }
+
+      const created = await res.json();
+      const displayName = (created.names && created.names[0] && created.names[0].displayName)
+        || data.firstName + (data.lastName ? " " + data.lastName : "")
+        || data.email || data.phone || "Contact";
+      const detailBits = [data.email, data.phone].filter(Boolean);
+      const resourceName = created.resourceName || "";
+      const contactId = resourceName.replace(/^people\//, "");
+      const url = contactId
+        ? "https://contacts.google.com/person/" + encodeURIComponent(contactId)
+        : "https://contacts.google.com/";
+
+      recent.unshift({
+        name: displayName,
+        detail: detailBits.length ? detailBits.join(" • ") : "added " + new Date().toLocaleTimeString(),
+        url
+      });
+      if (recent.length > 8) recent.length = 8;
+      renderRecent();
+
+      showStatus("✓ " + displayName + " added to Google Contacts.", "success");
+      toast("Contact saved");
+      els.form.reset();
+    } catch (err) {
+      showStatus(err.message || "Something went wrong.", "error");
+    } finally {
+      els.save.textContent = originalLabel;
+      els.save.disabled = !accessToken;
+    }
+  });
+
+  // Init
+  function init() {
+    if (!isClientConfigured()) {
+      els.configBanner.style.display = "block";
+      els.signin.disabled = true;
+    }
+    setSignedOut();
+    setTimeout(initTokenClient, 0);
+  }
+  window.addEventListener("load", init);
+</script>
+</body>
+</html>
