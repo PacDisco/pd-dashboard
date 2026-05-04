@@ -1,0 +1,8 @@
+{
+  "title": "Add Google Contact",
+  "description": "Quickly save a new contact to your Google address book. Sign in with Google, fill in name, email, and phone, and save — the contact lands directly in contacts.google.com.",
+  "category": "Outreach",
+  "icon": "👤",
+  "colors": ["#0f766e", "#22c55e"],
+  "allowedRoles": ["admin", "outreach", "admissions"]
+}
