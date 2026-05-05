@@ -28,8 +28,15 @@ import http from 'node:http';
 import { URL } from 'node:url';
 import { exec } from 'node:child_process';
 
-const PORT = 53682;
-const REDIRECT_URI = `http://localhost:${PORT}/`;
+const PORT = Number(process.env.GOOGLE_OAUTH_REDIRECT_PORT) || 53682;
+
+// REDIRECT_URI is what Google redirects to after consent. Defaults to a
+// loopback URL for local runs. In environments where the user's browser
+// can't reach the loopback (e.g. GitHub Codespaces), set
+// GOOGLE_OAUTH_REDIRECT_URI to the public forwarded URL — the script's
+// internal HTTP server still binds to PORT, but the user's browser hits
+// the public URL which the platform forwards back to that port.
+const REDIRECT_URI = process.env.GOOGLE_OAUTH_REDIRECT_URI || `http://localhost:${PORT}/`;
 const SCOPE = 'https://www.googleapis.com/auth/contacts';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
