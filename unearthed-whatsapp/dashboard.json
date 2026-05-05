@@ -1,0 +1,8 @@
+{
+  "title": "Add Unearthed WhatsApp Contact",
+  "description": "Save a contact directly to the Unearthed Education shared address book (info@unearthededucation.org) — no Google sign-in required.",
+  "category": "Outreach",
+  "icon": "🌱",
+  "colors": ["#c2410c", "#fb923c"],
+  "allowedRoles": ["admin", "outreach", "admissions"]
+}
