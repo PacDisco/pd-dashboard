@@ -400,15 +400,31 @@
   // ----------------------------------------------------------------------
   let programsCache = [];   // active programs, used for inline row dropdowns
 
+  async function apiGet(qs) {
+    const r = await fetch(`${API}?${qs}`);
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`API returned non-JSON (HTTP ${r.status}): ${text.slice(0, 200)}`); }
+    if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
+    return data;
+  }
+
   async function loadPrograms() {
-    const res = await fetch(`${API}?action=programs`).then(r => r.json());
-    programsCache = res.programs || [];
-    const opts = programsCache.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-    // Rebuild each dropdown preserving the first (placeholder) option
-    for (const id of ['filter-program', 'manual-program', 'upload-program']) {
-      const sel = document.getElementById(id);
-      const keep = sel.options[0]?.outerHTML || '';
-      sel.innerHTML = keep + opts;
+    try {
+      const res = await apiGet('action=programs');
+      programsCache = res.programs || [];
+      const opts = programsCache.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+      // Rebuild each dropdown preserving the first (placeholder) option
+      for (const id of ['filter-program', 'manual-program', 'upload-program']) {
+        const sel = document.getElementById(id);
+        const keep = sel.options[0]?.outerHTML || '';
+        sel.innerHTML = keep + opts;
+      }
+    } catch (e) {
+      console.error('loadPrograms failed:', e);
+      toast(`Could not load programs: ${e.message}`, 'err');
+      programsCache = [];   // let the rest of the page still render
     }
   }
 
@@ -745,7 +761,22 @@
     updateBulkBar();
 
     document.getElementById('payments-list').innerHTML = '<p class="empty">Loading…</p>';
-    const res = await fetch(`${API}?${qs}`).then(r => r.json());
+    let res;
+    try {
+      res = await apiGet(qs.toString());
+    } catch (e) {
+      console.error('loadPayments failed:', e);
+      document.getElementById('payments-list').innerHTML = `
+        <div class="card empty" style="border:1px solid #fecaca;background:#fef2f2;color:#991b1b;">
+          <strong>Couldn't load payments.</strong><br>
+          <span style="font-size:12px;">${escapeHtml(e.message)}</span><br>
+          <span style="font-size:12px;color:#6b7280;">
+            Hit <a href="/api/invoices?action=debug" target="_blank" style="color:#991b1b;text-decoration:underline;">/api/invoices?action=debug</a>
+            to see which env vars / DB pieces are missing, and check the function logs in Netlify → Logs → Functions → invoices.
+          </span>
+        </div>`;
+      return;
+    }
     const payments = res.payments || [];
 
     renderKpis(payments);
@@ -1082,7 +1113,9 @@
   document.getElementById('filter-to').addEventListener('change', loadPayments);
 
   // Boot — load rates + programs in parallel, then load payments (which uses both)
-  Promise.all([loadRates(), loadPrograms()]).then(loadPayments);
+  // Use allSettled so a failed FX or programs fetch never blocks the payments
+  // list. loadPayments has its own error UI for backend failures.
+  Promise.allSettled([loadRates(), loadPrograms()]).then(loadPayments);
 </script>
 
 </body>
