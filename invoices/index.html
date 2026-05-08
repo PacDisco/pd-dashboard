@@ -1,1122 +1,720 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Invoices & Payments</title>
-<style>
-  :root {
-    --bg: #f6f7f9;
-    --card: #ffffff;
-    --border: #e4e6eb;
-    --text: #1a1d21;
-    --muted: #6b7280;
-    --accent: #2563eb;
-    --accent-soft: #eff4ff;
-    --green: #16a34a;
-    --green-soft: #e6f6ea;
-    --amber: #d97706;
-    --amber-soft: #fef3c7;
-    --red: #dc2626;
-    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 14px;
-  }
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
-  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-  h1 { margin: 0; font-size: 22px; font-weight: 600; }
-  .back { color: var(--muted); text-decoration: none; font-size: 13px; }
-  .back:hover { color: var(--accent); }
+/**
+ * Invoice tool — single Netlify Function with action routing.
+ *
+ * Routes (query ?action=... or JSON body { action }):
+ *   - list              GET   -> list payments (optional: status, program_id, from, to)
+ *   - programs          GET   -> list active programs (add ?include_inactive=1 for admin view)
+ *   - create            POST  -> manual entry (vendor, amount, due_date, program_id, notes)
+ *   - upload            POST  -> multipart or base64 PDF -> Drive + Claude + DB
+ *   - update            POST  -> { id, patch: { approved_to_pay, paid, due_date, ... } }
+ *   - delete            POST  -> { id }  (removes payment row; Drive file stays)
+ *   - delete-bulk       POST  -> { ids: [1,2,3] }  (bulk remove)
+ *   - inbound           POST  -> Gmail Apps Script webhook (see apps-script/Code.gs)
+ *   - programs-create   POST  -> { name, sort_order? }
+ *   - programs-update   POST  -> { id, patch: { name, sort_order, is_active } }
+ *   - programs-delete   POST  -> { id }  (fails if any payment references it)
+ *
+ * Required env vars:
+ *   NETLIFY_DATABASE_URL          (auto-injected when Netlify DB is provisioned)
+ *   ANTHROPIC_API_KEY             (for invoice parsing)
+ *   GOOGLE_SERVICE_ACCOUNT_JSON   (full service-account JSON as a single string)
+ *   GOOGLE_DRIVE_FOLDER_ID        (the shared folder the service account writes to)
+ *   INVOICES_INBOUND_SECRET       (shared secret; Apps Script sends it in a header)
+ */
 
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
-  .tab {
-    padding: 10px 16px; cursor: pointer; border: none; background: transparent;
-    font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent;
-    margin-bottom: -1px; font-family: inherit;
-  }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
-  .tab:hover:not(.active) { color: var(--text); }
+const { neon } = require('@neondatabase/serverless');
+const { google } = require('googleapis');
+const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai/sdk');
 
-  .panel { display: none; }
-  .panel.active { display: block; }
+// --------------------------------------------------------------------------
+// Lazy-initialised clients
+// --------------------------------------------------------------------------
+let _sql;
+function sql() {
+  if (!_sql) _sql = neon(process.env.NETLIFY_DATABASE_URL);
+  return _sql;
+}
 
-  .card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px;
-  }
-  .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+let _drive;
+async function drive() {
+  if (!_drive) {
+    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON env var is not set');
 
-  /* Forms */
-  .row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-  .field { flex: 1; min-width: 180px; }
-  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
-  .field input, .field select, .field textarea {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
-    font-size: 14px; font-family: inherit; background: #fff;
-  }
-  .field input:focus, .field select:focus, .field textarea:focus {
-    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
-  }
-  textarea { min-height: 60px; resize: vertical; }
+    let creds;
+    try { creds = JSON.parse(raw); }
+    catch (e) { throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: ' + e.message); }
 
-  button {
-    padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px;
-    background: #fff; color: var(--text); cursor: pointer; font-size: 14px; font-family: inherit;
-  }
-  button:hover { background: #f3f4f6; }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  button.primary:hover { background: #1e55d4; }
-  button.primary:disabled { background: #93b8f5; border-color: #93b8f5; cursor: not-allowed; }
+    // Common env-var gotcha: private_key sometimes arrives with literal "\n"
+    // (two characters) instead of real newlines. Normalize.
+    if (creds.private_key && creds.private_key.includes('\\n')) {
+      creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+    }
 
-  /* Drop zone */
-  .drop {
-    border: 2px dashed var(--border); border-radius: 8px; padding: 40px; text-align: center;
-    color: var(--muted); cursor: pointer; transition: all .15s;
-  }
-  .drop:hover, .drop.dragover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-  .drop input { display: none; }
-
-  /* Filters */
-  .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-  .filters select, .filters input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
-  .filters .spacer { flex: 1; }
-
-  /* Week groups */
-  .week-header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 14px; background: var(--accent-soft); border-radius: 6px 6px 0 0;
-    font-size: 13px; font-weight: 600; color: var(--accent);
-    border: 1px solid var(--border); border-bottom: none;
-  }
-  .week-header .total { color: var(--text); font-weight: 600; }
-
-  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--border); }
-  .week-header + table { border-radius: 0 0 6px 6px; margin-bottom: 16px; }
-  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
-  th { background: #fafbfc; font-weight: 600; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  tr:last-child td { border-bottom: none; }
-  tr.paid td { color: var(--muted); }
-  tr.paid td.vendor { text-decoration: line-through; }
-
-  .chip { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
-  .chip.program { background: var(--accent-soft); color: var(--accent); }
-
-  select.row-program {
-    padding: 4px 6px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    background: var(--accent-soft);
-    color: var(--accent);
-    font-size: 12px;
-    font-family: inherit;
-    font-weight: 500;
-    cursor: pointer;
-    max-width: 180px;
-  }
-  select.row-program:hover { border-color: var(--accent); background: #fff; }
-  select.row-program:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px var(--accent-soft); }
-  .chip.source-upload { background: #f3e8ff; color: #7e22ce; }
-  .chip.source-email  { background: #e0f2fe; color: #0369a1; }
-  .chip.source-manual { background: #f3f4f6; color: var(--muted); }
-
-  .amount { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
-  .amount input {
-    width: 90px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px;
-    background: transparent; font-size: 13px; font-family: inherit; font-weight: 500;
-    text-align: right; font-variant-numeric: tabular-nums;
-  }
-  .amount input:hover  { border-color: var(--border); background: #fff; }
-  .amount input:focus  { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px var(--accent-soft); }
-  .amount .ccy { color: var(--muted); font-size: 11px; margin-left: 2px; font-weight: 500; text-transform: uppercase; }
-  .amount .ccy-input {
-    width: 46px; padding: 4px 4px;
-    border: 1px solid transparent; border-radius: 4px;
-    background: transparent; font-size: 11px; font-family: inherit;
-    color: var(--muted); text-transform: uppercase; font-weight: 500;
-    text-align: center; margin-left: 2px;
-  }
-  .amount .ccy-input:hover { border-color: var(--border); background: #fff; color: var(--text); }
-  .amount .ccy-input:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px var(--accent-soft); color: var(--text); }
-  .row-select { cursor: pointer; }
-  tr.row-checked { background: var(--accent-soft) !important; }
-  td.nzd-col { color: var(--muted); font-weight: 400; font-size: 12px; }
-
-  .delete-btn {
-    border: none; background: transparent; cursor: pointer; padding: 3px 6px; border-radius: 4px;
-    color: var(--muted); font-size: 14px;
-  }
-  .delete-btn:hover { background: #fee; color: var(--red); }
-  .actions { display: flex; gap: 4px; align-items: center; justify-content: flex-end; }
-  .act-btn {
-    display: inline-flex; align-items: center; gap: 3px;
-    padding: 4px 9px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: #fff;
-    cursor: pointer;
-    font-size: 12px;
-    font-family: inherit;
-    color: var(--text);
-    white-space: nowrap;
-    transition: all .12s;
-    user-select: none;
-  }
-  .act-btn:hover { background: #f3f4f6; }
-  .act-btn.is-on-approve {
-    background: var(--green-soft); border-color: var(--green); color: var(--green); font-weight: 500;
-  }
-  .act-btn.is-on-approve:hover { background: #d4f0db; }
-  .act-btn.is-on-paid {
-    background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 500;
-  }
-  .act-btn.is-on-paid:hover { background: #dde9ff; }
-  .act-btn .check { font-size: 10px; }
-  .act-btn.danger {
-    border-color: transparent; color: var(--muted); padding: 4px 6px; margin-left: 4px;
-  }
-  .act-btn.danger:hover { background: #fee; color: var(--red); }
-
-  .empty { padding: 40px; text-align: center; color: var(--muted); }
-
-  .toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 14px; border-radius: 6px; box-shadow: var(--shadow); font-size: 13px; z-index: 100; }
-  .toast.ok { background: var(--green-soft); color: var(--green); border: 1px solid var(--green); }
-  .toast.err { background: #fee; color: var(--red); border: 1px solid var(--red); }
-
-  .parse-preview { background: var(--accent-soft); padding: 12px; border-radius: 6px; margin-top: 12px; font-size: 13px; }
-  .parse-preview strong { color: var(--accent); }
-
-  .link { color: var(--accent); text-decoration: none; }
-  .link:hover { text-decoration: underline; }
-
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .kpi { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
-  .kpi .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
-  .kpi .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .kpi.amber .value { color: var(--amber); }
-  .kpi.green .value { color: var(--green); }
-</style>
-</head>
-<body>
-
-<div class="wrap">
-  <header>
-    <h1>📄 Invoices & Payments</h1>
-    <a class="back" href="/">← Back to dashboard</a>
-  </header>
-
-  <div class="tabs">
-    <button class="tab active" data-panel="dashboard">Dashboard</button>
-    <button class="tab"          data-panel="upload">Upload Invoice</button>
-    <button class="tab"          data-panel="manual">Manual Entry</button>
-    <button class="tab"          data-panel="programs">Programs</button>
-  </div>
-
-  <!-- ============================= DASHBOARD ============================= -->
-  <div class="panel active" id="panel-dashboard">
-
-    <div class="kpis" id="kpis"></div>
-
-    <div class="filters">
-      <select id="filter-status">
-        <option value="unpaid">Unpaid only</option>
-        <option value="pending">Awaiting approval</option>
-        <option value="approved">Approved, not paid</option>
-        <option value="paid">Paid</option>
-        <option value="">All</option>
-      </select>
-      <select id="filter-program"><option value="">All programs</option></select>
-      <select id="filter-sort" title="Sort order">
-        <option value="due_asc">Due date · earliest first</option>
-        <option value="due_desc">Due date · latest first</option>
-        <option value="created_desc">Date added · newest first</option>
-        <option value="created_asc">Date added · oldest first</option>
-        <option value="amount_desc">Amount · highest first</option>
-        <option value="amount_asc">Amount · lowest first</option>
-        <option value="vendor_asc">Vendor · A → Z</option>
-      </select>
-      <select id="filter-range" title="Date range">
-        <option value="">Any date</option>
-        <option value="7">Due in next 7 days</option>
-        <option value="14">Due in next 14 days</option>
-        <option value="30">Due in next 30 days</option>
-        <option value="60">Due in next 60 days</option>
-        <option value="90">Due in next 90 days</option>
-        <option value="overdue">Overdue</option>
-        <option value="custom">Custom…</option>
-      </select>
-      <input type="date" id="filter-from" style="display:none;" title="From">
-      <input type="date" id="filter-to"   style="display:none;" title="To">
-      <div class="spacer"></div>
-      <button id="bulk-delete-btn" onclick="bulkDelete()" style="display:none;background:#fee;color:var(--red);border-color:#fcc;">🗑 Delete selected</button>
-      <button onclick="exportCSV()" title="Export the filtered rows as CSV">⬇ Export CSV</button>
-      <button onclick="loadPayments()">↻ Refresh</button>
-    </div>
-
-    <div id="payments-list"><p class="empty">Loading…</p></div>
-  </div>
-
-  <!-- ============================= UPLOAD ============================= -->
-  <div class="panel" id="panel-upload">
-    <div class="card">
-      <h2>Upload an invoice</h2>
-      <p style="margin-top:0;color:var(--muted);">
-        Drop a PDF or image. We'll parse the vendor, amount and due date with AI,
-        save the file to Google Drive, and add it to your payment schedule.
-      </p>
-
-      <label class="drop" id="drop-zone">
-        <input type="file" id="file-input" accept=".pdf,image/*">
-        <div id="drop-text">📎 Click or drop an invoice file here</div>
-      </label>
-
-      <div class="row" style="margin-top:16px;">
-        <div class="field">
-          <label>Program (optional — you can set it after parsing)</label>
-          <select id="upload-program"><option value="">— Pick a program —</option></select>
-        </div>
-      </div>
-
-      <div id="parse-preview"></div>
-      <div style="margin-top:12px;"><button id="upload-btn" class="primary" disabled>Upload & Parse</button></div>
-    </div>
-  </div>
-
-  <!-- ============================= PROGRAMS ============================= -->
-  <div class="panel" id="panel-programs">
-    <div class="card">
-      <h2>Add a program</h2>
-      <p style="margin-top:0;color:var(--muted);">Programs appear in the dropdown when uploading or scheduling a payment. Keep names short and consistent (e.g. "Semester Programs - Peru" rather than "Peru Semester '26").</p>
-      <form id="program-form">
-        <div class="row">
-          <div class="field" style="flex:3;"><label>Program name *</label><input required name="name" type="text" placeholder="e.g. Semester Programs - Peru"></div>
-          <div class="field" style="flex:1;"><label>Sort order</label><input name="sort_order" type="number" value="100"><div style="font-size:11px;color:var(--muted);margin-top:2px;">Lower = higher in the list</div></div>
-          <div class="field" style="flex:0 0 auto;align-self:flex-end;"><button class="primary" type="submit">Add</button></div>
-        </div>
-      </form>
-    </div>
-
-    <div class="card">
-      <h2>All programs</h2>
-      <div id="programs-list"><p class="empty">Loading…</p></div>
-    </div>
-  </div>
-
-  <!-- ============================= MANUAL ============================= -->
-  <div class="panel" id="panel-manual">
-    <div class="card">
-      <h2>Manually schedule a payment</h2>
-      <p style="margin-top:0;color:var(--muted);">For payments without an invoice file (recurring transfers, reimbursements, etc.).</p>
-      <form id="manual-form">
-        <div class="row">
-          <div class="field" style="flex:3;"><label>Vendor / Payee *</label><input required name="vendor" type="text"></div>
-          <div class="field" style="flex:2;"><label>Amount *</label><input required name="amount" type="number" step="0.01" min="0"></div>
-          <div class="field" style="flex:1;min-width:100px;">
-            <label>Currency</label>
-            <input name="currency" type="text" list="currency-options" value="NZD" maxlength="3" style="text-transform:uppercase;">
-            <datalist id="currency-options">
-              <option value="NZD">New Zealand Dollar</option>
-              <option value="AUD">Australian Dollar</option>
-              <option value="USD">US Dollar</option>
-              <option value="EUR">Euro</option>
-              <option value="GBP">British Pound</option>
-              <option value="CAD">Canadian Dollar</option>
-              <option value="JPY">Japanese Yen</option>
-              <option value="CHF">Swiss Franc</option>
-              <option value="SGD">Singapore Dollar</option>
-              <option value="HKD">Hong Kong Dollar</option>
-              <option value="THB">Thai Baht</option>
-              <option value="IDR">Indonesian Rupiah</option>
-              <option value="VND">Vietnamese Dong</option>
-              <option value="PHP">Philippine Peso</option>
-              <option value="MYR">Malaysian Ringgit</option>
-              <option value="INR">Indian Rupee</option>
-              <option value="CNY">Chinese Yuan</option>
-              <option value="MXN">Mexican Peso</option>
-              <option value="BRL">Brazilian Real</option>
-              <option value="CLP">Chilean Peso</option>
-              <option value="PEN">Peruvian Sol</option>
-              <option value="FJD">Fijian Dollar</option>
-              <option value="ZAR">South African Rand</option>
-            </datalist>
-          </div>
-        </div>
-        <div class="row">
-          <div class="field"><label>Due date *</label><input required name="due_date" type="date"></div>
-          <div class="field">
-            <label>Program</label>
-            <select name="program_id" id="manual-program"><option value="">— None —</option></select>
-          </div>
-          <div class="field"><label>Invoice # (optional)</label><input name="invoice_number" type="text"></div>
-        </div>
-        <div class="row">
-          <div class="field" style="flex:1 1 100%;"><label>Notes</label><textarea name="notes"></textarea></div>
-        </div>
-        <button class="primary" type="submit">Schedule payment</button>
-      </form>
-    </div>
-  </div>
-</div>
-
-<div id="toast-host"></div>
-
-<script>
-  // ----------------------------------------------------------------------
-  // Config
-  // ----------------------------------------------------------------------
-  const API = '/api/invoices';
-
-  // ----------------------------------------------------------------------
-  // Tab switching
-  // ----------------------------------------------------------------------
-  document.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
-      if (btn.dataset.panel === 'programs') loadProgramsAdmin();
+    const auth = new google.auth.GoogleAuth({
+      credentials: creds,
+      // Use full drive scope — the service account still only sees folders
+      // explicitly shared with it, but can write into them.
+      scopes: ['https://www.googleapis.com/auth/drive'],
     });
+    const client = await auth.getClient();    // throws LOUDLY on bad creds
+    _drive = google.drive({ version: 'v3', auth: client });
+  }
+  return _drive;
+}
+
+let _anthropic;
+function anthropic() {
+  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return _anthropic;
+}
+
+// --------------------------------------------------------------------------
+// HTTP helpers
+// --------------------------------------------------------------------------
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+function ok(body) {
+  return { statusCode: 200, headers: JSON_HEADERS, body: JSON.stringify(body) };
+}
+function bad(msg, code = 400) {
+  return { statusCode: code, headers: JSON_HEADERS, body: JSON.stringify({ error: msg }) };
+}
+
+// --------------------------------------------------------------------------
+// Drive upload
+// --------------------------------------------------------------------------
+async function uploadToDrive({ filename, mimeType, buffer }) {
+  const d = await drive();
+  const res = await d.files.create({
+    requestBody: {
+      name: filename,
+      parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
+    },
+    media: {
+      mimeType,
+      body: require('stream').Readable.from(buffer),
+    },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true,
   });
+  return { id: res.data.id, url: res.data.webViewLink };
+}
 
-  // ----------------------------------------------------------------------
-  // Toast helper
-  // ----------------------------------------------------------------------
-  function toast(msg, kind = 'ok') {
-    const el = document.createElement('div');
-    el.className = `toast ${kind}`;
-    el.textContent = msg;
-    document.getElementById('toast-host').appendChild(el);
-    setTimeout(() => el.remove(), 3500);
-  }
+// --------------------------------------------------------------------------
+// Claude invoice parsing
+// --------------------------------------------------------------------------
 
-  // ----------------------------------------------------------------------
-  // Programs dropdown
-  // ----------------------------------------------------------------------
-  let programsCache = [];   // active programs, used for inline row dropdowns
-
-  async function apiGet(qs) {
-    const r = await fetch(`${API}?${qs}`);
-    const text = await r.text();
-    let data;
-    try { data = JSON.parse(text); }
-    catch { throw new Error(`API returned non-JSON (HTTP ${r.status}): ${text.slice(0, 200)}`); }
-    if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
-    return data;
-  }
-
-  async function loadPrograms() {
-    try {
-      const res = await apiGet('action=programs');
-      programsCache = res.programs || [];
-      const opts = programsCache.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-      // Rebuild each dropdown preserving the first (placeholder) option
-      for (const id of ['filter-program', 'manual-program', 'upload-program']) {
-        const sel = document.getElementById(id);
-        const keep = sel.options[0]?.outerHTML || '';
-        sel.innerHTML = keep + opts;
-      }
-    } catch (e) {
-      console.error('loadPrograms failed:', e);
-      toast(`Could not load programs: ${e.message}`, 'err');
-      programsCache = [];   // let the rest of the page still render
-    }
-  }
-
-  function programSelectHtml(selectedId, selectedName) {
-    const opts = programsCache.map(p =>
-      `<option value="${p.id}"${Number(p.id) === Number(selectedId) ? ' selected' : ''}>${escapeHtml(p.name)}</option>`
-    ).join('');
-    // If this payment's program was deactivated, still show its name so the user can see it.
-    let stale = '';
-    if (selectedId && !programsCache.some(p => Number(p.id) === Number(selectedId))) {
-      stale = `<option value="${selectedId}" selected>${escapeHtml(selectedName || '(inactive)')} (inactive)</option>`;
-    }
-    return `<select class="row-program" onchange="updateProgram(this)">
-      <option value=""${!selectedId ? ' selected' : ''}>— None —</option>
-      ${stale}
-      ${opts}
-    </select>`;
-  }
-
-  async function updateProgram(selectEl) {
-    const id = Number(selectEl.closest('tr').dataset.paymentId);
-    const newProgramId = selectEl.value ? Number(selectEl.value) : null;
-    const res = await fetch(`${API}?action=update`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id, patch: { program_id: newProgramId } }),
-    }).then(r => r.json());
-    if (res.error) { toast(res.error, 'err'); loadPayments(); return; }
-    toast('Program updated');
-    // Don't full-reload — the row is already showing the new value
-  }
-
-  async function updateAmount(id, inputEl) {
-    const newAmount = Number(inputEl.value);
-    const original  = Number(inputEl.dataset.original);
-    if (!Number.isFinite(newAmount) || newAmount < 0) {
-      toast('Enter a valid amount', 'err');
-      inputEl.value = original.toFixed(2);
-      return;
-    }
-    if (Math.abs(newAmount - original) < 0.005) return;  // no change
-
-    const res = await fetch(`${API}?action=update`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id, patch: { amount: newAmount } }),
-    }).then(r => r.json());
-    if (res.error) {
-      toast(res.error, 'err');
-      inputEl.value = original.toFixed(2);
-      return;
-    }
-    inputEl.dataset.original = newAmount.toFixed(2);
-    toast('Amount updated');
-    // Reload to refresh KPIs and week totals
-    loadPayments();
-  }
-
-  async function updateCurrency(id, inputEl) {
-    const newCurrency = (inputEl.value || '').trim().toUpperCase().slice(0, 3);
-    const original = inputEl.dataset.original;
-    if (!/^[A-Z]{3}$/.test(newCurrency)) {
-      toast('Currency must be 3 letters (e.g. NZD, USD)', 'err');
-      inputEl.value = original;
-      return;
-    }
-    if (newCurrency === original) return;
-    inputEl.value = newCurrency;
-    const res = await fetch(`${API}?action=update`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id, patch: { currency: newCurrency } }),
-    }).then(r => r.json());
-    if (res.error) {
-      toast(res.error, 'err');
-      inputEl.value = original;
-      return;
-    }
-    inputEl.dataset.original = newCurrency;
-    toast('Currency updated');
-    loadPayments();   // refresh KPIs / NZD column
-  }
-
-  // ----------------------------------------------------------------------
-  // Bulk selection + delete
-  // ----------------------------------------------------------------------
-  const selectedIds = new Set();
-
-  function onRowSelect() {
-    selectedIds.clear();
-    document.querySelectorAll('.row-select:checked').forEach(cb => {
-      selectedIds.add(Number(cb.dataset.id));
-      cb.closest('tr').classList.add('row-checked');
-    });
-    document.querySelectorAll('.row-select:not(:checked)').forEach(cb => {
-      cb.closest('tr').classList.remove('row-checked');
-    });
-    syncWeekSelectAll();
-    updateBulkBar();
-  }
-
-  function syncWeekSelectAll() {
-    document.querySelectorAll('.week-select-all').forEach(master => {
-      const week = master.dataset.week;
-      const rows = document.querySelectorAll(`tr[data-week="${week}"] .row-select`);
-      const checked = document.querySelectorAll(`tr[data-week="${week}"] .row-select:checked`);
-      master.checked = rows.length > 0 && checked.length === rows.length;
-      master.indeterminate = checked.length > 0 && checked.length < rows.length;
-    });
-  }
-
-  function toggleWeekSelect(masterCb) {
-    const week = masterCb.dataset.week;
-    document.querySelectorAll(`tr[data-week="${week}"] .row-select`).forEach(cb => {
-      cb.checked = masterCb.checked;
-    });
-    onRowSelect();
-  }
-
-  function updateBulkBar() {
-    const btn = document.getElementById('bulk-delete-btn');
-    if (!btn) return;
-    if (selectedIds.size > 0) {
-      btn.style.display = '';
-      btn.textContent = `🗑 Delete ${selectedIds.size} selected`;
-    } else {
-      btn.style.display = 'none';
-    }
-  }
-
-  async function bulkDelete() {
-    const ids = Array.from(selectedIds);
-    if (!ids.length) return;
-    const ok = confirm(
-      `Delete ${ids.length} payment${ids.length !== 1 ? 's' : ''}?\n\n` +
-      `Invoice files in Drive will remain as archives. This cannot be undone.`
-    );
-    if (!ok) return;
-    const res = await fetch(`${API}?action=delete-bulk`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ ids }),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast(`Deleted ${res.count} payment${res.count !== 1 ? 's' : ''}`);
-    selectedIds.clear();
-    loadPayments();
-  }
-
-  async function deletePayment(id, vendor, amount, currency) {
-    const fmt = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: currency || 'NZD' }).format(amount || 0);
-    const ok = confirm(
-      `Delete this payment?\n\n` +
-      `  ${vendor}\n` +
-      `  ${fmt}\n\n` +
-      `The invoice file (if any) will remain in Drive as an archive. This cannot be undone.`
-    );
-    if (!ok) return;
-
-    const res = await fetch(`${API}?action=delete`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id }),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast(`Deleted ${vendor}`);
-    loadPayments();
-  }
-
-  async function loadProgramsAdmin() {
-    const host = document.getElementById('programs-list');
-    host.innerHTML = '<p class="empty">Loading…</p>';
-    const res = await fetch(`${API}?action=programs&include_inactive=1`).then(r => r.json());
-    const progs = res.programs || [];
-    if (!progs.length) { host.innerHTML = '<p class="empty">No programs yet. Add one above.</p>'; return; }
-
-    host.innerHTML = `
-      <table>
-        <thead><tr>
-          <th style="width:45%;">Name</th>
-          <th>Sort</th>
-          <th>Payments</th>
-          <th>Active</th>
-          <th>Export</th>
-          <th></th>
-        </tr></thead>
-        <tbody>${progs.map(programRow).join('')}</tbody>
-      </table>
-    `;
-  }
-
-  function programRow(p) {
-    const inactive = !p.is_active ? 'style="opacity:0.55;"' : '';
-    const safeName = escapeHtml(p.name).replace(/'/g, "\\'");
-    return `
-      <tr data-id="${p.id}" ${inactive}>
-        <td><input class="prog-name-input" value="${escapeHtml(p.name)}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;font-size:13px;" onchange="saveProgramField(${p.id}, 'name', this.value)"></td>
-        <td><input type="number" value="${p.sort_order}" style="width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:transparent;font-size:13px;" onchange="saveProgramField(${p.id}, 'sort_order', Number(this.value))"></td>
-        <td style="color:var(--muted);">${p.payment_count}</td>
-        <td><label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;"><input type="checkbox" ${p.is_active ? 'checked' : ''} onchange="saveProgramField(${p.id}, 'is_active', this.checked)">${p.is_active ? 'Active' : 'Hidden'}</label></td>
-        <td>${p.payment_count > 0
-          ? `<button onclick="exportProgramCSV(${p.id}, '${safeName}')" style="font-size:12px;" title="Download all ${p.payment_count} payment${p.payment_count !== 1 ? 's' : ''} as CSV">⬇ CSV</button>`
-          : `<span style="font-size:11px;color:var(--muted);">—</span>`}</td>
-        <td>${p.payment_count === 0 ? `<button onclick="deleteProgram(${p.id}, '${safeName}')" style="color:var(--red);border-color:#fcc;font-size:12px;">Delete</button>` : `<span style="font-size:11px;color:var(--muted);">in use</span>`}</td>
-      </tr>
-    `;
-  }
-
-  async function saveProgramField(id, field, value) {
-    const res = await fetch(`${API}?action=programs-update`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id, patch: { [field]: value } }),
-    }).then(r => r.json());
-    if (res.error) { toast(res.error, 'err'); loadProgramsAdmin(); return; }
-    toast('Saved');
-    // Dropdowns elsewhere need refreshing if name or active changed
-    if (field === 'name' || field === 'is_active' || field === 'sort_order') loadPrograms();
-    if (field === 'is_active') loadProgramsAdmin(); // re-render with new opacity
-  }
-
-  async function deleteProgram(id, name) {
-    if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
-    const res = await fetch(`${API}?action=programs-delete`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id }),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast('Deleted');
-    loadProgramsAdmin();
-    loadPrograms();
-  }
-
-  document.getElementById('program-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const body = { name: fd.get('name'), sort_order: Number(fd.get('sort_order')) || 100 };
-    const res = await fetch(`${API}?action=programs-create`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(body),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast('Program added');
-    e.target.reset();
-    e.target.querySelector('[name=sort_order]').value = 100;
-    loadProgramsAdmin();
-    loadPrograms();
-  });
-
-  // ----------------------------------------------------------------------
-  // Live FX rates (NZD as base). Loaded once on page boot, refreshed daily.
-  // Source: open.er-api.com — free, no key, CORS-enabled, ~160 currencies.
-  // ----------------------------------------------------------------------
-  let fxRates = { NZD: 1 };   // default fallback; overwritten on success
-  let fxDate  = null;
-
-  async function loadRates() {
-    try {
-      const res  = await fetch('https://open.er-api.com/v6/latest/NZD').then(r => r.json());
-      if (res && res.rates && res.result === 'success') {
-        fxRates = res.rates;
-        fxRates.NZD = 1;
-        fxDate  = res.time_last_update_utc || res.time_last_update_unix || null;
-      }
-    } catch (e) {
-      console.warn('FX load failed, totals will treat all currencies as 1:1', e);
-    }
-  }
-
-  function toNZD(amount, currency) {
-    const cur = (currency || 'NZD').toUpperCase();
-    if (cur === 'NZD') return Number(amount) || 0;
-    const rate = fxRates[cur];
-    if (!rate) return Number(amount) || 0;   // unknown currency → no conversion
-    return (Number(amount) || 0) / rate;
-  }
-
-  // ----------------------------------------------------------------------
-  // Payment list
-  // ----------------------------------------------------------------------
-  function fmtMoney(n, cur = 'NZD') {
-    return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: cur }).format(n || 0);
-  }
-
-  function fmtNZD(n) {
-    return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(n || 0);
-  }
-
-  // Normalize any date input (YYYY-MM-DD or full ISO) to just 'YYYY-MM-DD'
-  function toDateOnly(dateStr) {
-    if (!dateStr) return '';
-    return String(dateStr).slice(0, 10);
-  }
-
-  function isoWeekKey(dateStr) {
-    const d = new Date(toDateOnly(dateStr) + 'T00:00:00');
-    if (isNaN(d)) return '1970-01-01';
-    const day = d.getDay() || 7;          // Mon=1..Sun=7
-    d.setDate(d.getDate() - day + 1);     // Monday of that week
-    return d.toISOString().slice(0, 10);
-  }
-
-  function weekLabel(startIso) {
-    const start = new Date(startIso + 'T00:00:00');
-    const end = new Date(start); end.setDate(end.getDate() + 6);
-    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `Week of ${fmt(start)} – ${fmt(end)}`;
-  }
-
-  function resolveDateRange() {
-    const range = document.getElementById('filter-range').value;
-    const from  = document.getElementById('filter-from');
-    const to    = document.getElementById('filter-to');
-    from.style.display = (range === 'custom') ? '' : 'none';
-    to.style.display   = (range === 'custom') ? '' : 'none';
-
-    const today = new Date();
-    const iso = d => d.toISOString().slice(0, 10);
-    if (range === 'custom') return { from: from.value || null, to: to.value || null };
-    if (range === 'overdue') return { from: null, to: iso(today) };
-    if (/^\d+$/.test(range)) {
-      const end = new Date(today); end.setDate(end.getDate() + Number(range));
-      return { from: iso(today), to: iso(end) };
-    }
-    return { from: null, to: null };
-  }
-
-  async function loadPayments() {
-    const status = document.getElementById('filter-status').value;
-    const program = document.getElementById('filter-program').value;
-    const sort   = document.getElementById('filter-sort').value;
-    const range  = resolveDateRange();
-    const qs = new URLSearchParams({ action: 'list' });
-    if (status) qs.set('status', status);
-    if (program) qs.set('program_id', program);
-    if (sort) qs.set('sort', sort);
-    if (range.from) qs.set('from', range.from);
-    if (range.to)   qs.set('to', range.to);
-    selectedIds.clear();
-    updateBulkBar();
-
-    document.getElementById('payments-list').innerHTML = '<p class="empty">Loading…</p>';
-    let res;
-    try {
-      res = await apiGet(qs.toString());
-    } catch (e) {
-      console.error('loadPayments failed:', e);
-      document.getElementById('payments-list').innerHTML = `
-        <div class="card empty" style="border:1px solid #fecaca;background:#fef2f2;color:#991b1b;">
-          <strong>Couldn't load payments.</strong><br>
-          <span style="font-size:12px;">${escapeHtml(e.message)}</span><br>
-          <span style="font-size:12px;color:#6b7280;">
-            Hit <a href="/api/invoices?action=debug" target="_blank" style="color:#991b1b;text-decoration:underline;">/api/invoices?action=debug</a>
-            to see which env vars / DB pieces are missing, and check the function logs in Netlify → Logs → Functions → invoices.
-          </span>
-        </div>`;
-      return;
-    }
-    const payments = res.payments || [];
-
-    renderKpis(payments);
-
-    if (!payments.length) {
-      document.getElementById('payments-list').innerHTML = '<div class="card empty">No payments match these filters.</div>';
-      return;
-    }
-
-    // Group by ISO week of due_date
-    const groups = {};
-    for (const p of payments) {
-      const k = isoWeekKey(p.due_date);
-      (groups[k] ||= []).push(p);
-    }
-    const weeks = Object.keys(groups).sort();
-
-    const html = weeks.map(k => {
-      const items = groups[k];
-      const totalNZD = items.reduce((s, p) => s + toNZD(p.amount, p.currency), 0);
-      const currencies = Array.from(new Set(items.map(p => (p.currency || 'NZD').toUpperCase())));
-      const mixed = currencies.length > 1 || (currencies[0] && currencies[0] !== 'NZD');
-      const rows = items.map(paymentRow).join('');
-      return `
-        <div class="week-header">
-          <span>${weekLabel(k)}</span>
-          <span class="total">${items.length} payment${items.length !== 1 ? 's' : ''} · ${fmtNZD(totalNZD)}${mixed ? ' (NZD)' : ''}</span>
-        </div>
-        <table>
-          <thead><tr>
-            <th style="width:24px;"><input type="checkbox" class="week-select-all" data-week="${k}" onchange="toggleWeekSelect(this)" title="Select all in this week"></th>
-            <th>Vendor</th><th>Program</th><th>Due</th><th>Amount</th><th>NZD</th>
-            <th>Source</th><th>Actions</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-    }).join('');
-
-    document.getElementById('payments-list').innerHTML = html;
-  }
-
-  function paymentRow(p) {
-    const fileLink = p.invoice_file_url
-      ? `<a class="link" href="${p.invoice_file_url}" target="_blank" title="Open invoice in Drive">📄</a>`
-      : '';
-    return `
-      <tr class="${p.paid ? 'paid' : ''}" data-payment-id="${p.id}" data-week="${isoWeekKey(p.due_date)}">
-        <td><input type="checkbox" class="row-select" data-id="${p.id}" onchange="onRowSelect()"></td>
-        <td class="vendor">
-          <strong>${escapeHtml(p.vendor)}</strong> ${fileLink}
-          ${p.invoice_number ? `<div style="color:var(--muted);font-size:11px;">#${escapeHtml(p.invoice_number)}</div>` : ''}
-        </td>
-        <td>${programSelectHtml(p.program_id, p.program_name)}</td>
-        <td>${toDateOnly(p.due_date)}${p.rescheduled_from ? `<div style="color:var(--muted);font-size:11px;">was ${toDateOnly(p.rescheduled_from)}</div>` : ''}</td>
-        <td class="amount">
-          <input type="number" step="0.01" min="0" value="${Number(p.amount).toFixed(2)}" data-original="${Number(p.amount).toFixed(2)}" onchange="updateAmount(${p.id}, this)">
-          <input class="ccy-input" list="currency-options" maxlength="3" value="${escapeHtml((p.currency || 'NZD').toUpperCase())}" data-original="${escapeHtml((p.currency || 'NZD').toUpperCase())}" onchange="updateCurrency(${p.id}, this)" title="Click to change currency">
-        </td>
-        <td class="amount nzd-col">${(p.currency || 'NZD').toUpperCase() === 'NZD' ? '<span style="color:var(--muted);">—</span>' : fmtNZD(toNZD(p.amount, p.currency))}</td>
-        <td><span class="chip source-${p.source}">${p.source}</span></td>
-        <td>
-          <div class="actions">
-            <button class="act-btn ${p.approved_to_pay ? 'is-on-approve' : ''}"
-                    onclick="toggleField(${p.id}, 'approved_to_pay', ${!p.approved_to_pay})"
-                    title="${p.approved_to_pay ? 'Approved — click to unapprove' : 'Approve for payment'}">
-              ${p.approved_to_pay ? '<span class="check">✓</span> Approved' : 'Approve'}
-            </button>
-            <button class="act-btn"
-                    onclick="reschedule(${p.id}, '${toDateOnly(p.due_date)}')"
-                    title="Change due date">
-              Reschedule
-            </button>
-            <button class="act-btn ${p.paid ? 'is-on-paid' : ''}"
-                    onclick="togglePaid(${p.id}, ${!p.paid})"
-                    title="${p.paid ? 'Paid — click to unmark' : 'Mark as paid'}">
-              ${p.paid ? '<span class="check">✓</span> Paid' : 'Mark paid'}
-            </button>
-            <button class="act-btn danger"
-                    onclick="deletePayment(${p.id}, ${JSON.stringify(p.vendor).replace(/"/g, '&quot;')}, ${Number(p.amount)}, ${JSON.stringify(p.currency || 'NZD').replace(/"/g, '&quot;')})"
-                    title="Delete this payment">🗑</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }
-
-  function renderKpis(payments) {
-    const unpaid = payments.filter(p => !p.paid);
-    const nextWeek = new Date(); nextWeek.setDate(nextWeek.getDate() + 7);
-    const dueThisWeek = unpaid.filter(p => new Date(p.due_date) <= nextWeek);
-    const awaiting = unpaid.filter(p => !p.approved_to_pay);
-    const approved = unpaid.filter(p => p.approved_to_pay);
-
-    // Sum in NZD using live FX
-    const sumNZD = arr => arr.reduce((s, p) => s + toNZD(p.amount, p.currency), 0);
-
-    const ratesNote = fxDate
-      ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">NZD · rates ${new Date(fxDate).toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' })}</div>`
-      : `<div style="font-size:11px;color:var(--red);margin-top:2px;">NZD · rates unavailable</div>`;
-
-    document.getElementById('kpis').innerHTML = `
-      <div class="kpi amber"><div class="label">Due within 7 days</div><div class="value">${fmtNZD(sumNZD(dueThisWeek))}</div><div style="font-size:11px;color:var(--muted);">${dueThisWeek.length} payment${dueThisWeek.length !== 1 ? 's' : ''}</div></div>
-      <div class="kpi"><div class="label">Awaiting approval</div><div class="value">${fmtNZD(sumNZD(awaiting))}</div><div style="font-size:11px;color:var(--muted);">${awaiting.length} payment${awaiting.length !== 1 ? 's' : ''}</div></div>
-      <div class="kpi green"><div class="label">Approved, ready to pay</div><div class="value">${fmtNZD(sumNZD(approved))}</div><div style="font-size:11px;color:var(--muted);">${approved.length} payment${approved.length !== 1 ? 's' : ''}</div></div>
-      <div class="kpi"><div class="label">Total outstanding</div><div class="value">${fmtNZD(sumNZD(unpaid))}</div>${ratesNote}</div>
-    `;
-  }
-
-  // ----------------------------------------------------------------------
-  // Row actions
-  // ----------------------------------------------------------------------
-  async function toggleField(id, field, value) {
-    const res = await fetch(`${API}?action=update`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id, patch: { [field]: value } }),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast(`Updated`);
-    loadPayments();
-  }
-
-  async function togglePaid(id, checked) {
-    const patch = { paid: checked };
-    if (checked) patch.paid_date = new Date().toISOString().slice(0, 10);
-    else patch.paid_date = null;
-    const res = await fetch(`${API}?action=update`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id, patch }),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast(checked ? 'Marked paid' : 'Unmarked paid');
-    loadPayments();
-  }
-
-  async function reschedule(id, currentDate) {
-    const newDate = prompt(`New due date (YYYY-MM-DD):`, currentDate);
-    if (!newDate) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return toast('Bad date format', 'err');
-    const reason = prompt('Reason for reschedule (optional):') || null;
-    const res = await fetch(`${API}?action=update`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ id, patch: { due_date: newDate, rescheduled_from: currentDate, reschedule_reason: reason } }),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast('Rescheduled');
-    loadPayments();
-  }
-
-  // ----------------------------------------------------------------------
-  // Upload
-  // ----------------------------------------------------------------------
-  const drop = document.getElementById('drop-zone');
-  const fileInput = document.getElementById('file-input');
-  let pendingFile = null;
-
-  drop.addEventListener('click', () => fileInput.click());
-  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
-  drop.addEventListener('drop', e => {
-    e.preventDefault(); drop.classList.remove('dragover');
-    if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
-  });
-  fileInput.addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
-
-  function setFile(f) {
-    pendingFile = f;
-    document.getElementById('drop-text').textContent = `📎 ${f.name} (${Math.round(f.size/1024)} KB)`;
-    document.getElementById('upload-btn').disabled = false;
-    document.getElementById('parse-preview').innerHTML = '';
-  }
-
-  document.getElementById('upload-btn').addEventListener('click', async () => {
-    if (!pendingFile) return;
-    const btn = document.getElementById('upload-btn');
-    btn.disabled = true; btn.textContent = 'Parsing & uploading…';
-
-    const data = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(pendingFile);
-    });
-
-    const res = await fetch(`${API}?action=upload`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        filename: pendingFile.name,
-        mimeType: pendingFile.type || 'application/pdf',
-        data,
-        program_id: document.getElementById('upload-program').value || null,
-      }),
-    }).then(r => r.json());
-
-    btn.disabled = false; btn.textContent = 'Upload & Parse';
-    if (res.error) { toast(res.error, 'err'); return; }
-
-    const p = res.parsed || {};
-    document.getElementById('parse-preview').innerHTML = `
-      <div class="parse-preview">
-        <div><strong>Vendor:</strong> ${escapeHtml(p.vendor || '—')}</div>
-        <div><strong>Amount:</strong> ${fmtMoney(p.amount, p.currency || 'NZD')}</div>
-        <div><strong>Due:</strong> ${p.due_date || '—'}</div>
-        <div style="margin-top:6px;color:var(--muted);font-size:12px;">Saved to Drive + payment scheduled. Edit it on the Dashboard if anything's wrong.</div>
-      </div>
-    `;
-    pendingFile = null;
-    document.getElementById('drop-text').textContent = '📎 Click or drop an invoice file here';
-    fileInput.value = '';
-    loadPayments();
-  });
-
-  // ----------------------------------------------------------------------
-  // Manual entry
-  // ----------------------------------------------------------------------
-  document.getElementById('manual-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const body = Object.fromEntries(fd.entries());
-    body.action = 'create';
-    body.amount = Number(body.amount);
-    body.currency = (body.currency || 'NZD').toUpperCase().slice(0, 3);
-    if (!body.program_id) delete body.program_id;
-
-    const res = await fetch(`${API}?action=create`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(body),
-    }).then(r => r.json());
-    if (res.error) return toast(res.error, 'err');
-    toast('Payment scheduled');
-    e.target.reset();
-    e.target.querySelector('[name=currency]').value = 'NZD';   // restore default
-    loadPayments();
-    document.querySelector('.tab[data-panel="dashboard"]').click();
-  });
-
-  // ----------------------------------------------------------------------
-  // CSV export
-  // ----------------------------------------------------------------------
-  const CSV_COLUMNS = [
-    { header: 'ID',                 get: p => p.id },
-    { header: 'Vendor',             get: p => p.vendor },
-    { header: 'Invoice Number',     get: p => p.invoice_number || '' },
-    { header: 'Amount',             get: p => Number(p.amount || 0).toFixed(2) },
-    { header: 'Currency',           get: p => (p.currency || 'NZD').toUpperCase() },
-    { header: 'NZD Equivalent',     get: p => toNZD(p.amount, p.currency).toFixed(2) },
-    { header: 'Due Date',           get: p => toDateOnly(p.due_date) },
-    { header: 'Program',             get: p => p.program_name || '' },
-    { header: 'Source',             get: p => p.source || '' },
-    { header: 'Approved',           get: p => p.approved_to_pay ? 'Yes' : 'No' },
-    { header: 'Approved At',        get: p => p.approved_at ? toDateOnly(p.approved_at) : '' },
-    { header: 'Paid',               get: p => p.paid ? 'Yes' : 'No' },
-    { header: 'Paid Date',          get: p => p.paid_date ? toDateOnly(p.paid_date) : '' },
-    { header: 'Rescheduled From',   get: p => p.rescheduled_from ? toDateOnly(p.rescheduled_from) : '' },
-    { header: 'Drive Link',         get: p => p.invoice_file_url || '' },
-    { header: 'Notes',              get: p => (p.notes || '').replace(/\s+/g, ' ').trim() },
-    { header: 'Created At',         get: p => p.created_at ? toDateOnly(p.created_at) : '' },
+// Extract a JSON value from a response that might have prose around it.
+// Tries strict JSON first, then code-fence stripping, then bracket-bounded extraction.
+function extractJSON(text) {
+  if (!text) return null;
+  const tries = [
+    text.trim(),
+    text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim(),
   ];
+  // First [ ... last ]
+  const firstBracket = text.indexOf('[');
+  const lastBracket  = text.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    tries.push(text.slice(firstBracket, lastBracket + 1));
+  }
+  // First { ... last }
+  const firstBrace = text.indexOf('{');
+  const lastBrace  = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    tries.push(text.slice(firstBrace, lastBrace + 1));
+  }
+  for (const candidate of tries) {
+    try { return JSON.parse(candidate); } catch (_) { /* keep trying */ }
+  }
+  return null;
+}
 
-  function csvCell(v) {
-    const s = String(v ?? '');
-    // RFC 4180: quote if it contains comma, quote, newline, or leading/trailing whitespace
-    if (/[",\n\r]/.test(s) || /^\s|\s$/.test(s)) {
-      return `"${s.replace(/"/g, '""')}"`;
+async function parseInvoiceWithClaude(buffer, mimeType) {
+  const prompt = `You are reading an invoice. Return ONLY a JSON array, no markdown fences, no commentary, no leading or trailing text.
+
+Each array element represents one currency on the invoice:
+
+[
+  {
+    "vendor": string,            // The party being paid (NOT the customer being billed)
+    "invoice_number": string|null,
+    "amount": number,            // Total due FOR THIS CURRENCY, after subtracting credits/refunds. NEVER negative.
+    "currency": string,          // 3-letter ISO code (USD, NZD, EUR, AUD, etc.). If ambiguous, default to "NZD".
+    "due_date": string           // ISO YYYY-MM-DD. If only an issue date is shown, add 30 days.
+  }
+]
+
+Rules for "amount":
+  - If the invoice has a clearly labelled "Total Amount Due", "Balance Due", "Amount Due", "Total Owed" or similar — USE THAT NUMBER for the predominant currency. Ignore the line-by-line subtotal calculation.
+  - If line items have DIFFERENT currencies (some USD, some EUR), produce one array element per currency. The "amount" for each currency is the sum of its lines (subtracting any negative/credit lines for that currency). If a single overall total is given without splitting by currency, put the bulk in the predominant currency and the smaller-currency lines as their own element.
+  - Negative line items are credits (already paid, refunds). Subtract them, don't include them as separate items.
+  - Skip header rows, footers, "Total" row labels, and bank-detail sections — these aren't payable items.
+
+Rules for "vendor":
+  - The party who should RECEIVE money (the contractor/instructor/supplier name on the invoice). NOT the customer being invoiced.
+
+Rules for "currency":
+  - Use codes shown next to amounts. If the invoice mixes "$" without country qualifier, prefer "NZD" unless the rest of the invoice strongly implies otherwise.
+
+If the document is genuinely not an invoice or you can't extract anything meaningful, return [] (empty array). Otherwise return at least one element.`;
+
+  const content = mimeType === 'application/pdf'
+    ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }]
+    : [{ type: 'image',    source: { type: 'base64', media_type: mimeType,          data: buffer.toString('base64') } }];
+
+  const msg = await anthropic().messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1500,
+    messages: [{ role: 'user', content: [...content, { type: 'text', text: prompt }] }],
+  });
+
+  const text = msg.content.find(c => c.type === 'text')?.text || '';
+  const parsed = extractJSON(text);
+  if (parsed === null) {
+    // Surface the raw response so we can iterate on the prompt later
+    const err = new Error(`Claude returned unparseable response: ${text.slice(0, 400)}`);
+    err.rawResponse = text;
+    throw err;
+  }
+  return Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' ? [parsed] : []);
+}
+
+// Text-only variant for emails that arrive without an attachment.
+// Returns an ARRAY of invoice/payment line items. An empty array means
+// "this email isn't actually about payments to make" — Apps Script then
+// flags the thread as Failed.
+async function parseInvoiceTextWithClaude({ from, subject, body }) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const prompt = `You are reading an email that may contain ONE OR MORE bills / invoices / scheduled payments.
+
+From: ${from || '(unknown)'}
+Subject: ${subject || '(no subject)'}
+Today's date: ${todayIso}
+
+Body:
+${(body || '').slice(0, 12000)}
+
+---
+
+Extract every distinct payment that needs to be made. Return ONLY a JSON ARRAY (no markdown, no commentary). Each element:
+
+{
+  "vendor": string,            // Who is being paid
+  "invoice_number": string|null,
+  "amount": number,            // No currency symbol, just the number
+  "currency": string,          // 3-letter ISO code. Default "NZD" if ambiguous.
+  "due_date": string,          // ISO YYYY-MM-DD — see rules below
+  "notes": string|null         // One-line context: section header, "Each month", "Accommodation bond", etc.
+}
+
+Due date rules (apply in order):
+  1. If a specific full date is shown, use it.
+  2. If only a day-of-month is shown WITH "each month" / "monthly" / "every month", use the NEXT upcoming occurrence of that day after today.
+  3. If only a day-of-month is shown without recurrence context, use the next upcoming occurrence after today.
+  4. If no date hint at all, use today + 30 days.
+
+Other rules:
+  - Lines that aren't payments (greetings, signatures, totals, section headers themselves) → skip them. Only return actual payable items.
+  - Sub-totals or running totals at the bottom of a section → skip.
+  - If a section header describes the items (e.g. "Accommodation Bonds", "Pacific Payments", "Pure Payments"), include it in each item's notes for that section.
+  - If the email is clearly NOT about payments at all (marketing, FYI/conversation, receipt of payment already made) → return [] (empty array).
+  - Do NOT invent payments not in the email. If unsure, skip.
+
+Return the array, nothing else.`;
+
+  const msg = await anthropic().messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4000,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = msg.content.find(c => c.type === 'text')?.text || '';
+  const parsed = extractJSON(text);
+  if (parsed === null) {
+    console.error('Body-text Claude parse failed. Raw response:', text.slice(0, 800));
+    return [];
+  }
+  return Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' ? [parsed] : []);
+}
+
+// --------------------------------------------------------------------------
+// Action handlers
+// --------------------------------------------------------------------------
+async function handleList(params) {
+  const where = [];
+  const args = [];
+  if (params.status === 'unpaid')   where.push(`paid = FALSE`);
+  if (params.status === 'paid')     where.push(`paid = TRUE`);
+  if (params.status === 'pending')  where.push(`paid = FALSE AND approved_to_pay = FALSE`);
+  if (params.status === 'approved') where.push(`paid = FALSE AND approved_to_pay = TRUE`);
+  if (params.program_id) {
+    args.push(Number(params.program_id));
+    where.push(`program_id = $${args.length}`);
+  }
+  if (params.from) { args.push(params.from); where.push(`due_date >= $${args.length}`); }
+  if (params.to)   { args.push(params.to);   where.push(`due_date <= $${args.length}`); }
+
+  // Sort options. Allow-listed for safety since this is interpolated into SQL.
+  const sortMap = {
+    'due_asc':       'p.due_date ASC, p.id ASC',
+    'due_desc':      'p.due_date DESC, p.id DESC',
+    'created_asc':   'p.created_at ASC, p.id ASC',
+    'created_desc':  'p.created_at DESC, p.id DESC',
+    'amount_asc':    'p.amount ASC, p.id ASC',
+    'amount_desc':   'p.amount DESC, p.id DESC',
+    'vendor_asc':    'lower(p.vendor) ASC, p.id ASC',
+  };
+  const sortKey = sortMap[params.sort] ? params.sort : 'due_asc';
+  const orderClause = `p.paid ASC, ${sortMap[sortKey]}`;
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const rows = await sql().query(
+    `SELECT p.*, pr.name AS program_name
+     FROM payments p
+     LEFT JOIN programs pr ON pr.id = p.program_id
+     ${whereSql}
+     ORDER BY ${orderClause}`,
+    args
+  );
+  return ok({ payments: rows, sort: sortKey });
+}
+
+async function handlePrograms(params) {
+  const includeInactive = params.include_inactive === '1' || params.include_inactive === 'true';
+  const rows = includeInactive
+    ? await sql()`
+        SELECT p.id, p.name, p.sort_order, p.is_active, p.created_at,
+               (SELECT COUNT(*) FROM payments WHERE program_id = p.id)::int AS payment_count
+        FROM programs p
+        ORDER BY p.sort_order, p.name
+      `
+    : await sql()`
+        SELECT id, name FROM programs WHERE is_active = TRUE ORDER BY sort_order, name
+      `;
+  return ok({ programs: rows });
+}
+
+async function handleProgramCreate(body) {
+  const name = (body.name || '').trim();
+  const sortOrder = Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 100;
+  if (!name) return bad('name required');
+  try {
+    const rows = await sql()`
+      INSERT INTO programs (name, sort_order)
+      VALUES (${name}, ${sortOrder})
+      RETURNING *
+    `;
+    return ok({ program: rows[0] });
+  } catch (e) {
+    if (/duplicate key/i.test(e.message)) return bad(`Program "${name}" already exists`, 409);
+    throw e;
+  }
+}
+
+async function handleProgramUpdate(body) {
+  const { id, patch } = body;
+  if (!id || !patch) return bad('id and patch required');
+
+  const sets = [];
+  const args = [];
+  const allow = ['name', 'sort_order', 'is_active'];
+  for (const k of Object.keys(patch)) {
+    if (!allow.includes(k)) continue;
+    args.push(k === 'name' ? String(patch[k]).trim() : patch[k]);
+    sets.push(`${k} = $${args.length}`);
+  }
+  if (!sets.length) return bad('no updatable fields in patch');
+
+  args.push(Number(id));
+  try {
+    const rows = await sql().query(
+      `UPDATE programs SET ${sets.join(', ')} WHERE id = $${args.length} RETURNING *`,
+      args
+    );
+    if (!rows.length) return bad('not found', 404);
+    return ok({ program: rows[0] });
+  } catch (e) {
+    if (/duplicate key/i.test(e.message)) return bad(`That program name already exists`, 409);
+    throw e;
+  }
+}
+
+async function handleProgramDelete(body) {
+  const id = Number(body.id);
+  if (!id) return bad('id required');
+  const ref = await sql()`SELECT COUNT(*)::int AS n FROM payments WHERE program_id = ${id}`;
+  if (ref[0].n > 0) {
+    return bad(`Can't delete — ${ref[0].n} payment(s) use this program. Deactivate it instead.`, 409);
+  }
+  const rows = await sql()`DELETE FROM programs WHERE id = ${id} RETURNING id`;
+  if (!rows.length) return bad('not found', 404);
+  return ok({ deleted: id });
+}
+
+async function handleCreate(body) {
+  const { vendor, amount, due_date, program_id, invoice_number, notes, currency } = body;
+  if (!vendor || !amount || !due_date) return bad('vendor, amount, due_date required');
+  const cur = (currency || 'NZD').toUpperCase().slice(0, 3);
+  const rows = await sql()`
+    INSERT INTO payments (vendor, amount, currency, due_date, program_id, invoice_number, notes, source)
+    VALUES (${vendor}, ${amount}, ${cur}, ${due_date}, ${program_id || null}, ${invoice_number || null}, ${notes || null}, 'manual')
+    RETURNING *
+  `;
+  return ok({ payment: rows[0] });
+}
+
+async function handleUpload(body) {
+  // body: { filename, mimeType, data (base64), program_id?, notes? }
+  if (!body.data || !body.filename) return bad('filename and base64 data required');
+  const buffer = Buffer.from(body.data, 'base64');
+  const mimeType = body.mimeType || 'application/pdf';
+
+  // 1. Parse with Claude — always returns an array (one entry per currency)
+  let lineGroups;
+  try {
+    lineGroups = await parseInvoiceWithClaude(buffer, mimeType);
+  } catch (e) {
+    return bad(`Claude parse failed: ${e.message}`, 502);
+  }
+  if (!lineGroups.length) return bad('Claude did not return any line items', 502);
+
+  // 2. Upload to Drive ONCE — all rows share the same file
+  const first = lineGroups[0];
+  const safeName = `${first.due_date || 'unknown'}_${(first.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}.${(mimeType.split('/')[1] || 'pdf')}`;
+  const driveFile = await uploadToDrive({ filename: safeName, mimeType, buffer });
+
+  // 3. Insert one row per line group
+  const multi = lineGroups.length > 1;
+  const created = [];
+  for (let i = 0; i < lineGroups.length; i++) {
+    const lg = lineGroups[i];
+    const noteExtra = multi ? `(Line ${i + 1} of ${lineGroups.length} — multi-currency invoice)` : '';
+    const note = [body.notes, noteExtra].filter(Boolean).join('\n') || null;
+    const rows = await sql()`
+      INSERT INTO payments
+        (vendor, amount, currency, invoice_number, due_date, program_id,
+         invoice_file_url, invoice_file_id, source, notes)
+      VALUES
+        (${lg.vendor || 'Unknown'}, ${lg.amount || 0}, ${lg.currency || 'NZD'},
+         ${lg.invoice_number || null}, ${lg.due_date || new Date().toISOString().slice(0,10)},
+         ${body.program_id || null},
+         ${driveFile.url}, ${driveFile.id}, 'upload', ${note})
+      RETURNING *
+    `;
+    created.push(rows[0]);
+  }
+  return ok({ payments: created, parsed: lineGroups });
+}
+
+async function handleUpdate(body) {
+  const { id, patch } = body;
+  if (!id || !patch) return bad('id and patch required');
+
+  const sets = [];
+  const args = [];
+  const allow = [
+    'vendor', 'amount', 'currency', 'due_date', 'program_id', 'invoice_number', 'notes',
+    'approved_to_pay', 'approved_by', 'paid', 'paid_date', 'paid_by',
+    'rescheduled_from', 'reschedule_reason',
+  ];
+  for (const k of Object.keys(patch)) {
+    if (!allow.includes(k)) continue;
+    let v = patch[k];
+    if (k === 'currency') v = String(v || '').toUpperCase().slice(0, 3);
+    args.push(v);
+    sets.push(`${k} = $${args.length}`);
+  }
+  if (patch.approved_to_pay === true && !patch.approved_at) {
+    sets.push(`approved_at = NOW()`);
+  }
+  if (!sets.length) return bad('no updatable fields in patch');
+
+  args.push(Number(id));
+  const rows = await sql().query(
+    `UPDATE payments SET ${sets.join(', ')} WHERE id = $${args.length} RETURNING *`,
+    args
+  );
+  if (!rows.length) return bad('not found', 404);
+  return ok({ payment: rows[0] });
+}
+
+async function handleDelete(body) {
+  const id = Number(body.id);
+  if (!id) return bad('id required');
+  const rows = await sql()`DELETE FROM payments WHERE id = ${id} RETURNING id, vendor, amount`;
+  if (!rows.length) return bad('not found', 404);
+  return ok({ deleted: rows[0] });
+}
+
+async function handleDeleteBulk(body) {
+  const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
+  if (!ids.length) return bad('ids array required');
+  const rows = await sql()`DELETE FROM payments WHERE id = ANY(${ids}::int[]) RETURNING id, vendor, amount`;
+  return ok({ deleted: rows, count: rows.length });
+}
+
+async function handleDebug() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  const report = {
+    env: {
+      GOOGLE_SERVICE_ACCOUNT_JSON: raw ? `present (${raw.length} chars)` : 'MISSING',
+      GOOGLE_DRIVE_FOLDER_ID:      process.env.GOOGLE_DRIVE_FOLDER_ID ? 'present' : 'MISSING',
+      ANTHROPIC_API_KEY:           process.env.ANTHROPIC_API_KEY ? `present (starts ${String(process.env.ANTHROPIC_API_KEY).slice(0, 7)}…)` : 'MISSING',
+      NETLIFY_DATABASE_URL:        process.env.NETLIFY_DATABASE_URL ? 'present' : 'MISSING',
+      INVOICES_INBOUND_SECRET:     process.env.INVOICES_INBOUND_SECRET ? 'present' : 'MISSING',
+    },
+  };
+
+  if (raw) {
+    try {
+      const creds = JSON.parse(raw);
+      report.service_account = {
+        client_email:      creds.client_email || 'missing field',
+        project_id:        creds.project_id || 'missing field',
+        private_key_looks_ok:
+          typeof creds.private_key === 'string' &&
+          creds.private_key.includes('BEGIN PRIVATE KEY') &&
+          creds.private_key.includes('END PRIVATE KEY'),
+        private_key_has_real_newlines: creds.private_key && creds.private_key.includes('\n'),
+        private_key_has_escaped_newlines: creds.private_key && creds.private_key.includes('\\n'),
+      };
+    } catch (e) {
+      report.service_account = { error: 'Failed to JSON.parse: ' + e.message };
     }
-    return s;
   }
 
-  function paymentsToCSV(payments) {
-    const header = CSV_COLUMNS.map(c => csvCell(c.header)).join(',');
-    const lines = payments.map(p => CSV_COLUMNS.map(c => csvCell(c.get(p))).join(','));
-    return [header, ...lines].join('\r\n');
+  try {
+    const d = await drive();
+
+    // 1. List test — confirms read access
+    const list = await d.files.list({
+      q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents`,
+      pageSize: 1, fields: 'files(id,name)',
+      supportsAllDrives: true, includeItemsFromAllDrives: true,
+    });
+    report.drive_list = { ok: true, sample_file: list.data.files?.[0]?.name || '(folder empty)' };
+
+    // 2. Metadata test — fetches info about the folder itself
+    try {
+      const meta = await d.files.get({
+        fileId: process.env.GOOGLE_DRIVE_FOLDER_ID,
+        fields: 'id,name,mimeType,driveId,parents,capabilities',
+        supportsAllDrives: true,
+      });
+      report.drive_folder = {
+        name: meta.data.name,
+        mimeType: meta.data.mimeType,
+        driveId: meta.data.driveId || '(not in a shared drive)',
+        parents: meta.data.parents,
+        can_add_children: meta.data.capabilities?.canAddChildren ?? 'unknown',
+        can_edit:         meta.data.capabilities?.canEdit ?? 'unknown',
+      };
+    } catch (e) {
+      report.drive_folder = { error: e.message };
+    }
+
+    // 3. Upload test — tries to create a tiny file
+    try {
+      const testRes = await d.files.create({
+        requestBody: {
+          name: `netlify-debug-${Date.now()}.txt`,
+          parents: [process.env.GOOGLE_DRIVE_FOLDER_ID],
+        },
+        media: { mimeType: 'text/plain', body: 'ok' },
+        fields: 'id,webViewLink',
+        supportsAllDrives: true,
+      });
+      report.drive_upload = { ok: true, created_id: testRes.data.id, view_link: testRes.data.webViewLink };
+    } catch (e) {
+      report.drive_upload = { ok: false, error: e.message };
+    }
+
+    report.drive_test = { ok: true };
+  } catch (e) {
+    report.drive_test = { ok: false, error: e.message };
   }
 
-  function downloadCSV(filename, csv) {
-    // Prepend UTF-8 BOM so Excel opens it correctly
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+  // ----- Database checks -----
+  try {
+    // 1. Can we connect at all?
+    const ping = await sql()`SELECT 1 AS ok`;
+    report.db_connect = { ok: true, result: ping[0]?.ok };
+
+    // 2. Do the expected tables exist?
+    const tables = await sql()`
+      SELECT table_name
+        FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name IN ('programs', 'payments')
+    `;
+    const found = tables.map(t => t.table_name).sort();
+    report.db_tables = {
+      found,
+      programs_exists: found.includes('programs'),
+      payments_exists: found.includes('payments'),
+    };
+
+    // 3. If tables exist, count rows so we know seeds ran
+    if (found.includes('programs')) {
+      const c = await sql()`SELECT COUNT(*)::int AS n FROM programs`;
+      report.db_tables.programs_rows = c[0].n;
+    }
+    if (found.includes('payments')) {
+      const c = await sql()`SELECT COUNT(*)::int AS n FROM payments`;
+      report.db_tables.payments_rows = c[0].n;
+    }
+  } catch (e) {
+    report.db_connect = { ok: false, error: e.message };
   }
 
-  async function exportCSV() {
-    // Respect current dashboard filters
-    const status = document.getElementById('filter-status').value;
-    const program = document.getElementById('filter-program').value;
-    const qs = new URLSearchParams({ action: 'list' });
-    if (status) qs.set('status', status);
-    if (program) qs.set('program_id', program);
+  return ok(report);
+}
 
-    toast('Preparing CSV…');
-    const res = await fetch(`${API}?${qs}`).then(r => r.json());
-    const payments = res.payments || [];
-    if (!payments.length) return toast('No rows to export', 'err');
+async function handleInbound(body, headers) {
+  // Apps Script POSTs:
+  //   X-Shared-Secret: <INVOICES_INBOUND_SECRET>
+  //   Body: {
+  //     from, subject,
+  //     attachments: [{ filename, mimeType, data (base64) }]   // preferred
+  //     body: "..."                                             // fallback when no attachments
+  //   }
+  const secret = headers['x-shared-secret'] || headers['X-Shared-Secret'];
+  if (secret !== process.env.INVOICES_INBOUND_SECRET) return bad('unauthorized', 401);
 
-    const today = new Date().toISOString().slice(0, 10);
-    const progLabel = program
-      ? `_${(programsCache.find(p => Number(p.id) === Number(program))?.name || 'program').replace(/[^a-z0-9]+/gi, '-')}`
-      : '';
-    const statusLabel = status ? `_${status}` : '';
-    downloadCSV(`invoices${progLabel}${statusLabel}_${today}.csv`, paymentsToCSV(payments));
-    toast(`Exported ${payments.length} row${payments.length !== 1 ? 's' : ''}`);
+  const hasAttachments = Array.isArray(body.attachments) && body.attachments.length > 0;
+  const hasBody        = typeof body.body === 'string' && body.body.trim().length > 20;
+
+  if (!hasAttachments && !hasBody) return bad('no attachments and no body text to parse');
+
+  const created = [];
+
+  // --- Attachment path --------------------------------------------------
+  if (hasAttachments) {
+    for (const att of body.attachments) {
+      const mimeType = att.mimeType || 'application/pdf';
+      const buffer = Buffer.from(att.data, 'base64');
+
+      let lineGroups;
+      let parseError = null;
+      try {
+        lineGroups = await parseInvoiceWithClaude(buffer, mimeType);
+      } catch (e) {
+        parseError = e.message || String(e);
+        console.error(`Claude parse failed for attachment "${att.filename}":`, parseError);
+        if (e.rawResponse) console.error('Raw Claude output:', e.rawResponse.slice(0, 800));
+        lineGroups = [{
+          vendor: `⚠ Parse failed — ${body.from || 'Unknown'}`,
+          amount: 0,
+          currency: 'NZD',
+          due_date: new Date().toISOString().slice(0, 10),
+        }];
+      }
+      if (!lineGroups.length) {
+        parseError = parseError || 'Claude returned an empty array';
+        lineGroups = [{
+          vendor: `⚠ Parse failed — ${body.from || 'Unknown'}`,
+          amount: 0,
+          currency: 'NZD',
+          due_date: new Date().toISOString().slice(0, 10),
+        }];
+      }
+
+      // Upload once per attachment
+      const first = lineGroups[0];
+      const safeName = `${first.due_date || 'unknown'}_${(first.vendor || 'vendor').replace(/[^a-z0-9]+/gi, '-')}.${(mimeType.split('/')[1] || 'pdf')}`;
+      const driveFile = await uploadToDrive({ filename: safeName, mimeType, buffer });
+
+      const multi = lineGroups.length > 1;
+      for (let i = 0; i < lineGroups.length; i++) {
+        const lg = lineGroups[i];
+        const base = `From: ${body.from || ''}\nSubject: ${body.subject || ''}`;
+        const extra = parseError
+          ? `\n\n⚠ Auto-parse failed. Please open the Drive file and edit this row.\nReason: ${parseError.slice(0, 300)}`
+          : (multi ? `\n(Line ${i + 1} of ${lineGroups.length} — multi-currency invoice)` : '');
+        const rows = await sql()`
+          INSERT INTO payments
+            (vendor, amount, currency, invoice_number, due_date,
+             invoice_file_url, invoice_file_id, source, notes)
+          VALUES
+            (${lg.vendor || 'Unknown'}, ${lg.amount || 0}, ${lg.currency || 'NZD'},
+             ${lg.invoice_number || null}, ${lg.due_date || new Date().toISOString().slice(0,10)},
+             ${driveFile.url}, ${driveFile.id}, 'email',
+             ${base + extra})
+          RETURNING *
+        `;
+        created.push(rows[0]);
+      }
+    }
+    return ok({ created });
   }
 
-  async function exportProgramCSV(programId, programName) {
-    toast('Preparing CSV…');
-    const res = await fetch(`${API}?action=list&program_id=${programId}`).then(r => r.json());
-    const payments = res.payments || [];
-    if (!payments.length) return toast('No rows to export', 'err');
-
-    const today = new Date().toISOString().slice(0, 10);
-    const safeName = (programName || 'program').replace(/[^a-z0-9]+/gi, '-');
-    downloadCSV(`invoices_${safeName}_${today}.csv`, paymentsToCSV(payments));
-    toast(`Exported ${payments.length} row${payments.length !== 1 ? 's' : ''}`);
+  // --- Body-only path ---------------------------------------------------
+  // parseInvoiceTextWithClaude now returns an array — could be 0, 1, or many items.
+  let items;
+  try {
+    items = await parseInvoiceTextWithClaude({ from: body.from, subject: body.subject, body: body.body });
+  } catch (e) {
+    return bad(`Failed to parse email body: ${e.message}`, 502);
   }
 
-  // ----------------------------------------------------------------------
-  // Utils
-  // ----------------------------------------------------------------------
-  function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // Filter out items missing required fields
+  const valid = (items || []).filter(it => it && it.vendor && Number(it.amount) > 0 && it.due_date);
+  const skipped = (items || []).length - valid.length;
+
+  if (!valid.length) {
+    return bad('Email does not appear to contain any payable invoices', 422);
   }
 
-  document.getElementById('filter-status').addEventListener('change', loadPayments);
-  document.getElementById('filter-program').addEventListener('change', loadPayments);
-  document.getElementById('filter-sort').addEventListener('change', loadPayments);
-  document.getElementById('filter-range').addEventListener('change', loadPayments);
-  document.getElementById('filter-from').addEventListener('change', loadPayments);
-  document.getElementById('filter-to').addEventListener('change', loadPayments);
+  const total = valid.length;
+  const baseNote = `From: ${body.from || ''}\nSubject: ${body.subject || ''}`;
+  for (let i = 0; i < valid.length; i++) {
+    const it = valid[i];
+    const positionTag = total > 1 ? `\n(Line ${i + 1} of ${total} — parsed from email body)` : `\n(Parsed from email body — no attachment)`;
+    const itemNote = it.notes ? `\nNotes: ${it.notes}` : '';
+    const rows = await sql()`
+      INSERT INTO payments
+        (vendor, amount, currency, invoice_number, due_date,
+         source, notes)
+      VALUES
+        (${it.vendor}, ${it.amount}, ${(it.currency || 'NZD').toUpperCase()},
+         ${it.invoice_number || null}, ${it.due_date},
+         'email',
+         ${baseNote + itemNote + positionTag})
+      RETURNING *
+    `;
+    created.push(rows[0]);
+  }
+  return ok({ created, parsed_from: 'body', skipped_incomplete: skipped });
+}
 
-  // Boot — load rates + programs in parallel, then load payments (which uses both)
-  // Use allSettled so a failed FX or programs fetch never blocks the payments
-  // list. loadPayments has its own error UI for backend failures.
-  Promise.allSettled([loadRates(), loadPrograms()]).then(loadPayments);
-</script>
+// --------------------------------------------------------------------------
+// Entry point
+// --------------------------------------------------------------------------
+exports.handler = async (event) => {
+  try {
+    const method = event.httpMethod;
+    const qs = event.queryStringParameters || {};
+    const body = event.body ? (event.isBase64Encoded ? JSON.parse(Buffer.from(event.body, 'base64').toString('utf8')) : JSON.parse(event.body)) : {};
+    const action = qs.action || body.action;
 
-</body>
-</html>
+    if (method === 'GET'  && action === 'debug')           return await handleDebug();
+    if (method === 'GET'  && action === 'list')             return await handleList(qs);
+    if (method === 'GET'  && action === 'programs')         return await handlePrograms(qs);
+    if (method === 'POST' && action === 'create')           return await handleCreate(body);
+    if (method === 'POST' && action === 'upload')           return await handleUpload(body);
+    if (method === 'POST' && action === 'update')           return await handleUpdate(body);
+    if (method === 'POST' && action === 'delete')           return await handleDelete(body);
+    if (method === 'POST' && action === 'delete-bulk')      return await handleDeleteBulk(body);
+    if (method === 'POST' && action === 'inbound')          return await handleInbound(body, event.headers || {});
+    if (method === 'POST' && action === 'programs-create')  return await handleProgramCreate(body);
+    if (method === 'POST' && action === 'programs-update')  return await handleProgramUpdate(body);
+    if (method === 'POST' && action === 'programs-delete')  return await handleProgramDelete(body);
+
+    return bad(`unknown action '${action}' for method ${method}`);
+  } catch (err) {
+    console.error(err);
+    return bad(err.message || 'server error', 500);
+  }
+};
