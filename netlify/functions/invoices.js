@@ -536,6 +536,39 @@ async function handleDebug() {
     report.drive_test = { ok: false, error: e.message };
   }
 
+  // ----- Database checks -----
+  try {
+    // 1. Can we connect at all?
+    const ping = await sql()`SELECT 1 AS ok`;
+    report.db_connect = { ok: true, result: ping[0]?.ok };
+
+    // 2. Do the expected tables exist?
+    const tables = await sql()`
+      SELECT table_name
+        FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name IN ('programs', 'payments')
+    `;
+    const found = tables.map(t => t.table_name).sort();
+    report.db_tables = {
+      found,
+      programs_exists: found.includes('programs'),
+      payments_exists: found.includes('payments'),
+    };
+
+    // 3. If tables exist, count rows so we know seeds ran
+    if (found.includes('programs')) {
+      const c = await sql()`SELECT COUNT(*)::int AS n FROM programs`;
+      report.db_tables.programs_rows = c[0].n;
+    }
+    if (found.includes('payments')) {
+      const c = await sql()`SELECT COUNT(*)::int AS n FROM payments`;
+      report.db_tables.payments_rows = c[0].n;
+    }
+  } catch (e) {
+    report.db_connect = { ok: false, error: e.message };
+  }
+
   return ok(report);
 }
 
