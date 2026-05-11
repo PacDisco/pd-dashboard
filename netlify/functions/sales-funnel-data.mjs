@@ -8,8 +8,8 @@
 // Response shape:
 //   {
 //     months: ["2025-04", "2025-05", ...],
-//     traffic:       [0, 0, ...],          // website sessions from HubSpot Analytics
-//     trafficSource: "hubspot" | "scope-missing" | "endpoint-gone" | "empty" | "error",
+//     traffic:       [423, 465, ...],      // monthly sessions (from MANUAL_TRAFFIC below)
+//     trafficSource: "manual" | "empty",
 //     contacts:      [259, 216, ...],      // PD-tagged contacts created
 //     opportunities: [4, 5, ...],          // entered Application Fee Received
 //     salesViaDp:    [4, 3, ...],          // entered Deposit Paid
@@ -17,9 +17,6 @@
 //     totalSales:    [5, 9, ...],
 //     skippedDeals:  { "2025-04": [{name, cw_date}], ... }
 //   }
-//
-// Rate-limit aware: respects HubSpot's 5 req/sec cap by batching the
-// contact-count queries and retrying with exponential backoff on 429.
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
@@ -32,9 +29,32 @@ const STAGES = {
   cw: ["143518991", "143518998", "143476017", "143502772", "1015966373"],
 };
 
-// Names to exclude (case-insensitive substring match on dealname)
+// Names to exclude
 const EXCLUDE_SUBSTRINGS = ["college credit", "test account", "meg test"];
 const EXCLUDE_EXACT = ["SAS", "Bali Summer", "Australia Summer 2027"];
+
+// ============================================================
+// MANUAL TRAFFIC — update once a month
+// ============================================================
+// Sessions for pacificdiscovery.org by month.
+// Initially seeded with SEMRush organic estimates (US database).
+// To update: add new months at the bottom each month. Anything missing
+// shows as 0 in the dashboard.
+const MANUAL_TRAFFIC = {
+  "2025-04": 423,
+  "2025-05": 465,
+  "2025-06": 506,
+  "2025-07": 419,
+  "2025-08": 423,
+  "2025-09": 368,
+  "2025-10": 365,
+  "2025-11": 377,
+  "2025-12": 346,
+  "2026-01": 359,
+  "2026-02": 384,
+  "2026-03": 464,
+  "2026-04": 446,
+};
 
 // -------- Helpers --------
 
@@ -172,83 +192,10 @@ async function countPdContacts(startISO, endISO) {
   return data.total ?? 0;
 }
 
-// ============================================================
-// Traffic data source — HubSpot Analytics API
-// ============================================================
-//
-// Uses HubSpot's Analytics v2 API:
-//   GET /analytics/v2/reports/sources/monthly
-//
-// Required scope on the private app token: `business-intelligence`
-// (in the HubSpot UI, shown as "Analytics tools" → Read access)
-//
-// Returns { counts: [num, num, ...], source: string }
-//
-// Possible source values:
-//   "hubspot"        — success, real data
-//   "scope-missing"  — token needs business-intelligence scope (401/403)
-//   "endpoint-gone"  — 404 (Marketing Pro+ may be required for this endpoint)
-//   "empty"          — call succeeded but returned no sessions
-//   "error"          — anything else
-async function getTraffic(months) {
-  const [firstISO] = monthRange(months[0]);
-  const [, lastISO] = monthRange(months[months.length - 1]);
-  // HubSpot uses inclusive end dates; subtract 1 day from our exclusive end
-  const lastDate = new Date(lastISO);
-  lastDate.setUTCDate(lastDate.getUTCDate() - 1);
-  const fmt = (iso) => iso.replace(/-/g, "").slice(0, 8);
-  const start = fmt(firstISO);
-  const end = fmt(lastDate.toISOString());
-
-  const url =
-    `${HS_BASE}/analytics/v2/reports/sources/monthly` +
-    `?start=${start}&end=${end}`;
-
-  try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
-    });
-
-    if (res.status === 401 || res.status === 403) {
-      const txt = await res.text().catch(() => "");
-      console.warn(`HubSpot Analytics auth/scope error: ${res.status}`, txt);
-      return { counts: months.map(() => 0), source: "scope-missing" };
-    }
-    if (res.status === 404) {
-      console.warn("HubSpot Analytics endpoint returned 404 (legacy API removed?)");
-      return { counts: months.map(() => 0), source: "endpoint-gone" };
-    }
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.warn(`HubSpot Analytics ${res.status}:`, txt);
-      return { counts: months.map(() => 0), source: "error" };
-    }
-
-    const data = await res.json();
-
-    // Response shape: { "YYYY-MM-01": [ {breakdown, visits, ...}, ... ], ... }
-    // Sum `visits` (sessions) across all source breakdowns per month.
-    const byMonth = {};
-    for (const [dateKey, breakdowns] of Object.entries(data || {})) {
-      const ym = dateKey.slice(0, 7);
-      if (!Array.isArray(breakdowns)) continue;
-      let total = 0;
-      for (const row of breakdowns) {
-        total += row.visits || 0;
-      }
-      byMonth[ym] = (byMonth[ym] || 0) + total;
-    }
-
-    const counts = months.map((m) => byMonth[m] || 0);
-    const hasAny = counts.some((c) => c > 0);
-    return {
-      counts,
-      source: hasAny ? "hubspot" : "empty",
-    };
-  } catch (err) {
-    console.warn("HubSpot Analytics fetch threw:", err.message);
-    return { counts: months.map(() => 0), source: "error" };
-  }
+function getTraffic(months) {
+  const counts = months.map((m) => MANUAL_TRAFFIC[m] || 0);
+  const hasAny = counts.some((c) => c > 0);
+  return { counts, source: hasAny ? "manual" : "empty" };
 }
 
 // -------- Main handler --------
@@ -271,7 +218,6 @@ export default async (req) => {
     const [windowStart] = monthRange(months[0]);
     const [, windowEnd] = monthRange(months[months.length - 1]);
 
-    // Phase 1: three parallel deal searches
     const [afDeals, dpDeals, cwDeals] = await Promise.all([
       searchStageEntries(STAGES.af, windowStart, windowEnd),
       searchStageEntries(STAGES.dp, windowStart, windowEnd),
@@ -322,7 +268,6 @@ export default async (req) => {
       }
     }
 
-    // Phase 2: contact counts — batched 3 at a time
     await sleep(300);
     const contactCounts = [];
     for (let i = 0; i < months.length; i += 3) {
@@ -337,8 +282,7 @@ export default async (req) => {
       if (i + 3 < months.length) await sleep(250);
     }
 
-    // Phase 3: traffic from HubSpot Analytics (one API call)
-    const trafficResult = await getTraffic(months);
+    const trafficResult = getTraffic(months);
 
     const oppsArr = months.map((m) => opps[m]);
     const dpArr = months.map((m) => salesDp[m]);
