@@ -1,37 +1,16 @@
 // netlify/functions/sales-funnel-data.mjs
 //
 // Returns monthly funnel data for the Pacific Discovery sales pipelines.
-// Traffic comes live from HubSpot Analytics v2 (sessions/monthly).
+// Includes DEBUG MODE for traffic — surfaces raw HubSpot Analytics API
+// responses so we can diagnose why parsing is returning zeros.
 //
 // Query params (all optional):
-//   from=YYYY-MM   (default: 13 months ago)
-//   to=YYYY-MM     (default: current month)
-//
-// Response shape:
-//   {
-//     months: ["2025-04", ...],
-//     traffic:       [8519, ...],          // sessions from HubSpot Analytics
-//     trafficSource: "hubspot" | "scope-missing" | "endpoint-gone" | "empty" | "error",
-//     contacts:      [259, ...],           // PD-tagged contacts created
-//     opportunities: [4, ...],             // entered Application Fee Received
-//     salesViaDp:    [4, ...],             // entered Deposit Paid
-//     salesSkipDp:   [1, ...],             // entered Closed Won w/o ever entering DP
-//     totalSales:    [5, ...],
-//     skippedDeals:  { "2025-04": [{name, cw_date}], ... }
-//   }
-//
-// Required private-app scopes:
-//   crm.objects.deals.read
-//   crm.objects.contacts.read
-//   crm.schemas.deals.read
-//   crm.schemas.contacts.read
-//   business-intelligence       ← for traffic data
+//   from=YYYY-MM
+//   to=YYYY-MM
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
 
-// Stage IDs (Application Fee Received, Deposit Paid, Closed Won)
-// Order: Fall Semester, Fall Mini, Spring Semester, Spring Mini, Summer Program
 const STAGES = {
   af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
   dp: ["143518989", "143518996", "143476015", "143502770", "1015966371"],
@@ -178,86 +157,90 @@ async function countPdContacts(startISO, endISO) {
 }
 
 // ============================================================
-// Traffic — HubSpot Analytics API
+// Traffic — HubSpot Analytics API (DEBUG MODE)
 // ============================================================
-//
-// Endpoint: GET /analytics/v2/reports/sessions/monthly?start=YYYYMMDD&end=YYYYMMDD
-// Required scope: business-intelligence
-//
-// Response shape (monthly aggregation):
-//   { "YYYY-MM-01": { "visits": N, "visitors": N, ... }, ... }
 async function getTraffic(months) {
   const [firstISO] = monthRange(months[0]);
   const [, lastISO] = monthRange(months[months.length - 1]);
-
-  // HubSpot expects inclusive end; subtract 1 day from our exclusive end
   const lastDate = new Date(lastISO);
   lastDate.setUTCDate(lastDate.getUTCDate() - 1);
-
   const fmt = (iso) => iso.replace(/-/g, "").slice(0, 8);
   const start = fmt(firstISO);
   const end = fmt(lastDate.toISOString());
 
-  // Try /sessions/monthly first (cleanest, single object response)
-  // Fall back to /sources/monthly if that 404s.
   const candidates = [
     `${HS_BASE}/analytics/v2/reports/sessions/monthly?start=${start}&end=${end}`,
     `${HS_BASE}/analytics/v2/reports/sources/monthly?start=${start}&end=${end}`,
+    `${HS_BASE}/analytics/v2/reports/totals/monthly?start=${start}&end=${end}`,
   ];
 
-  let lastError = null;
+  const debugLog = [];
+
   for (const url of candidates) {
     try {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
       });
 
+      const bodyText = await res.text();
+      debugLog.push({
+        url: url.replace(HS_BASE, ""),
+        status: res.status,
+        bodyPreview: bodyText.slice(0, 800),
+      });
+
       if (res.status === 401 || res.status === 403) {
-        const txt = await res.text().catch(() => "");
-        console.warn(`HubSpot Analytics auth/scope error: ${res.status}`, txt);
-        lastError = "scope-missing";
-        break; // no point trying other endpoints
+        return {
+          counts: months.map(() => 0),
+          source: "scope-missing",
+          debug: debugLog,
+        };
       }
-      if (res.status === 404) {
-        // Try next candidate
-        lastError = "endpoint-gone";
-        continue;
-      }
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        console.warn(`HubSpot Analytics ${res.status}:`, txt);
-        lastError = "error";
+      if (res.status === 404) continue;
+      if (!res.ok) continue;
+
+      let data;
+      try {
+        data = JSON.parse(bodyText);
+      } catch (e) {
+        debugLog[debugLog.length - 1].parseError = e.message;
         continue;
       }
 
-      const data = await res.json();
       const byMonth = {};
 
-      // /sessions/monthly returns {"YYYY-MM-01": {visits, visitors, ...}}
-      // /sources/monthly returns {"YYYY-MM-01": [{breakdown, visits, ...}, ...]}
       for (const [dateKey, value] of Object.entries(data || {})) {
         const ym = dateKey.slice(0, 7);
         if (Array.isArray(value)) {
-          // sources breakdown — sum visits across all sources
           let total = 0;
-          for (const row of value) total += row.visits || 0;
+          for (const row of value) {
+            total += row.visits || row.sessions || row.rawViews || 0;
+          }
           byMonth[ym] = (byMonth[ym] || 0) + total;
         } else if (value && typeof value === "object") {
-          // direct sessions object
-          byMonth[ym] = (byMonth[ym] || 0) + (value.visits || 0);
+          byMonth[ym] = (byMonth[ym] || 0) + (value.visits || value.sessions || value.rawViews || 0);
+        } else if (typeof value === "number") {
+          byMonth[ym] = (byMonth[ym] || 0) + value;
         }
       }
 
       const counts = months.map((m) => byMonth[m] || 0);
       const hasAny = counts.some((c) => c > 0);
-      return { counts, source: hasAny ? "hubspot" : "empty" };
+      return {
+        counts,
+        source: hasAny ? "hubspot" : "empty",
+        debug: debugLog,
+        parsedByMonth: byMonth,
+      };
     } catch (err) {
-      console.warn(`HubSpot Analytics fetch threw for ${url}:`, err.message);
-      lastError = "error";
+      debugLog.push({
+        url: url.replace(HS_BASE, ""),
+        error: err.message,
+      });
     }
   }
 
-  return { counts: months.map(() => 0), source: lastError || "error" };
+  return { counts: months.map(() => 0), source: "error", debug: debugLog };
 }
 
 // -------- Main handler --------
@@ -356,6 +339,8 @@ export default async (req) => {
         months,
         traffic: trafficResult.counts,
         trafficSource: trafficResult.source,
+        trafficDebug: trafficResult.debug,
+        trafficParsed: trafficResult.parsedByMonth,
         contacts: contactCounts,
         opportunities: oppsArr,
         salesViaDp: dpArr,
