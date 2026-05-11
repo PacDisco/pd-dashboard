@@ -1,0 +1,9 @@
+{
+  "title": "Forward Business Report",
+  "description": "Forward-looking revenue and enrollment outlook by season and program.",
+  "category": "Operations",
+  "icon": "🧭",
+  "pinned": true,
+  "colors": ["#0f766e", "#14b8a6"],
+  "allowedRoles": ["admin", "operations", "programs"]
+}
