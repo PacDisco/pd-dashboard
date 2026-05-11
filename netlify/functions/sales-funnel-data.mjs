@@ -1,34 +1,19 @@
 // netlify/functions/sales-funnel-data.mjs
 //
 // Returns monthly funnel data for the Pacific Discovery sales pipelines.
-// Traffic comes live from HubSpot Analytics, filtered to pacificdiscovery.org only.
+// Traffic filtered to pacificdiscovery.org via HubSpot Analytics View.
 //
-// HubSpot Analytics responses have come back in two shapes depending on
-// account/beta status:
-//
-//   Shape 1 (Analytics Suite — your account):
-//     { "YYYY-MM-01": [
-//         { "breakdown": "sessions",     "mobile": N, "desktop": N, "others": N,
-//                                        "organicSearch": N, "directTraffic": N, ... },
-//         { "breakdown": "new-visitors", ... },
-//         { "breakdown": "bounce-percent-dec", ... },
-//         { "breakdown": "views-per-session-dec", ... }
-//       ], ... }
-//
-//   Shape 2 (legacy):
-//     { "YYYY-MM-01": [
-//         { "breakdown": "organic", "visits": N },
-//         { "breakdown": "direct",  "visits": N }, ...
-//       ], ... }
-//
-// We handle both. To filter by domain, we hit the per-domain endpoint
-// and add f= parameter.
+// Strategy:
+//   1. Look up the "PACIFIC DISCOVERY" analytics view ID once per cold start
+//   2. Query /analytics/v2/reports/sessions/monthly with filterId=<that-id>
+//   3. Sum mobile+desktop+others from the "sessions" breakdown row
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
 
-// Restrict traffic data to this domain only. Set to null to include all domains.
-const TRAFFIC_DOMAIN = "pacificdiscovery.org";
+// Name of the HubSpot Analytics View to use for traffic filtering.
+// Configured in HubSpot under Reports → Analytics Tools → Traffic Analytics → Views.
+const ANALYTICS_VIEW_NAME = "PACIFIC DISCOVERY";
 
 const STAGES = {
   af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
@@ -38,6 +23,9 @@ const STAGES = {
 
 const EXCLUDE_SUBSTRINGS = ["college credit", "test account", "meg test"];
 const EXCLUDE_EXACT = ["SAS", "Bali Summer", "Australia Summer 2027"];
+
+// Cached view ID across requests on the same warm function instance
+let cachedViewId = null;
 
 // -------- Helpers --------
 
@@ -176,8 +164,47 @@ async function countPdContacts(startISO, endISO) {
 }
 
 // ============================================================
-// Traffic — HubSpot Analytics filtered to pacificdiscovery.org
+// Traffic — HubSpot Analytics filtered by Analytics View
 // ============================================================
+
+// Look up the view ID by name. Caches the result per warm function instance.
+async function resolveViewId() {
+  if (cachedViewId) return cachedViewId;
+
+  // List all analytics views — try a couple of endpoint shapes since HubSpot
+  // has reorganized this API multiple times
+  const candidates = [
+    `${HS_BASE}/analytics/v2/analytics-views/`,
+    `${HS_BASE}/analytics/v2/analytics-views`,
+  ];
+
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+
+      // Response is either an array of views, or {views: [...]}, or {results: [...]}
+      const views = Array.isArray(data)
+        ? data
+        : (data.views || data.results || []);
+
+      const target = views.find(
+        (v) => (v.name || "").trim().toLowerCase() === ANALYTICS_VIEW_NAME.toLowerCase()
+      );
+      if (target?.id) {
+        cachedViewId = String(target.id);
+        return cachedViewId;
+      }
+    } catch (err) {
+      console.warn(`view-list fetch ${url} threw:`, err.message);
+    }
+  }
+  return null;
+}
+
 async function getTraffic(months) {
   const [firstISO] = monthRange(months[0]);
   const [, lastISO] = monthRange(months[months.length - 1]);
@@ -187,17 +214,29 @@ async function getTraffic(months) {
   const start = fmt(firstISO);
   const end = fmt(lastDate.toISOString());
 
-  // Use breakdown_by=sources with d1=<domain> to filter to a single domain.
-  // The f= parameter filters the breakdowns shown but data is still all-domains.
-  // d1=<domain> is the proper drilldown into a specific domain's data.
-  const params = new URLSearchParams({ start, end });
-
-  // The sources endpoint can drill into a specific domain via d1
-  const url = TRAFFIC_DOMAIN
-    ? `${HS_BASE}/analytics/v2/reports/sources/monthly?${params}&f=${encodeURIComponent(TRAFFIC_DOMAIN)}`
-    : `${HS_BASE}/analytics/v2/reports/sessions/monthly?${params}`;
-
   const debugLog = [];
+
+  // 1. Resolve the analytics view ID
+  let viewId;
+  try {
+    viewId = await resolveViewId();
+    debugLog.push({ step: "resolveViewId", viewName: ANALYTICS_VIEW_NAME, viewId });
+  } catch (err) {
+    debugLog.push({ step: "resolveViewId", error: err.message });
+  }
+
+  if (!viewId) {
+    return {
+      counts: months.map(() => 0),
+      source: "view-not-found",
+      debug: debugLog,
+    };
+  }
+
+  // 2. Query analytics with the filterId
+  const url =
+    `${HS_BASE}/analytics/v2/reports/sessions/monthly` +
+    `?start=${start}&end=${end}&filterId=${encodeURIComponent(viewId)}`;
 
   try {
     const res = await fetch(url, {
@@ -205,9 +244,10 @@ async function getTraffic(months) {
     });
     const bodyText = await res.text();
     debugLog.push({
+      step: "analytics-call",
       url: url.replace(HS_BASE, ""),
       status: res.status,
-      bodyPreview: bodyText.slice(0, 1000),
+      bodyPreview: bodyText.slice(0, 800),
     });
 
     if (res.status === 401 || res.status === 403) {
@@ -229,13 +269,12 @@ async function getTraffic(months) {
       parsedByMonth: byMonth,
     };
   } catch (err) {
-    console.warn("HubSpot Analytics fetch threw:", err.message);
-    debugLog.push({ error: err.message });
+    debugLog.push({ step: "analytics-call", error: err.message });
     return { counts: months.map(() => 0), source: "error", debug: debugLog };
   }
 }
 
-// Sum sessions per month across all the response shapes HubSpot might return.
+// Sum sessions across the two response shapes HubSpot might return
 function sumSessions(data) {
   const byMonth = {};
   const DEVICE_FIELDS = ["mobile", "desktop", "others"];
@@ -244,7 +283,7 @@ function sumSessions(data) {
     const ym = dateKey.slice(0, 7);
 
     if (Array.isArray(value)) {
-      // Shape 1: Analytics Suite — array of metric breakdowns
+      // Shape 1: Analytics Suite
       const sessionsRow = value.find((b) => b.breakdown === "sessions");
       if (sessionsRow) {
         const total = DEVICE_FIELDS.reduce(
@@ -253,7 +292,7 @@ function sumSessions(data) {
         );
         byMonth[ym] = (byMonth[ym] || 0) + total;
       } else {
-        // Shape 2: Legacy — array of source breakdowns with visits field
+        // Shape 2: Legacy
         let total = 0;
         for (const row of value) {
           total += row.visits || row.sessions || 0;
@@ -261,7 +300,6 @@ function sumSessions(data) {
         byMonth[ym] = (byMonth[ym] || 0) + total;
       }
     } else if (value && typeof value === "object") {
-      // Single object: { visits: N, ... }
       byMonth[ym] = (byMonth[ym] || 0) + (value.visits || value.sessions || 0);
     }
   }
@@ -364,7 +402,7 @@ export default async (req) => {
         months,
         traffic: trafficResult.counts,
         trafficSource: trafficResult.source,
-        trafficDomain: TRAFFIC_DOMAIN,
+        trafficViewName: ANALYTICS_VIEW_NAME,
         trafficDebug: trafficResult.debug,
         contacts: contactCounts,
         opportunities: oppsArr,
