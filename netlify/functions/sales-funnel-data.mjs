@@ -1,450 +1,282 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pacific Discovery · Sales Funnel</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<style>
-  :root {
-    --bg:        #0e1413;
-    --panel:    #141c1b;
-    --panel-2:  #1a2322;
-    --line:      #243130;
-    --text:     #e6efed;
-    --muted:    #8aa19d;
-    --accent:   #d8a657;  /* warm gold */
-    --accent-2: #6ab39a;  /* sage / sea */
-    --warn:     #d96a4e;  /* coral */
-    --good:     #88c9a1;
+// netlify/functions/sales-funnel-data.mjs
+//
+// Returns monthly funnel data for the Pacific Discovery sales pipelines.
+// Query params (all optional):
+//   from=YYYY-MM   (default: 13 months ago)
+//   to=YYYY-MM     (default: current month)
+//
+// Response shape:
+//   {
+//     months: ["2025-04", "2025-05", ...],
+//     opportunities: [4, 5, ...],          // entered Application Fee Received
+//     salesViaDp:    [4, 3, ...],          // entered Deposit Paid
+//     salesSkipDp:   [1, 6, ...],          // entered Closed Won w/o ever entering DP
+//     totalSales:    [5, 9, ...],
+//     contacts:      [259, 216, ...],      // PD-tagged contacts created
+//     skippedDeals:  { "2025-04": [{name, cw_date}], ... }
+//   }
+//
+// All stage IDs and pipeline IDs are hardcoded to match the active
+// Fall / Fall Mini / Spring / Spring Mini / Summer pipelines. College
+// credit deals and test deals are excluded by name.
+
+const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
+const HS_BASE = "https://api.hubapi.com";
+
+// Stage IDs per pipeline (Application Fee Received, Deposit Paid, Closed Won)
+const STAGES = {
+  af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
+  dp: ["143518989", "143518996", "143476015", "143502770", "1015966371"],
+  cw: ["143518991", "143518998", "143476017", "143502772", "1015966373"],
+};
+
+// Names to exclude (case-insensitive substring match on dealname)
+const EXCLUDE_SUBSTRINGS = ["college credit", "test account", "meg test"];
+const EXCLUDE_EXACT = ["SAS", "Bali Summer", "Australia Summer 2027"];
+
+// -------- Helpers --------
+
+function isExcluded(dealname) {
+  if (!dealname) return true;
+  const lower = dealname.toLowerCase();
+  for (const s of EXCLUDE_SUBSTRINGS) if (lower.includes(s)) return true;
+  if (EXCLUDE_EXACT.includes(dealname)) return true;
+  return false;
+}
+
+function monthsBetween(fromYM, toYM) {
+  const [fy, fm] = fromYM.split("-").map(Number);
+  const [ty, tm] = toYM.split("-").map(Number);
+  const out = [];
+  let y = fy, m = fm;
+  while (y < ty || (y === ty && m <= tm)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
-  body {
-    min-height: 100vh;
-    background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(216,166,87,0.06), transparent 60%),
-      radial-gradient(900px 500px at -10% 30%, rgba(106,179,154,0.05), transparent 60%),
-      var(--bg);
+  return out;
+}
+
+function monthRange(ym) {
+  // returns [startISO, endISO) for the calendar month
+  const [y, m] = ym.split("-").map(Number);
+  const start = `${y}-${String(m).padStart(2, "0")}-01`;
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  const end = `${ny}-${String(nm).padStart(2, "0")}-01`;
+  return [start, end];
+}
+
+function defaultRange() {
+  const now = new Date();
+  const to = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const back = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12, 1));
+  const from = `${back.getUTCFullYear()}-${String(back.getUTCMonth() + 1).padStart(2, "0")}`;
+  return { from, to };
+}
+
+async function hsPost(path, body) {
+  const res = await fetch(`${HS_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${HUBSPOT_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`HubSpot ${path} ${res.status}: ${txt}`);
   }
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 48px 32px 96px; }
-  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 40px; }
-  .title {
-    font-family: 'Fraunces', Georgia, serif;
-    font-weight: 500;
-    font-size: clamp(34px, 4.5vw, 52px);
-    line-height: 1.05;
-    letter-spacing: -0.02em;
-    margin: 0 0 8px;
+  return res.json();
+}
+
+// Search deals where any of `stageIds` was entered within [start, end), paginated.
+async function searchStageEntries(stageIds, startISO, endISO) {
+  const filterGroups = stageIds.map((sid) => ({
+    filters: [
+      {
+        propertyName: `hs_v2_date_entered_${sid}`,
+        operator: "BETWEEN",
+        value: startISO,
+        highValue: endISO,
+      },
+    ],
+  }));
+
+  const properties = [
+    "dealname",
+    "pipeline",
+    "dealstage",
+    ...STAGES.af.map((s) => `hs_v2_date_entered_${s}`),
+    ...STAGES.dp.map((s) => `hs_v2_date_entered_${s}`),
+    ...STAGES.cw.map((s) => `hs_v2_date_entered_${s}`),
+  ];
+
+  const all = [];
+  let after = undefined;
+  for (let page = 0; page < 10; page++) {
+    const body = {
+      filterGroups,
+      properties,
+      limit: 100,
+      sorts: [{ propertyName: "hs_lastmodifieddate", direction: "DESCENDING" }],
+    };
+    if (after) body.after = after;
+    const data = await hsPost("/crm/v3/objects/deals/search", body);
+    for (const r of data.results || []) all.push(r);
+    after = data.paging?.next?.after;
+    if (!after) break;
   }
-  .title em { color: var(--accent); font-style: italic; font-weight: 400; }
-  .subtitle { color: var(--muted); font-size: 14px; max-width: 540px; }
-  .controls { display: flex; gap: 12px; align-items: center; font-size: 13px; color: var(--muted); }
-  .controls input {
-    background: var(--panel); border: 1px solid var(--line); color: var(--text);
-    padding: 8px 12px; border-radius: 6px; font: inherit; font-size: 13px;
+  return all;
+}
+
+// Earliest date among the given stage-entered properties on a deal.
+function earliestStageDate(deal, stageIds) {
+  let earliest = null;
+  for (const sid of stageIds) {
+    const d = deal.properties?.[`hs_v2_date_entered_${sid}`];
+    if (d && (!earliest || d < earliest)) earliest = d;
   }
-  .controls button {
-    background: var(--accent); color: #1a1208; border: 0;
-    padding: 9px 16px; border-radius: 6px; font: inherit; font-weight: 600;
-    cursor: pointer; transition: transform 80ms ease, opacity 200ms;
-  }
-  .controls button:hover { transform: translateY(-1px); }
-  .controls button:disabled { opacity: 0.5; cursor: wait; }
-  .meta { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  return earliest;
+}
 
-  /* KPI strip */
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
-  .kpi {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 20px 22px;
-    position: relative;
-    overflow: hidden;
-  }
-  .kpi::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-    background: linear-gradient(90deg, var(--accent), transparent 60%);
-    opacity: 0.7;
-  }
-  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
-  .kpi .value { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 500; margin-top: 6px; letter-spacing: -0.02em; }
-  .kpi .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
-
-  /* Chart cards */
-  .cards { display: grid; gap: 20px; grid-template-columns: 1fr; }
-  @media (min-width: 980px) { .cards { grid-template-columns: 1fr 1fr; } }
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 24px 24px 16px;
-    min-height: 320px;
-    position: relative;
-  }
-  .card.wide { grid-column: 1 / -1; }
-  .card h2 {
-    font-family: 'Fraunces', serif;
-    font-weight: 500;
-    font-size: 20px;
-    margin: 0 0 4px;
-    letter-spacing: -0.01em;
-  }
-  .card .h-sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
-  .chart-wrap { position: relative; height: 280px; }
-  .card.wide .chart-wrap { height: 340px; }
-
-  /* Loading skeleton */
-  .skeleton {
-    position: absolute; inset: 60px 24px 16px; border-radius: 8px;
-    background: linear-gradient(110deg, var(--panel-2) 30%, #1e2827 50%, var(--panel-2) 70%);
-    background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
-    pointer-events: none;
-  }
-  @keyframes shimmer { to { background-position: -200% 0; } }
-  .hidden { display: none; }
-
-  .error { color: var(--warn); font-size: 13px; padding: 12px; background: rgba(217,106,78,0.08); border: 1px solid rgba(217,106,78,0.25); border-radius: 8px; }
-
-  /* Footnotes */
-  .footnote { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 32px; max-width: 720px; }
-  .footnote strong { color: var(--text); font-weight: 500; }
-
-  /* Table */
-  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
-  thead th { text-align: right; padding: 10px 12px; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--line); }
-  thead th:first-child { text-align: left; }
-  tbody td { padding: 9px 12px; border-bottom: 1px solid rgba(36,49,48,0.5); text-align: right; font-variant-numeric: tabular-nums; }
-  tbody td:first-child { text-align: left; color: var(--muted); font-weight: 500; }
-  tbody tr:hover { background: rgba(216,166,87,0.03); }
-  tfoot td { padding: 12px; border-top: 1px solid var(--line); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-  tfoot td:first-child { text-align: left; color: var(--accent); }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <div>
-      <h1 class="title">Sales <em>Funnel</em></h1>
-      <p class="subtitle">Opportunities, sales, and contact intake across the five season pipelines. Live from HubSpot.</p>
-    </div>
-    <div class="controls">
-      <label>From <input type="month" id="from" /></label>
-      <label>To <input type="month" id="to" /></label>
-      <button id="refresh">Refresh</button>
-    </div>
-  </header>
-
-  <div class="meta" id="generated"></div>
-  <div id="error-banner" class="error hidden" style="margin-bottom: 24px;"></div>
-
-  <!-- KPI strip -->
-  <section class="kpis" id="kpis"></section>
-
-  <!-- Cards: each chart loads on demand -->
-  <section class="cards">
-    <div class="card wide">
-      <h2>Funnel by month</h2>
-      <div class="h-sub">Opportunities = entered Application Fee Received. Sales = entered Deposit Paid OR Closed Won without DP.</div>
-      <div class="chart-wrap"><canvas id="chart-funnel"></canvas><div class="skeleton" id="skel-funnel"></div></div>
-    </div>
-
-    <div class="card">
-      <h2>Sales mix</h2>
-      <div class="h-sub">Via Deposit Paid vs. skipped straight to Closed Won.</div>
-      <div class="chart-wrap"><canvas id="chart-sales-mix"></canvas><div class="skeleton" id="skel-sales-mix"></div></div>
-    </div>
-
-    <div class="card">
-      <h2>PD contacts created</h2>
-      <div class="h-sub">Top-of-funnel: new contacts tagged <em>Pacific Discovery</em>.</div>
-      <div class="chart-wrap"><canvas id="chart-contacts"></canvas><div class="skeleton" id="skel-contacts"></div></div>
-    </div>
-
-    <div class="card wide">
-      <h2>Full breakdown</h2>
-      <div class="h-sub">Monthly numbers behind the charts. Click a month to see deals that skipped Deposit Paid.</div>
-      <div id="table-wrap"></div>
-    </div>
-  </section>
-
-  <p class="footnote">
-    <strong>Source:</strong> HubSpot CRM, live on each page load.
-    <strong>Pipelines:</strong> Fall Semester, Fall Mini Semester, Spring Semester, Spring Mini Semester, Summer Program.
-    <strong>Excluded:</strong> College credit add-on deals, test accounts.
-    <strong>Sale definition:</strong> A deal that entered Deposit Paid in the month, OR entered Closed Won in the month without ever having entered Deposit Paid.
-  </p>
-</div>
-
-<script>
-  // -------- Defaults: last 13 months --------
-  function defaultRange() {
-    const now = new Date();
-    const to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const back = new Date(now.getFullYear(), now.getMonth() - 12, 1);
-    const from = `${back.getFullYear()}-${String(back.getMonth() + 1).padStart(2, '0')}`;
-    return { from, to };
-  }
-
-  const fromInput = document.getElementById('from');
-  const toInput = document.getElementById('to');
-  const refreshBtn = document.getElementById('refresh');
-  const errorBanner = document.getElementById('error-banner');
-  const generatedEl = document.getElementById('generated');
-  const kpisEl = document.getElementById('kpis');
-  const tableWrap = document.getElementById('table-wrap');
-
-  const def = defaultRange();
-  fromInput.value = def.from;
-  toInput.value = def.to;
-
-  // -------- Chart theme defaults --------
-  Chart.defaults.color = '#8aa19d';
-  Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
-  Chart.defaults.font.size = 11;
-  Chart.defaults.borderColor = '#243130';
-
-  const COLORS = {
-    accent:   '#d8a657',
-    accent2:  '#6ab39a',
-    warn:     '#d96a4e',
-    good:     '#88c9a1',
-    muted:    '#8aa19d',
+// Count of PD-tagged contacts created in [start, end)
+async function countPdContacts(startISO, endISO) {
+  const body = {
+    filterGroups: [
+      {
+        filters: [
+          { propertyName: "company_tag", operator: "EQ", value: "Pacific Discovery" },
+          {
+            propertyName: "createdate",
+            operator: "BETWEEN",
+            value: startISO,
+            highValue: endISO,
+          },
+        ],
+      },
+    ],
+    properties: ["firstname"],
+    limit: 1,
   };
+  const data = await hsPost("/crm/v3/objects/contacts/search", body);
+  return data.total ?? 0;
+}
 
-  let charts = {};
+// -------- Main handler --------
 
-  function showSkeletons(on) {
-    ['funnel', 'sales-mix', 'contacts'].forEach((k) => {
-      document.getElementById(`skel-${k}`).classList.toggle('hidden', !on);
-    });
+export default async (req) => {
+  if (!HUBSPOT_TOKEN) {
+    return new Response(
+      JSON.stringify({ error: "HUBSPOT_PRIVATE_APP_TOKEN not configured" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 
-  function fmtMonthLabel(ym) {
-    const [y, m] = ym.split('-').map(Number);
-    const d = new Date(Date.UTC(y, m - 1, 1));
-    return d.toLocaleString('en', { month: 'short', year: '2-digit' });
-  }
+  try {
+    const url = new URL(req.url);
+    const def = defaultRange();
+    const fromYM = url.searchParams.get("from") || def.from;
+    const toYM = url.searchParams.get("to") || def.to;
+    const months = monthsBetween(fromYM, toYM);
 
-  function renderKpis(data) {
-    const sum = (arr) => arr.reduce((a, b) => a + b, 0);
-    const opps = sum(data.opportunities);
-    const sales = sum(data.totalSales);
-    const skipped = sum(data.salesSkipDp);
-    const contacts = sum(data.contacts);
-    const conv = opps > 0 ? Math.round((sales / opps) * 100) : 0;
+    const [windowStart] = monthRange(months[0]);
+    const [, windowEnd] = monthRange(months[months.length - 1]);
 
-    const cards = [
-      { label: 'Opportunities', value: opps, sub: 'App Fee Received' },
-      { label: 'Total Sales', value: sales, sub: `${conv}% of opps` },
-      { label: 'Skipped DP → CW', value: skipped, sub: 'Closed without deposit stage' },
-      { label: 'PD Contacts', value: contacts.toLocaleString(), sub: 'New, tagged Pacific Discovery' },
-    ];
-    kpisEl.innerHTML = cards.map((c) => `
-      <div class="kpi">
-        <div class="label">${c.label}</div>
-        <div class="value">${c.value}</div>
-        <div class="sub">${c.sub}</div>
-      </div>`).join('');
-  }
+    // Three parallel deal searches across the whole window
+    const [afDeals, dpDeals, cwDeals] = await Promise.all([
+      searchStageEntries(STAGES.af, windowStart, windowEnd),
+      searchStageEntries(STAGES.dp, windowStart, windowEnd),
+      searchStageEntries(STAGES.cw, windowStart, windowEnd),
+    ]);
 
-  function renderFunnel(data) {
-    const ctx = document.getElementById('chart-funnel');
-    if (charts.funnel) charts.funnel.destroy();
-    charts.funnel = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: data.months.map(fmtMonthLabel),
-        datasets: [
-          {
-            label: 'Sales (via DP)',
-            data: data.salesViaDp,
-            backgroundColor: COLORS.accent2,
-            borderRadius: 4,
-            stack: 'sales',
-            order: 2,
-          },
-          {
-            label: 'Sales (skipped DP)',
-            data: data.salesSkipDp,
-            backgroundColor: COLORS.good,
-            borderRadius: 4,
-            stack: 'sales',
-            order: 2,
-          },
-          {
-            label: 'Opportunities',
-            type: 'line',
-            data: data.opportunities,
-            borderColor: COLORS.accent,
-            backgroundColor: COLORS.accent,
-            borderWidth: 2.5,
-            tension: 0.35,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            order: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } },
-          tooltip: { mode: 'index', intersect: false },
-        },
-        scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, grid: { color: '#1f2a29' } },
-        },
-      },
-    });
-  }
+    const empty = () => Object.fromEntries(months.map((m) => [m, 0]));
+    const opps = empty();
+    const salesDp = empty();
+    const salesSkip = empty();
+    const skippedNames = Object.fromEntries(months.map((m) => [m, []]));
 
-  function renderSalesMix(data) {
-    const ctx = document.getElementById('chart-sales-mix');
-    if (charts.salesMix) charts.salesMix.destroy();
-    charts.salesMix = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: data.months.map(fmtMonthLabel),
-        datasets: [
-          { label: 'Via Deposit Paid', data: data.salesViaDp, backgroundColor: COLORS.accent2, borderRadius: 3 },
-          { label: 'Skipped DP', data: data.salesSkipDp, backgroundColor: COLORS.good, borderRadius: 3 },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } } },
-        scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, grid: { color: '#1f2a29' } },
-        },
-      },
-    });
-  }
+    const monthOf = (iso) => (iso ? iso.slice(0, 7) : null);
 
-  function renderContacts(data) {
-    const ctx = document.getElementById('chart-contacts');
-    if (charts.contacts) charts.contacts.destroy();
-    charts.contacts = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: data.months.map(fmtMonthLabel),
-        datasets: [{
-          label: 'PD Contacts created',
-          data: data.contacts,
-          borderColor: COLORS.accent,
-          backgroundColor: 'rgba(216,166,87,0.12)',
-          fill: true,
-          tension: 0.35,
-          borderWidth: 2.5,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false } },
-          y: { beginAtZero: true, grid: { color: '#1f2a29' } },
-        },
-      },
-    });
-  }
+    // Opportunities: AF date in month
+    const seenAf = new Set();
+    for (const d of afDeals) {
+      if (isExcluded(d.properties?.dealname)) continue;
+      const date = earliestStageDate(d, STAGES.af);
+      const ym = monthOf(date);
+      if (ym && months.includes(ym) && !seenAf.has(d.id + ym)) {
+        opps[ym]++;
+        seenAf.add(d.id + ym);
+      }
+    }
 
-  function renderTable(data) {
-    const rows = data.months.map((m, i) => {
-      const total = data.totalSales[i];
-      const skip = data.salesSkipDp[i];
-      const skipNames = data.skippedDeals[m] || [];
-      const tip = skipNames.length
-        ? ` title="${skipNames.map(s => s.name).join(' · ')}"`
-        : '';
-      return `<tr>
-        <td>${fmtMonthLabel(m)}</td>
-        <td>${data.contacts[i].toLocaleString()}</td>
-        <td>${data.opportunities[i]}</td>
-        <td>${data.salesViaDp[i]}</td>
-        <td${tip}${skip > 0 ? ' style="cursor:help;color:var(--good)"' : ''}>${skip}</td>
-        <td><strong style="color:var(--text)">${total}</strong></td>
-      </tr>`;
-    }).join('');
+    // Sales via DP
+    for (const d of dpDeals) {
+      if (isExcluded(d.properties?.dealname)) continue;
+      const date = earliestStageDate(d, STAGES.dp);
+      const ym = monthOf(date);
+      if (ym && months.includes(ym)) {
+        salesDp[ym]++;
+      }
+    }
 
-    const sums = ['contacts', 'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales'].map(k =>
-      data[k].reduce((a, b) => a + b, 0)
+    function hasAnyDp(deal) {
+      for (const sid of STAGES.dp) {
+        if (deal.properties?.[`hs_v2_date_entered_${sid}`]) return true;
+      }
+      return false;
+    }
+
+    // Sales skipped DP: entered CW but no DP date on the deal record
+    for (const d of cwDeals) {
+      if (isExcluded(d.properties?.dealname)) continue;
+      if (hasAnyDp(d)) continue;
+      const date = earliestStageDate(d, STAGES.cw);
+      const ym = monthOf(date);
+      if (ym && months.includes(ym)) {
+        salesSkip[ym]++;
+        skippedNames[ym].push({ name: d.properties.dealname, cw_date: date });
+      }
+    }
+
+    // Contact counts in parallel
+    const contactCounts = await Promise.all(
+      months.map(async (m) => {
+        const [s, e] = monthRange(m);
+        return countPdContacts(s, e);
+      })
     );
 
-    tableWrap.innerHTML = `
-      <table>
-        <thead>
-          <tr>
-            <th>Month</th>
-            <th>Contacts</th>
-            <th>Opportunities</th>
-            <th>Sales (DP)</th>
-            <th>Sales (skip)</th>
-            <th>Total Sales</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-        <tfoot>
-          <tr>
-            <td>Total</td>
-            <td>${sums[0].toLocaleString()}</td>
-            <td>${sums[1]}</td>
-            <td>${sums[2]}</td>
-            <td>${sums[3]}</td>
-            <td>${sums[4]}</td>
-          </tr>
-        </tfoot>
-      </table>`;
+    const oppsArr = months.map((m) => opps[m]);
+    const dpArr = months.map((m) => salesDp[m]);
+    const skipArr = months.map((m) => salesSkip[m]);
+    const totalSales = months.map((_, i) => dpArr[i] + skipArr[i]);
+
+    const payload = {
+      months,
+      opportunities: oppsArr,
+      salesViaDp: dpArr,
+      salesSkipDp: skipArr,
+      totalSales,
+      contacts: contactCounts,
+      skippedDeals: skippedNames,
+      generatedAt: new Date().toISOString(),
+    };
+
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
-
-  async function load() {
-    refreshBtn.disabled = true;
-    refreshBtn.textContent = 'Loading…';
-    errorBanner.classList.add('hidden');
-    showSkeletons(true);
-
-    try {
-      const url = `/.netlify/functions/sales-funnel-data?from=${fromInput.value}&to=${toInput.value}`;
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Server ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      renderKpis(data);
-      // Each chart renders independently — easy to lazy-load further later
-      renderFunnel(data);
-      renderSalesMix(data);
-      renderContacts(data);
-      renderTable(data);
-
-      generatedEl.textContent = `Updated ${new Date(data.generatedAt).toLocaleString()}`;
-    } catch (err) {
-      errorBanner.textContent = `Failed to load: ${err.message}`;
-      errorBanner.classList.remove('hidden');
-      console.error(err);
-    } finally {
-      showSkeletons(false);
-      refreshBtn.disabled = false;
-      refreshBtn.textContent = 'Refresh';
-    }
-  }
-
-  refreshBtn.addEventListener('click', load);
-  load();
-</script>
-</body>
-</html>
+};
