@@ -1,0 +1,8 @@
+{
+  "title": "Slider Manager",
+  "description": "Manage homepage hero slider content — synced live to pacificdiscovery.org.",
+  "category": "Outreach",
+  "icon": "🎛️",
+  "colors": ["#0891b2", "#22d3ee"],
+  "allowedRoles": ["admin", "outreach"]
+}
