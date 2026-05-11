@@ -1,27 +1,36 @@
 // netlify/functions/sales-funnel-data.mjs
 //
 // Returns monthly funnel data for the Pacific Discovery sales pipelines.
+// Traffic comes live from HubSpot Analytics v2 (sessions/monthly).
+//
 // Query params (all optional):
 //   from=YYYY-MM   (default: 13 months ago)
 //   to=YYYY-MM     (default: current month)
 //
 // Response shape:
 //   {
-//     months: ["2025-04", "2025-05", ...],
-//     traffic:       [423, 465, ...],      // monthly sessions (from MANUAL_TRAFFIC below)
-//     trafficSource: "manual" | "empty",
-//     contacts:      [259, 216, ...],      // PD-tagged contacts created
-//     opportunities: [4, 5, ...],          // entered Application Fee Received
-//     salesViaDp:    [4, 3, ...],          // entered Deposit Paid
-//     salesSkipDp:   [1, 6, ...],          // entered Closed Won w/o ever entering DP
-//     totalSales:    [5, 9, ...],
+//     months: ["2025-04", ...],
+//     traffic:       [8519, ...],          // sessions from HubSpot Analytics
+//     trafficSource: "hubspot" | "scope-missing" | "endpoint-gone" | "empty" | "error",
+//     contacts:      [259, ...],           // PD-tagged contacts created
+//     opportunities: [4, ...],             // entered Application Fee Received
+//     salesViaDp:    [4, ...],             // entered Deposit Paid
+//     salesSkipDp:   [1, ...],             // entered Closed Won w/o ever entering DP
+//     totalSales:    [5, ...],
 //     skippedDeals:  { "2025-04": [{name, cw_date}], ... }
 //   }
+//
+// Required private-app scopes:
+//   crm.objects.deals.read
+//   crm.objects.contacts.read
+//   crm.schemas.deals.read
+//   crm.schemas.contacts.read
+//   business-intelligence       ← for traffic data
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
 
-// Stage IDs per pipeline (Application Fee Received, Deposit Paid, Closed Won)
+// Stage IDs (Application Fee Received, Deposit Paid, Closed Won)
 // Order: Fall Semester, Fall Mini, Spring Semester, Spring Mini, Summer Program
 const STAGES = {
   af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
@@ -29,32 +38,8 @@ const STAGES = {
   cw: ["143518991", "143518998", "143476017", "143502772", "1015966373"],
 };
 
-// Names to exclude
 const EXCLUDE_SUBSTRINGS = ["college credit", "test account", "meg test"];
 const EXCLUDE_EXACT = ["SAS", "Bali Summer", "Australia Summer 2027"];
-
-// ============================================================
-// MANUAL TRAFFIC — update once a month
-// ============================================================
-// Sessions for pacificdiscovery.org by month.
-// Initially seeded with SEMRush organic estimates (US database).
-// To update: add new months at the bottom each month. Anything missing
-// shows as 0 in the dashboard.
-const MANUAL_TRAFFIC = {
-  "2025-04": 423,
-  "2025-05": 465,
-  "2025-06": 506,
-  "2025-07": 419,
-  "2025-08": 423,
-  "2025-09": 368,
-  "2025-10": 365,
-  "2025-11": 377,
-  "2025-12": 346,
-  "2026-01": 359,
-  "2026-02": 384,
-  "2026-03": 464,
-  "2026-04": 446,
-};
 
 // -------- Helpers --------
 
@@ -192,10 +177,87 @@ async function countPdContacts(startISO, endISO) {
   return data.total ?? 0;
 }
 
-function getTraffic(months) {
-  const counts = months.map((m) => MANUAL_TRAFFIC[m] || 0);
-  const hasAny = counts.some((c) => c > 0);
-  return { counts, source: hasAny ? "manual" : "empty" };
+// ============================================================
+// Traffic — HubSpot Analytics API
+// ============================================================
+//
+// Endpoint: GET /analytics/v2/reports/sessions/monthly?start=YYYYMMDD&end=YYYYMMDD
+// Required scope: business-intelligence
+//
+// Response shape (monthly aggregation):
+//   { "YYYY-MM-01": { "visits": N, "visitors": N, ... }, ... }
+async function getTraffic(months) {
+  const [firstISO] = monthRange(months[0]);
+  const [, lastISO] = monthRange(months[months.length - 1]);
+
+  // HubSpot expects inclusive end; subtract 1 day from our exclusive end
+  const lastDate = new Date(lastISO);
+  lastDate.setUTCDate(lastDate.getUTCDate() - 1);
+
+  const fmt = (iso) => iso.replace(/-/g, "").slice(0, 8);
+  const start = fmt(firstISO);
+  const end = fmt(lastDate.toISOString());
+
+  // Try /sessions/monthly first (cleanest, single object response)
+  // Fall back to /sources/monthly if that 404s.
+  const candidates = [
+    `${HS_BASE}/analytics/v2/reports/sessions/monthly?start=${start}&end=${end}`,
+    `${HS_BASE}/analytics/v2/reports/sources/monthly?start=${start}&end=${end}`,
+  ];
+
+  let lastError = null;
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        const txt = await res.text().catch(() => "");
+        console.warn(`HubSpot Analytics auth/scope error: ${res.status}`, txt);
+        lastError = "scope-missing";
+        break; // no point trying other endpoints
+      }
+      if (res.status === 404) {
+        // Try next candidate
+        lastError = "endpoint-gone";
+        continue;
+      }
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        console.warn(`HubSpot Analytics ${res.status}:`, txt);
+        lastError = "error";
+        continue;
+      }
+
+      const data = await res.json();
+      const byMonth = {};
+
+      // /sessions/monthly returns {"YYYY-MM-01": {visits, visitors, ...}}
+      // /sources/monthly returns {"YYYY-MM-01": [{breakdown, visits, ...}, ...]}
+      for (const [dateKey, value] of Object.entries(data || {})) {
+        const ym = dateKey.slice(0, 7);
+        if (Array.isArray(value)) {
+          // sources breakdown — sum visits across all sources
+          let total = 0;
+          for (const row of value) total += row.visits || 0;
+          byMonth[ym] = (byMonth[ym] || 0) + total;
+        } else if (value && typeof value === "object") {
+          // direct sessions object
+          byMonth[ym] = (byMonth[ym] || 0) + (value.visits || 0);
+        }
+      }
+
+      const counts = months.map((m) => byMonth[m] || 0);
+      const hasAny = counts.some((c) => c > 0);
+      return { counts, source: hasAny ? "hubspot" : "empty" };
+    } catch (err) {
+      console.warn(`HubSpot Analytics fetch threw for ${url}:`, err.message);
+      lastError = "error";
+    }
+  }
+
+  return { counts: months.map(() => 0), source: lastError || "error" };
 }
 
 // -------- Main handler --------
@@ -282,7 +344,7 @@ export default async (req) => {
       if (i + 3 < months.length) await sleep(250);
     }
 
-    const trafficResult = getTraffic(months);
+    const trafficResult = await getTraffic(months);
 
     const oppsArr = months.map((m) => opps[m]);
     const dpArr = months.map((m) => salesDp[m]);
