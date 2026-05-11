@@ -1,19 +1,15 @@
 // netlify/functions/sales-funnel-data.mjs
 //
 // Returns monthly funnel data for the Pacific Discovery sales pipelines.
-// Traffic filtered to pacificdiscovery.org via HubSpot Analytics View.
-//
-// Strategy:
-//   1. Look up the "PACIFIC DISCOVERY" analytics view ID once per cold start
-//   2. Query /analytics/v2/reports/sessions/monthly with filterId=<that-id>
-//   3. Sum mobile+desktop+others from the "sessions" breakdown row
+// Traffic filtered to pacificdiscovery.org via HubSpot Analytics View 16405
+// (the "PACIFIC DISCOVERY" view configured in HubSpot).
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
 
-// Name of the HubSpot Analytics View to use for traffic filtering.
-// Configured in HubSpot under Reports → Analytics Tools → Traffic Analytics → Views.
-const ANALYTICS_VIEW_NAME = "PACIFIC DISCOVERY";
+// HubSpot Analytics View ID for "PACIFIC DISCOVERY" (filters traffic to
+// pacificdiscovery.org brand domain). Found in HubSpot Traffic Analytics URL.
+const ANALYTICS_VIEW_ID = "16405";
 
 const STAGES = {
   af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
@@ -23,9 +19,6 @@ const STAGES = {
 
 const EXCLUDE_SUBSTRINGS = ["college credit", "test account", "meg test"];
 const EXCLUDE_EXACT = ["SAS", "Bali Summer", "Australia Summer 2027"];
-
-// Cached view ID across requests on the same warm function instance
-let cachedViewId = null;
 
 // -------- Helpers --------
 
@@ -164,47 +157,8 @@ async function countPdContacts(startISO, endISO) {
 }
 
 // ============================================================
-// Traffic — HubSpot Analytics filtered by Analytics View
+// Traffic — HubSpot Analytics filtered by Analytics View 16405
 // ============================================================
-
-// Look up the view ID by name. Caches the result per warm function instance.
-async function resolveViewId() {
-  if (cachedViewId) return cachedViewId;
-
-  // List all analytics views — try a couple of endpoint shapes since HubSpot
-  // has reorganized this API multiple times
-  const candidates = [
-    `${HS_BASE}/analytics/v2/analytics-views/`,
-    `${HS_BASE}/analytics/v2/analytics-views`,
-  ];
-
-  for (const url of candidates) {
-    try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
-      });
-      if (!res.ok) continue;
-      const data = await res.json();
-
-      // Response is either an array of views, or {views: [...]}, or {results: [...]}
-      const views = Array.isArray(data)
-        ? data
-        : (data.views || data.results || []);
-
-      const target = views.find(
-        (v) => (v.name || "").trim().toLowerCase() === ANALYTICS_VIEW_NAME.toLowerCase()
-      );
-      if (target?.id) {
-        cachedViewId = String(target.id);
-        return cachedViewId;
-      }
-    } catch (err) {
-      console.warn(`view-list fetch ${url} threw:`, err.message);
-    }
-  }
-  return null;
-}
-
 async function getTraffic(months) {
   const [firstISO] = monthRange(months[0]);
   const [, lastISO] = monthRange(months[months.length - 1]);
@@ -214,29 +168,11 @@ async function getTraffic(months) {
   const start = fmt(firstISO);
   const end = fmt(lastDate.toISOString());
 
-  const debugLog = [];
-
-  // 1. Resolve the analytics view ID
-  let viewId;
-  try {
-    viewId = await resolveViewId();
-    debugLog.push({ step: "resolveViewId", viewName: ANALYTICS_VIEW_NAME, viewId });
-  } catch (err) {
-    debugLog.push({ step: "resolveViewId", error: err.message });
-  }
-
-  if (!viewId) {
-    return {
-      counts: months.map(() => 0),
-      source: "view-not-found",
-      debug: debugLog,
-    };
-  }
-
-  // 2. Query analytics with the filterId
   const url =
     `${HS_BASE}/analytics/v2/reports/sessions/monthly` +
-    `?start=${start}&end=${end}&filterId=${encodeURIComponent(viewId)}`;
+    `?start=${start}&end=${end}&filterId=${ANALYTICS_VIEW_ID}`;
+
+  const debugLog = [];
 
   try {
     const res = await fetch(url, {
@@ -244,7 +180,6 @@ async function getTraffic(months) {
     });
     const bodyText = await res.text();
     debugLog.push({
-      step: "analytics-call",
       url: url.replace(HS_BASE, ""),
       status: res.status,
       bodyPreview: bodyText.slice(0, 800),
@@ -269,7 +204,7 @@ async function getTraffic(months) {
       parsedByMonth: byMonth,
     };
   } catch (err) {
-    debugLog.push({ step: "analytics-call", error: err.message });
+    debugLog.push({ error: err.message });
     return { counts: months.map(() => 0), source: "error", debug: debugLog };
   }
 }
@@ -283,7 +218,7 @@ function sumSessions(data) {
     const ym = dateKey.slice(0, 7);
 
     if (Array.isArray(value)) {
-      // Shape 1: Analytics Suite
+      // Shape 1: Analytics Suite (your account)
       const sessionsRow = value.find((b) => b.breakdown === "sessions");
       if (sessionsRow) {
         const total = DEVICE_FIELDS.reduce(
@@ -402,7 +337,7 @@ export default async (req) => {
         months,
         traffic: trafficResult.counts,
         trafficSource: trafficResult.source,
-        trafficViewName: ANALYTICS_VIEW_NAME,
+        trafficViewId: ANALYTICS_VIEW_ID,
         trafficDebug: trafficResult.debug,
         contacts: contactCounts,
         opportunities: oppsArr,
