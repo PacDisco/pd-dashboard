@@ -1,28 +1,31 @@
 #!/usr/bin/env node
 /**
- * Scan the repo for dashboard folders and emit a "discovery" manifest.
+ * Scan the repo for dashboard folders and emit the discovery manifest.
  *
  * Outputs:
- *   - dashboards.discovery.json  (committed to the deploy; read by the config
- *      function as the baseline for which dashboards exist)
- *   - dashboards.json            (same content, kept for backwards compat and
- *      as a read-only fallback if Blobs are unavailable)
- *   - _redirects                 (coarse edge rules — fine-grained gating is
- *      enforced by netlify/edge-functions/auth-gate.js reading the blob)
+ *   - dashboards.discovery.json  (committed; the source of truth for which
+ *                                 dashboards exist + their default permissions)
+ *   - dashboards.json            (same content; kept as a public fallback)
+ *   - _redirects                 (coarse edge rules)
  *
- * Rules:
- *   - A dashboard is any top-level folder containing an index.html
- *   - Folders in EXCLUDED_DIRS are ignored
- *   - Optional per-folder metadata: drop `dashboard.json` inside a folder:
- *       { "title":"…", "description":"…", "category":"…", "icon":"📊",
- *         "owner":"…", "pinned":true, "colors":["#…","#…"],
- *         "allowedRoles":["outreach"] }
- *   - If no dashboard.json exists, falls back to folder's <title> +
- *     <meta name="description">, and defaults allowedRoles to [] (admin-only)
+ * Discovery rules:
+ *   - A dashboard is any top-level folder containing an `index.html`
+ *   - Folders in EXCLUDED_DIRS are ignored (case-insensitive)
+ *   - Optional per-folder `dashboard.json`:
+ *       { "title", "description", "category", "icon",
+ *         "owner", "pinned", "colors":[c1,c2], "allowedRoles":[…], "order" }
+ *   - Field aliases tolerated: `roles` → `allowedRoles`, `color` → `colors`
+ *   - Falls back to <title> + <meta name="description"> in index.html
  *
- * NOTE: Permissions live in Netlify Blobs at runtime. This script only sets
- * the INITIAL value for new dashboards. Once an admin edits permissions in
- * the UI, those blob values override whatever's in this file.
+ * Merge behaviour vs. previous discovery file:
+ *   - For folders that still exist: preserve owner-set metadata
+ *   - For entries in old discovery with NO corresponding folder: REMOVE
+ *     (this is the main behaviour change vs. the old script — kills
+ *      stale entries like `report` that drift in the manifest forever)
+ *
+ * Permissions note:
+ *   At runtime, Netlify Blobs (`dashboards/permissions` key) overrides what's
+ *   in these files. This script only seeds defaults.
  */
 
 const fs = require("fs");
@@ -33,12 +36,17 @@ const DISCOVERY = path.join(ROOT, "dashboards.discovery.json");
 const MANIFEST = path.join(ROOT, "dashboards.json");
 const REDIRECTS = path.join(ROOT, "_redirects");
 
+// Roles supported by the system (kept in one place for consistency)
+const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights"];
+const ALL_ROLES = ["admin", ...FUNCTIONAL_ROLES];
+
+// Folders that look like dashboards but aren't
 const EXCLUDED_DIRS = new Set([
   "netlify", "scripts", "node_modules",
   ".git", ".netlify", ".github",
-  "assets", "public", "dist", "build"
+  "assets", "public", "dist", "build",
+  "db", "docs",
 ]);
-const DEFAULT_ROLES = []; // admin-only until explicitly granted
 
 function titleFromHtml(html) {
   const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
@@ -49,25 +57,62 @@ function descFromHtml(html) {
   return m ? m[1].trim() : null;
 }
 function prettifySlug(slug) {
-  return slug.split(/[-_]/).filter(Boolean)
-    .map(s => s[0].toUpperCase() + s.slice(1)).join(" ");
+  return slug
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((s) => s[0].toUpperCase() + s.slice(1))
+    .join(" ");
+}
+
+/**
+ * Normalize a per-folder dashboard.json:
+ *   - `roles` → `allowedRoles`
+ *   - `color` (string) → `colors`: [color, color]
+ *   - drops unknown keys
+ */
+function normalizeMeta(meta) {
+  if (!meta || typeof meta !== "object") return {};
+  const out = { ...meta };
+  if (!Array.isArray(out.allowedRoles) && Array.isArray(out.roles)) {
+    out.allowedRoles = out.roles;
+  }
+  delete out.roles;
+  if (!Array.isArray(out.colors) && typeof out.color === "string") {
+    out.colors = [out.color, out.color];
+  }
+  delete out.color;
+  return out;
+}
+
+function readJsonSafe(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (err) {
+    console.warn(`⚠️  Couldn't parse ${path.relative(ROOT, file)}: ${err.message}`);
+    return null;
+  }
 }
 
 function scan() {
-  const folders = fs.readdirSync(ROOT, { withFileTypes: true })
-    .filter(e => e.isDirectory() && !e.name.startsWith(".") && !EXCLUDED_DIRS.has(e.name))
-    .map(e => e.name);
+  const folders = fs
+    .readdirSync(ROOT, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .filter((e) => !e.name.startsWith("."))
+    .filter((e) => !EXCLUDED_DIRS.has(e.name.toLowerCase()))
+    .map((e) => e.name);
 
   const out = [];
-  for (const slug of folders) {
-    const indexPath = path.join(ROOT, slug, "index.html");
+  for (const folderName of folders) {
+    const indexPath = path.join(ROOT, folderName, "index.html");
     if (!fs.existsSync(indexPath)) continue;
 
+    // Slug is always lowercase; URL preserves the original folder name
+    const slug = folderName.toLowerCase();
+
     let meta = {};
-    const metaPath = path.join(ROOT, slug, "dashboard.json");
+    const metaPath = path.join(ROOT, folderName, "dashboard.json");
     if (fs.existsSync(metaPath)) {
-      try { meta = JSON.parse(fs.readFileSync(metaPath, "utf8")); }
-      catch (err) { console.warn(`Couldn't parse ${metaPath}:`, err.message); }
+      meta = normalizeMeta(readJsonSafe(metaPath) || {});
     }
 
     let htmlTitle = null, htmlDesc = null;
@@ -79,88 +124,118 @@ function scan() {
 
     out.push({
       slug,
+      folderName,
       title: meta.title || htmlTitle || prettifySlug(slug),
       description: meta.description || htmlDesc || "",
       category: meta.category || "General",
       icon: meta.icon || "📊",
       owner: meta.owner || "",
-      pinned: meta.pinned || false,
-      colors: meta.colors || undefined,
-      allowedRoles: Array.isArray(meta.allowedRoles) ? meta.allowedRoles : DEFAULT_ROLES.slice(),
-      url: meta.url || `/${slug}/`
+      pinned: !!meta.pinned,
+      order: typeof meta.order === "number" ? meta.order : undefined,
+      colors: Array.isArray(meta.colors) && meta.colors.length ? meta.colors : undefined,
+      allowedRoles: Array.isArray(meta.allowedRoles) ? meta.allowedRoles.slice() : [],
+      // URL preserves original folder case (Netlify is case-sensitive)
+      url: meta.url || `/${folderName}/`,
     });
   }
   return out;
 }
 
+/**
+ * Merge previous discovery with current scan.
+ * Key change from the old script: entries in `existing` that have no
+ * matching scanned slug are DROPPED, not retained — this kills stale
+ * manifest entries when folders are removed.
+ */
 function merge(existing, scanned) {
-  const bySlug = new Map(existing.map(d => [d.slug, d]));
-  return scanned.map(s => {
-    const prev = bySlug.get(s.slug);
+  const prevBySlug = new Map((existing || []).map((d) => [d.slug, d]));
+  return scanned.map((s) => {
+    const prev = prevBySlug.get(s.slug);
     if (!prev) return s;
+
+    // Preserve human-set metadata where it differs from the auto-detected default
     return {
-      ...prev, ...s,
-      title: prev.title && prev.title !== s.slug ? prev.title : s.title,
+      ...s,
+      title: nonDefault(prev.title, s.slug, prettifySlug(s.slug)) ? prev.title : s.title,
       description: prev.description || s.description,
-      category: prev.category || s.category,
-      icon: prev.icon || s.icon,
+      category: prev.category && prev.category !== "General" ? prev.category : s.category,
+      icon: prev.icon && prev.icon !== "📊" ? prev.icon : s.icon,
       owner: prev.owner || s.owner,
-      pinned: prev.pinned ?? s.pinned,
+      pinned: typeof prev.pinned === "boolean" ? prev.pinned : s.pinned,
+      order: prev.order !== undefined ? prev.order : s.order,
       colors: prev.colors || s.colors,
       allowedRoles: Array.isArray(prev.allowedRoles) ? prev.allowedRoles : s.allowedRoles,
-      url: s.url
     };
   });
 }
-
-function readExisting(file) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return { dashboards: [] }; }
+function nonDefault(value, slug, prettified) {
+  // True if `value` is set and isn't just the auto-generated title
+  return !!value && value !== slug && value !== prettified;
 }
 
 function writeRedirects(dashboards) {
   // The edge function (netlify/edge-functions/auth-gate.js) does fine-grained
-  // role enforcement at request time by reading the blob. We still emit a
-  // coarse `_redirects` as a belt-and-suspenders fallback: any authenticated
-  // user with any functional role OR admin can reach a dashboard path; the
-  // edge function then refines this per-dashboard.
-  const roles = ["admin", "admissions", "outreach", "programs", "operations", "flights"];
+  // per-dashboard role enforcement at request time using live blob data. This
+  // file is a coarse baseline; any user with any functional role gets routed
+  // and the edge function refines from there.
   const lines = [
     "# AUTO-GENERATED by scripts/build-manifest.js — do not edit by hand",
     "# Coarse baseline: any authenticated user with a role can reach these paths.",
     "# Fine-grained permissions are enforced by netlify/edge-functions/auth-gate.js.",
     "",
-    `/api/config          200!    Role=${roles.join(",")}`,
-    `/api/users           200!    Role=admin`,
-    `/api/users/*         200!    Role=admin`,
+    `/api/config        200!    Role=${ALL_ROLES.join(",")}`,
+    `/api/users         200!    Role=admin`,
+    `/api/users/*       200!    Role=admin`,
   ];
   for (const d of dashboards) {
-    lines.push(`/${d.slug}/*${pad(d.slug)}200!    Role=${roles.join(",")}`);
+    const target = d.url || `/${d.folderName || d.slug}/`;
+    // _redirects globs work on the URL path, not the slug
+    const pathGlob = target.endsWith("/") ? `${target}*` : `${target}/*`;
+    lines.push(`${pathGlob.padEnd(28)} 200!    Role=${ALL_ROLES.join(",")}`);
   }
   lines.push("");
   fs.writeFileSync(REDIRECTS, lines.join("\n"));
 }
-function pad(slug) {
-  const w = Math.max(0, 18 - (slug.length + 3));
-  return " ".repeat(w + 1);
-}
 
 function main() {
-  const existing = readExisting(DISCOVERY).dashboards?.length
-    ? readExisting(DISCOVERY)
-    : readExisting(MANIFEST);
-  const scanned = scan();
-  const merged = merge(existing.dashboards || [], scanned);
+  // Load previous discovery (preferred) or fall back to dashboards.json
+  let previous = readJsonSafe(DISCOVERY);
+  if (!previous || !Array.isArray(previous.dashboards) || !previous.dashboards.length) {
+    previous = readJsonSafe(MANIFEST);
+  }
+  const existing = (previous && Array.isArray(previous.dashboards)) ? previous.dashboards : [];
 
-  const payload = { generatedAt: new Date().toISOString(), dashboards: merged };
-  fs.writeFileSync(DISCOVERY, JSON.stringify(payload, null, 2) + "\n");
-  fs.writeFileSync(MANIFEST, JSON.stringify(payload, null, 2) + "\n");
+  const scanned = scan();
+  const merged = merge(existing, scanned);
+
+  // Strip `folderName` from public output (internal helper only)
+  const publicForm = merged.map(({ folderName, ...rest }) => rest);
+
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    dashboards: publicForm,
+  };
+  const json = JSON.stringify(payload, null, 2) + "\n";
+  fs.writeFileSync(DISCOVERY, json);
+  fs.writeFileSync(MANIFEST, json);
   writeRedirects(merged);
 
-  console.log(`Wrote ${merged.length} dashboard(s) → dashboards.discovery.json + dashboards.json`);
-  console.log(`Wrote _redirects (coarse edge rules)`);
-  merged.forEach(d => console.log(
-    `  • ${d.slug.padEnd(20)} ${d.title.padEnd(30)} default roles: [${(d.allowedRoles || []).join(",")}]`
-  ));
+  // Report
+  const droppedSlugs = (existing || [])
+    .map((e) => e.slug)
+    .filter((slug) => !merged.find((m) => m.slug === slug));
+
+  console.log(`✓ Wrote ${merged.length} dashboard(s) → dashboards.discovery.json + dashboards.json`);
+  console.log(`✓ Wrote _redirects`);
+  if (droppedSlugs.length) {
+    console.log(`✓ Dropped ${droppedSlugs.length} stale entr${droppedSlugs.length === 1 ? "y" : "ies"}: ${droppedSlugs.join(", ")}`);
+  }
+  console.log("");
+  console.log("Dashboards:");
+  merged.forEach((d) => {
+    const roles = d.allowedRoles?.length ? `[${d.allowedRoles.join(",")}]` : "[admin only]";
+    console.log(`  • ${d.slug.padEnd(28)} ${(d.title || "").padEnd(35)} ${roles}`);
+  });
 }
 
 main();
