@@ -1,0 +1,8 @@
+{
+  "title": "Contacts",
+  "description": "Search and view HubSpot contacts.",
+  "category": "Outreach",
+  "icon": "👥",
+  "colors": ["#0ea5e9", "#7c9bff"],
+  "allowedRoles": ["admin", "admissions", "outreach"]
+}
