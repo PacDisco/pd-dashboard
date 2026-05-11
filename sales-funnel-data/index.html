@@ -415,7 +415,7 @@
     showSkeletons(true);
 
     try {
-      const url = `/api/sales-funnel-data?from=${fromInput.value}&to=${toInput.value}`;
+      const url = `/.netlify/functions/sales-funnel-data?from=${fromInput.value}&to=${toInput.value}`;
       const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) {
         const errText = await res.text();
