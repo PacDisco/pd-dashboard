@@ -1,9 +1,9 @@
 {
   "title": "Invoices & Payments",
   "description": "Upload invoices, email them in, or manually schedule payments. AI parses each invoice and slots it into a weekly pay schedule with approve / reschedule / paid checkboxes.",
-  "icon": "📄",
   "category": "Finance",
-  "color": "#2563eb",
-  "roles": ["admin", "operations"],
-  "order": 25
+  "icon": "📄",
+  "colors": ["#2563eb", "#60a5fa"],
+  "order": 25,
+  "allowedRoles": ["admin", "operations"]
 }
