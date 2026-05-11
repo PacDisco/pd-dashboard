@@ -4,9 +4,10 @@
 //                           requires any authenticated Identity user
 // PUT  /api/config        → replaces the permissions overrides in Netlify Blobs
 //                           requires the caller to have the "admin" role
+// GET  /api/config?debug=1 → diagnostics (no auth) for verifying deploy state
 //
-// Discovery manifest is loaded via HTTP from the site itself
-// (avoids all bundler/filesystem issues). Permissions live in a Netlify Blob.
+// Discovery manifest is loaded via HTTP from the site itself (no bundler
+// filesystem issues). Permissions live in a Netlify Blob.
 
 import { getStore } from "@netlify/blobs";
 import fs from "node:fs/promises";
@@ -15,12 +16,19 @@ import path from "node:path";
 const BLOB_KEY = "permissions";
 const STORE = "dashboards";
 
-// Netlify normally auto-binds the blob context; if that fails (e.g. the
-// package was marked external or blobs aren't enabled on the site), fall back
-// to explicit config using env vars the caller sets up manually.
+/**
+ * Open the dashboards blob store.
+ *   1. Try Netlify's auto-context (works on Netlify Functions out of the box).
+ *   2. Fall back to explicit env vars if the package is bundled externally
+ *      or blobs aren't enabled.
+ *
+ * NOTE: A previous version of this function called itself recursively
+ * (openStore → openStore → ...) which caused a stack-overflow on every
+ * request. Fixed here.
+ */
 function openStore() {
   try {
-    return openStore();
+    return getStore({ name: STORE, consistency: "strong" });
   } catch (err) {
     const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
     const token = process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN;
@@ -31,13 +39,10 @@ function openStore() {
   }
 }
 
-// Try multiple strategies to load the discovery manifest. Netlify's esbuild
-// bundler doesn't include static files by default, so earlier versions that
-// only used process.cwd() silently returned empty arrays. This version tries:
-//   1. HTTP fetch from the deploying site (works if discovery.json is public)
+// Try multiple strategies to load the discovery manifest:
+//   1. HTTP fetch from the deploying site (works if manifest is public)
 //   2. Filesystem reads at common bundle locations (works with included_files)
 async function loadDiscovery(event) {
-  // Strategy 1: HTTP fetch
   const protocol = event.headers?.["x-forwarded-proto"] || "https";
   const host = event.headers?.host || event.headers?.Host;
   if (host) {
@@ -55,7 +60,7 @@ async function loadDiscovery(event) {
     }
   }
 
-  // Strategy 2: filesystem (requires `included_files` in netlify.toml)
+  // Filesystem fallback — requires `included_files` in netlify.toml
   const roots = [process.cwd(), "/var/task", "/opt/build/repo"];
   for (const root of roots) {
     for (const name of ["dashboards.discovery.json", "dashboards.json"]) {
@@ -72,20 +77,24 @@ async function loadDiscovery(event) {
 }
 
 function merge(discovery, overrides) {
-  const map = new Map((overrides.dashboards || []).map(d => [d.slug, d]));
+  const ovMap = new Map((overrides.dashboards || []).map((d) => [d.slug, d]));
   return {
     ...discovery,
-    dashboards: (discovery.dashboards || []).map(d => {
-      const ov = map.get(d.slug) || {};
+    dashboards: (discovery.dashboards || []).map((d) => {
+      const ov = ovMap.get(d.slug) || {};
       return {
         ...d,
-        allowedRoles: Array.isArray(ov.allowedRoles) ? ov.allowedRoles : (d.allowedRoles || []),
+        allowedRoles: Array.isArray(ov.allowedRoles)
+          ? ov.allowedRoles
+          : (d.allowedRoles || []),
       };
     }),
   };
 }
 
-function isAdmin(user) { return (user?.app_metadata?.roles || []).includes("admin"); }
+function isAdmin(user) {
+  return (user?.app_metadata?.roles || []).includes("admin");
+}
 function requireAuth(user) {
   if (!user) return { status: 401, body: { error: "Not authenticated" } };
   return null;
@@ -95,11 +104,12 @@ export const handler = async (event, context) => {
   const { user } = context.clientContext || {};
   const method = event.httpMethod;
 
-  // Debug endpoint — useful for verifying deploy state. GET /api/config?debug=1
+  // Debug endpoint — verifies deploy state without requiring auth.
   if (method === "GET" && event.queryStringParameters?.debug === "1") {
     const discovery = await loadDiscovery(event);
-    let blob = null, blobError = null, blobStrategy = null;
-    // Try auto-context first, then explicit env-var fallback
+    let blob = null;
+    let blobError = null;
+    let blobStrategy = null;
     try {
       const autoStore = getStore({ name: STORE, consistency: "strong" });
       blob = await autoStore.get(BLOB_KEY, { type: "json" });
@@ -116,15 +126,17 @@ export const handler = async (event, context) => {
           blobError = `auto: ${autoErr.message} | explicit: ${explicitErr.message}`;
         }
       } else {
-        blobError = `${autoErr.message} (and NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN env vars not set)`;
+        blobError = `${autoErr.message} (NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN not set)`;
       }
     }
     return send(200, {
       authed: !!user,
       roles: user?.app_metadata?.roles || [],
       discoveryCount: discovery.dashboards?.length || 0,
-      discoverySlugs: (discovery.dashboards || []).map(d => d.slug),
-      blob, blobStrategy, blobError,
+      discoverySlugs: (discovery.dashboards || []).map((d) => d.slug),
+      blob,
+      blobStrategy,
+      blobError,
       envVarsPresent: {
         NETLIFY_SITE_ID: !!process.env.NETLIFY_SITE_ID,
         SITE_ID: !!process.env.SITE_ID,
@@ -165,18 +177,21 @@ export const handler = async (event, context) => {
     if (!isAdmin(user)) return send(403, { error: "Admin role required" });
 
     let body;
-    try { body = JSON.parse(event.body || "{}"); }
-    catch { return send(400, { error: "Invalid JSON" }); }
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch {
+      return send(400, { error: "Invalid JSON" });
+    }
 
     const incoming = Array.isArray(body.dashboards) ? body.dashboards : null;
     if (!incoming) return send(400, { error: "Body must include `dashboards` array" });
 
     const clean = incoming
-      .filter(d => typeof d?.slug === "string")
-      .map(d => ({
+      .filter((d) => typeof d?.slug === "string")
+      .map((d) => ({
         slug: d.slug,
         allowedRoles: Array.isArray(d.allowedRoles)
-          ? d.allowedRoles.filter(r => typeof r === "string")
+          ? d.allowedRoles.filter((r) => typeof r === "string")
           : [],
       }));
 
