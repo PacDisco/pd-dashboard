@@ -1,0 +1,9 @@
+{
+  "title": "Sales Funnel",
+  "description": "Opportunities, sales, and contact intake across the five Pacific Discovery season pipelines. Live from HubSpot.",
+  "category": "Enrollment",
+  "icon": "📊",
+  "pinned": true,
+  "colors": ["#d8a657", "#6ab39a"],
+  "allowedRoles": ["admin", "admissions", "outreach", "programs", "operations"]
+}
