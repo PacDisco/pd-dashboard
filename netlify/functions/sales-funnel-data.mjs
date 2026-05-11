@@ -16,14 +16,14 @@
 //     skippedDeals:  { "2025-04": [{name, cw_date}], ... }
 //   }
 //
-// All stage IDs and pipeline IDs are hardcoded to match the active
-// Fall / Fall Mini / Spring / Spring Mini / Summer pipelines. College
-// credit deals and test deals are excluded by name.
+// Rate-limit aware: respects HubSpot's 5 req/sec cap by batching the
+// contact-count queries and retrying with exponential backoff on 429.
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
 
 // Stage IDs per pipeline (Application Fee Received, Deposit Paid, Closed Won)
+// Order: Fall Semester, Fall Mini, Spring Semester, Spring Mini, Summer Program
 const STAGES = {
   af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
   dp: ["143518989", "143518996", "143476015", "143502770", "1015966371"],
@@ -35,6 +35,10 @@ const EXCLUDE_SUBSTRINGS = ["college credit", "test account", "meg test"];
 const EXCLUDE_EXACT = ["SAS", "Bali Summer", "Australia Summer 2027"];
 
 // -------- Helpers --------
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function isExcluded(dealname) {
   if (!dealname) return true;
@@ -75,20 +79,27 @@ function defaultRange() {
   return { from, to };
 }
 
-async function hsPost(path, body) {
-  const res = await fetch(`${HS_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${HUBSPOT_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
+// HubSpot POST with automatic retry on 429 rate limit errors.
+async function hsPost(path, body, retries = 3) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(`${HS_BASE}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${HUBSPOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return res.json();
+    if (res.status === 429 && attempt < retries) {
+      const wait = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+      console.warn(`HubSpot rate-limited (attempt ${attempt + 1}); waiting ${wait}ms`);
+      await sleep(wait);
+      continue;
+    }
     const txt = await res.text();
     throw new Error(`HubSpot ${path} ${res.status}: ${txt}`);
   }
-  return res.json();
 }
 
 // Search deals where any of `stageIds` was entered within [start, end), paginated.
@@ -184,7 +195,7 @@ export default async (req) => {
     const [windowStart] = monthRange(months[0]);
     const [, windowEnd] = monthRange(months[months.length - 1]);
 
-    // Three parallel deal searches across the whole window
+    // Phase 1: three parallel deal searches (3 of HubSpot's 5/sec budget)
     const [afDeals, dpDeals, cwDeals] = await Promise.all([
       searchStageEntries(STAGES.af, windowStart, windowEnd),
       searchStageEntries(STAGES.dp, windowStart, windowEnd),
@@ -216,9 +227,7 @@ export default async (req) => {
       if (isExcluded(d.properties?.dealname)) continue;
       const date = earliestStageDate(d, STAGES.dp);
       const ym = monthOf(date);
-      if (ym && months.includes(ym)) {
-        salesDp[ym]++;
-      }
+      if (ym && months.includes(ym)) salesDp[ym]++;
     }
 
     function hasAnyDp(deal) {
@@ -240,38 +249,48 @@ export default async (req) => {
       }
     }
 
-    // Contact counts in parallel
-    const contactCounts = await Promise.all(
-      months.map(async (m) => {
-        const [s, e] = monthRange(m);
-        return countPdContacts(s, e);
-      })
-    );
+    // Phase 2: contact counts — batched 3 at a time with 250ms gap to
+    // stay under HubSpot's 5 req/sec cap. Brief pause first to clear
+    // the budget from the deal searches above.
+    await sleep(300);
+    const contactCounts = [];
+    for (let i = 0; i < months.length; i += 3) {
+      const batch = months.slice(i, i + 3);
+      const counts = await Promise.all(
+        batch.map((m) => {
+          const [s, e] = monthRange(m);
+          return countPdContacts(s, e);
+        })
+      );
+      contactCounts.push(...counts);
+      if (i + 3 < months.length) await sleep(250);
+    }
 
     const oppsArr = months.map((m) => opps[m]);
     const dpArr = months.map((m) => salesDp[m]);
     const skipArr = months.map((m) => salesSkip[m]);
     const totalSales = months.map((_, i) => dpArr[i] + skipArr[i]);
 
-    const payload = {
-      months,
-      opportunities: oppsArr,
-      salesViaDp: dpArr,
-      salesSkipDp: skipArr,
-      totalSales,
-      contacts: contactCounts,
-      skippedDeals: skippedNames,
-      generatedAt: new Date().toISOString(),
-    };
-
-    return new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+    return new Response(
+      JSON.stringify({
+        months,
+        opportunities: oppsArr,
+        salesViaDp: dpArr,
+        salesSkipDp: skipArr,
+        totalSales,
+        contacts: contactCounts,
+        skippedDeals: skippedNames,
+        generatedAt: new Date().toISOString(),
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
   } catch (err) {
     console.error(err);
     return new Response(
