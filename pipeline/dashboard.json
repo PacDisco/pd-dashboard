@@ -1,0 +1,8 @@
+{
+  "title": "Pipeline",
+  "description": "Live deal pipeline across all season programs with stage-by-stage drill-downs.",
+  "category": "Enrollment",
+  "icon": "🪜",
+  "colors": ["#d97706", "#fbbf24"],
+  "allowedRoles": ["admin", "admissions", "outreach", "programs", "operations"]
+}
