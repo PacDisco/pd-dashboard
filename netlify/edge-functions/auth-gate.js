@@ -14,8 +14,10 @@ const ADMIN = "admin";
 
 export default async (request, context) => {
   const url = new URL(request.url);
-  const slug = url.pathname.split("/").filter(Boolean)[0];
-  if (!slug) return context.next();
+  // Canonical slug is lowercase (matches build-manifest's output)
+  const rawSlug = url.pathname.split("/").filter(Boolean)[0];
+  if (!rawSlug) return context.next();
+  const slug = rawSlug.toLowerCase();
 
   // Identify the caller from the Netlify Identity JWT cookie.
   const user = await readUserFromRequest(request);
@@ -35,7 +37,9 @@ export default async (request, context) => {
 
   const allowed = perms.allowedRoles || [];
   if (!allowed.length) return unauthorized("Admin-only resource.");
-  if (!allowed.some(r => roles.includes(r))) return unauthorized("Your role can't access this dashboard.");
+  if (!allowed.some((r) => roles.includes(r))) {
+    return unauthorized("Your role can't access this dashboard.");
+  }
 
   return context.next();
 };
@@ -61,7 +65,7 @@ async function loadPermissionsFor(slug, request) {
   try {
     const store = openEdgeStore();
     const overrides = await store.get("permissions", { type: "json" });
-    const entry = (overrides?.dashboards || []).find(d => d.slug === slug);
+    const entry = (overrides?.dashboards || []).find((d) => d.slug === slug);
     if (entry) return entry;
   } catch (err) {
     console.warn("auth-gate blob read failed, falling back to discovery:", err.message);
@@ -71,7 +75,7 @@ async function loadPermissionsFor(slug, request) {
     const res = await fetch(new URL("/dashboards.discovery.json", request.url));
     if (res.ok) {
       const discovery = await res.json();
-      return (discovery.dashboards || []).find(d => d.slug === slug) || null;
+      return (discovery.dashboards || []).find((d) => d.slug === slug) || null;
     }
   } catch (err) {
     console.error("auth-gate discovery fetch error", err);
@@ -82,7 +86,7 @@ async function loadPermissionsFor(slug, request) {
 async function readUserFromRequest(request) {
   // Netlify Identity sets an `nf_jwt` cookie on login. Edge runtime doesn't
   // auto-parse it; we decode the JWT payload (no signature verification at the
-  // edge — Netlify's own request pipeline has already validated the cookie for
+  // edge — Netlify's own request pipeline already validates the cookie for
   // context.clientContext elsewhere, but we only need the claims here).
   const cookie = request.headers.get("cookie") || "";
   const match = cookie.match(/(?:^|;\s*)nf_jwt=([^;]+)/);
@@ -126,5 +130,5 @@ function unauthorized(message) {
   });
 }
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
