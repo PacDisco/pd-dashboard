@@ -1,22 +1,34 @@
 // netlify/functions/sales-funnel-data.mjs
 //
 // Returns monthly funnel data for the Pacific Discovery sales pipelines.
-// Traffic comes live from HubSpot Analytics (sessions/monthly endpoint).
+// Traffic comes live from HubSpot Analytics, filtered to pacificdiscovery.org only.
 //
-// HubSpot's actual response shape (discovered via debug):
-//   { "2025-05-01": [
-//       { "breakdown": "sessions",         "mobile": 4440, "desktop": 3329, "others": 64, ... },
-//       { "breakdown": "new-visitors",     "mobile": 3229, "desktop": 1879, ... },
-//       { "breakdown": "bounce-percent-dec", ... },
-//       { "breakdown": "views-per-session-dec", ... }
-//     ],
-//     ...
-//   }
+// HubSpot Analytics responses have come back in two shapes depending on
+// account/beta status:
 //
-// We use the "sessions" breakdown and sum mobile+desktop+others for total sessions.
+//   Shape 1 (Analytics Suite — your account):
+//     { "YYYY-MM-01": [
+//         { "breakdown": "sessions",     "mobile": N, "desktop": N, "others": N,
+//                                        "organicSearch": N, "directTraffic": N, ... },
+//         { "breakdown": "new-visitors", ... },
+//         { "breakdown": "bounce-percent-dec", ... },
+//         { "breakdown": "views-per-session-dec", ... }
+//       ], ... }
+//
+//   Shape 2 (legacy):
+//     { "YYYY-MM-01": [
+//         { "breakdown": "organic", "visits": N },
+//         { "breakdown": "direct",  "visits": N }, ...
+//       ], ... }
+//
+// We handle both. To filter by domain, we hit the per-domain endpoint
+// and add f= parameter.
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
+
+// Restrict traffic data to this domain only. Set to null to include all domains.
+const TRAFFIC_DOMAIN = "pacificdiscovery.org";
 
 const STAGES = {
   af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
@@ -164,20 +176,8 @@ async function countPdContacts(startISO, endISO) {
 }
 
 // ============================================================
-// Traffic — HubSpot Analytics sessions/monthly
+// Traffic — HubSpot Analytics filtered to pacificdiscovery.org
 // ============================================================
-//
-// Response shape (confirmed via live API):
-//   { "YYYY-MM-01": [
-//       { "breakdown": "sessions",         "mobile": N, "desktop": N, "others": N, "organicSearch": N, ... },
-//       { "breakdown": "new-visitors",     ... },
-//       { "breakdown": "bounce-percent-dec", ... },
-//       { "breakdown": "views-per-session-dec", ... }
-//     ], ... }
-//
-// We pick the "sessions" row and sum the device buckets (mobile+desktop+others)
-// to get total sessions for the month. (Summing the source buckets — organicSearch,
-// directTraffic, paidSearch, etc. — would give the same total.)
 async function getTraffic(months) {
   const [firstISO] = monthRange(months[0]);
   const [, lastISO] = monthRange(months[months.length - 1]);
@@ -187,52 +187,85 @@ async function getTraffic(months) {
   const start = fmt(firstISO);
   const end = fmt(lastDate.toISOString());
 
-  const url = `${HS_BASE}/analytics/v2/reports/sessions/monthly?start=${start}&end=${end}`;
+  // Use breakdown_by=sources with d1=<domain> to filter to a single domain.
+  // The f= parameter filters the breakdowns shown but data is still all-domains.
+  // d1=<domain> is the proper drilldown into a specific domain's data.
+  const params = new URLSearchParams({ start, end });
+
+  // The sources endpoint can drill into a specific domain via d1
+  const url = TRAFFIC_DOMAIN
+    ? `${HS_BASE}/analytics/v2/reports/sources/monthly?${params}&f=${encodeURIComponent(TRAFFIC_DOMAIN)}`
+    : `${HS_BASE}/analytics/v2/reports/sessions/monthly?${params}`;
+
+  const debugLog = [];
 
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
     });
+    const bodyText = await res.text();
+    debugLog.push({
+      url: url.replace(HS_BASE, ""),
+      status: res.status,
+      bodyPreview: bodyText.slice(0, 1000),
+    });
 
     if (res.status === 401 || res.status === 403) {
-      const txt = await res.text().catch(() => "");
-      console.warn(`HubSpot Analytics auth/scope error: ${res.status}`, txt);
-      return { counts: months.map(() => 0), source: "scope-missing" };
+      return { counts: months.map(() => 0), source: "scope-missing", debug: debugLog };
     }
     if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.warn(`HubSpot Analytics ${res.status}:`, txt);
-      return { counts: months.map(() => 0), source: "error" };
+      return { counts: months.map(() => 0), source: "error", debug: debugLog };
     }
 
-    const data = await res.json();
-    const byMonth = {};
-
-    // Device buckets that, summed, equal total sessions
-    const DEVICE_FIELDS = ["mobile", "desktop", "others"];
-
-    for (const [dateKey, breakdowns] of Object.entries(data || {})) {
-      const ym = dateKey.slice(0, 7);
-      if (!Array.isArray(breakdowns)) continue;
-
-      // Find the "sessions" breakdown row
-      const sessionsRow = breakdowns.find((b) => b.breakdown === "sessions");
-      if (!sessionsRow) continue;
-
-      const total = DEVICE_FIELDS.reduce(
-        (sum, field) => sum + (sessionsRow[field] || 0),
-        0
-      );
-      byMonth[ym] = (byMonth[ym] || 0) + total;
-    }
+    const data = JSON.parse(bodyText);
+    const byMonth = sumSessions(data);
 
     const counts = months.map((m) => byMonth[m] || 0);
     const hasAny = counts.some((c) => c > 0);
-    return { counts, source: hasAny ? "hubspot" : "empty" };
+    return {
+      counts,
+      source: hasAny ? "hubspot" : "empty",
+      debug: debugLog,
+      parsedByMonth: byMonth,
+    };
   } catch (err) {
     console.warn("HubSpot Analytics fetch threw:", err.message);
-    return { counts: months.map(() => 0), source: "error" };
+    debugLog.push({ error: err.message });
+    return { counts: months.map(() => 0), source: "error", debug: debugLog };
   }
+}
+
+// Sum sessions per month across all the response shapes HubSpot might return.
+function sumSessions(data) {
+  const byMonth = {};
+  const DEVICE_FIELDS = ["mobile", "desktop", "others"];
+
+  for (const [dateKey, value] of Object.entries(data || {})) {
+    const ym = dateKey.slice(0, 7);
+
+    if (Array.isArray(value)) {
+      // Shape 1: Analytics Suite — array of metric breakdowns
+      const sessionsRow = value.find((b) => b.breakdown === "sessions");
+      if (sessionsRow) {
+        const total = DEVICE_FIELDS.reduce(
+          (sum, field) => sum + (sessionsRow[field] || 0),
+          0
+        );
+        byMonth[ym] = (byMonth[ym] || 0) + total;
+      } else {
+        // Shape 2: Legacy — array of source breakdowns with visits field
+        let total = 0;
+        for (const row of value) {
+          total += row.visits || row.sessions || 0;
+        }
+        byMonth[ym] = (byMonth[ym] || 0) + total;
+      }
+    } else if (value && typeof value === "object") {
+      // Single object: { visits: N, ... }
+      byMonth[ym] = (byMonth[ym] || 0) + (value.visits || value.sessions || 0);
+    }
+  }
+  return byMonth;
 }
 
 // -------- Main handler --------
@@ -331,6 +364,8 @@ export default async (req) => {
         months,
         traffic: trafficResult.counts,
         trafficSource: trafficResult.source,
+        trafficDomain: TRAFFIC_DOMAIN,
+        trafficDebug: trafficResult.debug,
         contacts: contactCounts,
         opportunities: oppsArr,
         salesViaDp: dpArr,
