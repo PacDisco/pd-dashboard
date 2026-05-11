@@ -8,11 +8,13 @@
 // Response shape:
 //   {
 //     months: ["2025-04", "2025-05", ...],
+//     traffic:       [0, 0, ...],          // website sessions from HubSpot Analytics
+//     trafficSource: "hubspot" | "scope-missing" | "endpoint-gone" | "empty" | "error",
+//     contacts:      [259, 216, ...],      // PD-tagged contacts created
 //     opportunities: [4, 5, ...],          // entered Application Fee Received
 //     salesViaDp:    [4, 3, ...],          // entered Deposit Paid
 //     salesSkipDp:   [1, 6, ...],          // entered Closed Won w/o ever entering DP
 //     totalSales:    [5, 9, ...],
-//     contacts:      [259, 216, ...],      // PD-tagged contacts created
 //     skippedDeals:  { "2025-04": [{name, cw_date}], ... }
 //   }
 //
@@ -62,7 +64,6 @@ function monthsBetween(fromYM, toYM) {
 }
 
 function monthRange(ym) {
-  // returns [startISO, endISO) for the calendar month
   const [y, m] = ym.split("-").map(Number);
   const start = `${y}-${String(m).padStart(2, "0")}-01`;
   const ny = m === 12 ? y + 1 : y;
@@ -79,7 +80,6 @@ function defaultRange() {
   return { from, to };
 }
 
-// HubSpot POST with automatic retry on 429 rate limit errors.
 async function hsPost(path, body, retries = 3) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(`${HS_BASE}${path}`, {
@@ -92,7 +92,7 @@ async function hsPost(path, body, retries = 3) {
     });
     if (res.ok) return res.json();
     if (res.status === 429 && attempt < retries) {
-      const wait = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+      const wait = 1000 * Math.pow(2, attempt);
       console.warn(`HubSpot rate-limited (attempt ${attempt + 1}); waiting ${wait}ms`);
       await sleep(wait);
       continue;
@@ -102,7 +102,6 @@ async function hsPost(path, body, retries = 3) {
   }
 }
 
-// Search deals where any of `stageIds` was entered within [start, end), paginated.
 async function searchStageEntries(stageIds, startISO, endISO) {
   const filterGroups = stageIds.map((sid) => ({
     filters: [
@@ -142,7 +141,6 @@ async function searchStageEntries(stageIds, startISO, endISO) {
   return all;
 }
 
-// Earliest date among the given stage-entered properties on a deal.
 function earliestStageDate(deal, stageIds) {
   let earliest = null;
   for (const sid of stageIds) {
@@ -152,7 +150,6 @@ function earliestStageDate(deal, stageIds) {
   return earliest;
 }
 
-// Count of PD-tagged contacts created in [start, end)
 async function countPdContacts(startISO, endISO) {
   const body = {
     filterGroups: [
@@ -175,6 +172,85 @@ async function countPdContacts(startISO, endISO) {
   return data.total ?? 0;
 }
 
+// ============================================================
+// Traffic data source — HubSpot Analytics API
+// ============================================================
+//
+// Uses HubSpot's Analytics v2 API:
+//   GET /analytics/v2/reports/sources/monthly
+//
+// Required scope on the private app token: `business-intelligence`
+// (in the HubSpot UI, shown as "Analytics tools" → Read access)
+//
+// Returns { counts: [num, num, ...], source: string }
+//
+// Possible source values:
+//   "hubspot"        — success, real data
+//   "scope-missing"  — token needs business-intelligence scope (401/403)
+//   "endpoint-gone"  — 404 (Marketing Pro+ may be required for this endpoint)
+//   "empty"          — call succeeded but returned no sessions
+//   "error"          — anything else
+async function getTraffic(months) {
+  const [firstISO] = monthRange(months[0]);
+  const [, lastISO] = monthRange(months[months.length - 1]);
+  // HubSpot uses inclusive end dates; subtract 1 day from our exclusive end
+  const lastDate = new Date(lastISO);
+  lastDate.setUTCDate(lastDate.getUTCDate() - 1);
+  const fmt = (iso) => iso.replace(/-/g, "").slice(0, 8);
+  const start = fmt(firstISO);
+  const end = fmt(lastDate.toISOString());
+
+  const url =
+    `${HS_BASE}/analytics/v2/reports/sources/monthly` +
+    `?start=${start}&end=${end}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      const txt = await res.text().catch(() => "");
+      console.warn(`HubSpot Analytics auth/scope error: ${res.status}`, txt);
+      return { counts: months.map(() => 0), source: "scope-missing" };
+    }
+    if (res.status === 404) {
+      console.warn("HubSpot Analytics endpoint returned 404 (legacy API removed?)");
+      return { counts: months.map(() => 0), source: "endpoint-gone" };
+    }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.warn(`HubSpot Analytics ${res.status}:`, txt);
+      return { counts: months.map(() => 0), source: "error" };
+    }
+
+    const data = await res.json();
+
+    // Response shape: { "YYYY-MM-01": [ {breakdown, visits, ...}, ... ], ... }
+    // Sum `visits` (sessions) across all source breakdowns per month.
+    const byMonth = {};
+    for (const [dateKey, breakdowns] of Object.entries(data || {})) {
+      const ym = dateKey.slice(0, 7);
+      if (!Array.isArray(breakdowns)) continue;
+      let total = 0;
+      for (const row of breakdowns) {
+        total += row.visits || 0;
+      }
+      byMonth[ym] = (byMonth[ym] || 0) + total;
+    }
+
+    const counts = months.map((m) => byMonth[m] || 0);
+    const hasAny = counts.some((c) => c > 0);
+    return {
+      counts,
+      source: hasAny ? "hubspot" : "empty",
+    };
+  } catch (err) {
+    console.warn("HubSpot Analytics fetch threw:", err.message);
+    return { counts: months.map(() => 0), source: "error" };
+  }
+}
+
 // -------- Main handler --------
 
 export default async (req) => {
@@ -195,7 +271,7 @@ export default async (req) => {
     const [windowStart] = monthRange(months[0]);
     const [, windowEnd] = monthRange(months[months.length - 1]);
 
-    // Phase 1: three parallel deal searches (3 of HubSpot's 5/sec budget)
+    // Phase 1: three parallel deal searches
     const [afDeals, dpDeals, cwDeals] = await Promise.all([
       searchStageEntries(STAGES.af, windowStart, windowEnd),
       searchStageEntries(STAGES.dp, windowStart, windowEnd),
@@ -210,7 +286,6 @@ export default async (req) => {
 
     const monthOf = (iso) => (iso ? iso.slice(0, 7) : null);
 
-    // Opportunities: AF date in month
     const seenAf = new Set();
     for (const d of afDeals) {
       if (isExcluded(d.properties?.dealname)) continue;
@@ -222,7 +297,6 @@ export default async (req) => {
       }
     }
 
-    // Sales via DP
     for (const d of dpDeals) {
       if (isExcluded(d.properties?.dealname)) continue;
       const date = earliestStageDate(d, STAGES.dp);
@@ -237,7 +311,6 @@ export default async (req) => {
       return false;
     }
 
-    // Sales skipped DP: entered CW but no DP date on the deal record
     for (const d of cwDeals) {
       if (isExcluded(d.properties?.dealname)) continue;
       if (hasAnyDp(d)) continue;
@@ -249,9 +322,7 @@ export default async (req) => {
       }
     }
 
-    // Phase 2: contact counts — batched 3 at a time with 250ms gap to
-    // stay under HubSpot's 5 req/sec cap. Brief pause first to clear
-    // the budget from the deal searches above.
+    // Phase 2: contact counts — batched 3 at a time
     await sleep(300);
     const contactCounts = [];
     for (let i = 0; i < months.length; i += 3) {
@@ -266,6 +337,9 @@ export default async (req) => {
       if (i + 3 < months.length) await sleep(250);
     }
 
+    // Phase 3: traffic from HubSpot Analytics (one API call)
+    const trafficResult = await getTraffic(months);
+
     const oppsArr = months.map((m) => opps[m]);
     const dpArr = months.map((m) => salesDp[m]);
     const skipArr = months.map((m) => salesSkip[m]);
@@ -274,11 +348,13 @@ export default async (req) => {
     return new Response(
       JSON.stringify({
         months,
+        traffic: trafficResult.counts,
+        trafficSource: trafficResult.source,
+        contacts: contactCounts,
         opportunities: oppsArr,
         salesViaDp: dpArr,
         salesSkipDp: skipArr,
         totalSales,
-        contacts: contactCounts,
         skippedDeals: skippedNames,
         generatedAt: new Date().toISOString(),
       }),
