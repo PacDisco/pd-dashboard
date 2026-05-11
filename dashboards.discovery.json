@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-17T00:00:00.000Z",
+  "generatedAt": "2026-05-11T00:00:00.000Z",
   "dashboards": [
     {
       "slug": "enrollment",
@@ -30,6 +30,17 @@
       "allowedRoles": []
     },
     {
+      "slug": "sales-funnel",
+      "title": "Sales Funnel",
+      "description": "Opportunities, sales, and contact intake across the five Pacific Discovery season pipelines. Live from HubSpot.",
+      "category": "Enrollment",
+      "icon": "📊",
+      "owner": "",
+      "pinned": true,
+      "colors": ["#d8a657", "#6ab39a"],
+      "allowedRoles": ["admin", "admissions", "outreach", "programs", "operations"]
+    },
+    {
       "slug": "slider",
       "title": "Slider Manager",
       "description": "Manage dashboard sliders and homepage content.",
@@ -37,6 +48,15 @@
       "icon": "🎛️",
       "owner": "",
       "allowedRoles": ["outreach"]
+    },
+    {
+      "slug": "stripe-payments",
+      "title": "Stripe Payments",
+      "description": "Live transactions and revenue summary pulled directly from Stripe. Click any row for full charge details.",
+      "category": "Finance",
+      "icon": "💳",
+      "colors": ["#635bff", "#00d4ff"],
+      "allowedRoles": ["admin", "operations"]
     }
   ]
 }
