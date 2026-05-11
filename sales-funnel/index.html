@@ -1,321 +1,851 @@
-// netlify/functions/sales-funnel-data.mjs
-//
-// Returns monthly funnel data for the Pacific Discovery sales pipelines.
-// Query params (all optional):
-//   from=YYYY-MM   (default: 13 months ago)
-//   to=YYYY-MM     (default: current month)
-//
-// Response shape:
-//   {
-//     months: ["2025-04", "2025-05", ...],
-//     traffic:       [423, 465, ...],      // monthly sessions (from MANUAL_TRAFFIC below)
-//     trafficSource: "manual" | "empty",
-//     contacts:      [259, 216, ...],      // PD-tagged contacts created
-//     opportunities: [4, 5, ...],          // entered Application Fee Received
-//     salesViaDp:    [4, 3, ...],          // entered Deposit Paid
-//     salesSkipDp:   [1, 6, ...],          // entered Closed Won w/o ever entering DP
-//     totalSales:    [5, 9, ...],
-//     skippedDeals:  { "2025-04": [{name, cw_date}], ... }
-//   }
-
-const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
-const HS_BASE = "https://api.hubapi.com";
-
-// Stage IDs per pipeline (Application Fee Received, Deposit Paid, Closed Won)
-// Order: Fall Semester, Fall Mini, Spring Semester, Spring Mini, Summer Program
-const STAGES = {
-  af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
-  dp: ["143518989", "143518996", "143476015", "143502770", "1015966371"],
-  cw: ["143518991", "143518998", "143476017", "143502772", "1015966373"],
-};
-
-// Names to exclude
-const EXCLUDE_SUBSTRINGS = ["college credit", "test account", "meg test"];
-const EXCLUDE_EXACT = ["SAS", "Bali Summer", "Australia Summer 2027"];
-
-// ============================================================
-// MANUAL TRAFFIC — update once a month
-// ============================================================
-// Sessions for pacificdiscovery.org by month.
-// Initially seeded with SEMRush organic estimates (US database).
-// To update: add new months at the bottom each month. Anything missing
-// shows as 0 in the dashboard.
-const MANUAL_TRAFFIC = {
-  "2025-04": 423,
-  "2025-05": 465,
-  "2025-06": 506,
-  "2025-07": 419,
-  "2025-08": 423,
-  "2025-09": 368,
-  "2025-10": 365,
-  "2025-11": 377,
-  "2025-12": 346,
-  "2026-01": 359,
-  "2026-02": 384,
-  "2026-03": 464,
-  "2026-04": 446,
-};
-
-// -------- Helpers --------
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function isExcluded(dealname) {
-  if (!dealname) return true;
-  const lower = dealname.toLowerCase();
-  for (const s of EXCLUDE_SUBSTRINGS) if (lower.includes(s)) return true;
-  if (EXCLUDE_EXACT.includes(dealname)) return true;
-  return false;
-}
-
-function monthsBetween(fromYM, toYM) {
-  const [fy, fm] = fromYM.split("-").map(Number);
-  const [ty, tm] = toYM.split("-").map(Number);
-  const out = [];
-  let y = fy, m = fm;
-  while (y < ty || (y === ty && m <= tm)) {
-    out.push(`${y}-${String(m).padStart(2, "0")}`);
-    m++;
-    if (m > 12) { m = 1; y++; }
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pacific Discovery · Sales Funnel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:        #0e1413;
+    --panel:    #141c1b;
+    --panel-2:  #1a2322;
+    --line:      #243130;
+    --text:     #e6efed;
+    --muted:    #8aa19d;
+    --accent:   #d8a657;
+    --accent-2: #6ab39a;
+    --warn:     #d96a4e;
+    --good:     #88c9a1;
+    --down:     #d96a4e;
+    --up:       #88c9a1;
   }
-  return out;
-}
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(216,166,87,0.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 30%, rgba(106,179,154,0.05), transparent 60%),
+      var(--bg);
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 48px 32px 96px; }
 
-function monthRange(ym) {
-  const [y, m] = ym.split("-").map(Number);
-  const start = `${y}-${String(m).padStart(2, "0")}-01`;
-  const ny = m === 12 ? y + 1 : y;
-  const nm = m === 12 ? 1 : m + 1;
-  const end = `${ny}-${String(nm).padStart(2, "0")}-01`;
-  return [start, end];
-}
+  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 32px; }
+  .title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 500;
+    font-size: clamp(34px, 4.5vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+  .title em { color: var(--accent); font-style: italic; font-weight: 400; }
+  .subtitle { color: var(--muted); font-size: 14px; max-width: 540px; }
 
-function defaultRange() {
-  const now = new Date();
-  const to = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const back = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12, 1));
-  const from = `${back.getUTCFullYear()}-${String(back.getUTCMonth() + 1).padStart(2, "0")}`;
-  return { from, to };
-}
+  .ranges {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 900px) {
+    .ranges { grid-template-columns: 1fr 1fr auto; align-items: end; }
+  }
+  .range-block { display: flex; flex-direction: column; gap: 8px; }
+  .range-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .range-label .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .range-label .dot.a { background: var(--accent); }
+  .range-label .dot.b { background: var(--accent-2); }
+  .range-inputs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .range-inputs input[type="month"] {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    padding: 8px 12px; border-radius: 6px; font: inherit; font-size: 13px;
+    color-scheme: dark;
+  }
+  .range-inputs .sep { color: var(--muted); font-size: 13px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .preset {
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    padding: 4px 10px; border-radius: 999px; font: inherit; font-size: 11px;
+    cursor: pointer; transition: all 120ms;
+  }
+  .preset:hover { color: var(--text); border-color: var(--muted); }
+  .preset.active { background: var(--accent); color: #1a1208; border-color: var(--accent); font-weight: 600; }
+  .compare-toggle {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
+    cursor: pointer; user-select: none;
+  }
+  .compare-toggle input { accent-color: var(--accent-2); }
+  .refresh-btn {
+    background: var(--accent); color: #1a1208; border: 0;
+    padding: 10px 18px; border-radius: 8px; font: inherit; font-weight: 600;
+    cursor: pointer; transition: transform 80ms ease, opacity 200ms;
+    height: fit-content;
+  }
+  .refresh-btn:hover { transform: translateY(-1px); }
+  .refresh-btn:disabled { opacity: 0.5; cursor: wait; }
 
-async function hsPost(path, body, retries = 3) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(`${HS_BASE}${path}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${HUBSPOT_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (res.ok) return res.json();
-    if (res.status === 429 && attempt < retries) {
-      const wait = 1000 * Math.pow(2, attempt);
-      console.warn(`HubSpot rate-limited (attempt ${attempt + 1}); waiting ${wait}ms`);
-      await sleep(wait);
-      continue;
+  .meta { color: var(--muted); font-size: 12px; margin: -16px 0 16px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .kpi {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent 60%);
+    opacity: 0.7;
+  }
+  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+  .kpi .value { font-family: 'Fraunces', serif; font-size: 36px; font-weight: 500; margin-top: 6px; letter-spacing: -0.02em; line-height: 1.1; }
+  .kpi .sub { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .delta { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .delta.up { color: var(--up); background: rgba(136,201,161,0.12); }
+  .delta.down { color: var(--down); background: rgba(217,106,78,0.12); }
+  .delta.flat { color: var(--muted); background: rgba(138,161,157,0.12); }
+  .compare-val { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+
+  .cards { display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 980px) { .cards { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 24px 16px;
+    min-height: 320px;
+    position: relative;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 20px;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .card .h-sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .chart-wrap { position: relative; height: 280px; }
+  .card.wide .chart-wrap { height: 340px; }
+
+  .funnel-card { padding: 28px; }
+  .funnel-stages { display: grid; gap: 14px; margin-top: 18px; }
+  .funnel-row { display: grid; grid-template-columns: 140px 1fr 60px; gap: 18px; align-items: center; }
+  .funnel-name { font-size: 14px; font-weight: 500; }
+  .funnel-name .funnel-detail { display: block; color: var(--muted); font-size: 11px; font-weight: 400; margin-top: 2px; }
+  .funnel-bar-track { position: relative; height: 32px; background: var(--panel-2); border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+  .funnel-bar { height: 100%; display: flex; align-items: center; padding: 0 12px; font-size: 12px; font-weight: 600; color: #1a1208; transition: width 600ms cubic-bezier(.2,.6,.2,1); }
+  .funnel-bar.a { background: var(--accent); }
+  .funnel-bar-compare { position: relative; height: 32px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .funnel-bar-compare .bar-a { position: absolute; top: 0; left: 0; height: 16px; background: var(--accent); display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 600; color: #1a1208; transition: width 600ms cubic-bezier(.2,.6,.2,1); border-radius: 4px 0 0 0; }
+  .funnel-bar-compare .bar-b { position: absolute; bottom: 0; left: 0; height: 16px; background: var(--accent-2); display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 600; color: #0e1413; opacity: 0.95; transition: width 600ms cubic-bezier(.2,.6,.2,1); border-radius: 0 0 0 4px; }
+  .funnel-pct { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500; text-align: right; }
+  .funnel-stage-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; background: rgba(216,166,87,0.12); color: var(--accent); margin-right: 8px; }
+  .funnel-arrow { color: var(--muted); font-size: 13px; padding: 0 4px; }
+
+  .skeleton {
+    position: absolute; inset: 60px 24px 16px; border-radius: 8px;
+    background: linear-gradient(110deg, var(--panel-2) 30%, #1e2827 50%, var(--panel-2) 70%);
+    background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .hidden { display: none !important; }
+
+  .error { color: var(--warn); font-size: 13px; padding: 12px; background: rgba(217,106,78,0.08); border: 1px solid rgba(217,106,78,0.25); border-radius: 8px; }
+
+  .footnote { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 32px; max-width: 720px; }
+  .footnote strong { color: var(--text); font-weight: 500; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  thead th { text-align: right; padding: 10px 12px; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--line); }
+  thead th:first-child { text-align: left; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid rgba(36,49,48,0.5); text-align: right; font-variant-numeric: tabular-nums; }
+  tbody td:first-child { text-align: left; color: var(--muted); font-weight: 500; }
+  tbody tr:hover { background: rgba(216,166,87,0.03); }
+  tfoot td { padding: 12px; border-top: 1px solid var(--line); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  tfoot td:first-child { text-align: left; color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 class="title">Sales <em>Funnel</em></h1>
+      <p class="subtitle">Live from HubSpot. Compare any two time periods, watch the conversion funnel breathe.</p>
+    </div>
+  </header>
+
+  <section class="ranges">
+    <div class="range-block">
+      <div class="range-label"><span class="dot a"></span>Range A</div>
+      <div class="range-inputs">
+        <input type="month" id="from-a" />
+        <span class="sep">→</span>
+        <input type="month" id="to-a" />
+      </div>
+      <div class="presets" id="presets-a">
+        <button class="preset" data-months="3">Last 3 mo</button>
+        <button class="preset" data-months="6">Last 6 mo</button>
+        <button class="preset active" data-months="13">Last 13 mo</button>
+        <button class="preset" data-ytd="1">YTD</button>
+      </div>
+    </div>
+
+    <div class="range-block">
+      <label class="compare-toggle">
+        <input type="checkbox" id="compare-on" checked />
+        <span class="range-label" style="margin: 0;"><span class="dot b"></span>Compare to</span>
+      </label>
+      <div class="range-inputs" id="range-b-inputs">
+        <input type="month" id="from-b" />
+        <span class="sep">→</span>
+        <input type="month" id="to-b" />
+      </div>
+      <div class="presets" id="presets-b">
+        <button class="preset active" data-cmp="yoy">Same period last year</button>
+        <button class="preset" data-cmp="prev">Previous period</button>
+      </div>
+    </div>
+
+    <button class="refresh-btn" id="refresh">Apply</button>
+  </section>
+
+  <div class="meta" id="generated"></div>
+  <div id="error-banner" class="error hidden" style="margin-bottom: 24px;"></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="card wide funnel-card" id="funnel-card">
+    <h2>Conversion funnel</h2>
+    <div class="h-sub" id="funnel-subtitle">Traffic → Lead → Opportunity → Sale.</div>
+    <div class="funnel-stages" id="funnel-stages"></div>
+  </section>
+
+  <section class="cards">
+    <div class="card wide">
+      <h2>Funnel by month</h2>
+      <div class="h-sub">Opportunities = entered Application Fee Received. Sales = entered Deposit Paid OR Closed Won without DP.</div>
+      <div class="chart-wrap"><canvas id="chart-funnel"></canvas><div class="skeleton" id="skel-funnel"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Sales over time</h2>
+      <div class="h-sub">Total sales per month. <span id="cmp-sales-label" class="hidden" style="color: var(--accent-2)">Range A vs B overlaid.</span></div>
+      <div class="chart-wrap"><canvas id="chart-sales"></canvas><div class="skeleton" id="skel-sales"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>PD contacts created</h2>
+      <div class="h-sub">Top-of-funnel: new contacts tagged <em>Pacific Discovery</em>.</div>
+      <div class="chart-wrap"><canvas id="chart-contacts"></canvas><div class="skeleton" id="skel-contacts"></div></div>
+    </div>
+
+    <div class="card wide">
+      <h2>Full breakdown</h2>
+      <div class="h-sub">Monthly numbers for Range A. Hover the Skip column to see deals that bypassed Deposit Paid.</div>
+      <div id="table-wrap"></div>
+    </div>
+  </section>
+
+  <p class="footnote">
+    <strong>Source:</strong> HubSpot CRM, live on each page load.
+    <strong>Pipelines:</strong> Fall Semester, Fall Mini, Spring Semester, Spring Mini, Summer Program.
+    <strong>Excluded:</strong> College credit add-ons, test accounts.
+    <strong>Sale definition:</strong> A deal that entered Deposit Paid that month, OR entered Closed Won that month without ever entering Deposit Paid.
+  </p>
+</div>
+
+<script>
+  function ymOf(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+  function parseYM(ym) {
+    const [y, m] = ym.split('-').map(Number);
+    return { y, m, date: new Date(y, m - 1, 1) };
+  }
+  function addMonths(ym, n) {
+    const { y, m } = parseYM(ym);
+    const d = new Date(y, m - 1 + n, 1);
+    return ymOf(d);
+  }
+  function monthsBetween(fromYM, toYM) {
+    const out = [];
+    let cur = fromYM;
+    while (cur <= toYM) {
+      out.push(cur);
+      cur = addMonths(cur, 1);
     }
-    const txt = await res.text();
-    throw new Error(`HubSpot ${path} ${res.status}: ${txt}`);
+    return out;
   }
-}
-
-async function searchStageEntries(stageIds, startISO, endISO) {
-  const filterGroups = stageIds.map((sid) => ({
-    filters: [
-      {
-        propertyName: `hs_v2_date_entered_${sid}`,
-        operator: "BETWEEN",
-        value: startISO,
-        highValue: endISO,
-      },
-    ],
-  }));
-
-  const properties = [
-    "dealname",
-    "pipeline",
-    "dealstage",
-    ...STAGES.af.map((s) => `hs_v2_date_entered_${s}`),
-    ...STAGES.dp.map((s) => `hs_v2_date_entered_${s}`),
-    ...STAGES.cw.map((s) => `hs_v2_date_entered_${s}`),
-  ];
-
-  const all = [];
-  let after = undefined;
-  for (let page = 0; page < 10; page++) {
-    const body = {
-      filterGroups,
-      properties,
-      limit: 100,
-      sorts: [{ propertyName: "hs_lastmodifieddate", direction: "DESCENDING" }],
-    };
-    if (after) body.after = after;
-    const data = await hsPost("/crm/v3/objects/deals/search", body);
-    for (const r of data.results || []) all.push(r);
-    after = data.paging?.next?.after;
-    if (!after) break;
+  function rangeLength(fromYM, toYM) {
+    return monthsBetween(fromYM, toYM).length;
   }
-  return all;
-}
-
-function earliestStageDate(deal, stageIds) {
-  let earliest = null;
-  for (const sid of stageIds) {
-    const d = deal.properties?.[`hs_v2_date_entered_${sid}`];
-    if (d && (!earliest || d < earliest)) earliest = d;
+  function fmtMonthLabel(ym) {
+    const { date } = parseYM(ym);
+    return date.toLocaleString('en', { month: 'short', year: '2-digit' });
   }
-  return earliest;
-}
+  function fmtRangeLabel(fromYM, toYM) {
+    if (fromYM === toYM) return fmtMonthLabel(fromYM);
+    return `${fmtMonthLabel(fromYM)} – ${fmtMonthLabel(toYM)}`;
+  }
 
-async function countPdContacts(startISO, endISO) {
-  const body = {
-    filterGroups: [
-      {
-        filters: [
-          { propertyName: "company_tag", operator: "EQ", value: "Pacific Discovery" },
-          {
-            propertyName: "createdate",
-            operator: "BETWEEN",
-            value: startISO,
-            highValue: endISO,
-          },
-        ],
-      },
-    ],
-    properties: ["firstname"],
-    limit: 1,
+  const els = {
+    fromA: document.getElementById('from-a'),
+    toA: document.getElementById('to-a'),
+    fromB: document.getElementById('from-b'),
+    toB: document.getElementById('to-b'),
+    compareOn: document.getElementById('compare-on'),
+    rangeBInputs: document.getElementById('range-b-inputs'),
+    refresh: document.getElementById('refresh'),
+    presetsA: document.getElementById('presets-a'),
+    presetsB: document.getElementById('presets-b'),
+    error: document.getElementById('error-banner'),
+    generated: document.getElementById('generated'),
+    kpis: document.getElementById('kpis'),
+    table: document.getElementById('table-wrap'),
+    funnelStages: document.getElementById('funnel-stages'),
+    cmpSalesLabel: document.getElementById('cmp-sales-label'),
   };
-  const data = await hsPost("/crm/v3/objects/contacts/search", body);
-  return data.total ?? 0;
-}
 
-function getTraffic(months) {
-  const counts = months.map((m) => MANUAL_TRAFFIC[m] || 0);
-  const hasAny = counts.some((c) => c > 0);
-  return { counts, source: hasAny ? "manual" : "empty" };
-}
+  const COLORS = {
+    accent:   '#d8a657',
+    accent2:  '#6ab39a',
+    warn:     '#d96a4e',
+    good:     '#88c9a1',
+    muted:    '#8aa19d',
+  };
 
-// -------- Main handler --------
+  Chart.defaults.color = COLORS.muted;
+  Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.borderColor = '#243130';
 
-export default async (req) => {
-  if (!HUBSPOT_TOKEN) {
-    return new Response(
-      JSON.stringify({ error: "HUBSPOT_PRIVATE_APP_TOKEN not configured" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+  let charts = {};
+
+  function applyPresetA(months) {
+    const now = new Date();
+    const toYM = ymOf(now);
+    const fromDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+    els.fromA.value = ymOf(fromDate);
+    els.toA.value = toYM;
+    updateRangeBPreset();
+  }
+  function applyYTDA() {
+    const now = new Date();
+    els.fromA.value = `${now.getFullYear()}-01`;
+    els.toA.value = ymOf(now);
+    updateRangeBPreset();
   }
 
-  try {
-    const url = new URL(req.url);
-    const def = defaultRange();
-    const fromYM = url.searchParams.get("from") || def.from;
-    const toYM = url.searchParams.get("to") || def.to;
-    const months = monthsBetween(fromYM, toYM);
+  function activePresetB() {
+    return els.presetsB.querySelector('.preset.active')?.dataset.cmp || 'yoy';
+  }
 
-    const [windowStart] = monthRange(months[0]);
-    const [, windowEnd] = monthRange(months[months.length - 1]);
+  function updateRangeBPreset() {
+    if (!els.compareOn.checked) return;
+    const mode = activePresetB();
+    if (mode === 'yoy') {
+      els.fromB.value = addMonths(els.fromA.value, -12);
+      els.toB.value = addMonths(els.toA.value, -12);
+    } else if (mode === 'prev') {
+      const len = rangeLength(els.fromA.value, els.toA.value);
+      els.toB.value = addMonths(els.fromA.value, -1);
+      els.fromB.value = addMonths(els.toB.value, -(len - 1));
+    }
+  }
 
-    const [afDeals, dpDeals, cwDeals] = await Promise.all([
-      searchStageEntries(STAGES.af, windowStart, windowEnd),
-      searchStageEntries(STAGES.dp, windowStart, windowEnd),
-      searchStageEntries(STAGES.cw, windowStart, windowEnd),
-    ]);
+  els.presetsA.addEventListener('click', (e) => {
+    const btn = e.target.closest('.preset');
+    if (!btn) return;
+    els.presetsA.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (btn.dataset.months) applyPresetA(parseInt(btn.dataset.months, 10));
+    else if (btn.dataset.ytd) applyYTDA();
+  });
 
-    const empty = () => Object.fromEntries(months.map((m) => [m, 0]));
-    const opps = empty();
-    const salesDp = empty();
-    const salesSkip = empty();
-    const skippedNames = Object.fromEntries(months.map((m) => [m, []]));
+  els.presetsB.addEventListener('click', (e) => {
+    const btn = e.target.closest('.preset');
+    if (!btn) return;
+    els.presetsB.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateRangeBPreset();
+  });
 
-    const monthOf = (iso) => (iso ? iso.slice(0, 7) : null);
+  els.compareOn.addEventListener('change', () => {
+    const on = els.compareOn.checked;
+    els.rangeBInputs.classList.toggle('hidden', !on);
+    els.presetsB.classList.toggle('hidden', !on);
+    if (on) updateRangeBPreset();
+  });
 
-    const seenAf = new Set();
-    for (const d of afDeals) {
-      if (isExcluded(d.properties?.dealname)) continue;
-      const date = earliestStageDate(d, STAGES.af);
-      const ym = monthOf(date);
-      if (ym && months.includes(ym) && !seenAf.has(d.id + ym)) {
-        opps[ym]++;
-        seenAf.add(d.id + ym);
+  [els.fromA, els.toA].forEach((inp) =>
+    inp.addEventListener('change', () => {
+      els.presetsA.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+      updateRangeBPreset();
+    })
+  );
+
+  applyPresetA(13);
+
+  function showSkeletons(on) {
+    ['funnel', 'sales', 'contacts'].forEach((k) => {
+      const el = document.getElementById(`skel-${k}`);
+      if (el) el.classList.toggle('hidden', !on);
+    });
+  }
+
+  async function fetchData(fromYM, toYM) {
+    const url = `/.netlify/functions/sales-funnel-data?from=${fromYM}&to=${toYM}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Server ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
+
+  function sum(arr) { return (arr || []).reduce((a, b) => a + b, 0); }
+
+  function deltaBadge(curr, prev) {
+    if (prev === 0 || prev == null) {
+      if (curr > 0) return '<span class="delta up">new</span>';
+      return '<span class="delta flat">—</span>';
+    }
+    const pct = ((curr - prev) / prev) * 100;
+    const sign = pct >= 0 ? '+' : '';
+    const cls = pct > 1 ? 'up' : pct < -1 ? 'down' : 'flat';
+    return `<span class="delta ${cls}">${sign}${pct.toFixed(0)}%</span>`;
+  }
+
+  function renderKpis(a, b) {
+    const oppsA = sum(a.opportunities);
+    const salesA = sum(a.totalSales);
+    const contactsA = sum(a.contacts);
+    const trafficA = sum(a.traffic || []);
+
+    const cards = b
+      ? [
+          { label: 'Traffic', value: trafficA, prev: sum(b.traffic || []), big: true },
+          { label: 'PD Contacts', value: contactsA, prev: sum(b.contacts), big: true },
+          { label: 'Opportunities', value: oppsA, prev: sum(b.opportunities) },
+          { label: 'Total Sales', value: salesA, prev: sum(b.totalSales) },
+        ]
+      : [
+          { label: 'Traffic', value: trafficA, sub: 'Website sessions', big: true },
+          { label: 'PD Contacts', value: contactsA, sub: 'New, tagged Pacific Discovery', big: true },
+          { label: 'Opportunities', value: oppsA, sub: 'App Fee Received' },
+          { label: 'Total Sales', value: salesA, sub: `${oppsA ? Math.round((salesA/oppsA)*100) : 0}% of opps` },
+        ];
+
+    els.kpis.innerHTML = cards.map((c) => {
+      const value = c.big ? c.value.toLocaleString() : c.value;
+      const subContent = b
+        ? `${deltaBadge(c.value, c.prev)} <span class="compare-val">vs ${c.prev.toLocaleString()}</span>`
+        : c.sub || '';
+      return `
+        <div class="kpi">
+          <div class="label">${c.label}</div>
+          <div class="value">${value}</div>
+          <div class="sub">${subContent}</div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderFunnel(a, b) {
+    const trafficSource = a.trafficSource || 'none';
+    const trafficSum = sum(a.traffic || []);
+    const hasTraffic = (trafficSource === 'hubspot' || trafficSource === 'manual') && trafficSum > 0;
+
+    const subtitle = document.getElementById('funnel-subtitle');
+    if (hasTraffic) {
+      const srcLabel = trafficSource === 'hubspot' ? 'HubSpot Analytics' : 'SEMRush estimates (manual)';
+      subtitle.innerHTML = `Traffic → Lead → Opportunity → Sale. <span style="color: var(--muted)">Traffic from ${srcLabel}.</span>`;
+    } else {
+      const hint = {
+        'scope-missing': '<strong style="color: var(--warn)">Traffic data unavailable:</strong> HubSpot private app token is missing the <code style="color: var(--accent); background: rgba(216,166,87,0.08); padding: 1px 6px; border-radius: 3px;">business-intelligence</code> scope.',
+        'endpoint-gone': '<strong style="color: var(--warn)">Traffic data unavailable:</strong> HubSpot returned 404 (Marketing Pro+ required).',
+        'empty': '<strong style="color: var(--muted)">Traffic data is empty</strong> for this period.',
+        'error': '<strong style="color: var(--warn)">Traffic data couldn\'t load</strong> — see Netlify function logs.',
+        'none': 'Traffic stage not configured.',
+      }[trafficSource] || `Traffic source: ${trafficSource}`;
+      subtitle.innerHTML = `Lead → Opportunity → Sale. <span style="color: var(--muted)">${hint}</span>`;
+    }
+
+    const baseStages = [
+      { key: 'contacts', label: 'Contacts created', tag: 'Lead', sum: sum(a.contacts), prev: b ? sum(b.contacts) : null },
+      { key: 'opps', label: 'Opportunities', tag: 'App Fee Received', sum: sum(a.opportunities), prev: b ? sum(b.opportunities) : null },
+      { key: 'sales', label: 'Sales', tag: 'Closed Won', sum: sum(a.totalSales), prev: b ? sum(b.totalSales) : null },
+    ];
+
+    const stages = hasTraffic
+      ? [
+          {
+            key: 'traffic',
+            label: 'Website sessions',
+            tag: 'Traffic',
+            sum: trafficSum,
+            prev: b ? sum(b.traffic || []) : null,
+          },
+          ...baseStages,
+        ]
+      : baseStages;
+
+    const max = Math.max(...stages.map((s) => s.sum), b ? Math.max(...stages.map((s) => s.prev || 0)) : 0);
+
+    const ratiosA = [];
+    for (let i = 1; i < stages.length; i++) {
+      const prev = stages[i - 1].sum;
+      const curr = stages[i].sum;
+      ratiosA.push(prev > 0 ? (curr / prev) * 100 : 0);
+    }
+    const ratiosB = b ? (() => {
+      const r = [];
+      for (let i = 1; i < stages.length; i++) {
+        const prev = stages[i - 1].prev;
+        const curr = stages[i].prev;
+        r.push(prev > 0 ? (curr / prev) * 100 : 0);
       }
-    }
+      return r;
+    })() : null;
 
-    for (const d of dpDeals) {
-      if (isExcluded(d.properties?.dealname)) continue;
-      const date = earliestStageDate(d, STAGES.dp);
-      const ym = monthOf(date);
-      if (ym && months.includes(ym)) salesDp[ym]++;
-    }
+    const rows = stages.map((s, idx) => {
+      const widthA = max > 0 ? (s.sum / max) * 100 : 0;
+      const widthB = b && max > 0 ? ((s.prev || 0) / max) * 100 : 0;
+      const valA = s.sum.toLocaleString();
+      const valB = b ? (s.prev || 0).toLocaleString() : null;
 
-    function hasAnyDp(deal) {
-      for (const sid of STAGES.dp) {
-        if (deal.properties?.[`hs_v2_date_entered_${sid}`]) return true;
+      let conversionRow = '';
+      if (idx > 0) {
+        const rA = ratiosA[idx - 1];
+        const rB = ratiosB ? ratiosB[idx - 1] : null;
+        let cmpText = '';
+        if (rB !== null) {
+          const diff = rA - rB;
+          const sign = diff >= 0 ? '+' : '';
+          const cls = diff > 0.5 ? 'up' : diff < -0.5 ? 'down' : 'flat';
+          cmpText = ` <span class="delta ${cls}" style="margin-left: 6px; font-size: 11px;">${sign}${diff.toFixed(1)}pp</span>`;
+        }
+        conversionRow = `
+          <div class="funnel-row" style="opacity: 0.85;">
+            <div class="funnel-name" style="text-align: right; padding-right: 4px;">
+              <span class="funnel-arrow">↓ conversion</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px;">
+              <span style="font-family: 'Fraunces', serif; color: var(--accent); font-size: 16px; font-weight: 500;">${rA.toFixed(1)}%</span>
+              ${rB !== null ? `<span style="color: var(--accent-2); font-size: 12px;">vs ${rB.toFixed(1)}%</span>` : ''}
+              ${cmpText}
+            </div>
+            <div></div>
+          </div>
+        `;
       }
-      return false;
+
+      const barHtml = b
+        ? `
+          <div class="funnel-bar-compare">
+            <div class="bar-a" style="width: ${widthA}%;">${valA}</div>
+            <div class="bar-b" style="width: ${widthB}%;">${valB}</div>
+          </div>
+        `
+        : `
+          <div class="funnel-bar-track">
+            <div class="funnel-bar a" style="width: ${widthA}%;">${valA}</div>
+          </div>
+        `;
+
+      return `
+        ${conversionRow}
+        <div class="funnel-row">
+          <div class="funnel-name">
+            <span class="funnel-stage-tag">${s.tag}</span>
+            <span class="funnel-detail">${s.label}</span>
+          </div>
+          ${barHtml}
+          <div class="funnel-pct">${valA}</div>
+        </div>
+      `;
+    });
+
+    const overallA = stages[0].sum > 0 ? (stages[stages.length - 1].sum / stages[0].sum) * 100 : 0;
+    const overallB = b && stages[0].prev > 0 ? (stages[stages.length - 1].prev / stages[0].prev) * 100 : null;
+    let overallCmp = '';
+    if (overallB !== null) {
+      const diff = overallA - overallB;
+      const sign = diff >= 0 ? '+' : '';
+      const cls = diff > 0.5 ? 'up' : diff < -0.5 ? 'down' : 'flat';
+      overallCmp = `<span class="delta ${cls}" style="margin-left: 8px;">${sign}${diff.toFixed(1)}pp</span>`;
     }
 
-    for (const d of cwDeals) {
-      if (isExcluded(d.properties?.dealname)) continue;
-      if (hasAnyDp(d)) continue;
-      const date = earliestStageDate(d, STAGES.cw);
-      const ym = monthOf(date);
-      if (ym && months.includes(ym)) {
-        salesSkip[ym]++;
-        skippedNames[ym].push({ name: d.properties.dealname, cw_date: date });
-      }
+    const summary = `
+      <div style="border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <div class="label" style="color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">${hasTraffic ? 'Traffic → Sale' : 'Lead → Sale'} (overall)</div>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <span style="font-family: 'Fraunces', serif; font-size: 32px; font-weight: 500; color: var(--accent);">${overallA.toFixed(2)}%</span>
+          ${overallB !== null ? `<span style="color: var(--accent-2); font-size: 14px;">vs ${overallB.toFixed(2)}%</span>` : ''}
+          ${overallCmp}
+        </div>
+      </div>
+    `;
+
+    els.funnelStages.innerHTML = rows.join('') + summary;
+  }
+
+  function destroyChart(key) {
+    if (charts[key]) {
+      charts[key].destroy();
+      delete charts[key];
     }
+  }
 
-    await sleep(300);
-    const contactCounts = [];
-    for (let i = 0; i < months.length; i += 3) {
-      const batch = months.slice(i, i + 3);
-      const counts = await Promise.all(
-        batch.map((m) => {
-          const [s, e] = monthRange(m);
-          return countPdContacts(s, e);
-        })
-      );
-      contactCounts.push(...counts);
-      if (i + 3 < months.length) await sleep(250);
-    }
-
-    const trafficResult = getTraffic(months);
-
-    const oppsArr = months.map((m) => opps[m]);
-    const dpArr = months.map((m) => salesDp[m]);
-    const skipArr = months.map((m) => salesSkip[m]);
-    const totalSales = months.map((_, i) => dpArr[i] + skipArr[i]);
-
-    return new Response(
-      JSON.stringify({
-        months,
-        traffic: trafficResult.counts,
-        trafficSource: trafficResult.source,
-        contacts: contactCounts,
-        opportunities: oppsArr,
-        salesViaDp: dpArr,
-        salesSkipDp: skipArr,
-        totalSales,
-        skippedDeals: skippedNames,
-        generatedAt: new Date().toISOString(),
-      }),
+  function renderFunnelChart(a, b) {
+    destroyChart('funnel');
+    const ctx = document.getElementById('chart-funnel');
+    const datasets = [
       {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Access-Control-Allow-Origin": "*",
+        label: 'Sales (via DP)',
+        data: a.salesViaDp,
+        backgroundColor: COLORS.accent2,
+        borderRadius: 4,
+        stack: 'salesA',
+        order: 2,
+      },
+      {
+        label: 'Sales (skipped DP)',
+        data: a.salesSkipDp,
+        backgroundColor: COLORS.good,
+        borderRadius: 4,
+        stack: 'salesA',
+        order: 2,
+      },
+      {
+        label: 'Opportunities',
+        type: 'line',
+        data: a.opportunities,
+        borderColor: COLORS.accent,
+        backgroundColor: COLORS.accent,
+        borderWidth: 2.5,
+        tension: 0.35,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        order: 1,
+      },
+    ];
+    charts.funnel = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: a.months.map(fmtMonthLabel), datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } },
+          tooltip: { mode: 'index', intersect: false },
         },
-      }
-    );
-  } catch (err) {
-    console.error(err);
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+        scales: {
+          x: { stacked: true, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, grid: { color: '#1f2a29' } },
+        },
+      },
+    });
   }
-};
+
+  function renderSalesChart(a, b) {
+    destroyChart('sales');
+    const ctx = document.getElementById('chart-sales');
+    const labels = a.months.map(fmtMonthLabel);
+    const datasets = [
+      {
+        label: `Range A · ${fmtRangeLabel(a.months[0], a.months[a.months.length - 1])}`,
+        data: a.totalSales,
+        borderColor: COLORS.accent,
+        backgroundColor: 'rgba(216,166,87,0.15)',
+        borderWidth: 2.5,
+        tension: 0.35,
+        fill: true,
+        pointRadius: 3,
+      },
+    ];
+    if (b) {
+      datasets.push({
+        label: `Range B · ${fmtRangeLabel(b.months[0], b.months[b.months.length - 1])}`,
+        data: b.totalSales,
+        borderColor: COLORS.accent2,
+        backgroundColor: 'rgba(106,179,154,0.10)',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        tension: 0.35,
+        fill: false,
+        pointRadius: 3,
+      });
+    }
+    charts.sales = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10 } } },
+          tooltip: { mode: 'index', intersect: false },
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, grid: { color: '#1f2a29' } },
+        },
+      },
+    });
+    els.cmpSalesLabel.classList.toggle('hidden', !b);
+  }
+
+  function renderContactsChart(a, b) {
+    destroyChart('contacts');
+    const ctx = document.getElementById('chart-contacts');
+    const labels = a.months.map(fmtMonthLabel);
+    const datasets = [
+      {
+        label: 'Range A',
+        data: a.contacts,
+        borderColor: COLORS.accent,
+        backgroundColor: 'rgba(216,166,87,0.12)',
+        fill: true,
+        tension: 0.35,
+        borderWidth: 2.5,
+        pointRadius: 3,
+      },
+    ];
+    if (b) {
+      datasets.push({
+        label: 'Range B',
+        data: b.contacts,
+        borderColor: COLORS.accent2,
+        backgroundColor: 'rgba(106,179,154,0.08)',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        fill: false,
+        tension: 0.35,
+        pointRadius: 3,
+      });
+    }
+    charts.contacts = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: !!b, position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10 } } },
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, grid: { color: '#1f2a29' } },
+        },
+      },
+    });
+  }
+
+  function renderTable(a) {
+    const rows = a.months.map((m, i) => {
+      const skip = a.salesSkipDp[i];
+      const skipNames = a.skippedDeals[m] || [];
+      const tip = skipNames.length ? ` title="${skipNames.map((s) => s.name).join(' · ')}"` : '';
+      return `<tr>
+        <td>${fmtMonthLabel(m)}</td>
+        <td>${(a.traffic[i] || 0).toLocaleString()}</td>
+        <td>${(a.contacts[i] || 0).toLocaleString()}</td>
+        <td>${a.opportunities[i]}</td>
+        <td>${a.salesViaDp[i]}</td>
+        <td${tip}${skip > 0 ? ' style="cursor:help;color:var(--good)"' : ''}>${skip}</td>
+        <td><strong style="color:var(--text)">${a.totalSales[i]}</strong></td>
+      </tr>`;
+    }).join('');
+
+    const sums = ['traffic', 'contacts', 'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales'].map((k) =>
+      (a[k] || []).reduce((x, y) => x + y, 0)
+    );
+
+    els.table.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Traffic</th>
+            <th>Contacts</th>
+            <th>Opportunities</th>
+            <th>Sales (DP)</th>
+            <th>Sales (skip)</th>
+            <th>Total Sales</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr>
+            <td>Total</td>
+            <td>${sums[0].toLocaleString()}</td>
+            <td>${sums[1].toLocaleString()}</td>
+            <td>${sums[2]}</td>
+            <td>${sums[3]}</td>
+            <td>${sums[4]}</td>
+            <td>${sums[5]}</td>
+          </tr>
+        </tfoot>
+      </table>`;
+  }
+
+  async function load() {
+    els.refresh.disabled = true;
+    els.refresh.textContent = 'Loading…';
+    els.error.classList.add('hidden');
+    showSkeletons(true);
+
+    try {
+      const fromA = els.fromA.value;
+      const toA = els.toA.value;
+      if (!fromA || !toA || fromA > toA) throw new Error('Invalid Range A');
+
+      const compare = els.compareOn.checked;
+      const fromB = compare ? els.fromB.value : null;
+      const toB = compare ? els.toB.value : null;
+      if (compare && (!fromB || !toB || fromB > toB)) throw new Error('Invalid Range B');
+
+      const a = await fetchData(fromA, toA);
+      const b = compare ? await fetchData(fromB, toB) : null;
+
+      renderKpis(a, b);
+      renderFunnel(a, b);
+      renderFunnelChart(a, b);
+      renderSalesChart(a, b);
+      renderContactsChart(a, b);
+      renderTable(a);
+
+      const cmp = b ? ` vs ${fmtRangeLabel(fromB, toB)}` : '';
+      els.generated.textContent = `${fmtRangeLabel(fromA, toA)}${cmp} · Updated ${new Date(a.generatedAt).toLocaleString()}`;
+    } catch (err) {
+      els.error.textContent = `Failed to load: ${err.message}`;
+      els.error.classList.remove('hidden');
+      console.error(err);
+    } finally {
+      showSkeletons(false);
+      els.refresh.disabled = false;
+      els.refresh.textContent = 'Apply';
+    }
+  }
+
+  els.refresh.addEventListener('click', load);
+  updateRangeBPreset();
+  load();
+</script>
+</body>
+</html>
