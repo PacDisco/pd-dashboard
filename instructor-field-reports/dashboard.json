@@ -1,0 +1,8 @@
+{
+  "title": "Instructor Field Reports",
+  "description": "Field reports submitted by instructors in-program — synthesized for operational follow-up.",
+  "category": "Programs",
+  "icon": "📝",
+  "colors": ["#7c3aed", "#a78bfa"],
+  "allowedRoles": ["admin", "programs", "operations"]
+}
