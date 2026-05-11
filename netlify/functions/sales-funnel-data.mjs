@@ -1,12 +1,19 @@
 // netlify/functions/sales-funnel-data.mjs
 //
 // Returns monthly funnel data for the Pacific Discovery sales pipelines.
-// Includes DEBUG MODE for traffic — surfaces raw HubSpot Analytics API
-// responses so we can diagnose why parsing is returning zeros.
+// Traffic comes live from HubSpot Analytics (sessions/monthly endpoint).
 //
-// Query params (all optional):
-//   from=YYYY-MM
-//   to=YYYY-MM
+// HubSpot's actual response shape (discovered via debug):
+//   { "2025-05-01": [
+//       { "breakdown": "sessions",         "mobile": 4440, "desktop": 3329, "others": 64, ... },
+//       { "breakdown": "new-visitors",     "mobile": 3229, "desktop": 1879, ... },
+//       { "breakdown": "bounce-percent-dec", ... },
+//       { "breakdown": "views-per-session-dec", ... }
+//     ],
+//     ...
+//   }
+//
+// We use the "sessions" breakdown and sum mobile+desktop+others for total sessions.
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
@@ -157,8 +164,20 @@ async function countPdContacts(startISO, endISO) {
 }
 
 // ============================================================
-// Traffic — HubSpot Analytics API (DEBUG MODE)
+// Traffic — HubSpot Analytics sessions/monthly
 // ============================================================
+//
+// Response shape (confirmed via live API):
+//   { "YYYY-MM-01": [
+//       { "breakdown": "sessions",         "mobile": N, "desktop": N, "others": N, "organicSearch": N, ... },
+//       { "breakdown": "new-visitors",     ... },
+//       { "breakdown": "bounce-percent-dec", ... },
+//       { "breakdown": "views-per-session-dec", ... }
+//     ], ... }
+//
+// We pick the "sessions" row and sum the device buckets (mobile+desktop+others)
+// to get total sessions for the month. (Summing the source buckets — organicSearch,
+// directTraffic, paidSearch, etc. — would give the same total.)
 async function getTraffic(months) {
   const [firstISO] = monthRange(months[0]);
   const [, lastISO] = monthRange(months[months.length - 1]);
@@ -168,79 +187,52 @@ async function getTraffic(months) {
   const start = fmt(firstISO);
   const end = fmt(lastDate.toISOString());
 
-  const candidates = [
-    `${HS_BASE}/analytics/v2/reports/sessions/monthly?start=${start}&end=${end}`,
-    `${HS_BASE}/analytics/v2/reports/sources/monthly?start=${start}&end=${end}`,
-    `${HS_BASE}/analytics/v2/reports/totals/monthly?start=${start}&end=${end}`,
-  ];
+  const url = `${HS_BASE}/analytics/v2/reports/sessions/monthly?start=${start}&end=${end}`;
 
-  const debugLog = [];
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
+    });
 
-  for (const url of candidates) {
-    try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${HUBSPOT_TOKEN}` },
-      });
-
-      const bodyText = await res.text();
-      debugLog.push({
-        url: url.replace(HS_BASE, ""),
-        status: res.status,
-        bodyPreview: bodyText.slice(0, 800),
-      });
-
-      if (res.status === 401 || res.status === 403) {
-        return {
-          counts: months.map(() => 0),
-          source: "scope-missing",
-          debug: debugLog,
-        };
-      }
-      if (res.status === 404) continue;
-      if (!res.ok) continue;
-
-      let data;
-      try {
-        data = JSON.parse(bodyText);
-      } catch (e) {
-        debugLog[debugLog.length - 1].parseError = e.message;
-        continue;
-      }
-
-      const byMonth = {};
-
-      for (const [dateKey, value] of Object.entries(data || {})) {
-        const ym = dateKey.slice(0, 7);
-        if (Array.isArray(value)) {
-          let total = 0;
-          for (const row of value) {
-            total += row.visits || row.sessions || row.rawViews || 0;
-          }
-          byMonth[ym] = (byMonth[ym] || 0) + total;
-        } else if (value && typeof value === "object") {
-          byMonth[ym] = (byMonth[ym] || 0) + (value.visits || value.sessions || value.rawViews || 0);
-        } else if (typeof value === "number") {
-          byMonth[ym] = (byMonth[ym] || 0) + value;
-        }
-      }
-
-      const counts = months.map((m) => byMonth[m] || 0);
-      const hasAny = counts.some((c) => c > 0);
-      return {
-        counts,
-        source: hasAny ? "hubspot" : "empty",
-        debug: debugLog,
-        parsedByMonth: byMonth,
-      };
-    } catch (err) {
-      debugLog.push({
-        url: url.replace(HS_BASE, ""),
-        error: err.message,
-      });
+    if (res.status === 401 || res.status === 403) {
+      const txt = await res.text().catch(() => "");
+      console.warn(`HubSpot Analytics auth/scope error: ${res.status}`, txt);
+      return { counts: months.map(() => 0), source: "scope-missing" };
     }
-  }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.warn(`HubSpot Analytics ${res.status}:`, txt);
+      return { counts: months.map(() => 0), source: "error" };
+    }
 
-  return { counts: months.map(() => 0), source: "error", debug: debugLog };
+    const data = await res.json();
+    const byMonth = {};
+
+    // Device buckets that, summed, equal total sessions
+    const DEVICE_FIELDS = ["mobile", "desktop", "others"];
+
+    for (const [dateKey, breakdowns] of Object.entries(data || {})) {
+      const ym = dateKey.slice(0, 7);
+      if (!Array.isArray(breakdowns)) continue;
+
+      // Find the "sessions" breakdown row
+      const sessionsRow = breakdowns.find((b) => b.breakdown === "sessions");
+      if (!sessionsRow) continue;
+
+      const total = DEVICE_FIELDS.reduce(
+        (sum, field) => sum + (sessionsRow[field] || 0),
+        0
+      );
+      byMonth[ym] = (byMonth[ym] || 0) + total;
+    }
+
+    const counts = months.map((m) => byMonth[m] || 0);
+    const hasAny = counts.some((c) => c > 0);
+    return { counts, source: hasAny ? "hubspot" : "empty" };
+  } catch (err) {
+    console.warn("HubSpot Analytics fetch threw:", err.message);
+    return { counts: months.map(() => 0), source: "error" };
+  }
 }
 
 // -------- Main handler --------
@@ -339,8 +331,6 @@ export default async (req) => {
         months,
         traffic: trafficResult.counts,
         trafficSource: trafficResult.source,
-        trafficDebug: trafficResult.debug,
-        trafficParsed: trafficResult.parsedByMonth,
         contacts: contactCounts,
         opportunities: oppsArr,
         salesViaDp: dpArr,
