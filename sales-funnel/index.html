@@ -140,6 +140,17 @@
     background: var(--accent); color: var(--pd-black);
   }
   .source-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .source-subtabs {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding-top: 12px; margin-top: 6px;
+    border-top: 1px dashed var(--line);
+  }
+  .source-subtabs.hidden { display: none; }
+  .subtabs-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); font-weight: 600;
+  }
+  .subtabs-label .arrow { color: var(--accent); margin-right: 4px; }
   .source-tab {
     background: transparent; border: 1px solid var(--line); color: var(--muted);
     padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 12px;
@@ -155,6 +166,10 @@
     font-size: 11px; font-weight: 600;
   }
   .source-tab.active .count { background: rgba(0,0,0,0.2); }
+  .source-tab.disabled, .source-tab[disabled] {
+    cursor: default; opacity: 0.5; pointer-events: none;
+    background: transparent;
+  }
 
   .meta { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
 
@@ -302,6 +317,11 @@
       </div>
     </div>
     <div class="source-tabs" id="source-tabs"></div>
+    <!-- Sub-tabs appear only when a Jotform primary with detail fields is selected -->
+    <div class="source-subtabs hidden" id="source-subtabs">
+      <span class="subtabs-label" id="subtabs-label"></span>
+      <div class="source-tabs" id="source-subtab-list"></div>
+    </div>
   </section>
 
   <div class="meta" id="generated"></div>
@@ -402,6 +422,9 @@
     cmpSalesLabel: document.getElementById('cmp-sales-label'),
     modeToggle: document.getElementById('mode-toggle'),
     sourceTabs: document.getElementById('source-tabs'),
+    sourceSubtabs: document.getElementById('source-subtabs'),
+    sourceSubtabList: document.getElementById('source-subtab-list'),
+    subtabsLabel: document.getElementById('subtabs-label'),
   };
 
   const COLORS = {
@@ -428,6 +451,7 @@
     dataB: null,
     mode: 'hubspot',  // 'hubspot' | 'jotform'
     source: 'All',    // 'All' or one of the source labels
+    subSource: 'All', // 'All' or one of the sub-source labels (Jotform mode only)
   };
 
   let charts = {};
@@ -501,6 +525,7 @@
     if (!btn) return;
     state.mode = btn.dataset.mode;
     state.source = 'All'; // reset to All when mode changes
+    state.subSource = 'All';
     els.modeToggle.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
     rerender();
   });
@@ -510,7 +535,17 @@
     const btn = e.target.closest('.source-tab');
     if (!btn) return;
     state.source = btn.dataset.source;
+    state.subSource = 'All'; // reset sub when primary changes
     els.sourceTabs.querySelectorAll('.source-tab').forEach((b) => b.classList.toggle('active', b === btn));
+    rerender();
+  });
+
+  // Sub-tab clicks (Jotform mode only, for the 3 primaries with detail fields)
+  els.sourceSubtabList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.source-tab');
+    if (!btn) return;
+    state.subSource = btn.dataset.source;
+    els.sourceSubtabList.querySelectorAll('.source-tab').forEach((b) => b.classList.toggle('active', b === btn));
     rerender();
   });
 
@@ -537,7 +572,8 @@
   // -------- Source filtering --------
   // Returns a "view" object filtered to the selected source.
   // In HubSpot mode, Traffic also gets filtered to the source's channel.
-  // In Jotform mode, Traffic stays empty/total (no mapping available).
+  // In Jotform mode + a primary with detail fields + specific sub-source selected,
+  // metrics drill down to that sub-source.
   function viewForSource(data) {
     if (!data) return null;
     if (state.source === 'All') {
@@ -553,8 +589,35 @@
         skippedDeals: data.skippedDeals,
       };
     }
-    const bs = data.bySource?.[state.mode] || {};
     const emptyArr = data.months.map(() => 0);
+
+    // If we're in Jotform mode + primary has detail fields + a specific sub-source is picked,
+    // drill into bySubSource. Otherwise use bySource as before.
+    const subDetailFields = data.bySubSource?.detailFieldsByPrimary || {};
+    const subSourceSelected =
+      state.mode === 'jotform' &&
+      state.subSource !== 'All' &&
+      subDetailFields[state.source];
+
+    if (subSourceSelected) {
+      const ss = data.bySubSource;
+      return {
+        months: data.months,
+        traffic: emptyArr, // no traffic at sub-source level
+        trafficSource: data.trafficSource,
+        trafficAvailable: false,
+        contacts: ss.contacts?.[state.source]?.[state.subSource] || emptyArr,
+        opportunities: ss.opportunities?.[state.source]?.[state.subSource] || emptyArr,
+        salesViaDp: ss.salesViaDp?.[state.source]?.[state.subSource] || emptyArr,
+        salesSkipDp: ss.salesSkipDp?.[state.source]?.[state.subSource] || emptyArr,
+        totalSales: ss.totalSales?.[state.source]?.[state.subSource] || emptyArr,
+        skippedDeals: data.skippedDeals,
+        _filtered: true,
+        _subFiltered: true,
+      };
+    }
+
+    const bs = data.bySource?.[state.mode] || {};
 
     // Per-source traffic only works in HubSpot mode (channel ↔ source mapping)
     let traffic = emptyArr;
@@ -568,7 +631,7 @@
       months: data.months,
       traffic,
       trafficSource: data.trafficSource,
-      trafficAvailable, // true if we have real per-source traffic
+      trafficAvailable,
       contacts: bs.contacts?.[state.source] || emptyArr,
       opportunities: bs.opportunities?.[state.source] || emptyArr,
       salesViaDp: bs.salesViaDp?.[state.source] || emptyArr,
@@ -610,6 +673,65 @@
         ${escapeHtml(t.display)} <span class="count">${t.count.toLocaleString()}</span>
       </button>
     `).join('');
+  }
+
+  // Sub-tabs: only shown for Jotform mode + one of the three primaries with detail fields.
+  // Shows actual advisor names / event names / referrer names from contact records.
+  function renderSubTabs() {
+    if (!state.dataA) {
+      els.sourceSubtabs.classList.add('hidden');
+      return;
+    }
+    const ss = state.dataA.bySubSource;
+    const detailFields = ss?.detailFieldsByPrimary || {};
+    // Show sub-tabs only when: Jotform mode AND primary has detail field AND primary != All
+    const eligible = state.mode === 'jotform' && state.source !== 'All' && detailFields[state.source];
+    if (!eligible) {
+      els.sourceSubtabs.classList.add('hidden');
+      return;
+    }
+
+    // Friendly label for the sub-strip
+    const niceName = {
+      'Gap Year Advisor or Independent Educational Consultant': 'Advisor',
+      'Gap Year Fair, College Fair, High School Event or similar': 'Event',
+      'Word of Mouth': 'Referrer',
+    }[state.source] || 'Detail';
+
+    const subLabels = ss.labels?.[state.source] || [];
+    // Count by opportunities (most meaningful for Jotform attribution)
+    const subCounts = {};
+    let allCount = 0;
+    for (const sl of subLabels) {
+      const c = sum(ss.opportunities?.[state.source]?.[sl] || []);
+      subCounts[sl] = c;
+      allCount += c;
+    }
+    const sortedSubs = subLabels.slice().sort((a, b) => (subCounts[b] || 0) - (subCounts[a] || 0));
+
+    // Limit to top 15 to keep the strip readable. Bucket the rest into "Other (N)".
+    const TOP_N = 15;
+    const top = sortedSubs.slice(0, TOP_N);
+    const rest = sortedSubs.slice(TOP_N);
+    let restCount = 0;
+    for (const s of rest) restCount += subCounts[s] || 0;
+
+    const tabs = [
+      { source: 'All', display: `All ${niceName}s`, count: allCount },
+      ...top.map((s) => ({ source: s, display: s, count: subCounts[s] })),
+    ];
+    if (rest.length > 0) {
+      tabs.push({ source: '__hidden__', display: `+${rest.length} more`, count: restCount, disabled: true });
+    }
+
+    els.subtabsLabel.innerHTML = `<span class="arrow">↳</span> ${niceName}`;
+    els.sourceSubtabList.innerHTML = tabs.map((t) => `
+      <button class="source-tab${t.source === state.subSource ? ' active' : ''}${t.disabled ? ' disabled' : ''}"
+              data-source="${escapeHtml(t.source)}"${t.disabled ? ' disabled' : ''}>
+        ${escapeHtml(t.display)} <span class="count">${t.count.toLocaleString()}</span>
+      </button>
+    `).join('');
+    els.sourceSubtabs.classList.remove('hidden');
   }
 
   function escapeHtml(s) {
@@ -691,14 +813,20 @@
     // Update source pill
     if (state.source !== 'All') {
       const modeLabel = state.mode === 'hubspot' ? 'HubSpot' : 'Jotform';
-      els.funnelSourcePill.textContent = `${modeLabel} · ${state.source}`;
+      const pillText = (state.subSource && state.subSource !== 'All')
+        ? `${modeLabel} · ${state.source} · ${state.subSource}`
+        : `${modeLabel} · ${state.source}`;
+      els.funnelSourcePill.textContent = pillText;
       els.funnelSourcePill.classList.remove('hidden');
     } else {
       els.funnelSourcePill.classList.add('hidden');
     }
 
     const subtitle = document.getElementById('funnel-subtitle');
-    if (filtered && hasTraffic) {
+    const subFiltered = a._subFiltered;
+    if (subFiltered) {
+      subtitle.innerHTML = `Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong> → <strong style="color: var(--text)">${escapeHtml(state.subSource)}</strong>.`;
+    } else if (filtered && hasTraffic) {
       subtitle.innerHTML = `Traffic → Lead → Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">Traffic from HubSpot Analytics channel breakdown.</span>`;
     } else if (filtered && state.mode === 'jotform') {
       subtitle.innerHTML = `Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">Jotform "How did you find us?" is collected only at application time — earlier funnel stages don't apply.</span>`;
@@ -981,6 +1109,7 @@
   function rerender() {
     if (!state.dataA) return;
     renderSourceTabs();
+    renderSubTabs();
     const a = viewForSource(state.dataA);
     const b = state.dataB ? viewForSource(state.dataB) : null;
     renderKpis(a, b);
@@ -1010,6 +1139,7 @@
       state.dataA = await fetchData(fromA, toA);
       state.dataB = compare ? await fetchData(fromB, toB) : null;
       state.source = 'All';
+      state.subSource = 'All';
 
       rerender();
 
