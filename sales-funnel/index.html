@@ -10,7 +10,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    /* Pacific Discovery brand palette */
     --pd-teal:    #55BBD2;
     --pd-green:   #81C243;
     --pd-navy:    #3B5998;
@@ -21,7 +20,6 @@
     --pd-white:   #fefeff;
     --pd-offwhite:#f8f8f8;
 
-    /* Semantic roles */
     --bg:        #16191c;
     --panel:     #1d2226;
     --panel-2:   #252b30;
@@ -71,7 +69,7 @@
     border: 1px solid var(--line);
     border-radius: 12px;
     padding: 20px 24px;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
     display: grid;
     gap: 16px;
     grid-template-columns: 1fr;
@@ -114,7 +112,51 @@
   .refresh-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(85,187,210,0.35); }
   .refresh-btn:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 
-  .meta { color: var(--muted); font-size: 12px; margin: -16px 0 16px; }
+  /* Source picker */
+  .source-bar {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .source-mode {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .source-mode .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; margin-right: 6px; }
+  .mode-toggle {
+    display: inline-flex; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 3px;
+  }
+  .mode-toggle button {
+    background: transparent; border: 0; color: var(--muted);
+    padding: 7px 14px; border-radius: 6px; font: inherit; font-size: 12px;
+    font-weight: 600; cursor: pointer; transition: all 120ms;
+  }
+  .mode-toggle button.active {
+    background: var(--accent); color: var(--pd-black);
+  }
+  .source-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .source-tab {
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 12px;
+    cursor: pointer; transition: all 120ms; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .source-tab:hover { color: var(--text); border-color: var(--muted); }
+  .source-tab.active {
+    background: var(--accent); color: var(--pd-black); border-color: var(--accent); font-weight: 600;
+  }
+  .source-tab .count {
+    background: rgba(0,0,0,0.15); padding: 1px 7px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+  }
+  .source-tab.active .count { background: rgba(0,0,0,0.2); }
+
+  .meta { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
 
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
   .kpi {
@@ -190,6 +232,12 @@
   .footnote { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 32px; max-width: 720px; }
   .footnote strong { color: var(--text); font-weight: 500; }
 
+  .source-pill {
+    display: inline-block; padding: 1px 8px; border-radius: 4px;
+    background: rgba(85,187,210,0.14); color: var(--accent);
+    font-size: 11px; font-weight: 600; margin-left: 8px;
+  }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
   thead th { text-align: right; padding: 10px 12px; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--line); }
   thead th:first-child { text-align: left; }
@@ -244,13 +292,25 @@
     <button class="refresh-btn" id="refresh">Apply</button>
   </section>
 
+  <!-- Source picker: toggle attribution mode + tabs per source value -->
+  <section class="source-bar">
+    <div class="source-mode">
+      <span class="label">Source attribution</span>
+      <div class="mode-toggle" id="mode-toggle">
+        <button data-mode="hubspot" class="active">HubSpot Original Source</button>
+        <button data-mode="jotform">Jotform "How did you find us?"</button>
+      </div>
+    </div>
+    <div class="source-tabs" id="source-tabs"></div>
+  </section>
+
   <div class="meta" id="generated"></div>
   <div id="error-banner" class="error hidden" style="margin-bottom: 24px;"></div>
 
   <section class="kpis" id="kpis"></section>
 
   <section class="card wide funnel-card" id="funnel-card">
-    <h2>Conversion funnel</h2>
+    <h2>Conversion funnel <span id="funnel-source-pill" class="source-pill hidden"></span></h2>
     <div class="h-sub" id="funnel-subtitle">Traffic → Lead → Opportunity → Sale.</div>
     <div class="funnel-stages" id="funnel-stages"></div>
   </section>
@@ -285,7 +345,7 @@
     <strong>Source:</strong> HubSpot CRM &amp; HubSpot Analytics, live on each page load.
     <strong>Pipelines:</strong> Fall Semester, Fall Mini, Spring Semester, Spring Mini, Summer Program.
     <strong>Excluded:</strong> College credit add-ons, test accounts.
-    <strong>Sale definition:</strong> A deal that entered Deposit Paid that month, OR entered Closed Won that month without ever entering Deposit Paid.
+    <strong>Source attribution:</strong> Selecting a source filters Lead/Opportunity/Sale stages by the primary associated contact's source. Traffic stays at the total (HubSpot doesn't expose per-source session counts via the v2 endpoint).
   </p>
 </div>
 
@@ -338,7 +398,10 @@
     kpis: document.getElementById('kpis'),
     table: document.getElementById('table-wrap'),
     funnelStages: document.getElementById('funnel-stages'),
+    funnelSourcePill: document.getElementById('funnel-source-pill'),
     cmpSalesLabel: document.getElementById('cmp-sales-label'),
+    modeToggle: document.getElementById('mode-toggle'),
+    sourceTabs: document.getElementById('source-tabs'),
   };
 
   const COLORS = {
@@ -350,7 +413,6 @@
     charcoal:'#4a4a4a',
     muted:   '#8a949c',
   };
-  // Aliases used by the chart code
   COLORS.accent  = COLORS.teal;
   COLORS.accent2 = COLORS.green;
   COLORS.accent3 = COLORS.navy;
@@ -359,6 +421,14 @@
   Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
   Chart.defaults.font.size = 11;
   Chart.defaults.borderColor = '#2f363d';
+
+  // State: latest fetched data (A and optional B), selected mode, selected source
+  const state = {
+    dataA: null,
+    dataB: null,
+    mode: 'hubspot',  // 'hubspot' | 'jotform'
+    source: 'All',    // 'All' or one of the source labels
+  };
 
   let charts = {};
 
@@ -425,6 +495,25 @@
     })
   );
 
+  // Mode toggle handler
+  els.modeToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-mode]');
+    if (!btn) return;
+    state.mode = btn.dataset.mode;
+    state.source = 'All'; // reset to All when mode changes
+    els.modeToggle.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+    rerender();
+  });
+
+  // Source tab clicks (delegated)
+  els.sourceTabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('.source-tab');
+    if (!btn) return;
+    state.source = btn.dataset.source;
+    els.sourceTabs.querySelectorAll('.source-tab').forEach((b) => b.classList.toggle('active', b === btn));
+    rerender();
+  });
+
   applyPresetA(13);
 
   function showSkeletons(on) {
@@ -445,6 +534,88 @@
 
   function sum(arr) { return (arr || []).reduce((a, b) => a + b, 0); }
 
+  // -------- Source filtering --------
+  // Returns a "view" object filtered to the selected source.
+  // In HubSpot mode, Traffic also gets filtered to the source's channel.
+  // In Jotform mode, Traffic stays empty/total (no mapping available).
+  function viewForSource(data) {
+    if (!data) return null;
+    if (state.source === 'All') {
+      return {
+        months: data.months,
+        traffic: data.traffic,
+        trafficSource: data.trafficSource,
+        contacts: data.contacts,
+        opportunities: data.opportunities,
+        salesViaDp: data.salesViaDp,
+        salesSkipDp: data.salesSkipDp,
+        totalSales: data.totalSales,
+        skippedDeals: data.skippedDeals,
+      };
+    }
+    const bs = data.bySource?.[state.mode] || {};
+    const emptyArr = data.months.map(() => 0);
+
+    // Per-source traffic only works in HubSpot mode (channel ↔ source mapping)
+    let traffic = emptyArr;
+    let trafficAvailable = false;
+    if (state.mode === 'hubspot' && data.trafficByChannel?.[state.source]) {
+      traffic = data.trafficByChannel[state.source];
+      trafficAvailable = true;
+    }
+
+    return {
+      months: data.months,
+      traffic,
+      trafficSource: data.trafficSource,
+      trafficAvailable, // true if we have real per-source traffic
+      contacts: bs.contacts?.[state.source] || emptyArr,
+      opportunities: bs.opportunities?.[state.source] || emptyArr,
+      salesViaDp: bs.salesViaDp?.[state.source] || emptyArr,
+      salesSkipDp: bs.salesSkipDp?.[state.source] || emptyArr,
+      totalSales: bs.totalSales?.[state.source] || emptyArr,
+      skippedDeals: data.skippedDeals,
+      _filtered: true,
+    };
+  }
+
+  // -------- Source tabs UI --------
+  function renderSourceTabs() {
+    if (!state.dataA) return;
+    const bs = state.dataA.bySource?.[state.mode];
+    if (!bs) {
+      els.sourceTabs.innerHTML = '';
+      return;
+    }
+    const labels = bs.labels || [];
+    // Count contacts per source for tab display (good summary metric)
+    const counts = {};
+    let allCount = 0;
+    for (const label of labels) {
+      const c = sum(bs.contacts?.[label] || []);
+      counts[label] = c;
+      allCount += c;
+    }
+    // Sort by count desc
+    const sorted = labels.slice().sort((a, b) => (counts[b] || 0) - (counts[a] || 0));
+
+    const tabs = [
+      { source: 'All', display: 'All Sources', count: allCount },
+      ...sorted.map((label) => ({ source: label, display: label, count: counts[label] })),
+    ];
+
+    els.sourceTabs.innerHTML = tabs.map((t) => `
+      <button class="source-tab${t.source === state.source ? ' active' : ''}" data-source="${escapeHtml(t.source)}">
+        ${escapeHtml(t.display)} <span class="count">${t.count.toLocaleString()}</span>
+      </button>
+    `).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+  }
+
+  // -------- Rendering pipeline --------
   function deltaBadge(curr, prev) {
     if (prev === 0 || prev == null) {
       if (curr > 0) return '<span class="delta up">new</span>';
@@ -461,16 +632,22 @@
     const salesA = sum(a.totalSales);
     const contactsA = sum(a.contacts);
     const trafficA = sum(a.traffic || []);
+    // Show Traffic KPI when traffic is meaningful (All Sources, or HubSpot-filtered with channel mapping)
+    const showTraffic = !a._filtered || a.trafficAvailable;
+
+    const trafficCard = b
+      ? { label: 'Traffic', value: trafficA, prev: sum(b.traffic || []), big: true }
+      : { label: 'Traffic', value: trafficA, sub: 'Website sessions', big: true };
 
     const cards = b
       ? [
-          { label: 'Traffic', value: trafficA, prev: sum(b.traffic || []), big: true },
+          ...(showTraffic ? [trafficCard] : []),
           { label: 'PD Contacts', value: contactsA, prev: sum(b.contacts), big: true },
           { label: 'Opportunities', value: oppsA, prev: sum(b.opportunities) },
           { label: 'Total Sales', value: salesA, prev: sum(b.totalSales) },
         ]
       : [
-          { label: 'Traffic', value: trafficA, sub: 'Website sessions', big: true },
+          ...(showTraffic ? [trafficCard] : []),
           { label: 'PD Contacts', value: contactsA, sub: 'New, tagged Pacific Discovery', big: true },
           { label: 'Opportunities', value: oppsA, sub: 'App Fee Received' },
           { label: 'Total Sales', value: salesA, sub: `${oppsA ? Math.round((salesA/oppsA)*100) : 0}% of opps` },
@@ -493,21 +670,36 @@
   function renderFunnel(a, b) {
     const trafficSource = a.trafficSource || 'none';
     const trafficSum = sum(a.traffic || []);
-    const hasTraffic = (trafficSource === 'hubspot' || trafficSource === 'manual') && trafficSum > 0;
+    const filtered = a._filtered;
+    // Traffic stage appears when:
+    //   - All Sources: total HubSpot traffic available
+    //   - HubSpot mode + specific source: per-channel traffic mapped to that source
+    //   - Jotform mode + specific source: NOT available (channels don't map to Jotform answers)
+    const hasTraffic =
+      (trafficSource === 'hubspot' || trafficSource === 'manual') &&
+      trafficSum > 0 &&
+      (!filtered || a.trafficAvailable);
+
+    // Update source pill
+    if (state.source !== 'All') {
+      const modeLabel = state.mode === 'hubspot' ? 'HubSpot' : 'Jotform';
+      els.funnelSourcePill.textContent = `${modeLabel} · ${state.source}`;
+      els.funnelSourcePill.classList.remove('hidden');
+    } else {
+      els.funnelSourcePill.classList.add('hidden');
+    }
 
     const subtitle = document.getElementById('funnel-subtitle');
-    if (hasTraffic) {
-      const srcLabel = trafficSource === 'hubspot' ? 'HubSpot Analytics' : 'manual data';
-      subtitle.innerHTML = `Traffic → Lead → Opportunity → Sale. <span style="color: var(--muted)">Traffic from ${srcLabel}.</span>`;
+    if (filtered && hasTraffic) {
+      subtitle.innerHTML = `Traffic → Lead → Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">Traffic from HubSpot Analytics channel breakdown.</span>`;
+    } else if (filtered && state.mode === 'jotform') {
+      subtitle.innerHTML = `Lead → Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">Traffic stage hidden — Jotform answers don't map to website traffic channels.</span>`;
+    } else if (filtered) {
+      subtitle.innerHTML = `Lead → Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">No traffic mapping for this source.</span>`;
+    } else if (hasTraffic) {
+      subtitle.innerHTML = 'Traffic → Lead → Opportunity → Sale. <span style="color: var(--muted)">Traffic from HubSpot Analytics.</span>';
     } else {
-      const hint = {
-        'scope-missing': '<strong style="color: var(--warn)">Traffic data unavailable:</strong> HubSpot private app token is missing the <code style="color: var(--accent); background: rgba(85,187,210,0.10); padding: 1px 6px; border-radius: 3px;">business-intelligence</code> scope.',
-        'view-not-found': '<strong style="color: var(--warn)">Analytics view not found</strong> in HubSpot.',
-        'empty': '<strong style="color: var(--muted)">Traffic data is empty</strong> for this period.',
-        'error': '<strong style="color: var(--warn)">Traffic data couldn\'t load</strong> — see Netlify function logs.',
-        'none': 'Traffic stage not configured.',
-      }[trafficSource] || `Traffic source: ${trafficSource}`;
-      subtitle.innerHTML = `Lead → Opportunity → Sale. <span style="color: var(--muted)">${hint}</span>`;
+      subtitle.innerHTML = 'Lead → Opportunity → Sale.';
     }
 
     const baseStages = [
@@ -615,10 +807,11 @@
       overallCmp = `<span class="delta ${cls}" style="margin-left: 8px;">${sign}${diff.toFixed(1)}pp</span>`;
     }
 
+    const overallLabel = hasTraffic ? 'Traffic → Sale' : 'Lead → Sale';
     const summary = `
       <div style="border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div>
-          <div class="label" style="color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">${hasTraffic ? 'Traffic → Sale' : 'Lead → Sale'} (overall)</div>
+          <div class="label" style="color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">${overallLabel} (overall)</div>
         </div>
         <div style="display: flex; align-items: baseline; gap: 12px;">
           <span style="font-family: 'Fraunces', serif; font-size: 32px; font-weight: 500; background: linear-gradient(135deg, var(--pd-teal), var(--pd-green)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">${overallA.toFixed(2)}%</span>
@@ -642,49 +835,17 @@
     destroyChart('funnel');
     const ctx = document.getElementById('chart-funnel');
     const datasets = [
-      {
-        label: 'Sales (via DP)',
-        data: a.salesViaDp,
-        backgroundColor: COLORS.green,
-        borderRadius: 4,
-        stack: 'salesA',
-        order: 2,
-      },
-      {
-        label: 'Sales (skipped DP)',
-        data: a.salesSkipDp,
-        backgroundColor: COLORS.navy,
-        borderRadius: 4,
-        stack: 'salesA',
-        order: 2,
-      },
-      {
-        label: 'Opportunities',
-        type: 'line',
-        data: a.opportunities,
-        borderColor: COLORS.teal,
-        backgroundColor: COLORS.teal,
-        borderWidth: 2.5,
-        tension: 0.35,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        order: 1,
-      },
+      { label: 'Sales (via DP)', data: a.salesViaDp, backgroundColor: COLORS.green, borderRadius: 4, stack: 'salesA', order: 2 },
+      { label: 'Sales (skipped DP)', data: a.salesSkipDp, backgroundColor: COLORS.navy, borderRadius: 4, stack: 'salesA', order: 2 },
+      { label: 'Opportunities', type: 'line', data: a.opportunities, borderColor: COLORS.teal, backgroundColor: COLORS.teal, borderWidth: 2.5, tension: 0.35, pointRadius: 4, pointHoverRadius: 6, order: 1 },
     ];
     charts.funnel = new Chart(ctx, {
       type: 'bar',
       data: { labels: a.months.map(fmtMonthLabel), datasets },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } },
-          tooltip: { mode: 'index', intersect: false },
-        },
-        scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, grid: { color: '#262d33' } },
-        },
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16 } }, tooltip: { mode: 'index', intersect: false } },
+        scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: '#262d33' } } },
       },
     });
   }
@@ -699,10 +860,7 @@
         data: a.totalSales,
         borderColor: COLORS.teal,
         backgroundColor: 'rgba(85,187,210,0.18)',
-        borderWidth: 2.5,
-        tension: 0.35,
-        fill: true,
-        pointRadius: 3,
+        borderWidth: 2.5, tension: 0.35, fill: true, pointRadius: 3,
       },
     ];
     if (b) {
@@ -711,27 +869,15 @@
         data: b.totalSales,
         borderColor: COLORS.green,
         backgroundColor: 'rgba(129,194,67,0.10)',
-        borderWidth: 2,
-        borderDash: [6, 4],
-        tension: 0.35,
-        fill: false,
-        pointRadius: 3,
+        borderWidth: 2, borderDash: [6, 4], tension: 0.35, fill: false, pointRadius: 3,
       });
     }
     charts.sales = new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets },
+      type: 'line', data: { labels, datasets },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10 } } },
-          tooltip: { mode: 'index', intersect: false },
-        },
-        scales: {
-          x: { grid: { display: false } },
-          y: { beginAtZero: true, grid: { color: '#262d33' } },
-        },
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10 } } }, tooltip: { mode: 'index', intersect: false } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#262d33' } } },
       },
     });
     els.cmpSalesLabel.classList.toggle('hidden', !b);
@@ -742,55 +888,33 @@
     const ctx = document.getElementById('chart-contacts');
     const labels = a.months.map(fmtMonthLabel);
     const datasets = [
-      {
-        label: 'Range A',
-        data: a.contacts,
-        borderColor: COLORS.teal,
-        backgroundColor: 'rgba(85,187,210,0.15)',
-        fill: true,
-        tension: 0.35,
-        borderWidth: 2.5,
-        pointRadius: 3,
-      },
+      { label: 'Range A', data: a.contacts, borderColor: COLORS.teal, backgroundColor: 'rgba(85,187,210,0.15)', fill: true, tension: 0.35, borderWidth: 2.5, pointRadius: 3 },
     ];
     if (b) {
-      datasets.push({
-        label: 'Range B',
-        data: b.contacts,
-        borderColor: COLORS.green,
-        backgroundColor: 'rgba(129,194,67,0.08)',
-        borderWidth: 2,
-        borderDash: [6, 4],
-        fill: false,
-        tension: 0.35,
-        pointRadius: 3,
-      });
+      datasets.push({ label: 'Range B', data: b.contacts, borderColor: COLORS.green, backgroundColor: 'rgba(129,194,67,0.08)', borderWidth: 2, borderDash: [6, 4], fill: false, tension: 0.35, pointRadius: 3 });
     }
     charts.contacts = new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets },
+      type: 'line', data: { labels, datasets },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: !!b, position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10 } } },
-        },
-        scales: {
-          x: { grid: { display: false } },
-          y: { beginAtZero: true, grid: { color: '#262d33' } },
-        },
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: !!b, position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10 } } } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#262d33' } } },
       },
     });
   }
 
   function renderTable(a) {
+    const filtered = a._filtered;
+    // Show Traffic column when traffic data is available (always for All, or
+    // for filtered views in HubSpot mode where channel data is mapped)
+    const showTraffic = !filtered || a.trafficAvailable;
     const rows = a.months.map((m, i) => {
       const skip = a.salesSkipDp[i];
       const skipNames = a.skippedDeals[m] || [];
       const tip = skipNames.length ? ` title="${skipNames.map((s) => s.name).join(' · ')}"` : '';
       return `<tr>
         <td>${fmtMonthLabel(m)}</td>
-        <td>${(a.traffic[i] || 0).toLocaleString()}</td>
+        ${showTraffic ? `<td>${(a.traffic[i] || 0).toLocaleString()}</td>` : ''}
         <td>${(a.contacts[i] || 0).toLocaleString()}</td>
         <td>${a.opportunities[i]}</td>
         <td>${a.salesViaDp[i]}</td>
@@ -799,16 +923,17 @@
       </tr>`;
     }).join('');
 
-    const sums = ['traffic', 'contacts', 'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales'].map((k) =>
-      (a[k] || []).reduce((x, y) => x + y, 0)
-    );
+    const fields = showTraffic
+      ? ['traffic', 'contacts', 'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales']
+      : ['contacts', 'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales'];
+    const sums = fields.map((k) => (a[k] || []).reduce((x, y) => x + y, 0));
 
     els.table.innerHTML = `
       <table>
         <thead>
           <tr>
             <th>Month</th>
-            <th>Traffic</th>
+            ${showTraffic ? '<th>Traffic</th>' : ''}
             <th>Contacts</th>
             <th>Opportunities</th>
             <th>Sales (DP)</th>
@@ -820,15 +945,24 @@
         <tfoot>
           <tr>
             <td>Total</td>
-            <td>${sums[0].toLocaleString()}</td>
-            <td>${sums[1].toLocaleString()}</td>
-            <td>${sums[2]}</td>
-            <td>${sums[3]}</td>
-            <td>${sums[4]}</td>
-            <td>${sums[5]}</td>
+            ${sums.map((s) => `<td>${s.toLocaleString()}</td>`).join('')}
           </tr>
         </tfoot>
       </table>`;
+  }
+
+  // Re-render everything from cached data when mode/source changes (no refetch)
+  function rerender() {
+    if (!state.dataA) return;
+    renderSourceTabs();
+    const a = viewForSource(state.dataA);
+    const b = state.dataB ? viewForSource(state.dataB) : null;
+    renderKpis(a, b);
+    renderFunnel(a, b);
+    renderFunnelChart(a, b);
+    renderSalesChart(a, b);
+    renderContactsChart(a, b);
+    renderTable(a);
   }
 
   async function load() {
@@ -847,18 +981,14 @@
       const toB = compare ? els.toB.value : null;
       if (compare && (!fromB || !toB || fromB > toB)) throw new Error('Invalid Range B');
 
-      const a = await fetchData(fromA, toA);
-      const b = compare ? await fetchData(fromB, toB) : null;
+      state.dataA = await fetchData(fromA, toA);
+      state.dataB = compare ? await fetchData(fromB, toB) : null;
+      state.source = 'All';
 
-      renderKpis(a, b);
-      renderFunnel(a, b);
-      renderFunnelChart(a, b);
-      renderSalesChart(a, b);
-      renderContactsChart(a, b);
-      renderTable(a);
+      rerender();
 
-      const cmp = b ? ` vs ${fmtRangeLabel(fromB, toB)}` : '';
-      els.generated.textContent = `${fmtRangeLabel(fromA, toA)}${cmp} · Updated ${new Date(a.generatedAt).toLocaleString()}`;
+      const cmp = state.dataB ? ` vs ${fmtRangeLabel(fromB, toB)}` : '';
+      els.generated.textContent = `${fmtRangeLabel(fromA, toA)}${cmp} · Updated ${new Date(state.dataA.generatedAt).toLocaleString()}`;
     } catch (err) {
       els.error.textContent = `Failed to load: ${err.message}`;
       els.error.classList.remove('hidden');
