@@ -588,15 +588,16 @@
       return;
     }
     const labels = bs.labels || [];
-    // Count contacts per source for tab display (good summary metric)
+    // In HubSpot mode show contact counts (lead-stage attribution).
+    // In Jotform mode show opportunity counts (funnel starts at opp).
+    const metric = state.mode === 'jotform' ? 'opportunities' : 'contacts';
     const counts = {};
     let allCount = 0;
     for (const label of labels) {
-      const c = sum(bs.contacts?.[label] || []);
+      const c = sum(bs[metric]?.[label] || []);
       counts[label] = c;
       allCount += c;
     }
-    // Sort by count desc
     const sorted = labels.slice().sort((a, b) => (counts[b] || 0) - (counts[a] || 0));
 
     const tabs = [
@@ -632,23 +633,30 @@
     const salesA = sum(a.totalSales);
     const contactsA = sum(a.contacts);
     const trafficA = sum(a.traffic || []);
+    const filtered = a._filtered;
     // Show Traffic KPI when traffic is meaningful (All Sources, or HubSpot-filtered with channel mapping)
-    const showTraffic = !a._filtered || a.trafficAvailable;
+    const showTraffic = !filtered || a.trafficAvailable;
+    // Hide Contacts KPI in Jotform-filtered mode (data is misleading there)
+    const showContacts = !(filtered && state.mode === 'jotform');
 
     const trafficCard = b
       ? { label: 'Traffic', value: trafficA, prev: sum(b.traffic || []), big: true }
       : { label: 'Traffic', value: trafficA, sub: 'Website sessions', big: true };
 
+    const contactsCard = b
+      ? { label: 'PD Contacts', value: contactsA, prev: sum(b.contacts), big: true }
+      : { label: 'PD Contacts', value: contactsA, sub: 'New, tagged Pacific Discovery', big: true };
+
     const cards = b
       ? [
           ...(showTraffic ? [trafficCard] : []),
-          { label: 'PD Contacts', value: contactsA, prev: sum(b.contacts), big: true },
+          ...(showContacts ? [contactsCard] : []),
           { label: 'Opportunities', value: oppsA, prev: sum(b.opportunities) },
           { label: 'Total Sales', value: salesA, prev: sum(b.totalSales) },
         ]
       : [
           ...(showTraffic ? [trafficCard] : []),
-          { label: 'PD Contacts', value: contactsA, sub: 'New, tagged Pacific Discovery', big: true },
+          ...(showContacts ? [contactsCard] : []),
           { label: 'Opportunities', value: oppsA, sub: 'App Fee Received' },
           { label: 'Total Sales', value: salesA, sub: `${oppsA ? Math.round((salesA/oppsA)*100) : 0}% of opps` },
         ];
@@ -693,7 +701,7 @@
     if (filtered && hasTraffic) {
       subtitle.innerHTML = `Traffic → Lead → Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">Traffic from HubSpot Analytics channel breakdown.</span>`;
     } else if (filtered && state.mode === 'jotform') {
-      subtitle.innerHTML = `Lead → Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">Traffic stage hidden — Jotform answers don't map to website traffic channels.</span>`;
+      subtitle.innerHTML = `Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">Jotform "How did you find us?" is collected only at application time — earlier funnel stages don't apply.</span>`;
     } else if (filtered) {
       subtitle.innerHTML = `Lead → Opportunity → Sale, filtered to <strong style="color: var(--text)">${escapeHtml(state.source)}</strong>. <span style="color: var(--muted)">No traffic mapping for this source.</span>`;
     } else if (hasTraffic) {
@@ -708,6 +716,14 @@
       { key: 'sales', label: 'Sales', tag: 'Closed Won', sum: sum(a.totalSales), prev: b ? sum(b.totalSales) : null },
     ];
 
+    // In Jotform mode + specific source, drop the Contacts (Lead) stage.
+    // Jotform "How did you find us?" is only collected when someone submits
+    // an application, so contact counts by Jotform value only reflect people
+    // who already converted to opportunities — making the Lead stage
+    // misleading. Funnel becomes Opportunity → Sale.
+    const dropLeadStage = filtered && state.mode === 'jotform';
+    const stagesNoLead = dropLeadStage ? baseStages.slice(1) : baseStages;
+
     const stages = hasTraffic
       ? [
           {
@@ -717,9 +733,9 @@
             sum: trafficSum,
             prev: b ? sum(b.traffic || []) : null,
           },
-          ...baseStages,
+          ...stagesNoLead,
         ]
-      : baseStages;
+      : stagesNoLead;
 
     const max = Math.max(...stages.map((s) => s.sum), b ? Math.max(...stages.map((s) => s.prev || 0)) : 0);
 
@@ -807,7 +823,14 @@
       overallCmp = `<span class="delta ${cls}" style="margin-left: 8px;">${sign}${diff.toFixed(1)}pp</span>`;
     }
 
-    const overallLabel = hasTraffic ? 'Traffic → Sale' : 'Lead → Sale';
+    let overallLabel;
+    if (hasTraffic) {
+      overallLabel = 'Traffic → Sale';
+    } else if (dropLeadStage) {
+      overallLabel = 'Opp → Sale';
+    } else {
+      overallLabel = 'Lead → Sale';
+    }
     const summary = `
       <div style="border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div>
@@ -905,9 +928,10 @@
 
   function renderTable(a) {
     const filtered = a._filtered;
-    // Show Traffic column when traffic data is available (always for All, or
-    // for filtered views in HubSpot mode where channel data is mapped)
+    // Traffic column: shown when traffic data is available
     const showTraffic = !filtered || a.trafficAvailable;
+    // Contacts column: hidden in Jotform-filtered mode (misleading data)
+    const showContacts = !(filtered && state.mode === 'jotform');
     const rows = a.months.map((m, i) => {
       const skip = a.salesSkipDp[i];
       const skipNames = a.skippedDeals[m] || [];
@@ -915,7 +939,7 @@
       return `<tr>
         <td>${fmtMonthLabel(m)}</td>
         ${showTraffic ? `<td>${(a.traffic[i] || 0).toLocaleString()}</td>` : ''}
-        <td>${(a.contacts[i] || 0).toLocaleString()}</td>
+        ${showContacts ? `<td>${(a.contacts[i] || 0).toLocaleString()}</td>` : ''}
         <td>${a.opportunities[i]}</td>
         <td>${a.salesViaDp[i]}</td>
         <td${tip}${skip > 0 ? ' style="cursor:help;color:var(--accent-2)"' : ''}>${skip}</td>
@@ -923,9 +947,11 @@
       </tr>`;
     }).join('');
 
-    const fields = showTraffic
-      ? ['traffic', 'contacts', 'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales']
-      : ['contacts', 'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales'];
+    const fields = [
+      ...(showTraffic ? ['traffic'] : []),
+      ...(showContacts ? ['contacts'] : []),
+      'opportunities', 'salesViaDp', 'salesSkipDp', 'totalSales',
+    ];
     const sums = fields.map((k) => (a[k] || []).reduce((x, y) => x + y, 0));
 
     els.table.innerHTML = `
@@ -934,7 +960,7 @@
           <tr>
             <th>Month</th>
             ${showTraffic ? '<th>Traffic</th>' : ''}
-            <th>Contacts</th>
+            ${showContacts ? '<th>Contacts</th>' : ''}
             <th>Opportunities</th>
             <th>Sales (DP)</th>
             <th>Sales (skip)</th>
