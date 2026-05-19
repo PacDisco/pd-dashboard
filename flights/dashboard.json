@@ -1,0 +1,9 @@
+{
+  "title": "Flights",
+  "description": "Student flights tracker mirroring the enrollment pipeline, focused on logistics and program assignments (no payment data).",
+  "category": "Operations",
+  "icon": "✈️",
+  "pinned": true,
+  "colors": ["#0ea5e9", "#6ee7b7"],
+  "allowedRoles": ["admin", "operations", "flights"]
+}

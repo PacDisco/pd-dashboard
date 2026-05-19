@@ -1,6 +1,43 @@
 {
-  "generatedAt": "2026-05-11T00:00:00.000Z",
+  "generatedAt": "2026-05-19T23:28:52.331Z",
   "dashboards": [
+    {
+      "slug": "contacts",
+      "title": "Contacts",
+      "description": "Search and view HubSpot contacts.",
+      "category": "Outreach",
+      "icon": "👥",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#0ea5e9",
+        "#7c9bff"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "outreach"
+      ],
+      "url": "/Contacts/"
+    },
+    {
+      "slug": "cashflow",
+      "title": "Cashflow Forecast",
+      "description": "Compare cashflow forecast versions — live from Google Drive.",
+      "category": "Finance",
+      "icon": "💰",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#2563eb",
+        "#0ea5e9"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations"
+      ],
+      "url": "/cashflow/"
+    },
     {
       "slug": "enrollment",
       "title": "Student Enrollment",
@@ -9,25 +46,142 @@
       "icon": "🎓",
       "owner": "",
       "pinned": true,
-      "allowedRoles": ["admissions", "outreach", "programs", "operations"]
+      "allowedRoles": [
+        "admissions",
+        "outreach",
+        "programs",
+        "operations"
+      ],
+      "url": "/enrollment/"
+    },
+    {
+      "slug": "flights",
+      "title": "Flights",
+      "description": "Student flights tracker mirroring the enrollment pipeline, focused on logistics and program assignments (no payment data).",
+      "category": "Operations",
+      "icon": "✈️",
+      "owner": "",
+      "pinned": true,
+      "colors": [
+        "#0ea5e9",
+        "#6ee7b7"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations",
+        "flights"
+      ],
+      "url": "/flights/"
+    },
+    {
+      "slug": "forward-business-report",
+      "title": "Forward Business Report",
+      "description": "Forward-looking revenue and enrollment outlook by season and program.",
+      "category": "Operations",
+      "icon": "🧭",
+      "owner": "",
+      "pinned": true,
+      "colors": [
+        "#0f766e",
+        "#14b8a6"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations",
+        "programs"
+      ],
+      "url": "/forward-business-report/"
+    },
+    {
+      "slug": "instructor-field-reports",
+      "title": "Instructor Field Reports",
+      "description": "Field reports submitted by instructors in-program — synthesized for operational follow-up.",
+      "category": "Programs",
+      "icon": "📝",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#7c3aed",
+        "#a78bfa"
+      ],
+      "allowedRoles": [
+        "admin",
+        "programs",
+        "operations"
+      ],
+      "url": "/instructor-field-reports/"
+    },
+    {
+      "slug": "invoices",
+      "title": "Invoices & Payments",
+      "description": "Upload invoices, email them in, or manually schedule payments. AI parses each invoice and slots it into a weekly pay schedule with approve / reschedule / paid checkboxes.",
+      "category": "Finance",
+      "icon": "📄",
+      "owner": "",
+      "pinned": false,
+      "order": 25,
+      "colors": [
+        "#2563eb",
+        "#60a5fa"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations"
+      ],
+      "url": "/invoices/"
     },
     {
       "slug": "lead-data-sheet",
-      "title": "Lead Data Sheet",
+      "title": "Pacific Discovery - Marketing Lead Source Dashboard",
       "description": "Live lead data synced from HubSpot with source, stage, and owner views.",
       "category": "Outreach",
       "icon": "📈",
       "owner": "",
-      "allowedRoles": ["outreach"]
+      "pinned": false,
+      "allowedRoles": [
+        "outreach"
+      ],
+      "url": "/lead-data-sheet/"
     },
     {
-      "slug": "report",
-      "title": "Report",
-      "description": "Summary report dashboard (admin only).",
-      "category": "Admin",
-      "icon": "📊",
+      "slug": "pd-whatsapp",
+      "title": "Add Pacific Discovery WhatsApp Contact",
+      "description": "Quickly save a new contact to your Google address book. Sign in with Google, fill in name, email, and phone, and save — the contact lands directly in contacts.google.com.",
+      "category": "Outreach",
+      "icon": "👤",
       "owner": "",
-      "allowedRoles": []
+      "pinned": false,
+      "colors": [
+        "#0f766e",
+        "#22c55e"
+      ],
+      "allowedRoles": [
+        "admin",
+        "outreach",
+        "admissions"
+      ],
+      "url": "/pd-whatsapp/"
+    },
+    {
+      "slug": "pipeline",
+      "title": "Pipeline",
+      "description": "Live deal pipeline across all season programs with stage-by-stage drill-downs.",
+      "category": "Enrollment",
+      "icon": "🪜",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#d97706",
+        "#fbbf24"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "outreach",
+        "programs",
+        "operations"
+      ],
+      "url": "/pipeline/"
     },
     {
       "slug": "sales-funnel",
@@ -37,8 +191,18 @@
       "icon": "📊",
       "owner": "",
       "pinned": true,
-      "colors": ["#d8a657", "#6ab39a"],
-      "allowedRoles": ["admin", "admissions", "outreach", "programs", "operations"]
+      "colors": [
+        "#d8a657",
+        "#6ab39a"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "outreach",
+        "programs",
+        "operations"
+      ],
+      "url": "/sales-funnel/"
     },
     {
       "slug": "slider",
@@ -47,16 +211,52 @@
       "category": "Outreach",
       "icon": "🎛️",
       "owner": "",
-      "allowedRoles": ["outreach"]
+      "pinned": false,
+      "colors": [
+        "#0891b2",
+        "#22d3ee"
+      ],
+      "allowedRoles": [
+        "outreach"
+      ],
+      "url": "/slider/"
     },
     {
-      "slug": "stripe-payments",
+      "slug": "stripe",
       "title": "Stripe Payments",
       "description": "Live transactions and revenue summary pulled directly from Stripe. Click any row for full charge details.",
       "category": "Finance",
       "icon": "💳",
-      "colors": ["#635bff", "#00d4ff"],
-      "allowedRoles": ["admin", "operations"]
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#635bff",
+        "#00d4ff"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations"
+      ],
+      "url": "/stripe/"
+    },
+    {
+      "slug": "unearthed-whatsapp",
+      "title": "Add Unearthed WhatsApp Contact",
+      "description": "Save a contact directly to the Unearthed Education shared address book (info@unearthededucation.org) — no Google sign-in required.",
+      "category": "Outreach",
+      "icon": "🌱",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#c2410c",
+        "#fb923c"
+      ],
+      "allowedRoles": [
+        "admin",
+        "outreach",
+        "admissions"
+      ],
+      "url": "/unearthed-whatsapp/"
     }
   ]
 }

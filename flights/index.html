@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Flights Dashboard</title>
+<meta name="description" content="Student flights tracker mirroring the enrollment pipeline, focused on logistics and program assignments (no payment data).">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .tab-btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; color: #6b7280; background: transparent; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .tab-btn:hover { background: #e5e7eb; color: #374151; }
+  .tab-btn-active { background: #2563eb !important; color: white !important; }
+  .tab-btn[data-past="true"] { border: 1px dashed #9ca3af; opacity: 0.75; }
+  .tab-btn[data-past="true"].tab-btn-active { opacity: 1; }
+  .sub-tab-btn { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #6b7280; background: #f3f4f6; border: 1px solid #e5e7eb; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .sub-tab-btn:hover { background: #e5e7eb; color: #374151; }
+  .sub-tab-active { background: #1e40af !important; color: white !important; border-color: #1e40af !important; }
+  .tab-content.hidden { display: none; }
+  .sub-tab-content.hidden { display: none; }
+  .table-scroll { max-height: 600px; overflow-y: auto; overflow-x: auto; }
+  thead th { position: sticky; top: 0; z-index: 10; background: #f9fafb; }
+  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Editable cell inputs */
+  .cell-input {
+    width: 100%; min-width: 130px;
+    padding: 4px 6px; font-size: 13px;
+    background: transparent;
+    border: 1px solid transparent; border-radius: 4px;
+    color: #111827; font-family: inherit;
+    transition: all 0.12s;
+  }
+  .cell-input:hover { background: #f9fafb; border-color: #e5e7eb; }
+  .cell-input:focus { background: #fff; border-color: #2563eb; outline: none; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+  .cell-input[data-saving="true"] { background: #fef3c7; border-color: #f59e0b; }
+  .cell-input[data-saved="true"]  { background: #d1fae5; border-color: #10b981; }
+  .cell-input[data-error="true"]  { background: #fee2e2; border-color: #ef4444; }
+  .cell-input[type="datetime-local"] { min-width: 175px; }
+  .email-list { font-size: 12px; color: #4b5563; line-height: 1.4; max-width: 220px; word-break: break-all; }
+  .email-list a { color: #2563eb; }
+  .email-list a:hover { text-decoration: underline; }
+  /* Toast for save errors */
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { background: #b91c1c; }
+  #toast.success { background: #065f46; }
+</style>
+</head>
+<body>
+<div id="app" class="max-w-full mx-auto px-6 py-6">
+
+  <!-- Loading State -->
+  <div id="loading" class="flex flex-col items-center justify-center py-32">
+    <div class="loading-spinner mb-4"></div>
+    <p class="text-gray-500 text-sm">Loading flights data from HubSpot...</p>
+  </div>
+
+  <!-- Error State -->
+  <div id="error" class="hidden flex flex-col items-center justify-center py-32">
+    <div class="text-red-500 text-4xl mb-4">&#x26A0;</div>
+    <p class="text-gray-700 font-medium mb-2">Failed to load data</p>
+    <p id="error-msg" class="text-gray-500 text-sm mb-4"></p>
+    <button onclick="loadData()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Retry</button>
+  </div>
+
+  <!-- Dashboard (hidden until data loads) -->
+  <div id="dashboard" class="hidden">
+    <div class="mb-6">
+      <h1 class="text-2xl font-bold text-gray-900">Student Flights Dashboard</h1>
+      <p class="text-sm text-gray-500 mt-1"><span id="subtitle"></span></p>
+    </div>
+
+    <!-- Overall Stats (non-revenue) -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">All Students</div>
+        <div id="stat-students" class="text-3xl font-bold">-</div>
+      </div>
+      <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">Confirmed (Closed Won)</div>
+        <div id="stat-confirmed" class="text-3xl font-bold">-</div>
+      </div>
+      <div class="bg-gradient-to-br from-sky-500 to-sky-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">Deposit Paid</div>
+        <div id="stat-deposit" class="text-3xl font-bold">-</div>
+      </div>
+      <div class="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">In Application</div>
+        <div id="stat-app" class="text-3xl font-bold">-</div>
+      </div>
+    </div>
+
+    <!-- Season Tabs -->
+    <div id="season-tabs" class="flex flex-wrap gap-2 mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-3"></div>
+
+    <!-- Tab Content Container -->
+    <div id="tab-content"></div>
+  </div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// ═══════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════
+function stageBadge(stage) {
+  if (stage.includes('Closed Won')) return 'bg-green-100 text-green-800';
+  if (stage.includes('Deposit')) return 'bg-blue-100 text-blue-800';
+  if (stage.includes('Interview')) return 'bg-yellow-100 text-yellow-800';
+  if (stage.includes('Application')) return 'bg-purple-100 text-purple-800';
+  return 'bg-gray-100 text-gray-800';
+}
+
+function summaryFor(deals) {
+  var counted = deals.filter(function(d) { return !d.excludeFromCount; });
+  var confirmed = counted.filter(function(d) { return (d.stage || '').indexOf('Closed Won') !== -1; }).length;
+  var deposit = counted.filter(function(d) { return (d.stage || '').indexOf('Deposit') !== -1; }).length;
+  var app = counted.filter(function(d) { return (d.stage || '').indexOf('Application') !== -1 || (d.stage || '').indexOf('Interview') !== -1; }).length;
+  return { count: counted.length, confirmed: confirmed, deposit: deposit, app: app };
+}
+
+// ═══════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════
+function renderSummaryCards(summary) {
+  return '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Total Students</div><div class="text-2xl font-bold text-gray-900">' + summary.count + '</div></div>' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Confirmed</div><div class="text-2xl font-bold text-green-700">' + summary.confirmed + '</div></div>' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Deposit Paid</div><div class="text-2xl font-bold text-blue-700">' + summary.deposit + '</div></div>' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">In Application</div><div class="text-2xl font-bold text-amber-700">' + summary.app + '</div></div>' +
+  '</div>';
+}
+
+// HTML-escape any string headed for innerHTML.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+  });
+}
+
+// Convert a HubSpot ISO 8601 datetime string to the format datetime-local
+// inputs expect ("YYYY-MM-DDTHH:MM"). Returns '' if unparseable / empty.
+function isoToLocalInput(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+         'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+// 7 editable flight columns. `field` is the HubSpot internal property name.
+var FLIGHT_COLS = [
+  { field: 'insurance_policy',               key: 'insurancePolicy',             label: 'Insurance Policy',           type: 'text' },
+  { field: 'arrival_flight_number',          key: 'arrivalFlightNumber',         label: 'Arrival Flight Number',      type: 'text' },
+  { field: 'arrival_flight_time',            key: 'arrivalFlightTime',           label: 'Arrival Flight Time',        type: 'datetime' },
+  { field: 'internal_flight_number',         key: 'internalFlightNumber',        label: 'Internal Flight Number',     type: 'text' },
+  { field: 'internal_flight_departure_time', key: 'internalFlightDepartureTime', label: 'Internal Flight Departure',  type: 'datetime' },
+  { field: 'departure_flight_number',        key: 'departureFlightNumber',       label: 'Departure Flight Number',    type: 'text' },
+  { field: 'departure_time',                 key: 'departureTime',               label: 'Departure Time',             type: 'datetime' }
+];
+
+function renderEmails(emails) {
+  if (!emails || !emails.length) return '<span class="text-gray-400">—</span>';
+  return '<div class="email-list">' + emails.map(function(e) {
+    var safe = esc(e);
+    return '<a href="mailto:' + safe + '">' + safe + '</a>';
+  }).join('<br>') + '</div>';
+}
+
+function renderEditableCell(dealId, col, value) {
+  var displayVal = col.type === 'datetime' ? isoToLocalInput(value) : (value || '');
+  var inputType = col.type === 'datetime' ? 'datetime-local' : 'text';
+  // data-original tracks the unsaved-baseline so we don't fire a save on blur
+  // when nothing actually changed.
+  return '<td class="px-2 py-2">' +
+    '<input class="cell-input" type="' + inputType + '" ' +
+      'data-deal-id="' + esc(dealId) + '" ' +
+      'data-field="' + esc(col.field) + '" ' +
+      'data-original="' + esc(displayVal) + '" ' +
+      'value="' + esc(displayVal) + '" />' +
+  '</td>';
+}
+
+function renderTable(deals, tableId) {
+  var sorted = deals.slice().sort(function(a, b) { return a.studentName.localeCompare(b.studentName); });
+  var rows = '';
+  for (var i = 0; i < sorted.length; i++) {
+    var d = sorted[i];
+    rows += '<tr class="hover:bg-gray-50 border-b border-gray-100 data-row align-top">' +
+      '<td class="px-4 py-3 text-sm font-medium whitespace-nowrap"><a href="' + d.hubspotUrl + '" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">' + esc(d.studentName) + '</a></td>' +
+      '<td class="px-4 py-3 text-sm text-gray-700">' + esc(d.pdProgram || '-') + '</td>' +
+      '<td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">' + esc(d.pipeline) + '</td>' +
+      '<td class="px-4 py-3 text-sm text-gray-700 text-center">' + esc(d.travelYear) + '</td>' +
+      '<td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-medium ' + stageBadge(d.stage) + '">' + esc(d.stage) + '</span></td>' +
+      '<td class="px-4 py-3 text-sm">' + renderEmails(d.contactEmails) + '</td>';
+    for (var c = 0; c < FLIGHT_COLS.length; c++) {
+      rows += renderEditableCell(d.id, FLIGHT_COLS[c], d[FLIGHT_COLS[c].key]);
+    }
+    rows += '</tr>';
+  }
+
+  var headers =
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="0">Student Name &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="1">PD Program &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="2">Pipeline &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="3">Travel Year &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="4">Stage &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact Emails</th>';
+  for (var h = 0; h < FLIGHT_COLS.length; h++) {
+    // Editable columns are not sortable (no data-col, no cursor-pointer arrows).
+    headers += '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">' + esc(FLIGHT_COLS[h].label) + '</th>';
+  }
+
+  return '<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">' +
+    '<div class="p-4 border-b border-gray-200"><input type="text" placeholder="Search students..." class="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" data-search="' + tableId + '"></div>' +
+    '<div class="table-scroll"><table class="min-w-full" data-table="' + tableId + '"><thead><tr class="bg-gray-50 border-b border-gray-200">' +
+      headers +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+}
+
+function renderSubTabs(deals, parentId) {
+  var byProgram = {};
+  for (var i = 0; i < deals.length; i++) {
+    var prog = deals[i].pdProgram || 'No Program';
+    if (!byProgram[prog]) byProgram[prog] = [];
+    byProgram[prog].push(deals[i]);
+  }
+  var sortedPrograms = Object.entries(byProgram).sort(function(a, b) { return b[1].length - a[1].length; });
+
+  var allCountedDeals = deals.filter(function(d) { return !d.excludeFromCount; });
+  var buttons = '<button class="sub-tab-btn sub-tab-active" data-subtab="' + parentId + '_all">All <span class="ml-1 text-xs opacity-70">' + allCountedDeals.length + '</span></button>';
+  for (var j = 0; j < sortedPrograms.length; j++) {
+    var progCounted = sortedPrograms[j][1].filter(function(d) { return !d.excludeFromCount; });
+    buttons += '<button class="sub-tab-btn" data-subtab="' + parentId + '_p' + j + '">' + sortedPrograms[j][0] + ' <span class="ml-1 text-xs opacity-70">' + progCounted.length + '</span></button>';
+  }
+
+  var allSummary = summaryFor(deals);
+  var content = '<div id="' + parentId + '_all" class="sub-tab-content">' + renderSummaryCards(allSummary) + renderTable(deals, parentId + '_all_tbl') + '</div>';
+  for (var j = 0; j < sortedPrograms.length; j++) {
+    var pSummary = summaryFor(sortedPrograms[j][1]);
+    content += '<div id="' + parentId + '_p' + j + '" class="sub-tab-content hidden">' + renderSummaryCards(pSummary) + renderTable(sortedPrograms[j][1], parentId + '_p' + j + '_tbl') + '</div>';
+  }
+
+  return '<div class="flex flex-wrap gap-2 mb-5 pb-3 border-b border-gray-200 sub-tab-bar">' + buttons + '</div>' + content;
+}
+
+// ═══════════════════════════════════════════
+// BUILD FULL DASHBOARD
+// ═══════════════════════════════════════════
+function renderDashboard(data) {
+  var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
+
+  // Compute overall non-revenue stats across all tabs.
+  var overall = { count: 0, confirmed: 0, deposit: 0, app: 0 };
+  for (var t = 0; t < allTabs.length; t++) {
+    var s = summaryFor(allTabs[t].deals || []);
+    overall.count += s.count;
+    overall.confirmed += s.confirmed;
+    overall.deposit += s.deposit;
+    overall.app += s.app;
+  }
+
+  document.getElementById('stat-students').textContent = data.totalStudents != null ? data.totalStudents : overall.count;
+  document.getElementById('stat-confirmed').textContent = overall.confirmed;
+  document.getElementById('stat-deposit').textContent = overall.deposit;
+  document.getElementById('stat-app').textContent = overall.app;
+
+  var updatedDate = new Date(data.updatedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  document.getElementById('subtitle').textContent = (data.totalStudents != null ? data.totalStudents : overall.count) + ' students with flights to coordinate · Live from HubSpot · Updated ' + updatedDate;
+
+  // Season tab buttons
+  var tabBar = document.getElementById('season-tabs');
+  var tabHtml = '';
+  for (var i = 0; i < allTabs.length; i++) {
+    var tab = allTabs[i];
+    var isPast = (data.pastTabs || []).indexOf(tab) !== -1;
+    var active = i === 0 ? ' tab-btn-active' : '';
+    var pastAttr = isPast ? ' data-past="true"' : '';
+    var pastLabel = isPast ? ' (Past)' : '';
+    var badgeCount = typeof tab.countedDeals === 'number' ? tab.countedDeals : tab.deals.length;
+    tabHtml += '<button class="tab-btn' + active + '" data-tab="tab_' + i + '"' + pastAttr + '>' + tab.key + pastLabel + ' <span class="ml-1 text-xs bg-white bg-opacity-30 px-1.5 py-0.5 rounded-full">' + badgeCount + '</span></button>';
+  }
+  tabBar.innerHTML = tabHtml;
+
+  // Tab content
+  var contentEl = document.getElementById('tab-content');
+  var contentHtml = '';
+  for (var i = 0; i < allTabs.length; i++) {
+    var hidden = i === 0 ? '' : ' hidden';
+    contentHtml += '<div id="tab_' + i + '" class="tab-content' + hidden + '">' + renderSubTabs(allTabs[i].deals, 'tab_' + i) + '</div>';
+  }
+  contentEl.innerHTML = contentHtml;
+
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+
+  attachListeners();
+}
+
+// ═══════════════════════════════════════════
+// SAVE — POST to /api/flights-update
+// ═══════════════════════════════════════════
+function showToast(message, kind) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = message;
+  t.className = 'show ' + (kind || '');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(function() { t.className = ''; }, 3500);
+}
+
+async function saveCell(input) {
+  var dealId = input.dataset.dealId;
+  var field = input.dataset.field;
+  var newVal = input.value;
+  var original = input.dataset.original || '';
+  if (newVal === original) return; // nothing changed
+
+  input.dataset.saving = 'true';
+  delete input.dataset.saved;
+  delete input.dataset.error;
+
+  try {
+    var resp = await fetch('/api/flights-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ dealId: dealId, field: field, value: newVal })
+    });
+    var body = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
+
+    delete input.dataset.saving;
+    input.dataset.saved = 'true';
+    input.dataset.original = newVal;
+    setTimeout(function() { delete input.dataset.saved; }, 1500);
+  } catch (err) {
+    delete input.dataset.saving;
+    input.dataset.error = 'true';
+    showToast('Save failed: ' + err.message, 'error');
+    setTimeout(function() { delete input.dataset.error; }, 4000);
+  }
+}
+
+// ═══════════════════════════════════════════
+// EVENT LISTENERS
+// ═══════════════════════════════════════════
+function attachListeners() {
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('tab-btn-active'); });
+      document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.add('hidden'); });
+      this.classList.add('tab-btn-active');
+      document.getElementById(this.dataset.tab).classList.remove('hidden');
+    });
+  });
+
+  document.querySelectorAll('.sub-tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var parent = this.closest('.tab-content');
+      parent.querySelectorAll('.sub-tab-btn').forEach(function(b) { b.classList.remove('sub-tab-active'); });
+      parent.querySelectorAll('.sub-tab-content').forEach(function(c) { c.classList.add('hidden'); });
+      this.classList.add('sub-tab-active');
+      document.getElementById(this.dataset.subtab).classList.remove('hidden');
+    });
+  });
+
+  document.querySelectorAll('[data-search]').forEach(function(input) {
+    input.addEventListener('keyup', function() {
+      var filter = this.value.toLowerCase();
+      var container = this.closest('.sub-tab-content');
+      container.querySelectorAll('.data-row').forEach(function(row) {
+        row.style.display = row.textContent.toLowerCase().indexOf(filter) !== -1 ? '' : 'none';
+      });
+    });
+  });
+
+  // Auto-save editable flight cells on blur (or Enter for text inputs).
+  document.querySelectorAll('.cell-input').forEach(function(input) {
+    input.addEventListener('blur', function() { saveCell(this); });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+      if (e.key === 'Escape') {
+        this.value = this.dataset.original || '';
+        this.blur();
+      }
+    });
+  });
+
+  document.querySelectorAll('th[data-col]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var colIndex = parseInt(this.dataset.col);
+      var table = this.closest('table');
+      var tbody = table.querySelector('tbody');
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      var asc = this.dataset.sortDir !== 'asc';
+      this.dataset.sortDir = asc ? 'asc' : 'desc';
+      var self = this;
+      this.closest('tr').querySelectorAll('th').forEach(function(h) { if (h !== self) delete h.dataset.sortDir; });
+      rows.sort(function(a, b) {
+        var aVal = a.cells[colIndex].textContent.trim();
+        var bVal = b.cells[colIndex].textContent.trim();
+        // Travel Year column (3) sorts numerically; everything else lexicographically.
+        if (colIndex === 3) {
+          aVal = parseFloat(aVal) || 0;
+          bVal = parseFloat(bVal) || 0;
+          return asc ? aVal - bVal : bVal - aVal;
+        }
+        return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      });
+      rows.forEach(function(row) { tbody.appendChild(row); });
+    });
+  });
+}
+
+// ═══════════════════════════════════════════
+// DATA FETCH — runs on every page load
+// ═══════════════════════════════════════════
+async function loadData() {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('error').classList.add('hidden');
+  document.getElementById('dashboard').classList.add('hidden');
+
+  try {
+    // Flights dashboard reuses the enrollment data source — same students,
+    // same season/program structure. Payment fields in the response are
+    // ignored on the UI side.
+    var resp = await fetch('/api/enrollment');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    renderDashboard(data);
+  } catch (err) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('error').classList.remove('hidden');
+    document.getElementById('error-msg').textContent = err.message;
+  }
+}
+
+// Load fresh data on every page load / refresh
+loadData();
+</script>
+</body>
+</html>
