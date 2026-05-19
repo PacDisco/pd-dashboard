@@ -61,7 +61,12 @@ async function fetchAllDeals(token) {
     'dealstage', 'amount', 'total_amount_paid',
     'payment_1', 'payment_2', 'payment_3', 'payment_4',
     'payment_5', 'payment_6', 'payment_7', 'payment_8',
-    'payment_9', 'payment_10'
+    'payment_9', 'payment_10',
+    // Flights dashboard fields (read here, written via /api/flights-update)
+    'insurance_policy',
+    'arrival_flight_number', 'arrival_flight_time',
+    'internal_flight_number', 'internal_flight_departure_time',
+    'departure_flight_number', 'departure_time'
   ];
 
   // Get current year for filtering
@@ -111,6 +116,55 @@ async function fetchAllDeals(token) {
 }
 
 // ═══════════════════════════════════════════
+// CONTACT ASSOCIATIONS — fetch contact IDs per deal, then resolve emails
+// ═══════════════════════════════════════════
+async function fetchDealContactAssociations(token, dealIds) {
+  const map = new Map(); // dealId -> [contactId, ...]
+  if (!dealIds.length) return map;
+
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const chunk = dealIds.slice(i, i + 100);
+    const resp = await fetch(`${HUBSPOT_API}/crm/v4/associations/deals/contacts/batch/read`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs: chunk.map(id => ({ id })) })
+    });
+    if (!resp.ok) { console.error(`Associations batch error: ${resp.status}`); continue; }
+    const data = await resp.json();
+    for (const r of (data.results || [])) {
+      const contactIds = (r.to || []).map(t => t.toObjectId);
+      map.set(r.from.id, contactIds);
+    }
+  }
+  return map;
+}
+
+async function fetchContactEmails(token, contactIds) {
+  const map = new Map(); // contactId -> email
+  const unique = [...new Set(contactIds)];
+  if (!unique.length) return map;
+
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const resp = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/batch/read`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        properties: ['email'],
+        inputs: chunk.map(id => ({ id }))
+      })
+    });
+    if (!resp.ok) { console.error(`Contact batch error: ${resp.status}`); continue; }
+    const data = await resp.json();
+    for (const c of (data.results || [])) {
+      const email = c.properties && c.properties.email;
+      if (email) map.set(c.id, email);
+    }
+  }
+  return map;
+}
+
+// ═══════════════════════════════════════════
 // DATA PROCESSING
 // ═══════════════════════════════════════════
 function parsePayment(val) {
@@ -122,8 +176,9 @@ function parsePayment(val) {
   }
 }
 
-function processDeals(rawDeals) {
+function processDeals(rawDeals, dealToEmails) {
   const processed = [];
+  dealToEmails = dealToEmails || new Map();
 
   for (const deal of rawDeals) {
     const props = deal.properties || {};
@@ -184,7 +239,17 @@ function processDeals(rawDeals) {
       amount,
       totalPaid,
       excludeFromCount,
-      hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${deal.id}`
+      hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${deal.id}`,
+      // Flights-related fields (editable via /api/flights-update). Datetime
+      // fields come back as ISO 8601 strings from HubSpot.
+      insurancePolicy: props.insurance_policy || '',
+      arrivalFlightNumber: props.arrival_flight_number || '',
+      arrivalFlightTime: props.arrival_flight_time || '',
+      internalFlightNumber: props.internal_flight_number || '',
+      internalFlightDepartureTime: props.internal_flight_departure_time || '',
+      departureFlightNumber: props.departure_flight_number || '',
+      departureTime: props.departure_time || '',
+      contactEmails: dealToEmails.get(deal.id) || []
     });
   }
 
@@ -245,7 +310,19 @@ export default async (req) => {
 
   try {
     const rawDeals = await fetchAllDeals(token);
-    const processed = processDeals(rawDeals);
+
+    // Pull contact emails for every deal in one pass — two batched calls.
+    const dealIds = rawDeals.map(d => d.id);
+    const assocMap = await fetchDealContactAssociations(token, dealIds);
+    const allContactIds = [].concat(...assocMap.values());
+    const emailMap = await fetchContactEmails(token, allContactIds);
+    const dealToEmails = new Map();
+    for (const [dealId, contactIds] of assocMap.entries()) {
+      const emails = contactIds.map(id => emailMap.get(id)).filter(Boolean);
+      dealToEmails.set(dealId, emails);
+    }
+
+    const processed = processDeals(rawDeals, dealToEmails);
     const { current, past } = groupBySeason(processed);
 
     // Summary stats (exclude College Credit / empty PD Program from counts)
