@@ -37,6 +37,8 @@
   .cell-input[data-saved="true"]  { background: #d1fae5; border-color: #10b981; }
   .cell-input[data-error="true"]  { background: #fee2e2; border-color: #ef4444; }
   .cell-input[type="datetime-local"] { min-width: 175px; }
+  select.cell-input { min-width: 150px; appearance: auto; background-color: #fff; }
+  select.cell-input:focus { background: #fff; }
   .email-list { font-size: 12px; color: #4b5563; line-height: 1.4; max-width: 220px; word-break: break-all; }
   .email-list a { color: #2563eb; }
   .email-list a:hover { text-decoration: underline; }
@@ -151,8 +153,10 @@ function isoToLocalInput(iso) {
 }
 
 // 7 editable flight columns. `field` is the HubSpot internal property name.
+// `type` is 'text' | 'datetime' | 'select'. Picklist options for 'select'
+// columns come from data.propertyOptions[field] at load time.
 var FLIGHT_COLS = [
-  { field: 'insurance_policy',               key: 'insurancePolicy',             label: 'Insurance Policy',           type: 'text' },
+  { field: 'insurance_policy',               key: 'insurancePolicy',             label: 'Insurance Policy',           type: 'select' },
   { field: 'arrival_flight_number',          key: 'arrivalFlightNumber',         label: 'Arrival Flight Number',      type: 'text' },
   { field: 'arrival_flight_time',            key: 'arrivalFlightTime',           label: 'Arrival Flight Time',        type: 'datetime' },
   { field: 'internal_flight_number',         key: 'internalFlightNumber',        label: 'Internal Flight Number',     type: 'text' },
@@ -160,6 +164,10 @@ var FLIGHT_COLS = [
   { field: 'departure_flight_number',        key: 'departureFlightNumber',       label: 'Departure Flight Number',    type: 'text' },
   { field: 'departure_time',                 key: 'departureTime',               label: 'Departure Time',             type: 'datetime' }
 ];
+
+// Picklist options keyed by HubSpot internal property name — populated from
+// the API response at render time. Each entry is [{label, value}, ...].
+var PROPERTY_OPTIONS = {};
 
 function renderEmails(emails) {
   if (!emails || !emails.length) return '<span class="text-gray-400">—</span>';
@@ -170,6 +178,34 @@ function renderEmails(emails) {
 }
 
 function renderEditableCell(dealId, col, value) {
+  // Select (HubSpot enumeration) — render <select> with picklist options.
+  if (col.type === 'select') {
+    var current = value == null ? '' : String(value);
+    var options = PROPERTY_OPTIONS[col.field] || [];
+    var optionsHtml = '<option value=""></option>';
+    var matched = current === '';
+    for (var i = 0; i < options.length; i++) {
+      var v = String(options[i].value);
+      var l = options[i].label;
+      var selAttr = v === current ? ' selected' : '';
+      if (v === current) matched = true;
+      optionsHtml += '<option value="' + esc(v) + '"' + selAttr + '>' + esc(l) + '</option>';
+    }
+    // If the stored value isn't in the picklist (e.g. legacy / typo / option
+    // recently renamed), keep it visible so the user can see what's there.
+    if (!matched && current) {
+      optionsHtml += '<option value="' + esc(current) + '" selected>' + esc(current) + ' (legacy)</option>';
+    }
+    return '<td class="px-2 py-2">' +
+      '<select class="cell-input cell-select" ' +
+        'data-deal-id="' + esc(dealId) + '" ' +
+        'data-field="' + esc(col.field) + '" ' +
+        'data-original="' + esc(current) + '">' + optionsHtml +
+      '</select>' +
+    '</td>';
+  }
+
+  // Text / datetime — plain input.
   var displayVal = col.type === 'datetime' ? isoToLocalInput(value) : (value || '');
   var inputType = col.type === 'datetime' ? 'datetime-local' : 'text';
   // data-original tracks the unsaved-baseline so we don't fire a save on blur
@@ -250,6 +286,9 @@ function renderSubTabs(deals, parentId) {
 // BUILD FULL DASHBOARD
 // ═══════════════════════════════════════════
 function renderDashboard(data) {
+  // Picklist options (insurance_policy, etc.) — populated for renderEditableCell.
+  PROPERTY_OPTIONS = (data && data.propertyOptions) || {};
+
   var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
 
   // Compute overall non-revenue stats across all tabs.
@@ -377,16 +416,21 @@ function attachListeners() {
     });
   });
 
-  // Auto-save editable flight cells on blur (or Enter for text inputs).
+  // Auto-save editable flight cells. Inputs save on blur (and on Enter via blur);
+  // selects save the moment the value changes.
   document.querySelectorAll('.cell-input').forEach(function(input) {
     input.addEventListener('blur', function() { saveCell(this); });
-    input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-      if (e.key === 'Escape') {
-        this.value = this.dataset.original || '';
-        this.blur();
-      }
-    });
+    if (input.tagName === 'SELECT') {
+      input.addEventListener('change', function() { saveCell(this); });
+    } else {
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        if (e.key === 'Escape') {
+          this.value = this.dataset.original || '';
+          this.blur();
+        }
+      });
+    }
   });
 
   document.querySelectorAll('th[data-col]').forEach(function(th) {
