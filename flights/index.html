@@ -39,9 +39,21 @@
   .cell-input[type="datetime-local"] { min-width: 175px; }
   select.cell-input { min-width: 150px; appearance: auto; background-color: #fff; }
   select.cell-input:focus { background: #fff; }
-  .email-list { font-size: 12px; color: #4b5563; line-height: 1.4; max-width: 220px; word-break: break-all; }
-  .email-list a { color: #2563eb; }
-  .email-list a:hover { text-decoration: underline; }
+  .email-list { font-size: 12px; max-width: 240px; }
+  .email-item {
+    display: block;
+    padding: 3px 8px;
+    margin-bottom: 4px;
+    background: #f3f4f6;
+    border-left: 2px solid #93c5fd;
+    border-radius: 3px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .email-item:last-child { margin-bottom: 0; }
+  .email-item a { color: #2563eb; text-decoration: none; }
+  .email-item a:hover { text-decoration: underline; }
   /* Toast for save errors */
   #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
   #toast.show { opacity: 1; transform: translateY(0); }
@@ -173,8 +185,8 @@ function renderEmails(emails) {
   if (!emails || !emails.length) return '<span class="text-gray-400">—</span>';
   return '<div class="email-list">' + emails.map(function(e) {
     var safe = esc(e);
-    return '<a href="mailto:' + safe + '">' + safe + '</a>';
-  }).join('<br>') + '</div>';
+    return '<span class="email-item"><a href="mailto:' + safe + '">' + safe + '</a></span>';
+  }).join('') + '</div>';
 }
 
 function renderEditableCell(dealId, col, value) {
