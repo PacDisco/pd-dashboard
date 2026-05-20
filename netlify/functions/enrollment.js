@@ -82,9 +82,9 @@ async function fetchAllDeals(token) {
         }]
       }],
       properties,
-      // Ask HubSpot to embed deal→contact associations in the search response,
-      // so we don't need a separate batch-associations call.
-      associations: ['contacts'],
+      // NOTE: HubSpot's Search API does NOT return associations even when
+      // requested in the body — we fetch them separately via the v4 batch
+      // associations endpoint below.
       limit: 200,
       after
     };
@@ -163,13 +163,41 @@ async function fetchExcludedStageIds(token) {
 }
 
 // ═══════════════════════════════════════════
-// CONTACT EMAILS — batch-resolve emails for a flat list of contact IDs
-// (Deal→contact associations come back inline on each deal from the search,
-//  via `associations: ['contacts']` in the request body.)
+// DEAL → CONTACT ASSOCIATIONS — the HubSpot Search API doesn't return
+// associations, so we ask the v4 batch endpoint. Pattern matches
+// batchGetDealsForContacts in refresh-hot-leads.mjs (known-good in this repo).
 // ═══════════════════════════════════════════
-function contactIdsFromDeal(deal) {
-  const results = (deal.associations && deal.associations.contacts && deal.associations.contacts.results) || [];
-  return results.map(r => String(r.id));
+async function fetchDealContactAssociations(token, dealIds) {
+  const map = new Map(); // dealId -> [contactId, ...]
+  if (!dealIds.length) return map;
+
+  let totalAssociations = 0;
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const chunk = dealIds.slice(i, i + 100);
+    const resp = await fetch(
+      `${HUBSPOT_API}/crm/v4/associations/deals/contacts/batch/read`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: chunk.map(id => ({ id: String(id) })) })
+      }
+    );
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.error(`Associations batch failed ${resp.status}: ${errText.slice(0, 300)}`);
+      continue;
+    }
+    const data = await resp.json();
+    for (const row of (data.results || [])) {
+      const fromId = row.from && row.from.id ? String(row.from.id) : null;
+      if (!fromId) continue;
+      const contactIds = (row.to || []).map(t => String(t.toObjectId));
+      map.set(fromId, contactIds);
+      totalAssociations += contactIds.length;
+    }
+  }
+  console.log(`fetchDealContactAssociations: ${dealIds.length} deals → ${map.size} with contacts, ${totalAssociations} contact links total`);
+  return map;
 }
 
 async function fetchContactEmails(token, contactIds) {
@@ -189,7 +217,7 @@ async function fetchContactEmails(token, contactIds) {
     });
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
-      console.error(`Contact batch error ${resp.status}: ${errText}`);
+      console.error(`Contact batch error ${resp.status}: ${errText.slice(0, 300)}`);
       continue;
     }
     const data = await resp.json();
@@ -198,6 +226,7 @@ async function fetchContactEmails(token, contactIds) {
       if (email) map.set(String(c.id), email);
     }
   }
+  console.log(`fetchContactEmails: ${unique.length} unique contact IDs → ${map.size} emails resolved`);
   return map;
 }
 
@@ -392,23 +421,24 @@ export default async (req) => {
         fetchExcludedStageIds(token)
       ]);
 
-    // Build the deal→contactIds map directly from the inline associations
-    // returned by /deals/search (we requested associations:['contacts']).
-    const dealToContactIds = new Map();
-    const allContactIds = [];
-    for (const deal of rawDeals) {
-      const ids = contactIdsFromDeal(deal);
-      dealToContactIds.set(String(deal.id), ids);
-      for (const id of ids) allContactIds.push(id);
-    }
+    // Fetch deal→contact associations via the v4 batch endpoint.
+    // (The Search API doesn't return associations, even when asked.)
+    const dealIds = rawDeals.map(d => String(d.id));
+    const dealToContactIds = await fetchDealContactAssociations(token, dealIds);
 
-    // Resolve contact IDs → emails in one batched pass.
+    // Flatten contact IDs and resolve their emails in one batched pass.
+    const allContactIds = [];
+    for (const contactIds of dealToContactIds.values()) {
+      for (const id of contactIds) allContactIds.push(id);
+    }
     const emailMap = await fetchContactEmails(token, allContactIds);
+
     const dealToEmails = new Map();
     for (const [dealId, contactIds] of dealToContactIds.entries()) {
       const emails = contactIds.map(id => emailMap.get(id)).filter(Boolean);
       dealToEmails.set(dealId, emails);
     }
+    console.log(`enrollment: ${rawDeals.length} deals fetched, ${dealToEmails.size} have at least one resolved email`);
 
     // Pull insurance_policy dropdown options in parallel with the rest so the
     // dashboard can render the same picklist HubSpot has.
