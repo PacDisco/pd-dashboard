@@ -82,6 +82,9 @@ async function fetchAllDeals(token) {
         }]
       }],
       properties,
+      // Ask HubSpot to embed deal→contact associations in the search response,
+      // so we don't need a separate batch-associations call.
+      associations: ['contacts'],
       limit: 200,
       after
     };
@@ -116,32 +119,18 @@ async function fetchAllDeals(token) {
 }
 
 // ═══════════════════════════════════════════
-// CONTACT ASSOCIATIONS — fetch contact IDs per deal, then resolve emails
+// CONTACT EMAILS — batch-resolve emails for a flat list of contact IDs
+// (Deal→contact associations come back inline on each deal from the search,
+//  via `associations: ['contacts']` in the request body.)
 // ═══════════════════════════════════════════
-async function fetchDealContactAssociations(token, dealIds) {
-  const map = new Map(); // dealId -> [contactId, ...]
-  if (!dealIds.length) return map;
-
-  for (let i = 0; i < dealIds.length; i += 100) {
-    const chunk = dealIds.slice(i, i + 100);
-    const resp = await fetch(`${HUBSPOT_API}/crm/v4/associations/deals/contacts/batch/read`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inputs: chunk.map(id => ({ id })) })
-    });
-    if (!resp.ok) { console.error(`Associations batch error: ${resp.status}`); continue; }
-    const data = await resp.json();
-    for (const r of (data.results || [])) {
-      const contactIds = (r.to || []).map(t => t.toObjectId);
-      map.set(r.from.id, contactIds);
-    }
-  }
-  return map;
+function contactIdsFromDeal(deal) {
+  const results = (deal.associations && deal.associations.contacts && deal.associations.contacts.results) || [];
+  return results.map(r => String(r.id));
 }
 
 async function fetchContactEmails(token, contactIds) {
   const map = new Map(); // contactId -> email
-  const unique = [...new Set(contactIds)];
+  const unique = [...new Set(contactIds.map(String))];
   if (!unique.length) return map;
 
   for (let i = 0; i < unique.length; i += 100) {
@@ -151,17 +140,46 @@ async function fetchContactEmails(token, contactIds) {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         properties: ['email'],
-        inputs: chunk.map(id => ({ id }))
+        inputs: chunk.map(id => ({ id: String(id) }))
       })
     });
-    if (!resp.ok) { console.error(`Contact batch error: ${resp.status}`); continue; }
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.error(`Contact batch error ${resp.status}: ${errText}`);
+      continue;
+    }
     const data = await resp.json();
     for (const c of (data.results || [])) {
       const email = c.properties && c.properties.email;
-      if (email) map.set(c.id, email);
+      if (email) map.set(String(c.id), email);
     }
   }
   return map;
+}
+
+// ═══════════════════════════════════════════
+// PROPERTY METADATA — pull dropdown options for enumeration fields.
+// Used for insurance_policy so the UI can render the same picklist HubSpot has.
+// ═══════════════════════════════════════════
+async function fetchPropertyOptions(token, propertyName) {
+  try {
+    const resp = await fetch(
+      `${HUBSPOT_API}/crm/v3/properties/deals/${encodeURIComponent(propertyName)}`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+    if (!resp.ok) {
+      console.error(`Property ${propertyName} fetch failed: ${resp.status}`);
+      return [];
+    }
+    const data = await resp.json();
+    // HubSpot returns options as [{label, value, displayOrder, hidden}, ...]
+    return (data.options || [])
+      .filter(o => !o.hidden)
+      .map(o => ({ label: o.label, value: o.value }));
+  } catch (err) {
+    console.error(`fetchPropertyOptions(${propertyName}) error: ${err.message}`);
+    return [];
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -311,16 +329,27 @@ export default async (req) => {
   try {
     const rawDeals = await fetchAllDeals(token);
 
-    // Pull contact emails for every deal in one pass — two batched calls.
-    const dealIds = rawDeals.map(d => d.id);
-    const assocMap = await fetchDealContactAssociations(token, dealIds);
-    const allContactIds = [].concat(...assocMap.values());
+    // Build the deal→contactIds map directly from the inline associations
+    // returned by /deals/search (we requested associations:['contacts']).
+    const dealToContactIds = new Map();
+    const allContactIds = [];
+    for (const deal of rawDeals) {
+      const ids = contactIdsFromDeal(deal);
+      dealToContactIds.set(String(deal.id), ids);
+      for (const id of ids) allContactIds.push(id);
+    }
+
+    // Resolve contact IDs → emails in one batched pass.
     const emailMap = await fetchContactEmails(token, allContactIds);
     const dealToEmails = new Map();
-    for (const [dealId, contactIds] of assocMap.entries()) {
+    for (const [dealId, contactIds] of dealToContactIds.entries()) {
       const emails = contactIds.map(id => emailMap.get(id)).filter(Boolean);
       dealToEmails.set(dealId, emails);
     }
+
+    // Pull insurance_policy dropdown options in parallel with the rest so the
+    // dashboard can render the same picklist HubSpot has.
+    const insurancePolicyOptions = await fetchPropertyOptions(token, 'insurance_policy');
 
     const processed = processDeals(rawDeals, dealToEmails);
     const { current, past } = groupBySeason(processed);
@@ -337,7 +366,11 @@ export default async (req) => {
       totalPaid,
       outstanding: totalAmount - totalPaid,
       currentTabs: current,
-      pastTabs: past
+      pastTabs: past,
+      // Picklist options for the Flights dashboard.
+      propertyOptions: {
+        insurance_policy: insurancePolicyOptions
+      }
     }), {
       headers: {
         'Content-Type': 'application/json',
