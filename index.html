@@ -1,740 +1,519 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pacific Discovery Dashboards</title>
-  <meta name="description" content="Central hub for all Pacific Discovery reporting dashboards." />
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-  <style>
-    :root {
-      --bg: #0b1020;
-      --bg-soft: #121830;
-      --card: #171f3a;
-      --card-hover: #1e2748;
-      --border: #2a335a;
-      --text: #e8ecf6;
-      --text-dim: #9aa3c0;
-      --accent: #7c9bff;
-      --accent-2: #6ee7b7;
-      --danger: #fb7185;
-      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-      --radius: 14px;
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0; padding: 0;
-      background: radial-gradient(1200px 600px at 10% -10%, #1a2550 0%, transparent 60%),
-                  radial-gradient(1000px 500px at 110% 10%, #0f3b3a 0%, transparent 60%),
-                  var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-    }
-    header {
-      max-width: 1200px; margin: 0 auto;
-      padding: 56px 24px 24px;
-      display: flex; justify-content: space-between; align-items: flex-end;
-      gap: 24px; flex-wrap: wrap;
-    }
-    .brand {
-      display: flex; align-items: center; gap: 12px;
-      font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
-      color: var(--text-dim); margin-bottom: 16px;
-    }
-    .brand-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 0 12px var(--accent);
-    }
-    h1 {
-      margin: 0 0 10px;
-      font-size: clamp(28px, 4vw, 44px);
-      letter-spacing: -0.02em; font-weight: 700;
-    }
-    .subtitle { margin: 0; color: var(--text-dim); font-size: 16px; max-width: 620px; }
-    .user-panel {
-      display: flex; align-items: center; gap: 12px;
-      background: var(--bg-soft); border: 1px solid var(--border);
-      border-radius: 999px; padding: 6px 6px 6px 14px;
-    }
-    .user-panel.hidden { display: none; }
-    .user-avatar {
-      width: 32px; height: 32px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      display: grid; place-items: center;
-      color: #0b1020; font-weight: 700; font-size: 13px;
-    }
-    .user-info { font-size: 13px; line-height: 1.3; }
-    .user-info .email { color: var(--text-dim); font-size: 11px; }
-    .user-info .role { color: var(--accent-2); font-size: 11px; }
-
-    .btn {
-      background: transparent; color: var(--text);
-      border: 1px solid var(--border); border-radius: 999px;
-      padding: 7px 14px; font-size: 13px; cursor: pointer;
-      transition: all .15s; font-family: inherit;
-    }
-    .btn:hover { border-color: var(--accent); }
-    .btn-primary {
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #0b1020; border: 0; font-weight: 600;
-    }
-    .btn-primary:hover { opacity: .92; }
-    .btn-danger { color: var(--danger); border-color: rgba(251,113,133,.3); }
-    .btn-danger:hover { border-color: var(--danger); background: rgba(251,113,133,.1); }
-    .btn-sm { padding: 5px 10px; font-size: 12px; }
-
-    .toolbar {
-      max-width: 1200px; margin: 24px auto 0; padding: 0 24px;
-      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
-    }
-    .search {
-      flex: 1 1 260px; min-width: 240px;
-      display: flex; align-items: center;
-      background: var(--bg-soft); border: 1px solid var(--border);
-      border-radius: 12px; padding: 10px 14px;
-    }
-    .search:focus-within { border-color: var(--accent); }
-    .search svg { flex-shrink: 0; opacity: .7; margin-right: 10px; }
-    .search input {
-      background: transparent; border: 0; outline: none;
-      color: var(--text); width: 100%; font-size: 15px; font-family: inherit;
-    }
-    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
-    .chip {
-      background: var(--bg-soft); color: var(--text-dim);
-      border: 1px solid var(--border); border-radius: 999px;
-      padding: 8px 14px; font-size: 13px; cursor: pointer;
-      user-select: none; transition: all .15s; font-family: inherit;
-    }
-    .chip:hover { color: var(--text); border-color: var(--accent); }
-    .chip.active {
-      color: var(--bg); background: var(--text);
-      border-color: var(--text); font-weight: 600;
-    }
-
-    main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 18px;
-    }
-    .card {
-      display: flex; flex-direction: column;
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 20px;
-      text-decoration: none; color: inherit;
-      position: relative; overflow: hidden;
-      transition: transform .18s, border-color .18s, background .18s;
-      box-shadow: var(--shadow);
-    }
-    .card:hover {
-      transform: translateY(-3px);
-      border-color: var(--accent);
-      background: var(--card-hover);
-    }
-    .card::before {
-      content: ""; position: absolute; inset: 0 0 auto 0; height: 4px;
-      background: linear-gradient(90deg, var(--c1, var(--accent)), var(--c2, var(--accent-2)));
-    }
-    .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-    .icon {
-      width: 44px; height: 44px; border-radius: 10px;
-      display: grid; place-items: center; font-size: 22px;
-      background: linear-gradient(135deg, rgba(124,155,255,.18), rgba(110,231,183,.14));
-      border: 1px solid var(--border);
-    }
-    .category {
-      font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
-      color: var(--text-dim); background: var(--bg-soft);
-      border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
-    }
-    .card h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-    .card p { margin: 0 0 16px; color: var(--text-dim); font-size: 14px; line-height: 1.5; flex: 1; }
-    .card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-dim); }
-    .open { color: var(--accent); font-weight: 600; }
-    .role-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
-
-    .empty, .loading, .gate {
-      text-align: center; color: var(--text-dim);
-      padding: 60px 20px; border: 1px dashed var(--border);
-      border-radius: var(--radius);
-    }
-    .gate h2 { color: var(--text); margin: 0 0 8px; font-size: 22px; }
-    .gate p { max-width: 440px; margin: 0 auto 20px; }
-    .gate .btn-primary { padding: 12px 22px; font-size: 15px; }
-
-    footer {
-      max-width: 1200px; margin: 0 auto; padding: 20px 24px 40px;
-      color: var(--text-dim); font-size: 13px;
-      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
-    }
-
-    /* --- Admin modal --- */
-    .modal-backdrop {
-      position: fixed; inset: 0;
-      background: rgba(2, 5, 20, 0.7);
-      backdrop-filter: blur(6px);
-      display: none; align-items: flex-start; justify-content: center;
-      padding: 40px 20px; overflow-y: auto; z-index: 100;
-    }
-    .modal-backdrop.show { display: flex; }
-    .modal {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 0;
-      width: 100%; max-width: 960px;
-      box-shadow: 0 20px 60px rgba(0,0,0,.5);
-    }
-    .modal-header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 20px 24px; border-bottom: 1px solid var(--border);
-    }
-    .modal-header h2 { margin: 0; font-size: 20px; }
-    .modal-tabs {
-      display: flex; gap: 4px; padding: 0 24px;
-      border-bottom: 1px solid var(--border);
-    }
-    .modal-tab {
-      padding: 14px 18px; cursor: pointer;
-      color: var(--text-dim); font-size: 14px; font-weight: 500;
-      border: 0; background: transparent;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      font-family: inherit;
-    }
-    .modal-tab.active { color: var(--text); border-bottom-color: var(--accent); }
-    .modal-body { padding: 24px; max-height: 65vh; overflow-y: auto; }
-    .modal-footer {
-      display: flex; justify-content: space-between; align-items: center; gap: 12px;
-      padding: 16px 24px;
-      border-top: 1px solid var(--border);
-    }
-    .perm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .perm-table th, .perm-table td {
-      padding: 12px 10px; text-align: left;
-      border-bottom: 1px solid var(--border);
-    }
-    .perm-table th {
-      color: var(--text-dim); font-weight: 500; font-size: 11px;
-      text-transform: uppercase; letter-spacing: .1em;
-    }
-    .perm-table .slug { color: var(--text-dim); font-size: 12px; }
-    .perm-table .role-cell { text-align: center; }
-    .perm-table input[type="checkbox"] {
-      width: 18px; height: 18px; cursor: pointer;
-      accent-color: var(--accent);
-    }
-    .role-pill {
-      display: inline-block; padding: 2px 8px; margin: 2px;
-      font-size: 11px; border-radius: 999px;
-      background: rgba(124,155,255,.15); color: var(--accent);
-      border: 1px solid rgba(124,155,255,.3);
-    }
-    .role-pill.admin { background: rgba(110,231,183,.15); color: var(--accent-2); border-color: rgba(110,231,183,.3); }
-
-    .users-toolbar {
-      display: flex; gap: 8px; margin-bottom: 16px; align-items: center;
-    }
-    .users-toolbar input[type="email"] {
-      flex: 1; background: var(--bg-soft); border: 1px solid var(--border);
-      color: var(--text); border-radius: 8px; padding: 10px 14px;
-      font-size: 14px; font-family: inherit;
-    }
-    .users-toolbar input[type="email"]:focus { outline: none; border-color: var(--accent); }
-
-    .role-editor {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      background: var(--bg-soft); border: 1px solid var(--border);
-      border-radius: 8px; padding: 6px; min-width: 220px;
-    }
-    .role-editor label {
-      display: flex; align-items: center; gap: 4px;
-      padding: 3px 8px; border-radius: 999px; cursor: pointer;
-      font-size: 11px; border: 1px solid transparent;
-    }
-    .role-editor label:hover { background: var(--card); }
-    .role-editor label.checked { background: rgba(124,155,255,.15); color: var(--accent); border-color: rgba(124,155,255,.3); }
-    .role-editor input { display: none; }
-
-    .toast {
-      position: fixed; bottom: 30px; right: 30px; z-index: 200;
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px 18px;
-      box-shadow: var(--shadow); font-size: 14px;
-      opacity: 0; transform: translateY(10px); pointer-events: none;
-      transition: all .25s;
-    }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .toast.error { border-color: var(--danger); color: var(--danger); }
-    .toast.success { border-color: var(--accent-2); }
-
-    @media (max-width: 540px) {
-      header { padding-top: 32px; }
-      .perm-table th, .perm-table td { padding: 8px 4px; font-size: 12px; }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Flights Dashboard</title>
+<meta name="description" content="Student flights tracker mirroring the enrollment pipeline, focused on logistics and program assignments (no payment data).">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .tab-btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; color: #6b7280; background: transparent; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .tab-btn:hover { background: #e5e7eb; color: #374151; }
+  .tab-btn-active { background: #2563eb !important; color: white !important; }
+  .tab-btn[data-past="true"] { border: 1px dashed #9ca3af; opacity: 0.75; }
+  .tab-btn[data-past="true"].tab-btn-active { opacity: 1; }
+  .sub-tab-btn { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #6b7280; background: #f3f4f6; border: 1px solid #e5e7eb; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .sub-tab-btn:hover { background: #e5e7eb; color: #374151; }
+  .sub-tab-active { background: #1e40af !important; color: white !important; border-color: #1e40af !important; }
+  .tab-content.hidden { display: none; }
+  .sub-tab-content.hidden { display: none; }
+  .table-scroll { max-height: 600px; overflow-y: auto; overflow-x: auto; }
+  thead th { position: sticky; top: 0; z-index: 10; background: #f9fafb; }
+  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Editable cell inputs */
+  .cell-input {
+    width: 100%; min-width: 130px;
+    padding: 4px 6px; font-size: 13px;
+    background: transparent;
+    border: 1px solid transparent; border-radius: 4px;
+    color: #111827; font-family: inherit;
+    transition: all 0.12s;
+  }
+  .cell-input:hover { background: #f9fafb; border-color: #e5e7eb; }
+  .cell-input:focus { background: #fff; border-color: #2563eb; outline: none; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+  .cell-input[data-saving="true"] { background: #fef3c7; border-color: #f59e0b; }
+  .cell-input[data-saved="true"]  { background: #d1fae5; border-color: #10b981; }
+  .cell-input[data-error="true"]  { background: #fee2e2; border-color: #ef4444; }
+  .cell-input[type="datetime-local"] { min-width: 175px; }
+  select.cell-input { min-width: 150px; appearance: auto; background-color: #fff; }
+  select.cell-input:focus { background: #fff; }
+  .email-list { font-size: 12px; color: #4b5563; line-height: 1.4; max-width: 220px; word-break: break-all; }
+  .email-list a { color: #2563eb; }
+  .email-list a:hover { text-decoration: underline; }
+  /* Toast for save errors */
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { background: #b91c1c; }
+  #toast.success { background: #065f46; }
+</style>
 </head>
 <body>
-  <header>
-    <div>
-      <div class="brand"><span class="brand-dot"></span> Pacific Discovery</div>
-      <h1>Dashboards</h1>
-      <p class="subtitle">A central hub for reporting. Access is restricted to invited team members.</p>
-    </div>
-    <div id="userPanel" class="user-panel hidden">
-      <div class="user-avatar" id="userAvatar">?</div>
-      <div class="user-info">
-        <div id="userName"></div>
-        <div class="email" id="userEmail"></div>
-        <div class="role" id="userRole"></div>
-      </div>
-      <button class="btn" id="adminBtn" style="display:none">Manage access</button>
-      <button class="btn" id="logoutBtn" title="Sign out">Sign out</button>
-    </div>
-  </header>
+<div id="app" class="max-w-full mx-auto px-6 py-6">
 
-  <div class="toolbar" id="toolbar" style="display:none">
-    <label class="search">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="search" type="search" placeholder="Search dashboards..." autocomplete="off" />
-    </label>
-    <div class="chips" id="categoryChips"></div>
+  <!-- Loading State -->
+  <div id="loading" class="flex flex-col items-center justify-center py-32">
+    <div class="loading-spinner mb-4"></div>
+    <p class="text-gray-500 text-sm">Loading flights data from HubSpot...</p>
   </div>
 
-  <main>
-    <div id="grid" class="grid" aria-live="polite">
-      <div class="loading">Starting up…</div>
-    </div>
-  </main>
-
-  <footer>
-    <div id="count">—</div>
-    <div id="updated">—</div>
-  </footer>
-
-  <!-- Admin modal -->
-  <div class="modal-backdrop" id="adminModal">
-    <div class="modal" role="dialog" aria-modal="true">
-      <div class="modal-header">
-        <h2>Manage access</h2>
-        <button class="btn" id="closeModalBtn">Close</button>
-      </div>
-      <div class="modal-tabs">
-        <button class="modal-tab active" data-tab="permissions">Dashboard permissions</button>
-        <button class="modal-tab" data-tab="users">Users</button>
-      </div>
-      <div class="modal-body">
-        <div id="tabPermissions">
-          <p style="color:var(--text-dim); font-size:13px; margin:0 0 16px">
-            Check which roles should see each dashboard. Admins always see everything. Empty row = admin-only.
-          </p>
-          <div id="permissionsContent"><div class="loading">Loading…</div></div>
-        </div>
-        <div id="tabUsers" style="display:none">
-          <div class="users-toolbar">
-            <input id="inviteEmail" type="email" placeholder="person@pacificdiscovery.org" />
-            <button class="btn btn-primary" id="inviteBtn">Invite</button>
-          </div>
-          <div id="usersContent"><div class="loading">Loading…</div></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <div id="modalStatus" style="color:var(--text-dim); font-size:12px">—</div>
-        <div>
-          <button class="btn" id="refreshBtn">Refresh</button>
-          <button class="btn btn-primary" id="savePermsBtn">Save permissions</button>
-        </div>
-      </div>
-    </div>
+  <!-- Error State -->
+  <div id="error" class="hidden flex flex-col items-center justify-center py-32">
+    <div class="text-red-500 text-4xl mb-4">&#x26A0;</div>
+    <p class="text-gray-700 font-medium mb-2">Failed to load data</p>
+    <p id="error-msg" class="text-gray-500 text-sm mb-4"></p>
+    <button onclick="loadData()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Retry</button>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <!-- Dashboard (hidden until data loads) -->
+  <div id="dashboard" class="hidden">
+    <div class="mb-6">
+      <h1 class="text-2xl font-bold text-gray-900">Student Flights Dashboard</h1>
+      <p class="text-sm text-gray-500 mt-1"><span id="subtitle"></span></p>
+    </div>
 
-  <script>
-    const PALETTES = [
-      ["#7c9bff", "#6ee7b7"], ["#f0abfc", "#fca5a5"], ["#fcd34d", "#f59e0b"],
-      ["#34d399", "#06b6d4"], ["#a78bfa", "#60a5fa"], ["#fb7185", "#f97316"]
-    ];
-    const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights"];
-    const ALL_ROLES = ["admin", ...FUNCTIONAL_ROLES];
+    <!-- Overall Stats (non-revenue) -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">All Students</div>
+        <div id="stat-students" class="text-3xl font-bold">-</div>
+      </div>
+      <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">Confirmed (Closed Won)</div>
+        <div id="stat-confirmed" class="text-3xl font-bold">-</div>
+      </div>
+      <div class="bg-gradient-to-br from-sky-500 to-sky-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">Deposit Paid</div>
+        <div id="stat-deposit" class="text-3xl font-bold">-</div>
+      </div>
+      <div class="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-sm p-4 text-white">
+        <div class="text-sm opacity-80">In Application</div>
+        <div id="stat-app" class="text-3xl font-bold">-</div>
+      </div>
+    </div>
 
-    let STATE = {
-      dashboards: [], query: "", category: "All",
-      user: null, roles: [],
-      draftPerms: null,        // in-flight edits in admin modal
-      users: []                // loaded on admin modal open
+    <!-- Season Tabs -->
+    <div id="season-tabs" class="flex flex-wrap gap-2 mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-3"></div>
+
+    <!-- Tab Content Container -->
+    <div id="tab-content"></div>
+  </div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// ═══════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════
+function stageBadge(stage) {
+  if (stage.includes('Closed Won')) return 'bg-green-100 text-green-800';
+  if (stage.includes('Deposit')) return 'bg-blue-100 text-blue-800';
+  if (stage.includes('Interview')) return 'bg-yellow-100 text-yellow-800';
+  if (stage.includes('Application')) return 'bg-purple-100 text-purple-800';
+  return 'bg-gray-100 text-gray-800';
+}
+
+function summaryFor(deals) {
+  var counted = deals.filter(function(d) { return !d.excludeFromCount; });
+  var confirmed = counted.filter(function(d) { return (d.stage || '').indexOf('Closed Won') !== -1; }).length;
+  var deposit = counted.filter(function(d) { return (d.stage || '').indexOf('Deposit') !== -1; }).length;
+  var app = counted.filter(function(d) { return (d.stage || '').indexOf('Application') !== -1 || (d.stage || '').indexOf('Interview') !== -1; }).length;
+  return { count: counted.length, confirmed: confirmed, deposit: deposit, app: app };
+}
+
+// ═══════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════
+function renderSummaryCards(summary) {
+  return '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Total Students</div><div class="text-2xl font-bold text-gray-900">' + summary.count + '</div></div>' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Confirmed</div><div class="text-2xl font-bold text-green-700">' + summary.confirmed + '</div></div>' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Deposit Paid</div><div class="text-2xl font-bold text-blue-700">' + summary.deposit + '</div></div>' +
+    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">In Application</div><div class="text-2xl font-bold text-amber-700">' + summary.app + '</div></div>' +
+  '</div>';
+}
+
+// HTML-escape any string headed for innerHTML.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+  });
+}
+
+// Convert a HubSpot ISO 8601 datetime string to the format datetime-local
+// inputs expect ("YYYY-MM-DDTHH:MM"). Returns '' if unparseable / empty.
+function isoToLocalInput(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+         'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+// 7 editable flight columns. `field` is the HubSpot internal property name.
+// `type` is 'text' | 'datetime' | 'select'. Picklist options for 'select'
+// columns come from data.propertyOptions[field] at load time.
+var FLIGHT_COLS = [
+  { field: 'insurance_policy',               key: 'insurancePolicy',             label: 'Insurance Policy',           type: 'select' },
+  { field: 'arrival_flight_number',          key: 'arrivalFlightNumber',         label: 'Arrival Flight Number',      type: 'text' },
+  { field: 'arrival_flight_time',            key: 'arrivalFlightTime',           label: 'Arrival Flight Time',        type: 'datetime' },
+  { field: 'internal_flight_number',         key: 'internalFlightNumber',        label: 'Internal Flight Number',     type: 'text' },
+  { field: 'internal_flight_departure_time', key: 'internalFlightDepartureTime', label: 'Internal Flight Departure',  type: 'datetime' },
+  { field: 'departure_flight_number',        key: 'departureFlightNumber',       label: 'Departure Flight Number',    type: 'text' },
+  { field: 'departure_time',                 key: 'departureTime',               label: 'Departure Time',             type: 'datetime' }
+];
+
+// Picklist options keyed by HubSpot internal property name — populated from
+// the API response at render time. Each entry is [{label, value}, ...].
+var PROPERTY_OPTIONS = {};
+
+function renderEmails(emails) {
+  if (!emails || !emails.length) return '<span class="text-gray-400">—</span>';
+  return '<div class="email-list">' + emails.map(function(e) {
+    var safe = esc(e);
+    return '<a href="mailto:' + safe + '">' + safe + '</a>';
+  }).join('<br>') + '</div>';
+}
+
+function renderEditableCell(dealId, col, value) {
+  // Select (HubSpot enumeration) — render <select> with picklist options.
+  if (col.type === 'select') {
+    var current = value == null ? '' : String(value);
+    var options = PROPERTY_OPTIONS[col.field] || [];
+    var optionsHtml = '<option value=""></option>';
+    var matched = current === '';
+    for (var i = 0; i < options.length; i++) {
+      var v = String(options[i].value);
+      var l = options[i].label;
+      var selAttr = v === current ? ' selected' : '';
+      if (v === current) matched = true;
+      optionsHtml += '<option value="' + esc(v) + '"' + selAttr + '>' + esc(l) + '</option>';
+    }
+    // If the stored value isn't in the picklist (e.g. legacy / typo / option
+    // recently renamed), keep it visible so the user can see what's there.
+    if (!matched && current) {
+      optionsHtml += '<option value="' + esc(current) + '" selected>' + esc(current) + ' (legacy)</option>';
+    }
+    return '<td class="px-2 py-2">' +
+      '<select class="cell-input cell-select" ' +
+        'data-deal-id="' + esc(dealId) + '" ' +
+        'data-field="' + esc(col.field) + '" ' +
+        'data-original="' + esc(current) + '">' + optionsHtml +
+      '</select>' +
+    '</td>';
+  }
+
+  // Text / datetime — plain input.
+  var displayVal = col.type === 'datetime' ? isoToLocalInput(value) : (value || '');
+  var inputType = col.type === 'datetime' ? 'datetime-local' : 'text';
+  // data-original tracks the unsaved-baseline so we don't fire a save on blur
+  // when nothing actually changed.
+  return '<td class="px-2 py-2">' +
+    '<input class="cell-input" type="' + inputType + '" ' +
+      'data-deal-id="' + esc(dealId) + '" ' +
+      'data-field="' + esc(col.field) + '" ' +
+      'data-original="' + esc(displayVal) + '" ' +
+      'value="' + esc(displayVal) + '" />' +
+  '</td>';
+}
+
+function renderTable(deals, tableId) {
+  var sorted = deals.slice().sort(function(a, b) { return a.studentName.localeCompare(b.studentName); });
+  var rows = '';
+  for (var i = 0; i < sorted.length; i++) {
+    var d = sorted[i];
+    rows += '<tr class="hover:bg-gray-50 border-b border-gray-100 data-row align-top">' +
+      '<td class="px-4 py-3 text-sm font-medium whitespace-nowrap"><a href="' + d.hubspotUrl + '" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">' + esc(d.studentName) + '</a></td>' +
+      '<td class="px-4 py-3 text-sm text-gray-700">' + esc(d.pdProgram || '-') + '</td>' +
+      '<td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">' + esc(d.pipeline) + '</td>' +
+      '<td class="px-4 py-3 text-sm text-gray-700 text-center">' + esc(d.travelYear) + '</td>' +
+      '<td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-medium ' + stageBadge(d.stage) + '">' + esc(d.stage) + '</span></td>' +
+      '<td class="px-4 py-3 text-sm">' + renderEmails(d.contactEmails) + '</td>';
+    for (var c = 0; c < FLIGHT_COLS.length; c++) {
+      rows += renderEditableCell(d.id, FLIGHT_COLS[c], d[FLIGHT_COLS[c].key]);
+    }
+    rows += '</tr>';
+  }
+
+  var headers =
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="0">Student Name &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="1">PD Program &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="2">Pipeline &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="3">Travel Year &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="4">Stage &#x25B4;&#x25BE;</th>' +
+    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact Emails</th>';
+  for (var h = 0; h < FLIGHT_COLS.length; h++) {
+    // Editable columns are not sortable (no data-col, no cursor-pointer arrows).
+    headers += '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">' + esc(FLIGHT_COLS[h].label) + '</th>';
+  }
+
+  return '<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">' +
+    '<div class="p-4 border-b border-gray-200"><input type="text" placeholder="Search students..." class="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" data-search="' + tableId + '"></div>' +
+    '<div class="table-scroll"><table class="min-w-full" data-table="' + tableId + '"><thead><tr class="bg-gray-50 border-b border-gray-200">' +
+      headers +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+}
+
+function renderSubTabs(deals, parentId) {
+  var byProgram = {};
+  for (var i = 0; i < deals.length; i++) {
+    var prog = deals[i].pdProgram || 'No Program';
+    if (!byProgram[prog]) byProgram[prog] = [];
+    byProgram[prog].push(deals[i]);
+  }
+  var sortedPrograms = Object.entries(byProgram).sort(function(a, b) { return b[1].length - a[1].length; });
+
+  var allCountedDeals = deals.filter(function(d) { return !d.excludeFromCount; });
+  var buttons = '<button class="sub-tab-btn sub-tab-active" data-subtab="' + parentId + '_all">All <span class="ml-1 text-xs opacity-70">' + allCountedDeals.length + '</span></button>';
+  for (var j = 0; j < sortedPrograms.length; j++) {
+    var progCounted = sortedPrograms[j][1].filter(function(d) { return !d.excludeFromCount; });
+    buttons += '<button class="sub-tab-btn" data-subtab="' + parentId + '_p' + j + '">' + sortedPrograms[j][0] + ' <span class="ml-1 text-xs opacity-70">' + progCounted.length + '</span></button>';
+  }
+
+  var allSummary = summaryFor(deals);
+  var content = '<div id="' + parentId + '_all" class="sub-tab-content">' + renderSummaryCards(allSummary) + renderTable(deals, parentId + '_all_tbl') + '</div>';
+  for (var j = 0; j < sortedPrograms.length; j++) {
+    var pSummary = summaryFor(sortedPrograms[j][1]);
+    content += '<div id="' + parentId + '_p' + j + '" class="sub-tab-content hidden">' + renderSummaryCards(pSummary) + renderTable(sortedPrograms[j][1], parentId + '_p' + j + '_tbl') + '</div>';
+  }
+
+  return '<div class="flex flex-wrap gap-2 mb-5 pb-3 border-b border-gray-200 sub-tab-bar">' + buttons + '</div>' + content;
+}
+
+// ═══════════════════════════════════════════
+// BUILD FULL DASHBOARD
+// ═══════════════════════════════════════════
+// Stage substrings that should never appear in the Flights view. The API
+// already drops most of these, but this catches HubSpot stage IDs that aren't
+// in the STAGE_LABELS map and fall through as raw IDs or partially-labelled
+// strings.
+var FLIGHT_EXCLUDED_STAGE_SUBSTRINGS = ['closed lost', 'cancelled', 'canceled', 'lost'];
+
+function isExcludedFromFlights(deal) {
+  var s = (deal && deal.stage ? String(deal.stage) : '').toLowerCase();
+  if (!s) return false;
+  for (var i = 0; i < FLIGHT_EXCLUDED_STAGE_SUBSTRINGS.length; i++) {
+    if (s.indexOf(FLIGHT_EXCLUDED_STAGE_SUBSTRINGS[i]) !== -1) return true;
+  }
+  return false;
+}
+
+function renderDashboard(data) {
+  // Picklist options (insurance_policy, etc.) — populated for renderEditableCell.
+  PROPERTY_OPTIONS = (data && data.propertyOptions) || {};
+
+  // Rebuild each season tab with Closed Lost / Cancelled deals stripped out,
+  // and refresh the per-tab "counted" badge so the headers match what's shown.
+  var rawTabs = (data.currentTabs || []).concat(data.pastTabs || []);
+  var allTabs = rawTabs.map(function(tab) {
+    var filtered = (tab.deals || []).filter(function(d) { return !isExcludedFromFlights(d); });
+    var countedDeals = filtered.filter(function(d) { return !d.excludeFromCount; }).length;
+    return {
+      key: tab.key,
+      season: tab.season,
+      year: tab.year,
+      deals: filtered,
+      countedDeals: countedDeals,
+      _isPast: (data.pastTabs || []).indexOf(tab) !== -1
     };
+  });
 
-    // --- Auth lifecycle ---
-    window.addEventListener("DOMContentLoaded", () => {
-      if (!window.netlifyIdentity) { showGate("Netlify Identity didn't load."); return; }
-      netlifyIdentity.on("init", u => u ? onLogin(u) : showGate());
-      netlifyIdentity.on("login", u => { netlifyIdentity.close(); onLogin(u); });
-      netlifyIdentity.on("logout", () => { STATE.user = null; STATE.roles = []; showGate(); });
-      netlifyIdentity.init();
+  // Compute overall non-revenue stats from the filtered tabs.
+  var overall = { count: 0, confirmed: 0, deposit: 0, app: 0 };
+  for (var t = 0; t < allTabs.length; t++) {
+    var s = summaryFor(allTabs[t].deals || []);
+    overall.count += s.count;
+    overall.confirmed += s.confirmed;
+    overall.deposit += s.deposit;
+    overall.app += s.app;
+  }
+
+  document.getElementById('stat-students').textContent = overall.count;
+  document.getElementById('stat-confirmed').textContent = overall.confirmed;
+  document.getElementById('stat-deposit').textContent = overall.deposit;
+  document.getElementById('stat-app').textContent = overall.app;
+
+  var updatedDate = new Date(data.updatedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  document.getElementById('subtitle').textContent = overall.count + ' students with flights to coordinate · Live from HubSpot · Updated ' + updatedDate;
+
+  // Season tab buttons
+  var tabBar = document.getElementById('season-tabs');
+  var tabHtml = '';
+  for (var i = 0; i < allTabs.length; i++) {
+    var tab = allTabs[i];
+    var isPast = !!tab._isPast;
+    var active = i === 0 ? ' tab-btn-active' : '';
+    var pastAttr = isPast ? ' data-past="true"' : '';
+    var pastLabel = isPast ? ' (Past)' : '';
+    var badgeCount = typeof tab.countedDeals === 'number' ? tab.countedDeals : tab.deals.length;
+    tabHtml += '<button class="tab-btn' + active + '" data-tab="tab_' + i + '"' + pastAttr + '>' + tab.key + pastLabel + ' <span class="ml-1 text-xs bg-white bg-opacity-30 px-1.5 py-0.5 rounded-full">' + badgeCount + '</span></button>';
+  }
+  tabBar.innerHTML = tabHtml;
+
+  // Tab content
+  var contentEl = document.getElementById('tab-content');
+  var contentHtml = '';
+  for (var i = 0; i < allTabs.length; i++) {
+    var hidden = i === 0 ? '' : ' hidden';
+    contentHtml += '<div id="tab_' + i + '" class="tab-content' + hidden + '">' + renderSubTabs(allTabs[i].deals, 'tab_' + i) + '</div>';
+  }
+  contentEl.innerHTML = contentHtml;
+
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+
+  attachListeners();
+}
+
+// ═══════════════════════════════════════════
+// SAVE — POST to /api/flights-update
+// ═══════════════════════════════════════════
+function showToast(message, kind) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = message;
+  t.className = 'show ' + (kind || '');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(function() { t.className = ''; }, 3500);
+}
+
+async function saveCell(input) {
+  var dealId = input.dataset.dealId;
+  var field = input.dataset.field;
+  var newVal = input.value;
+  var original = input.dataset.original || '';
+  if (newVal === original) return; // nothing changed
+
+  input.dataset.saving = 'true';
+  delete input.dataset.saved;
+  delete input.dataset.error;
+
+  try {
+    var resp = await fetch('/api/flights-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ dealId: dealId, field: field, value: newVal })
     });
+    var body = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
 
-    $("logoutBtn").addEventListener("click", () => netlifyIdentity.logout());
-    $("adminBtn").addEventListener("click", openAdmin);
-    $("closeModalBtn").addEventListener("click", closeAdmin);
-    $("refreshBtn").addEventListener("click", () => { loadDashboards(); loadUsers(); });
-    $("savePermsBtn").addEventListener("click", savePermissions);
-    $("inviteBtn").addEventListener("click", inviteUser);
-    $("inviteEmail").addEventListener("keydown", e => { if (e.key === "Enter") inviteUser(); });
-    document.querySelectorAll(".modal-tab").forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+    delete input.dataset.saving;
+    input.dataset.saved = 'true';
+    input.dataset.original = newVal;
+    setTimeout(function() { delete input.dataset.saved; }, 1500);
+  } catch (err) {
+    delete input.dataset.saving;
+    input.dataset.error = 'true';
+    showToast('Save failed: ' + err.message, 'error');
+    setTimeout(function() { delete input.dataset.error; }, 4000);
+  }
+}
 
-    function showGate(message) {
-      $("userPanel").classList.add("hidden");
-      $("toolbar").style.display = "none";
-      $("grid").innerHTML = `<div class="gate" style="grid-column:1/-1">
-        <h2>Sign in to view dashboards</h2>
-        <p>${message || "Access is restricted to Pacific Discovery team members. Sign in with your Google account to continue."}</p>
-        <button class="btn btn-primary" id="loginBtn">Sign in</button>
-      </div>`;
-      $("loginBtn").onclick = () => netlifyIdentity.open();
-    }
+// ═══════════════════════════════════════════
+// EVENT LISTENERS
+// ═══════════════════════════════════════════
+function attachListeners() {
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('tab-btn-active'); });
+      document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.add('hidden'); });
+      this.classList.add('tab-btn-active');
+      document.getElementById(this.dataset.tab).classList.remove('hidden');
+    });
+  });
 
-    async function onLogin(user) {
-      STATE.user = user;
-      STATE.roles = rolesFromUser(user);
+  document.querySelectorAll('.sub-tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var parent = this.closest('.tab-content');
+      parent.querySelectorAll('.sub-tab-btn').forEach(function(b) { b.classList.remove('sub-tab-active'); });
+      parent.querySelectorAll('.sub-tab-content').forEach(function(c) { c.classList.add('hidden'); });
+      this.classList.add('sub-tab-active');
+      document.getElementById(this.dataset.subtab).classList.remove('hidden');
+    });
+  });
 
-      // The login event sometimes fires before app_metadata is fully synced.
-      // Force-refresh the JWT, re-pick the widget's updated currentUser(), and
-      // decode the raw JWT as a last resort so roles always land on first render.
-      try {
-        const token = await user.jwt(true);
-        const fresh = netlifyIdentity.currentUser();
-        if (fresh) { STATE.user = fresh; user = fresh; }
-        const refreshed = rolesFromUser(user);
-        if (refreshed.length) {
-          STATE.roles = refreshed;
-        } else if (token) {
-          // Decode JWT payload manually — the widget's user object can lag.
-          const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-          const padded = b64 + "===".slice((b64.length + 3) % 4);
-          const payload = JSON.parse(decodeURIComponent(
-            atob(padded).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
-          ));
-          STATE.roles = payload.app_metadata?.roles || [];
+  document.querySelectorAll('[data-search]').forEach(function(input) {
+    input.addEventListener('keyup', function() {
+      var filter = this.value.toLowerCase();
+      var container = this.closest('.sub-tab-content');
+      container.querySelectorAll('.data-row').forEach(function(row) {
+        row.style.display = row.textContent.toLowerCase().indexOf(filter) !== -1 ? '' : 'none';
+      });
+    });
+  });
+
+  // Auto-save editable flight cells. Inputs save on blur (and on Enter via blur);
+  // selects save the moment the value changes.
+  document.querySelectorAll('.cell-input').forEach(function(input) {
+    input.addEventListener('blur', function() { saveCell(this); });
+    if (input.tagName === 'SELECT') {
+      input.addEventListener('change', function() { saveCell(this); });
+    } else {
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        if (e.key === 'Escape') {
+          this.value = this.dataset.original || '';
+          this.blur();
         }
-      } catch (err) {
-        console.warn("JWT refresh failed:", err);
-      }
-
-      paintUser(user);
-      $("adminBtn").style.display = STATE.roles.includes("admin") ? "" : "none";
-      loadDashboards();
-    }
-
-    function rolesFromUser(user) {
-      return (user && user.app_metadata && user.app_metadata.roles) || [];
-    }
-
-    function paintUser(user) {
-      const email = user.email || "";
-      const name = user.user_metadata?.full_name || email.split("@")[0];
-      const initials = (name || "?").split(/\s+/).map(s => s[0]).slice(0, 2).join("").toUpperCase();
-      $("userAvatar").textContent = initials || "?";
-      $("userName").textContent = name;
-      $("userEmail").textContent = email;
-      $("userRole").textContent = STATE.roles.length ? STATE.roles.join(" · ") : "no roles assigned";
-      $("userPanel").classList.remove("hidden");
-    }
-
-    // --- Dashboard listing ---
-    async function loadDashboards() {
-      const grid = $("grid");
-      grid.innerHTML = `<div class="loading" style="grid-column:1/-1">Loading dashboards…</div>`;
-      try {
-        const res = await api("GET", "/.netlify/functions/config");
-        if (res.status === 401 || res.status === 403) { showGate("Your session expired."); return; }
-        const data = await res.json();
-        render(data);
-      } catch (err) {
-        grid.innerHTML = `<div class="empty" style="grid-column:1/-1">Couldn't load config<br><small>${err.message}</small></div>`;
-      }
-    }
-
-    function render(data) {
-      STATE.dashboards = (data.dashboards || []).slice().sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (b.pinned && !a.pinned) return 1;
-        return (a.title || "").localeCompare(b.title || "");
-      });
-      $("updated").textContent = data.generatedAt ? `Last updated ${new Date(data.generatedAt).toLocaleString()}` : "";
-      buildChips();
-      $("toolbar").style.display = "";
-      draw();
-    }
-
-    function visibleDashboards() {
-      const isAdmin = STATE.roles.includes("admin");
-      return STATE.dashboards.filter(d => {
-        if (isAdmin) return true;
-        const allowed = d.allowedRoles || [];
-        if (!allowed.length) return false;
-        return allowed.some(r => STATE.roles.includes(r));
       });
     }
+  });
 
-    function buildChips() {
-      const cats = ["All", ...new Set(visibleDashboards().map(d => d.category).filter(Boolean))];
-      const wrap = $("categoryChips"); wrap.innerHTML = "";
-      cats.forEach(c => {
-        const el = document.createElement("button");
-        el.className = "chip" + (c === STATE.category ? " active" : "");
-        el.textContent = c;
-        el.onclick = () => { STATE.category = c; buildChips(); draw(); };
-        wrap.appendChild(el);
+  document.querySelectorAll('th[data-col]').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var colIndex = parseInt(this.dataset.col);
+      var table = this.closest('table');
+      var tbody = table.querySelector('tbody');
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      var asc = this.dataset.sortDir !== 'asc';
+      this.dataset.sortDir = asc ? 'asc' : 'desc';
+      var self = this;
+      this.closest('tr').querySelectorAll('th').forEach(function(h) { if (h !== self) delete h.dataset.sortDir; });
+      rows.sort(function(a, b) {
+        var aVal = a.cells[colIndex].textContent.trim();
+        var bVal = b.cells[colIndex].textContent.trim();
+        // Travel Year column (3) sorts numerically; everything else lexicographically.
+        if (colIndex === 3) {
+          aVal = parseFloat(aVal) || 0;
+          bVal = parseFloat(bVal) || 0;
+          return asc ? aVal - bVal : bVal - aVal;
+        }
+        return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       });
-    }
+      rows.forEach(function(row) { tbody.appendChild(row); });
+    });
+  });
+}
 
-    function draw() {
-      const grid = $("grid");
-      const q = STATE.query.trim().toLowerCase();
-      const filtered = visibleDashboards().filter(d => {
-        const matchesCat = STATE.category === "All" || d.category === STATE.category;
-        const hay = `${d.title||""} ${d.description||""} ${d.category||""}`.toLowerCase();
-        return matchesCat && (!q || hay.includes(q));
-      });
-      $("count").textContent = `${filtered.length} dashboard${filtered.length===1?"":"s"} visible`;
-      if (!filtered.length) { grid.innerHTML = `<div class="empty" style="grid-column:1/-1">No dashboards match your access or filters.</div>`; return; }
+// ═══════════════════════════════════════════
+// DATA FETCH — runs on every page load
+// ═══════════════════════════════════════════
+async function loadData() {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('error').classList.add('hidden');
+  document.getElementById('dashboard').classList.add('hidden');
 
-      grid.innerHTML = filtered.map((d, i) => {
-        const palette = PALETTES[Math.abs(hash(d.slug||d.title||String(i))) % PALETTES.length];
-        const [c1, c2] = d.colors || palette;
-        const icon = d.icon || "📊";
-        const href = d.url || `/${d.slug}/`;
-        const cat = d.category ? `<span class="category">${esc(d.category)}</span>` : "";
-        const tag = d.allowedRoles?.length
-          ? `<span class="role-tag">${esc(d.allowedRoles.join(" · "))}</span>`
-          : `<span class="role-tag">admin only</span>`;
-        return `<a class="card" href="${esc(href)}" style="--c1:${c1};--c2:${c2}">
-          <div class="card-top"><div class="icon" style="background:linear-gradient(135deg, ${c1}33, ${c2}22)">${icon}</div>${cat}</div>
-          <h3>${esc(d.title||d.slug||"Untitled")}</h3>
-          <p>${esc(d.description||"")}</p>
-          <div class="card-footer">${tag}<span class="open">Open →</span></div>
-        </a>`;
-      }).join("");
-    }
+  try {
+    // Flights dashboard reuses the enrollment data source — same students,
+    // same season/program structure. Payment fields in the response are
+    // ignored on the UI side.
+    var resp = await fetch('/api/enrollment');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    renderDashboard(data);
+  } catch (err) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('error').classList.remove('hidden');
+    document.getElementById('error-msg').textContent = err.message;
+  }
+}
 
-    $("search").addEventListener("input", e => { STATE.query = e.target.value; draw(); });
-
-    // --- Admin modal ---
-    function openAdmin() {
-      $("adminModal").classList.add("show");
-      switchTab("permissions");
-      renderPermissions();
-      loadUsers();
-    }
-    function closeAdmin() { $("adminModal").classList.remove("show"); }
-    function switchTab(name) {
-      document.querySelectorAll(".modal-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-      $("tabPermissions").style.display = name === "permissions" ? "" : "none";
-      $("tabUsers").style.display = name === "users" ? "" : "none";
-      $("savePermsBtn").style.display = name === "permissions" ? "" : "none";
-    }
-
-    function renderPermissions() {
-      STATE.draftPerms = STATE.dashboards.map(d => ({
-        slug: d.slug,
-        title: d.title,
-        allowedRoles: Array.isArray(d.allowedRoles) ? [...d.allowedRoles] : []
-      }));
-      const rows = STATE.draftPerms.map(d => `
-        <tr data-slug="${esc(d.slug)}">
-          <td>
-            <div style="font-weight:600">${esc(d.title)}</div>
-            <div class="slug">${esc(d.slug)}</div>
-          </td>
-          ${FUNCTIONAL_ROLES.map(r => `
-            <td class="role-cell">
-              <input type="checkbox" data-role="${r}" ${d.allowedRoles.includes(r) ? "checked" : ""} />
-            </td>`).join("")}
-        </tr>`).join("");
-      $("permissionsContent").innerHTML = `
-        <table class="perm-table">
-          <thead><tr>
-            <th>Dashboard</th>
-            ${FUNCTIONAL_ROLES.map(r => `<th class="role-cell">${r}</th>`).join("")}
-          </tr></thead>
-          <tbody>${rows || `<tr><td colspan="${FUNCTIONAL_ROLES.length+1}" style="color:var(--text-dim); text-align:center; padding:30px">No dashboards found.</td></tr>`}</tbody>
-        </table>`;
-      $("permissionsContent").querySelectorAll("input[type=checkbox]").forEach(cb => {
-        cb.addEventListener("change", e => {
-          const row = e.target.closest("tr");
-          const slug = row.dataset.slug;
-          const role = e.target.dataset.role;
-          const entry = STATE.draftPerms.find(x => x.slug === slug);
-          if (!entry) return;
-          if (e.target.checked) {
-            if (!entry.allowedRoles.includes(role)) entry.allowedRoles.push(role);
-          } else {
-            entry.allowedRoles = entry.allowedRoles.filter(r => r !== role);
-          }
-        });
-      });
-    }
-
-    async function savePermissions() {
-      if (!STATE.draftPerms) return;
-      setStatus("Saving…");
-      try {
-        const res = await api("PUT", "/.netlify/functions/config", {
-          dashboards: STATE.draftPerms.map(d => ({ slug: d.slug, allowedRoles: d.allowedRoles }))
-        });
-        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
-        toast("Permissions saved", "success");
-        setStatus("Saved · " + new Date().toLocaleTimeString());
-        await loadDashboards();
-        renderPermissions();
-      } catch (err) {
-        toast("Save failed: " + err.message, "error");
-        setStatus("Error: " + err.message);
-      }
-    }
-
-    // --- User management ---
-    async function loadUsers() {
-      $("usersContent").innerHTML = `<div class="loading">Loading users…</div>`;
-      try {
-        const res = await api("GET", "/.netlify/functions/users");
-        if (!res.ok) throw await httpError(res);
-        const data = await res.json();
-        STATE.users = data.users || [];
-        renderUsers();
-      } catch (err) {
-        console.error("loadUsers failed:", err);
-        $("usersContent").innerHTML = `<div class="empty">Couldn't load users: ${esc(err.message)}</div>`;
-      }
-    }
-
-    async function httpError(res) {
-      const body = await safeJson(res);
-      const text = body.error || body.msg || body.error_description || body.message || "";
-      const status = `HTTP ${res.status}${res.statusText ? " " + res.statusText : ""}`;
-      const detail = text || JSON.stringify(body).slice(0, 200);
-      return new Error(detail ? `${status} — ${detail}` : status);
-    }
-
-    function renderUsers() {
-      if (!STATE.users.length) {
-        $("usersContent").innerHTML = `<div class="empty">No users yet — invite someone using the form above.</div>`;
-        return;
-      }
-      const rows = STATE.users.map(u => `
-        <tr data-id="${esc(u.id)}">
-          <td>
-            <div style="font-weight:600">${esc(u.full_name || u.email.split("@")[0])}</div>
-            <div class="slug">${esc(u.email)}${u.invited ? ' <em style="color:var(--accent-2)">· invited, pending</em>' : ""}</div>
-          </td>
-          <td>
-            <div class="role-editor">
-              ${ALL_ROLES.map(r => `
-                <label class="${u.roles.includes(r) ? "checked" : ""}">
-                  <input type="checkbox" data-role="${r}" ${u.roles.includes(r) ? "checked" : ""} />${r}
-                </label>`).join("")}
-            </div>
-          </td>
-          <td style="text-align:right">
-            <button class="btn btn-danger btn-sm" data-action="delete">Remove</button>
-          </td>
-        </tr>`).join("");
-      $("usersContent").innerHTML = `
-        <table class="perm-table">
-          <thead><tr><th>User</th><th>Roles</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
-
-      $("usersContent").querySelectorAll("tr[data-id]").forEach(tr => {
-        const id = tr.dataset.id;
-        tr.querySelectorAll("input[type=checkbox]").forEach(cb => {
-          cb.addEventListener("change", () => {
-            const label = cb.closest("label");
-            label.classList.toggle("checked", cb.checked);
-            saveUserRoles(id, tr);
-          });
-        });
-        tr.querySelector("button[data-action=delete]").addEventListener("click", () => deleteUser(id, tr));
-      });
-    }
-
-    async function saveUserRoles(id, tr) {
-      const roles = [...tr.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.dataset.role);
-      setStatus("Saving…");
-      try {
-        const res = await api("PATCH", `/.netlify/functions/users/${encodeURIComponent(id)}`, { roles });
-        if (!res.ok) throw await httpError(res);
-        const u = STATE.users.find(x => x.id === id);
-        if (u) u.roles = roles;
-        toast("Roles updated", "success");
-        setStatus("Saved · " + new Date().toLocaleTimeString());
-      } catch (err) {
-        console.error("saveUserRoles failed:", err);
-        toast("Save failed: " + err.message, "error");
-      }
-    }
-
-    async function deleteUser(id, tr) {
-      const u = STATE.users.find(x => x.id === id);
-      if (!confirm(`Remove ${u?.email || "this user"}? They'll lose all access immediately.`)) return;
-      try {
-        const res = await api("DELETE", `/.netlify/functions/users/${encodeURIComponent(id)}`);
-        if (!res.ok) throw await httpError(res);
-        STATE.users = STATE.users.filter(x => x.id !== id);
-        tr.remove();
-        toast("User removed", "success");
-      } catch (err) {
-        console.error("deleteUser failed:", err);
-        toast("Remove failed: " + err.message, "error");
-      }
-    }
-
-    async function inviteUser() {
-      const email = $("inviteEmail").value.trim();
-      if (!email) return;
-      $("inviteBtn").disabled = true;
-      try {
-        const res = await api("POST", "/.netlify/functions/users", { email });
-        if (!res.ok) throw await httpError(res);
-        toast(`Invite sent to ${email}`, "success");
-        $("inviteEmail").value = "";
-        loadUsers();
-      } catch (err) {
-        console.error("inviteUser failed:", err);
-        toast("Invite failed: " + err.message, "error");
-      } finally {
-        $("inviteBtn").disabled = false;
-      }
-    }
-
-    // --- API helpers ---
-    async function api(method, url, body) {
-      const headers = { "Content-Type": "application/json" };
-      if (STATE.user) {
-        try { headers.Authorization = `Bearer ${await STATE.user.jwt()}`; } catch {}
-      }
-      return fetch(url, {
-        method, headers, credentials: "include",
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-    }
-    async function safeJson(r) { try { return await r.json(); } catch { return {}; } }
-
-    function setStatus(s) { $("modalStatus").textContent = s; }
-    function toast(msg, kind) {
-      const t = $("toast");
-      t.className = `toast show ${kind || ""}`;
-      t.textContent = msg;
-      clearTimeout(toast._timer);
-      toast._timer = setTimeout(() => t.classList.remove("show"), 2500);
-    }
-
-    function $(id) { return document.getElementById(id); }
-    function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-    function hash(str) { let h = 0; for (const c of str) h = (h << 5) - h + c.charCodeAt(0) | 0; return h; }
-  </script>
+// Load fresh data on every page load / refresh
+loadData();
+</script>
 </body>
 </html>
