@@ -119,6 +119,50 @@ async function fetchAllDeals(token) {
 }
 
 // ═══════════════════════════════════════════
+// PIPELINE METADATA — discover all Closed Lost stage IDs dynamically so we
+// catch any stages that aren't in the hand-maintained STAGE_LABELS map.
+// A stage is "Closed Lost" iff its metadata says isClosed=true AND probability=0.
+// We also pick up any stages whose label contains "lost" or "cancelled" so the
+// existing Cancelled-stage exclusion keeps working when pipelines change.
+// ═══════════════════════════════════════════
+async function fetchExcludedStageIds(token) {
+  const excluded = new Set();
+  const labels = new Map(); // stageId -> human-readable label (for STAGE_LABELS fallback)
+  try {
+    const resp = await fetch(`${HUBSPOT_API}/crm/v3/pipelines/deals`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!resp.ok) {
+      console.error(`Pipelines fetch failed: ${resp.status}`);
+      return { excluded, labels };
+    }
+    const data = await resp.json();
+    for (const pipeline of (data.results || [])) {
+      // Only look at pipelines we actually surface in the dashboard.
+      if (!ALLOWED_PIPELINES[pipeline.id]) continue;
+      for (const stage of (pipeline.stages || [])) {
+        labels.set(stage.id, stage.label || '');
+        const meta = stage.metadata || {};
+        const isClosed = String(meta.isClosed) === 'true';
+        const probability = parseFloat(meta.probability);
+        const label = (stage.label || '').toLowerCase();
+        // Closed Lost: isClosed + 0% probability.
+        if (isClosed && probability === 0) excluded.add(stage.id);
+        // Belt-and-braces label match for stages set up unconventionally.
+        if (label.indexOf('closed lost') !== -1 ||
+            label.indexOf('cancelled') !== -1 ||
+            label.indexOf('canceled') !== -1) {
+          excluded.add(stage.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`fetchExcludedStageIds error: ${err.message}`);
+  }
+  return { excluded, labels };
+}
+
+// ═══════════════════════════════════════════
 // CONTACT EMAILS — batch-resolve emails for a flat list of contact IDs
 // (Deal→contact associations come back inline on each deal from the search,
 //  via `associations: ['contacts']` in the request body.)
@@ -194,9 +238,11 @@ function parsePayment(val) {
   }
 }
 
-function processDeals(rawDeals, dealToEmails) {
+function processDeals(rawDeals, dealToEmails, excludedStageIds, liveStageLabels) {
   const processed = [];
   dealToEmails = dealToEmails || new Map();
+  excludedStageIds = excludedStageIds || new Set();
+  liveStageLabels = liveStageLabels || new Map();
 
   for (const deal of rawDeals) {
     const props = deal.properties || {};
@@ -207,9 +253,21 @@ function processDeals(rawDeals, dealToEmails) {
     const pipelineLabel = ALLOWED_PIPELINES[pipelineId];
     if (!pipelineLabel) continue;
 
-    // Filter: exclude closed lost / cancelled
-    const stageLabel = STAGE_LABELS[stageId] || stageId;
+    // Filter: any stage ID that HubSpot itself marks Closed Lost / Cancelled.
+    // This is the authoritative check — covers stages that aren't in
+    // STAGE_LABELS (e.g. 1015966374 in the Summer Program pipeline).
+    if (excludedStageIds.has(stageId)) continue;
+
+    // Resolve the stage label. Prefer the hand-curated STAGE_LABELS map
+    // (groups synonyms together for badges), then the live label from
+    // HubSpot's pipelines API, and only fall back to the raw ID if both miss.
+    const stageLabel = STAGE_LABELS[stageId] || liveStageLabels.get(stageId) || stageId;
+    // Belt-and-braces: legacy exclude-by-label still applies.
     if (EXCLUDE_STAGES.has(stageLabel)) continue;
+    const stageLower = String(stageLabel).toLowerCase();
+    if (stageLower.indexOf('closed lost') !== -1 ||
+        stageLower.indexOf('cancelled') !== -1 ||
+        stageLower.indexOf('canceled') !== -1) continue;
 
     // Filter: skip dropped programs
     const pdProgram = props.pd_program || '';
@@ -327,7 +385,12 @@ export default async (req) => {
   }
 
   try {
-    const rawDeals = await fetchAllDeals(token);
+    // Pull pipeline metadata and the deal list in parallel — independent calls.
+    const [rawDeals, { excluded: excludedStageIds, labels: liveStageLabels }] =
+      await Promise.all([
+        fetchAllDeals(token),
+        fetchExcludedStageIds(token)
+      ]);
 
     // Build the deal→contactIds map directly from the inline associations
     // returned by /deals/search (we requested associations:['contacts']).
@@ -351,7 +414,7 @@ export default async (req) => {
     // dashboard can render the same picklist HubSpot has.
     const insurancePolicyOptions = await fetchPropertyOptions(token, 'insurance_policy');
 
-    const processed = processDeals(rawDeals, dealToEmails);
+    const processed = processDeals(rawDeals, dealToEmails, excludedStageIds, liveStageLabels);
     const { current, past } = groupBySeason(processed);
 
     // Summary stats (exclude College Credit / empty PD Program from counts)
