@@ -285,13 +285,42 @@ function renderSubTabs(deals, parentId) {
 // ═══════════════════════════════════════════
 // BUILD FULL DASHBOARD
 // ═══════════════════════════════════════════
+// Stage substrings that should never appear in the Flights view. The API
+// already drops most of these, but this catches HubSpot stage IDs that aren't
+// in the STAGE_LABELS map and fall through as raw IDs or partially-labelled
+// strings.
+var FLIGHT_EXCLUDED_STAGE_SUBSTRINGS = ['closed lost', 'cancelled', 'canceled', 'lost'];
+
+function isExcludedFromFlights(deal) {
+  var s = (deal && deal.stage ? String(deal.stage) : '').toLowerCase();
+  if (!s) return false;
+  for (var i = 0; i < FLIGHT_EXCLUDED_STAGE_SUBSTRINGS.length; i++) {
+    if (s.indexOf(FLIGHT_EXCLUDED_STAGE_SUBSTRINGS[i]) !== -1) return true;
+  }
+  return false;
+}
+
 function renderDashboard(data) {
   // Picklist options (insurance_policy, etc.) — populated for renderEditableCell.
   PROPERTY_OPTIONS = (data && data.propertyOptions) || {};
 
-  var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
+  // Rebuild each season tab with Closed Lost / Cancelled deals stripped out,
+  // and refresh the per-tab "counted" badge so the headers match what's shown.
+  var rawTabs = (data.currentTabs || []).concat(data.pastTabs || []);
+  var allTabs = rawTabs.map(function(tab) {
+    var filtered = (tab.deals || []).filter(function(d) { return !isExcludedFromFlights(d); });
+    var countedDeals = filtered.filter(function(d) { return !d.excludeFromCount; }).length;
+    return {
+      key: tab.key,
+      season: tab.season,
+      year: tab.year,
+      deals: filtered,
+      countedDeals: countedDeals,
+      _isPast: (data.pastTabs || []).indexOf(tab) !== -1
+    };
+  });
 
-  // Compute overall non-revenue stats across all tabs.
+  // Compute overall non-revenue stats from the filtered tabs.
   var overall = { count: 0, confirmed: 0, deposit: 0, app: 0 };
   for (var t = 0; t < allTabs.length; t++) {
     var s = summaryFor(allTabs[t].deals || []);
@@ -301,20 +330,20 @@ function renderDashboard(data) {
     overall.app += s.app;
   }
 
-  document.getElementById('stat-students').textContent = data.totalStudents != null ? data.totalStudents : overall.count;
+  document.getElementById('stat-students').textContent = overall.count;
   document.getElementById('stat-confirmed').textContent = overall.confirmed;
   document.getElementById('stat-deposit').textContent = overall.deposit;
   document.getElementById('stat-app').textContent = overall.app;
 
   var updatedDate = new Date(data.updatedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  document.getElementById('subtitle').textContent = (data.totalStudents != null ? data.totalStudents : overall.count) + ' students with flights to coordinate · Live from HubSpot · Updated ' + updatedDate;
+  document.getElementById('subtitle').textContent = overall.count + ' students with flights to coordinate · Live from HubSpot · Updated ' + updatedDate;
 
   // Season tab buttons
   var tabBar = document.getElementById('season-tabs');
   var tabHtml = '';
   for (var i = 0; i < allTabs.length; i++) {
     var tab = allTabs[i];
-    var isPast = (data.pastTabs || []).indexOf(tab) !== -1;
+    var isPast = !!tab._isPast;
     var active = i === 0 ? ' tab-btn-active' : '';
     var pastAttr = isPast ? ' data-past="true"' : '';
     var pastLabel = isPast ? ' (Past)' : '';
