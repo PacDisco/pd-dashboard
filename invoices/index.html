@@ -124,6 +124,8 @@
   .chip.source-upload { background: #f3e8ff; color: #7e22ce; }
   .chip.source-email  { background: #e0f2fe; color: #0369a1; }
   .chip.source-manual { background: #f3f4f6; color: var(--muted); }
+  .chip.recurring     { background: #ecfdf5; color: #065f46; cursor: pointer; margin-left: 6px; }
+  .chip.recurring:hover { background: #d1fae5; }
 
   .amount { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
   .amount input {
@@ -355,7 +357,17 @@
           <div class="field"><label>Invoice # (optional)</label><input name="invoice_number" type="text"></div>
         </div>
         <div class="row">
-          <div class="field" style="flex:1 1 100%;"><label>Notes</label><textarea name="notes"></textarea></div>
+          <div class="field">
+            <label>Repeat</label>
+            <select name="recurrence" id="manual-recurrence">
+              <option value="">Never</option>
+              <option value="week:1">Weekly</option>
+              <option value="week:2">Every 2 weeks</option>
+              <option value="month:1">Monthly</option>
+              <option value="year:1">Annually</option>
+            </select>
+          </div>
+          <div class="field" style="flex:2 1 100%;"><label>Notes</label><textarea name="notes"></textarea></div>
         </div>
         <button class="primary" type="submit">Schedule payment</button>
       </form>
@@ -819,15 +831,33 @@
     document.getElementById('payments-list').innerHTML = html;
   }
 
+  // Human label for a recurring row's cadence. Returns '' when not recurring.
+  function recurrenceLabel(p) {
+    if (!p.recurrence_unit) return '';
+    const n = Number(p.recurrence_interval) || 1;
+    if (p.recurrence_unit === 'week' && n === 1)  return 'Weekly';
+    if (p.recurrence_unit === 'week' && n === 2)  return 'Every 2 weeks';
+    if (p.recurrence_unit === 'week')             return `Every ${n} weeks`;
+    if (p.recurrence_unit === 'month' && n === 1) return 'Monthly';
+    if (p.recurrence_unit === 'month')            return `Every ${n} months`;
+    if (p.recurrence_unit === 'year' && n === 1)  return 'Annually';
+    if (p.recurrence_unit === 'year')             return `Every ${n} years`;
+    return '';
+  }
+
   function paymentRow(p) {
     const fileLink = p.invoice_file_url
       ? `<a class="link" href="${p.invoice_file_url}" target="_blank" title="Open invoice in Drive">📄</a>`
+      : '';
+    const recLabel = recurrenceLabel(p);
+    const recChip = recLabel
+      ? `<span class="chip recurring" onclick="editRecurrence(${p.id})" title="Click to change or stop the recurrence">🔁 ${escapeHtml(recLabel)}</span>`
       : '';
     return `
       <tr class="${p.paid ? 'paid' : ''}" data-payment-id="${p.id}" data-week="${isoWeekKey(p.due_date)}">
         <td><input type="checkbox" class="row-select" data-id="${p.id}" onchange="onRowSelect()"></td>
         <td class="vendor">
-          <strong>${escapeHtml(p.vendor)}</strong> ${fileLink}
+          <strong>${escapeHtml(p.vendor)}</strong> ${fileLink}${recChip}
           ${p.invoice_number ? `<div style="color:var(--muted);font-size:11px;">#${escapeHtml(p.invoice_number)}</div>` : ''}
         </td>
         <td>${programSelectHtml(p.program_id, p.program_name)}</td>
@@ -850,6 +880,9 @@
                     title="Change due date">
               Reschedule
             </button>
+            ${recLabel ? '' : `<button class="act-btn"
+                    onclick="editRecurrence(${p.id})"
+                    title="Make this a recurring payment">🔁 Repeat</button>`}
             <button class="act-btn ${p.paid ? 'is-on-paid' : ''}"
                     onclick="togglePaid(${p.id}, ${!p.paid})"
                     title="${p.paid ? 'Paid — click to unmark' : 'Mark as paid'}">
@@ -908,7 +941,13 @@
       body: JSON.stringify({ id, patch }),
     }).then(r => r.json());
     if (res.error) return toast(res.error, 'err');
-    toast(checked ? 'Marked paid' : 'Unmarked paid');
+    // If the backend auto-created the next recurring occurrence, surface it.
+    if (res.next_occurrence) {
+      const due = toDateOnly(res.next_occurrence.due_date);
+      toast(`Marked paid — next ${recurrenceLabel(res.next_occurrence).toLowerCase()} occurrence scheduled for ${due}`);
+    } else {
+      toast(checked ? 'Marked paid' : 'Unmarked paid');
+    }
     loadPayments();
   }
 
@@ -923,6 +962,39 @@
     }).then(r => r.json());
     if (res.error) return toast(res.error, 'err');
     toast('Rescheduled');
+    loadPayments();
+  }
+
+  // ----------------------------------------------------------------------
+  // Recurrence editor (called from the 🔁 chip and the Repeat button)
+  // ----------------------------------------------------------------------
+  // Options here mirror the manual-entry dropdown. Send `0` to stop a series.
+  async function editRecurrence(id) {
+    const choice = prompt(
+      'Repeat this payment?\n' +
+      '  1) Weekly\n' +
+      '  2) Every 2 weeks\n' +
+      '  3) Monthly\n' +
+      '  4) Annually\n' +
+      '  0) Stop / never\n' +
+      'Enter a number:'
+    );
+    if (choice === null) return;            // user cancelled
+    const map = {
+      '0': { recurrence_unit: null,    recurrence_interval: null },
+      '1': { recurrence_unit: 'week',  recurrence_interval: 1 },
+      '2': { recurrence_unit: 'week',  recurrence_interval: 2 },
+      '3': { recurrence_unit: 'month', recurrence_interval: 1 },
+      '4': { recurrence_unit: 'year',  recurrence_interval: 1 },
+    };
+    const patch = map[String(choice).trim()];
+    if (!patch) return toast('Pick a number 0-4', 'err');
+    const res = await fetch(`${API}?action=update`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, patch }),
+    }).then(r => r.json());
+    if (res.error) return toast(res.error, 'err');
+    toast(patch.recurrence_unit ? 'Recurrence set' : 'Recurrence stopped');
     loadPayments();
   }
 
@@ -992,6 +1064,17 @@
   // ----------------------------------------------------------------------
   // Manual entry
   // ----------------------------------------------------------------------
+  // Parse a "unit:interval" string from the Repeat dropdown into the two
+  // fields the API expects. Empty / "Never" -> nulls.
+  function parseRecurrence(value) {
+    if (!value) return { recurrence_unit: null, recurrence_interval: null };
+    const [unit, interval] = String(value).split(':');
+    return {
+      recurrence_unit: unit || null,
+      recurrence_interval: Number(interval) || 1,
+    };
+  }
+
   document.getElementById('manual-form').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -1000,6 +1083,12 @@
     body.amount = Number(body.amount);
     body.currency = (body.currency || 'NZD').toUpperCase().slice(0, 3);
     if (!body.program_id) delete body.program_id;
+
+    // Translate the Repeat dropdown into recurrence_unit + recurrence_interval
+    const rec = parseRecurrence(body.recurrence);
+    delete body.recurrence;
+    body.recurrence_unit     = rec.recurrence_unit;
+    body.recurrence_interval = rec.recurrence_interval;
 
     const res = await fetch(`${API}?action=create`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -1031,6 +1120,8 @@
     { header: 'Paid',               get: p => p.paid ? 'Yes' : 'No' },
     { header: 'Paid Date',          get: p => p.paid_date ? toDateOnly(p.paid_date) : '' },
     { header: 'Rescheduled From',   get: p => p.rescheduled_from ? toDateOnly(p.rescheduled_from) : '' },
+    { header: 'Recurring',          get: p => recurrenceLabel(p) },
+    { header: 'Recurrence Series',  get: p => p.recurrence_parent_id || (p.recurrence_unit ? p.id : '') },
     { header: 'Drive Link',         get: p => p.invoice_file_url || '' },
     { header: 'Notes',              get: p => (p.notes || '').replace(/\s+/g, ' ').trim() },
     { header: 'Created At',         get: p => p.created_at ? toDateOnly(p.created_at) : '' },
