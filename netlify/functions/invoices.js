@@ -240,6 +240,34 @@ Return the array, nothing else.`;
 }
 
 // --------------------------------------------------------------------------
+// Recurrence helpers
+// --------------------------------------------------------------------------
+const RECURRENCE_UNITS = new Set(['week', 'month', 'year']);
+
+// Returns { unit, interval } or { unit: null, interval: null }
+function normalizeRecurrence(rawUnit, rawInterval) {
+  const unit = rawUnit ? String(rawUnit).toLowerCase() : null;
+  if (!unit || !RECURRENCE_UNITS.has(unit)) return { unit: null, interval: null };
+  const n = Math.max(1, Math.min(60, Number(rawInterval) || 1));   // clamp 1..60
+  return { unit, interval: n };
+}
+
+// Given a YYYY-MM-DD (or Date) and a (unit, interval), returns the next
+// occurrence as YYYY-MM-DD. Month/year add preserves day-of-month with
+// JS's natural overflow (e.g. Jan 31 + 1 month -> Mar 3 in non-leap years;
+// good enough for invoice purposes — users can reschedule).
+function computeNextDue(currentDate, unit, interval) {
+  const base = currentDate instanceof Date
+    ? new Date(currentDate.getTime())
+    : new Date(String(currentDate).slice(0, 10) + 'T00:00:00Z');
+  const n = Math.max(1, Number(interval) || 1);
+  if (unit === 'week')  base.setUTCDate(base.getUTCDate() + 7 * n);
+  if (unit === 'month') base.setUTCMonth(base.getUTCMonth() + n);
+  if (unit === 'year')  base.setUTCFullYear(base.getUTCFullYear() + n);
+  return base.toISOString().slice(0, 10);
+}
+
+// --------------------------------------------------------------------------
 // Action handlers
 // --------------------------------------------------------------------------
 async function handleList(params) {
@@ -357,9 +385,14 @@ async function handleCreate(body) {
   const { vendor, amount, due_date, program_id, invoice_number, notes, currency } = body;
   if (!vendor || !amount || !due_date) return bad('vendor, amount, due_date required');
   const cur = (currency || 'NZD').toUpperCase().slice(0, 3);
+  const { unit: rUnit, interval: rInterval } =
+    normalizeRecurrence(body.recurrence_unit, body.recurrence_interval);
   const rows = await sql()`
-    INSERT INTO payments (vendor, amount, currency, due_date, program_id, invoice_number, notes, source)
-    VALUES (${vendor}, ${amount}, ${cur}, ${due_date}, ${program_id || null}, ${invoice_number || null}, ${notes || null}, 'manual')
+    INSERT INTO payments (vendor, amount, currency, due_date, program_id, invoice_number, notes,
+                          source, recurrence_unit, recurrence_interval)
+    VALUES (${vendor}, ${amount}, ${cur}, ${due_date}, ${program_id || null},
+            ${invoice_number || null}, ${notes || null}, 'manual',
+            ${rUnit}, ${rInterval})
     RETURNING *
   `;
   return ok({ payment: rows[0] });
@@ -412,13 +445,29 @@ async function handleUpdate(body) {
   const { id, patch } = body;
   if (!id || !patch) return bad('id and patch required');
 
+  // Fetch the row first so we can detect transitions (e.g. paid: false -> true)
+  // and read the current recurrence settings before we apply the patch.
+  const before = await sql()`SELECT * FROM payments WHERE id = ${Number(id)}`;
+  if (!before.length) return bad('not found', 404);
+  const prior = before[0];
+
   const sets = [];
   const args = [];
   const allow = [
     'vendor', 'amount', 'currency', 'due_date', 'program_id', 'invoice_number', 'notes',
     'approved_to_pay', 'approved_by', 'paid', 'paid_date', 'paid_by',
     'rescheduled_from', 'reschedule_reason',
+    'recurrence_unit', 'recurrence_interval',
   ];
+  // Normalize recurrence fields together if either is present in the patch
+  if ('recurrence_unit' in patch || 'recurrence_interval' in patch) {
+    const merged = normalizeRecurrence(
+      'recurrence_unit'     in patch ? patch.recurrence_unit     : prior.recurrence_unit,
+      'recurrence_interval' in patch ? patch.recurrence_interval : prior.recurrence_interval,
+    );
+    patch.recurrence_unit     = merged.unit;
+    patch.recurrence_interval = merged.interval;
+  }
   for (const k of Object.keys(patch)) {
     if (!allow.includes(k)) continue;
     let v = patch[k];
@@ -437,7 +486,31 @@ async function handleUpdate(body) {
     args
   );
   if (!rows.length) return bad('not found', 404);
-  return ok({ payment: rows[0] });
+  const updated = rows[0];
+
+  // ---- Recurring: spawn next occurrence on paid: false -> true transition ----
+  let nextOccurrence = null;
+  const justMarkedPaid = patch.paid === true && !prior.paid;
+  if (justMarkedPaid && updated.recurrence_unit) {
+    const nextDue = computeNextDue(
+      prior.due_date, updated.recurrence_unit, updated.recurrence_interval
+    );
+    const parentId = prior.recurrence_parent_id || prior.id;
+    const inserted = await sql()`
+      INSERT INTO payments
+        (vendor, amount, currency, invoice_number, due_date, program_id, notes,
+         source,
+         recurrence_unit, recurrence_interval, recurrence_parent_id)
+      VALUES
+        (${updated.vendor}, ${updated.amount}, ${updated.currency},
+         ${updated.invoice_number}, ${nextDue}, ${updated.program_id}, ${updated.notes},
+         ${prior.source === 'upload' ? 'manual' : prior.source},
+         ${updated.recurrence_unit}, ${updated.recurrence_interval}, ${parentId})
+      RETURNING *
+    `;
+    nextOccurrence = inserted[0];
+  }
+  return ok({ payment: updated, next_occurrence: nextOccurrence });
 }
 
 async function handleDelete(body) {
