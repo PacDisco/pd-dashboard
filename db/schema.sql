@@ -85,3 +85,35 @@ CREATE TRIGGER payments_set_updated_at
   BEFORE UPDATE ON payments
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
+
+-- ==========================================================================
+-- Recurring payments (additive, safe to re-run)
+--   recurrence_unit     : 'week' | 'month' | 'year'    (NULL = not recurring)
+--   recurrence_interval : every N units (1 for weekly/monthly/annual,
+--                         2 for fortnightly, etc.)
+--   recurrence_parent_id: the id of the first row in this series.
+--                         The "anchor" row has recurrence_parent_id = NULL;
+--                         every auto-generated next occurrence points back to
+--                         that anchor so we can group a series.
+-- ==========================================================================
+ALTER TABLE payments
+  ADD COLUMN IF NOT EXISTS recurrence_unit      TEXT,
+  ADD COLUMN IF NOT EXISTS recurrence_interval  INTEGER,
+  ADD COLUMN IF NOT EXISTS recurrence_parent_id INTEGER;
+
+-- Drop the constraint first if it exists, so this block stays re-runnable
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'payments_recurrence_unit_check'
+  ) THEN
+    ALTER TABLE payments DROP CONSTRAINT payments_recurrence_unit_check;
+  END IF;
+END$$;
+
+ALTER TABLE payments
+  ADD CONSTRAINT payments_recurrence_unit_check
+  CHECK (recurrence_unit IS NULL OR recurrence_unit IN ('week', 'month', 'year'));
+
+CREATE INDEX IF NOT EXISTS payments_recurrence_parent_idx
+  ON payments(recurrence_parent_id);
