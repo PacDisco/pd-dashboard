@@ -1,0 +1,9 @@
+{
+  "title": "Student Document Uploads",
+  "description": "Files students have submitted via the Document Upload Jotform — grouped by email, so every file a student has ever sent shows up under one card.",
+  "category": "Admissions",
+  "icon": "📤",
+  "colors": ["#7c3aed", "#a78bfa"],
+  "allowedRoles": ["admin", "admissions", "operations"],
+  "order": 30
+}
