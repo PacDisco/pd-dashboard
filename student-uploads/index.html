@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Document Uploads</title>
+<meta name="description" content="Files students have uploaded via the Document Upload Jotform, grouped by email.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #7c3aed; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary .chev { transition: transform 0.15s; display: inline-block; }
+  details[open] > summary .chev { transform: rotate(90deg); }
+  .file-tile { transition: box-shadow 0.15s, transform 0.15s; }
+  .file-tile:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
+  .img-thumb { width: 100%; height: 120px; object-fit: cover; background: #f3f4f6; }
+  .file-ext { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; }
+</style>
+</head>
+<body>
+<div id="app" class="max-w-6xl mx-auto px-6 py-6">
+
+  <!-- Header -->
+  <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">📤 Student Document Uploads</h1>
+      <p class="text-sm text-gray-500 mt-1">Every file students have submitted via the Document Upload form, grouped by email address.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <input id="search" type="search" placeholder="Filter by name, email, or filename…"
+             class="px-3 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-purple-500">
+      <button id="refresh-btn" onclick="loadData()"
+              class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+        ↻ Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div id="kpis" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6 hidden">
+    <div class="bg-white rounded-lg p-4 border border-gray-200">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Students</div>
+      <div id="kpi-students" class="text-2xl font-bold text-gray-900 mt-1">—</div>
+    </div>
+    <div class="bg-white rounded-lg p-4 border border-gray-200">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Submissions</div>
+      <div id="kpi-submissions" class="text-2xl font-bold text-gray-900 mt-1">—</div>
+    </div>
+    <div class="bg-white rounded-lg p-4 border border-gray-200">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Files uploaded</div>
+      <div id="kpi-files" class="text-2xl font-bold text-gray-900 mt-1">—</div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="flex flex-col items-center justify-center py-24">
+    <div class="loading-spinner mb-4"></div>
+    <p class="text-gray-500 text-sm">Loading submissions from Jotform…</p>
+  </div>
+
+  <!-- Error -->
+  <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+    <div class="font-medium text-red-800 mb-1">Couldn't load submissions</div>
+    <div id="error-msg" class="text-red-700"></div>
+    <button onclick="loadData()" class="mt-3 px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700">Retry</button>
+  </div>
+
+  <!-- Empty -->
+  <div id="empty" class="hidden bg-white border border-gray-200 rounded-lg p-8 text-center text-gray-500">
+    No submissions yet.
+  </div>
+
+  <!-- Students list -->
+  <div id="students" class="hidden space-y-3"></div>
+</div>
+
+<script>
+  // ----------------------------------------------------------------------
+  // Config — change FORM_ID if the form is ever swapped.
+  // ----------------------------------------------------------------------
+  const FORM_ID = '261337066421856';
+  const API     = `/api/jotform?path=/form/${FORM_ID}/submissions&limit=500`;
+
+  // In-memory state
+  let groups = [];      // [{ email, name, submissions: [...], files: [...] }, ...]
+
+  // ----------------------------------------------------------------------
+  // Load + group
+  // ----------------------------------------------------------------------
+  async function loadData() {
+    show('loading');
+    hide('error'); hide('empty'); hide('students');
+    hide('kpis');
+
+    let data;
+    try {
+      const r = await fetch(API);
+      const text = await r.text();
+      try { data = JSON.parse(text); }
+      catch { throw new Error(`Non-JSON response (HTTP ${r.status}): ${text.slice(0, 200)}`); }
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    } catch (e) {
+      document.getElementById('error-msg').textContent = e.message;
+      hide('loading'); show('error');
+      return;
+    }
+
+    const submissions = (data.content || []).filter(s => s.status !== 'DELETED');
+    groups = groupByEmail(submissions);
+
+    if (!groups.length) {
+      hide('loading'); show('empty');
+      return;
+    }
+
+    renderKpis();
+    renderStudents(groups);
+    hide('loading');
+    show('kpis');
+    show('students');
+  }
+
+  // Pull the email and a best-guess name out of a submission's answers.
+  function extractIdentity(sub) {
+    let email = '';
+    let name  = '';
+    const answers = sub.answers || {};
+    for (const qid of Object.keys(answers)) {
+      const a = answers[qid];
+      if (!a) continue;
+      const type = (a.type || '').toLowerCase();
+      if (!email && (type === 'control_email' || /email/i.test(a.name || ''))) {
+        email = typeof a.answer === 'string' ? a.answer.trim().toLowerCase() : '';
+      }
+      if (!name && type === 'control_fullname' && a.answer && typeof a.answer === 'object') {
+        name = [a.answer.first, a.answer.last].filter(Boolean).join(' ').trim();
+      } else if (!name && /name/i.test(a.name || '') && typeof a.answer === 'string') {
+        name = a.answer.trim();
+      }
+    }
+    return { email, name };
+  }
+
+  // Extract every uploaded file from a submission. Returns
+  // [{ url, filename, ext, doc_name }] — doc_name pulled from the
+  // nearest "Document Name"-style text answer (by question order).
+  function extractFiles(sub) {
+    const answers = sub.answers || {};
+    const entries = Object.entries(answers)
+      .map(([qid, a]) => ({ qid, ...(a || {}) }))
+      .sort((x, y) => (Number(x.order) || 0) - (Number(y.order) || 0));
+
+    const out = [];
+    let lastDocName = '';
+
+    for (const e of entries) {
+      const type = (e.type || '').toLowerCase();
+      const text = (e.text || '').toLowerCase();
+      // Track the most recent "Document Name"-style text field so we can
+      // attach it to the next file upload below it on the form.
+      if ((type === 'control_textbox' || type === 'control_textarea') &&
+          /doc(ument)?\s*name|name\s*of|description/i.test(text + ' ' + (e.name || ''))) {
+        if (typeof e.answer === 'string' && e.answer.trim()) lastDocName = e.answer.trim();
+        continue;
+      }
+      if (type !== 'control_fileupload') continue;
+      const urls = Array.isArray(e.answer) ? e.answer : (e.answer ? [e.answer] : []);
+      for (const url of urls) {
+        if (!url || typeof url !== 'string') continue;
+        const filename = decodeURIComponent(url.split('/').pop() || 'file');
+        const ext      = (filename.split('.').pop() || '').toLowerCase().slice(0, 8);
+        out.push({ url, filename, ext, doc_name: lastDocName });
+      }
+      // A label applies to a single upload; reset after consuming.
+      lastDocName = '';
+    }
+    return out;
+  }
+
+  function groupByEmail(submissions) {
+    const map = new Map();
+    let unknownCounter = 0;
+    for (const sub of submissions) {
+      const { email, name } = extractIdentity(sub);
+      const files = extractFiles(sub);
+      const key = email || `__no-email-${++unknownCounter}`;
+      if (!map.has(key)) {
+        map.set(key, { email, name, submissions: [], files: [] });
+      }
+      const g = map.get(key);
+      if (!g.name && name) g.name = name;
+      g.submissions.push({
+        id: sub.id,
+        created_at: sub.created_at,
+        files,
+      });
+      for (const f of files) g.files.push({ ...f, submission_id: sub.id, submitted_at: sub.created_at });
+    }
+    // Sort groups: most-recently active first; sort each group's files newest first.
+    const arr = [...map.values()];
+    for (const g of arr) {
+      g.files.sort((a, b) => (b.submitted_at || '').localeCompare(a.submitted_at || ''));
+      g.submissions.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      g.last_seen = g.submissions[0]?.created_at || '';
+    }
+    arr.sort((a, b) => (b.last_seen || '').localeCompare(a.last_seen || ''));
+    return arr;
+  }
+
+  // ----------------------------------------------------------------------
+  // Render
+  // ----------------------------------------------------------------------
+  function renderKpis() {
+    const totalFiles = groups.reduce((n, g) => n + g.files.length, 0);
+    const totalSubs  = groups.reduce((n, g) => n + g.submissions.length, 0);
+    document.getElementById('kpi-students').textContent    = groups.length;
+    document.getElementById('kpi-submissions').textContent = totalSubs;
+    document.getElementById('kpi-files').textContent       = totalFiles;
+  }
+
+  const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','heic','heif','bmp','svg']);
+
+  function fileTile(f) {
+    const isImg = IMAGE_EXTS.has(f.ext);
+    const preview = isImg
+      ? `<img class="img-thumb" src="${escapeAttr(f.url)}" alt="${escapeAttr(f.filename)}" loading="lazy">`
+      : `<div class="img-thumb flex flex-col items-center justify-center text-gray-400">
+           <div class="text-3xl">📄</div>
+           <div class="file-ext mt-1">${escapeHtml((f.ext || 'FILE').toUpperCase())}</div>
+         </div>`;
+    return `
+      <a href="${escapeAttr(f.url)}" target="_blank" rel="noopener"
+         class="file-tile block bg-white border border-gray-200 rounded-lg overflow-hidden">
+        ${preview}
+        <div class="p-2">
+          <div class="text-xs font-medium text-gray-900 truncate" title="${escapeAttr(f.filename)}">${escapeHtml(f.filename)}</div>
+          ${f.doc_name ? `<div class="text-xs text-purple-700 truncate" title="${escapeAttr(f.doc_name)}">${escapeHtml(f.doc_name)}</div>` : ''}
+          <div class="text-xs text-gray-400 mt-0.5">${fmtDate(f.submitted_at)}</div>
+        </div>
+      </a>
+    `;
+  }
+
+  function studentCard(g) {
+    const filesHtml = g.files.length
+      ? `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-4 pb-4">${g.files.map(fileTile).join('')}</div>`
+      : `<div class="px-4 pb-4 text-sm text-gray-500 italic">No files attached.</div>`;
+    const subtitle = [
+      g.submissions.length + ' submission' + (g.submissions.length !== 1 ? 's' : ''),
+      g.files.length + ' file' + (g.files.length !== 1 ? 's' : ''),
+      g.last_seen ? 'last ' + fmtDate(g.last_seen) : '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <details class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <summary class="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="chev text-gray-400">▶</span>
+            <div class="min-w-0">
+              <div class="font-medium text-gray-900 truncate">${escapeHtml(g.name || g.email || '(no name)')}</div>
+              <div class="text-xs text-gray-500 truncate">${escapeHtml(g.email || 'no email on file')}</div>
+            </div>
+          </div>
+          <div class="text-xs text-gray-500 whitespace-nowrap ml-3">${escapeHtml(subtitle)}</div>
+        </summary>
+        ${filesHtml}
+      </details>
+    `;
+  }
+
+  function renderStudents(list) {
+    document.getElementById('students').innerHTML = list.map(studentCard).join('');
+  }
+
+  // ----------------------------------------------------------------------
+  // Search
+  // ----------------------------------------------------------------------
+  document.getElementById('search').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) return renderStudents(groups);
+    const filtered = groups.filter(g => {
+      if ((g.name || '').toLowerCase().includes(q)) return true;
+      if ((g.email || '').toLowerCase().includes(q)) return true;
+      if (g.files.some(f => (f.filename || '').toLowerCase().includes(q))) return true;
+      if (g.files.some(f => (f.doc_name || '').toLowerCase().includes(q))) return true;
+      return false;
+    });
+    renderStudents(filtered);
+  });
+
+  // ----------------------------------------------------------------------
+  // Helpers
+  // ----------------------------------------------------------------------
+  function fmtDate(s) {
+    if (!s) return '';
+    const d = new Date(s.replace(' ', 'T'));
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('en-NZ', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+  function show(id) { document.getElementById(id).classList.remove('hidden'); }
+  function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+  // Kick it off
+  loadData();
+</script>
+</body>
+</html>
