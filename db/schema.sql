@@ -117,3 +117,84 @@ ALTER TABLE payments
 
 CREATE INDEX IF NOT EXISTS payments_recurrence_parent_idx
   ON payments(recurrence_parent_id);
+
+-- ==========================================================================
+-- Field media uploader (pd-media app at media.pacificdiscovery.org)
+--   - field_trips:   season + program; each trip gets its own Drive subfolder
+--   - field_uploads: one row per uploaded photo/video. drive_file_id is the
+--                    source of truth; the row itself is just a queryable index.
+-- ==========================================================================
+
+CREATE TABLE IF NOT EXISTS field_trips (
+  id                 SERIAL PRIMARY KEY,
+  season             TEXT NOT NULL,                       -- 'Spring' | 'Summer' | 'Fall' | 'Winter'
+  year               INTEGER NOT NULL,
+  program            TEXT NOT NULL,                       -- 'Bali', 'Cambodia', etc.
+  drive_folder_id    TEXT,                                -- set on first upload
+  drive_folder_url   TEXT,
+  is_active          BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(season, year, program)
+);
+
+CREATE INDEX IF NOT EXISTS field_trips_active_idx ON field_trips(is_active, year DESC, season);
+
+CREATE TABLE IF NOT EXISTS field_uploads (
+  id                  SERIAL PRIMARY KEY,
+  trip_id             INTEGER NOT NULL REFERENCES field_trips(id) ON DELETE CASCADE,
+  uploader_name       TEXT,                                -- free text, optional
+  uploader_device_id  TEXT,                                -- localStorage UUID, used to retry/dedupe
+  filename            TEXT NOT NULL,
+  mime_type           TEXT,
+  size_bytes          BIGINT,
+  drive_file_id       TEXT NOT NULL,
+  drive_file_url      TEXT NOT NULL,
+  thumbnail_url       TEXT,                                -- Drive thumbnailLink, fetched after upload
+  tags                TEXT[] NOT NULL DEFAULT '{}',
+  notes               TEXT,
+  status              TEXT NOT NULL DEFAULT 'complete'
+                      CHECK (status IN ('pending', 'uploading', 'complete', 'failed')),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS field_uploads_trip_idx       ON field_uploads(trip_id);
+CREATE INDEX IF NOT EXISTS field_uploads_created_idx    ON field_uploads(created_at DESC);
+CREATE INDEX IF NOT EXISTS field_uploads_tags_idx       ON field_uploads USING GIN (tags);
+
+-- ==========================================================================
+-- Google Photos integration
+--   gphotos_tokens : OAuth tokens, one row per staff user (keyed by email).
+--                    Refresh token rotates ~every 7 days; we store the latest.
+--   gphotos_albums : per-trip mapping to a Google Photos album that our app
+--                    created. share_url is the public family-viewable link.
+-- ==========================================================================
+
+CREATE TABLE IF NOT EXISTS gphotos_tokens (
+  email          TEXT PRIMARY KEY,
+  access_token   TEXT NOT NULL,
+  refresh_token  TEXT,
+  expires_at     TIMESTAMPTZ NOT NULL,
+  scope          TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS gphotos_tokens_updated_at ON gphotos_tokens;
+CREATE TRIGGER gphotos_tokens_updated_at
+  BEFORE UPDATE ON gphotos_tokens
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS gphotos_albums (
+  id             SERIAL PRIMARY KEY,
+  program        TEXT NOT NULL,                         -- e.g. 'Bali' — one album spans all seasons
+  owner_email    TEXT NOT NULL,                         -- whose Google Photos account it lives in
+  album_id       TEXT NOT NULL,                         -- Google Photos album ID
+  album_title    TEXT,
+  product_url    TEXT,                                  -- direct link for the owner
+  share_url      TEXT,                                  -- public "anyone with the link" URL
+  share_token    TEXT,                                  -- album.shareInfo.shareToken
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(program, owner_email)
+);
+
+CREATE INDEX IF NOT EXISTS gphotos_albums_program_idx ON gphotos_albums(program);
