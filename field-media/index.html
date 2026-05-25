@@ -57,6 +57,43 @@
   #share-modal .progress-line { font-size: 13px; color: #475569; margin-top: 12px; }
   #share-modal .progress-line.err { color: #b91c1c; }
 
+  /* Manage Trips modal */
+  #trips-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.85); z-index: 55; display: none; align-items: center; justify-content: center; padding: 16px; }
+  #trips-modal.open { display: flex; }
+  #trips-modal .panel { background: #fff; border-radius: 12px; max-width: 640px; width: 100%; max-height: 86vh; overflow: hidden; display: flex; flex-direction: column; }
+  #trips-modal .head { padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+  #trips-modal .head h3 { margin: 0; font-size: 17px; font-weight: 600; color: #0f172a; }
+  #trips-modal .body { padding: 16px 20px; overflow-y: auto; }
+  #trips-modal table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #trips-modal thead th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; }
+  #trips-modal tbody td { padding: 8px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+  #trips-modal tr.inactive td { color: #94a3b8; }
+  #trips-modal tr.inactive .program-name { text-decoration: line-through; }
+  #trips-modal .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  #trips-modal .pill.active   { background: #ecfdf5; color: #065f46; }
+  #trips-modal .pill.inactive { background: #f3f4f6; color: #6b7280; }
+  #trips-modal .btn-row { display: flex; gap: 6px; justify-content: flex-end; }
+  #trips-modal .btn-row button { padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid #d1d5db; background: #fff; color: #374151; }
+  #trips-modal .btn-row button.danger { color: #b91c1c; border-color: #fecaca; }
+  #trips-modal .btn-row button:hover { background: #f9fafb; }
+  #trips-modal .add-form {
+    background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 12px; margin-top: 16px; display: grid; grid-template-columns: 1fr 90px 1.4fr auto; gap: 8px; align-items: end;
+  }
+  #trips-modal .add-form label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 4px; }
+  #trips-modal .add-form input, #trips-modal .add-form select {
+    width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; background: #fff;
+  }
+  #trips-modal .add-form button { padding: 6px 14px; border-radius: 6px; background: #0891b2; color: #fff; border: 0; font-weight: 600; font-size: 13px; cursor: pointer; }
+  #trips-modal .add-form button:hover { background: #0e7490; }
+  #trips-modal .add-form .err { grid-column: 1 / -1; font-size: 12px; color: #b91c1c; }
+  #trips-modal .foot { padding: 12px 20px; border-top: 1px solid #e5e7eb; text-align: right; }
+  #trips-modal .foot button { padding: 6px 14px; border-radius: 6px; background: #f3f4f6; border: 0; font-size: 13px; cursor: pointer; }
+  @media (max-width: 540px) {
+    #trips-modal .add-form { grid-template-columns: 1fr 1fr; }
+    #trips-modal .add-form button { grid-column: 1 / -1; }
+  }
+
   /* Preview lightbox (same pattern as student-uploads) */
   #preview-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.92); z-index: 50; display: none; }
   #preview-overlay.open { display: flex; flex-direction: column; }
@@ -83,7 +120,10 @@
       <h1 class="text-2xl font-bold text-gray-900">🎬 Field Media</h1>
       <p class="text-sm text-gray-500 mt-1">Photos and videos uploaded by field staff from <a class="underline" href="https://media.pacificdiscovery.org" target="_blank">media.pacificdiscovery.org</a>.</p>
     </div>
-    <button id="refresh-btn" onclick="loadData()" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">↻ Refresh</button>
+    <div class="flex gap-2">
+      <button id="manage-trips-btn" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">⚙️ Manage Trips</button>
+      <button id="refresh-btn" onclick="loadData()" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">↻ Refresh</button>
+    </div>
   </div>
 
   <!-- Filters -->
@@ -150,6 +190,46 @@
   </div>
 
   <div id="grouped" class="hidden space-y-6"></div>
+</div>
+
+<!-- Manage Trips modal -->
+<div id="trips-modal" role="dialog" aria-modal="true">
+  <div class="panel">
+    <div class="head">
+      <h3>Manage Trips</h3>
+      <button id="trips-close" style="background:none;border:0;font-size:20px;cursor:pointer;color:#6b7280;">✕</button>
+    </div>
+    <div class="body">
+      <div id="trips-list">
+        <p style="color:#6b7280;font-size:13px;">Loading…</p>
+      </div>
+
+      <div class="add-form" id="trip-add-form">
+        <div>
+          <label>Season</label>
+          <select id="trip-season">
+            <option value="Spring">Spring</option>
+            <option value="Summer">Summer</option>
+            <option value="Fall" selected>Fall</option>
+            <option value="Winter">Winter</option>
+          </select>
+        </div>
+        <div>
+          <label>Year</label>
+          <input id="trip-year" type="number" min="2020" max="2050" value="2026">
+        </div>
+        <div>
+          <label>Program</label>
+          <input id="trip-program" type="text" placeholder="Bali, Cambodia, etc.">
+        </div>
+        <button id="trip-add">+ Add Trip</button>
+        <div id="trip-err" class="err" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="foot">
+      <button id="trips-done">Done</button>
+    </div>
+  </div>
 </div>
 
 <!-- Share modal (shown after push completes) -->
@@ -607,6 +687,104 @@
       updateSelUI();
     } catch (e) {
       showShareModal({ title: 'Push failed', sub: '', progress: { text: e.message, kind: 'err' } });
+    }
+  });
+
+  // ============== Manage Trips ============================================
+  async function openTripsModal() {
+    document.getElementById('trips-modal').classList.add('open');
+    await renderTripsAdmin();
+  }
+  function closeTripsModal() {
+    document.getElementById('trips-modal').classList.remove('open');
+  }
+  document.getElementById('manage-trips-btn').addEventListener('click', openTripsModal);
+  document.getElementById('trips-close').addEventListener('click', closeTripsModal);
+  document.getElementById('trips-done').addEventListener('click', () => {
+    closeTripsModal();
+    // Refresh the filter dropdown + data — newly added trips appear immediately
+    loadTrips();
+    loadData();
+  });
+  document.getElementById('trips-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'trips-modal') closeTripsModal();
+  });
+
+  async function renderTripsAdmin() {
+    const host = document.getElementById('trips-list');
+    host.innerHTML = '<p style="color:#6b7280;font-size:13px;">Loading…</p>';
+    try {
+      const r = await fetch(`${API_TRIPS}?include_inactive=1`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      const all = d.trips || [];
+      if (!all.length) {
+        host.innerHTML = '<p style="color:#6b7280;font-size:13px;">No trips yet. Add one below.</p>';
+        return;
+      }
+      const rows = all.map(t => `
+        <tr class="${t.is_active ? '' : 'inactive'}" data-trip-id="${t.id}">
+          <td>${escapeHtml(t.season)}</td>
+          <td>${t.year}</td>
+          <td class="program-name">${escapeHtml(t.program)}</td>
+          <td><span class="pill ${t.is_active ? 'active' : 'inactive'}">${t.is_active ? 'Active' : 'Hidden'}</span></td>
+          <td>
+            <div class="btn-row">
+              ${t.is_active
+                ? `<button onclick="toggleTrip(${t.id}, false)">Hide</button>`
+                : `<button onclick="toggleTrip(${t.id}, true)">Reactivate</button>`}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+      host.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>Season</th><th>Year</th><th>Program</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    } catch (e) {
+      host.innerHTML = `<p style="color:#b91c1c;font-size:13px;">Couldn't load trips: ${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  window.toggleTrip = async function(id, makeActive) {
+    try {
+      const r = await fetch(API_TRIPS, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, patch: { is_active: makeActive } }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      renderTripsAdmin();
+    } catch (e) {
+      alert('Update failed: ' + e.message);
+    }
+  };
+
+  document.getElementById('trip-add').addEventListener('click', async () => {
+    const season  = document.getElementById('trip-season').value;
+    const year    = Number(document.getElementById('trip-year').value);
+    const program = document.getElementById('trip-program').value.trim();
+    const errEl   = document.getElementById('trip-err');
+    errEl.style.display = 'none';
+
+    if (!program) { errEl.textContent = 'Program name is required.'; errEl.style.display = 'block'; return; }
+
+    try {
+      const r = await fetch(API_TRIPS, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ season, year, program }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      document.getElementById('trip-program').value = '';   // reset only the program field
+      renderTripsAdmin();
+    } catch (e) {
+      errEl.textContent = 'Could not add trip: ' + e.message;
+      errEl.style.display = 'block';
     }
   });
 
