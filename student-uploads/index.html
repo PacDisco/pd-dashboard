@@ -81,11 +81,21 @@
   // ----------------------------------------------------------------------
   // Config — change FORM_ID if the form is ever swapped.
   // ----------------------------------------------------------------------
-  const FORM_ID = '261337066421856';
-  const API     = `/api/jotform?path=/form/${FORM_ID}/submissions&limit=500`;
+  const FORM_ID         = '261337066421856';
+  const API_SUBMISSIONS = `/api/jotform?path=/form/${FORM_ID}/submissions&limit=500`;
+  const API_CONTACTS    = `/.netlify/functions/contact-lookup`;
+  const API_FILE_PROXY  = `/.netlify/functions/jotform-file`;
 
   // In-memory state
-  let groups = [];      // [{ email, name, submissions: [...], files: [...] }, ...]
+  let groups = [];      // [{ email, name, hubspot, submissions: [...], files: [...] }, ...]
+
+  // Rewrite a raw Jotform file URL so it streams through our authed proxy.
+  // Anyone who can access this dashboard can open the file; nobody needs a
+  // Jotform login.
+  function proxiedFileUrl(rawUrl, opts = {}) {
+    const u = `${API_FILE_PROXY}?url=${encodeURIComponent(rawUrl)}`;
+    return opts.download ? `${u}&download=1` : u;
+  }
 
   // ----------------------------------------------------------------------
   // Load + group
@@ -97,7 +107,7 @@
 
     let data;
     try {
-      const r = await fetch(API);
+      const r = await fetch(API_SUBMISSIONS);
       const text = await r.text();
       try { data = JSON.parse(text); }
       catch { throw new Error(`Non-JSON response (HTTP ${r.status}): ${text.slice(0, 200)}`); }
@@ -116,11 +126,57 @@
       return;
     }
 
+    // Render once with whatever the form gave us, then enrich asynchronously
+    // with HubSpot contact names. This keeps the page responsive — HubSpot
+    // can take a second or two and we don't want to gate the whole UI on it.
     renderKpis();
     renderStudents(groups);
     hide('loading');
     show('kpis');
     show('students');
+
+    enrichWithHubspot(groups).catch(e => {
+      console.warn('HubSpot enrichment failed:', e);
+      // Non-fatal — we already rendered with email fallbacks.
+    });
+  }
+
+  // Batch-lookup all the emails in HubSpot. When the response comes back,
+  // patch each group's `hubspot` field and re-render so names appear.
+  async function enrichWithHubspot(list) {
+    const emails = list.map(g => g.email).filter(Boolean);
+    if (!emails.length) return;
+    const r = await fetch(API_CONTACTS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails }),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`contact-lookup HTTP ${r.status}: ${txt.slice(0,200)}`);
+    }
+    const { contacts = {} } = await r.json();
+    for (const g of list) {
+      if (g.email && contacts[g.email]) g.hubspot = contacts[g.email];
+    }
+    // Re-sort: groups with a HubSpot match come first by recency, no-match after.
+    // (Keep existing recency sort; HubSpot info doesn't change that.)
+    renderStudents(currentFilteredList());
+  }
+
+  // Whichever filter is currently in the search box should drive what we re-render.
+  function currentFilteredList() {
+    const q = (document.getElementById('search').value || '').trim().toLowerCase();
+    if (!q) return groups;
+    return groups.filter(g => groupMatchesQuery(g, q));
+  }
+  function groupMatchesQuery(g, q) {
+    if (g.hubspot?.full_name && g.hubspot.full_name.toLowerCase().includes(q)) return true;
+    if ((g.name || '').toLowerCase().includes(q)) return true;
+    if ((g.email || '').toLowerCase().includes(q)) return true;
+    if (g.files.some(f => (f.filename || '').toLowerCase().includes(q))) return true;
+    if (g.files.some(f => (f.doc_name || '').toLowerCase().includes(q))) return true;
+    return false;
   }
 
   // Pull the email and a best-guess name out of a submission's answers.
@@ -224,47 +280,85 @@
   const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','heic','heif','bmp','svg']);
 
   function fileTile(f) {
-    const isImg = IMAGE_EXTS.has(f.ext);
+    const isImg   = IMAGE_EXTS.has(f.ext);
+    const openUrl = proxiedFileUrl(f.url);
+    const dlUrl   = proxiedFileUrl(f.url, { download: true });
     const preview = isImg
-      ? `<img class="img-thumb" src="${escapeAttr(f.url)}" alt="${escapeAttr(f.filename)}" loading="lazy">`
+      ? `<img class="img-thumb" src="${escapeAttr(openUrl)}" alt="${escapeAttr(f.filename)}" loading="lazy">`
       : `<div class="img-thumb flex flex-col items-center justify-center text-gray-400">
            <div class="text-3xl">📄</div>
            <div class="file-ext mt-1">${escapeHtml((f.ext || 'FILE').toUpperCase())}</div>
          </div>`;
     return `
-      <a href="${escapeAttr(f.url)}" target="_blank" rel="noopener"
-         class="file-tile block bg-white border border-gray-200 rounded-lg overflow-hidden">
-        ${preview}
+      <div class="file-tile bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <a href="${escapeAttr(openUrl)}" target="_blank" rel="noopener">
+          ${preview}
+        </a>
         <div class="p-2">
           <div class="text-xs font-medium text-gray-900 truncate" title="${escapeAttr(f.filename)}">${escapeHtml(f.filename)}</div>
           ${f.doc_name ? `<div class="text-xs text-purple-700 truncate" title="${escapeAttr(f.doc_name)}">${escapeHtml(f.doc_name)}</div>` : ''}
-          <div class="text-xs text-gray-400 mt-0.5">${fmtDate(f.submitted_at)}</div>
+          <div class="text-xs text-gray-400 mt-0.5 flex items-center justify-between">
+            <span>${fmtDate(f.submitted_at)}</span>
+            <a href="${escapeAttr(dlUrl)}" class="text-purple-600 hover:underline" title="Download">⬇</a>
+          </div>
         </div>
-      </a>
+      </div>
     `;
   }
 
+  // A small chip shown in the collapsed row — gives the team a glance at
+  // what's inside without having to expand.
+  function filePreviewChip(f) {
+    const label = f.doc_name || f.filename;
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs">
+              <span class="font-mono text-[10px] text-purple-500">${escapeHtml((f.ext || '').toUpperCase() || 'FILE')}</span>
+              <span class="truncate max-w-[14rem]" title="${escapeAttr(label)}">${escapeHtml(label)}</span>
+            </span>`;
+  }
+
   function studentCard(g) {
+    // Title: prefer HubSpot full name, then any name we saw in form answers,
+    // then the email itself. Subtitle always shows email.
+    const titleName = g.hubspot?.full_name || g.name || g.email || '(no name)';
+    const hsBadge   = g.hubspot
+      ? `<span class="ml-2 inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-medium align-middle">HubSpot</span>`
+      : (g.email ? `<span class="ml-2 inline-block px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-medium align-middle">no HubSpot match</span>` : '');
+
+    // Quick preview of files in the collapsed row (up to 4).
+    const MAX_PREVIEW = 4;
+    const previewChips = g.files.slice(0, MAX_PREVIEW).map(filePreviewChip).join('');
+    const moreChip = g.files.length > MAX_PREVIEW
+      ? `<span class="text-xs text-gray-500">+${g.files.length - MAX_PREVIEW} more</span>`
+      : '';
+    const previewRow = g.files.length
+      ? `<div class="px-4 pb-2 flex flex-wrap gap-1.5 items-center">${previewChips}${moreChip}</div>`
+      : '';
+
     const filesHtml = g.files.length
       ? `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-4 pb-4">${g.files.map(fileTile).join('')}</div>`
       : `<div class="px-4 pb-4 text-sm text-gray-500 italic">No files attached.</div>`;
+
     const subtitle = [
       g.submissions.length + ' submission' + (g.submissions.length !== 1 ? 's' : ''),
       g.files.length + ' file' + (g.files.length !== 1 ? 's' : ''),
       g.last_seen ? 'last ' + fmtDate(g.last_seen) : '',
     ].filter(Boolean).join(' · ');
+
     return `
       <details class="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <summary class="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
           <div class="flex items-center gap-3 min-w-0">
             <span class="chev text-gray-400">▶</span>
             <div class="min-w-0">
-              <div class="font-medium text-gray-900 truncate">${escapeHtml(g.name || g.email || '(no name)')}</div>
+              <div class="font-medium text-gray-900 truncate">
+                ${escapeHtml(titleName)}${hsBadge}
+              </div>
               <div class="text-xs text-gray-500 truncate">${escapeHtml(g.email || 'no email on file')}</div>
             </div>
           </div>
           <div class="text-xs text-gray-500 whitespace-nowrap ml-3">${escapeHtml(subtitle)}</div>
         </summary>
+        ${previewRow}
         ${filesHtml}
       </details>
     `;
@@ -277,17 +371,8 @@
   // ----------------------------------------------------------------------
   // Search
   // ----------------------------------------------------------------------
-  document.getElementById('search').addEventListener('input', e => {
-    const q = e.target.value.trim().toLowerCase();
-    if (!q) return renderStudents(groups);
-    const filtered = groups.filter(g => {
-      if ((g.name || '').toLowerCase().includes(q)) return true;
-      if ((g.email || '').toLowerCase().includes(q)) return true;
-      if (g.files.some(f => (f.filename || '').toLowerCase().includes(q))) return true;
-      if (g.files.some(f => (f.doc_name || '').toLowerCase().includes(q))) return true;
-      return false;
-    });
-    renderStudents(filtered);
+  document.getElementById('search').addEventListener('input', () => {
+    renderStudents(currentFilteredList());
   });
 
   // ----------------------------------------------------------------------
