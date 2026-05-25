@@ -14,10 +14,37 @@
   details > summary::-webkit-details-marker { display: none; }
   details > summary .chev { transition: transform 0.15s; display: inline-block; }
   details[open] > summary .chev { transform: rotate(90deg); }
-  .file-tile { transition: box-shadow 0.15s, transform 0.15s; }
+  .file-tile { transition: box-shadow 0.15s, transform 0.15s; cursor: pointer; }
   .file-tile:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
   .img-thumb { width: 100%; height: 120px; object-fit: cover; background: #f3f4f6; }
   .file-ext { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; }
+
+  /* Preview lightbox */
+  #preview-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.85); z-index: 50; display: none; }
+  #preview-overlay.open { display: flex; flex-direction: column; }
+  #preview-overlay .toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; color: #fff; background: rgba(0,0,0,0.3);
+  }
+  #preview-overlay .filename { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #preview-overlay .toolbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  #preview-overlay .icon-btn {
+    color: #fff; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+    padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; text-decoration: none; line-height: 1;
+  }
+  #preview-overlay .icon-btn:hover { background: rgba(255,255,255,0.2); }
+  #preview-overlay .icon-btn[disabled] { opacity: 0.4; cursor: default; }
+  #preview-overlay .stage {
+    flex: 1; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: hidden;
+  }
+  #preview-overlay .stage img,
+  #preview-overlay .stage iframe { max-width: 100%; max-height: 100%; background: #fff; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+  #preview-overlay .stage iframe { width: min(1100px, 100%); height: 100%; border: 0; }
+  #preview-overlay .fallback {
+    background: #fff; border-radius: 8px; padding: 32px; max-width: 480px; text-align: center;
+  }
+  #preview-overlay .fallback .icon { font-size: 56px; margin-bottom: 12px; }
+  #preview-overlay .nav-counter { color: rgba(255,255,255,0.7); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -75,6 +102,24 @@
 
   <!-- Students list -->
   <div id="students" class="hidden space-y-3"></div>
+</div>
+
+<!-- Preview lightbox -->
+<div id="preview-overlay" role="dialog" aria-modal="true" aria-labelledby="preview-filename">
+  <div class="toolbar">
+    <div class="flex items-center gap-3 min-w-0 flex-1">
+      <button class="icon-btn" id="preview-prev" title="Previous file (←)">←</button>
+      <button class="icon-btn" id="preview-next" title="Next file (→)">→</button>
+      <span class="nav-counter" id="preview-counter"></span>
+      <span class="filename" id="preview-filename"></span>
+    </div>
+    <div class="toolbar-actions">
+      <a class="icon-btn" id="preview-open" target="_blank" rel="noopener" title="Open in new tab">↗ Open</a>
+      <a class="icon-btn" id="preview-download" title="Download">⬇ Download</a>
+      <button class="icon-btn" id="preview-close" title="Close (Esc)">✕</button>
+    </div>
+  </div>
+  <div class="stage" id="preview-stage"></div>
 </div>
 
 <script>
@@ -253,7 +298,13 @@
         created_at: sub.created_at,
         files,
       });
-      for (const f of files) g.files.push({ ...f, submission_id: sub.id, submitted_at: sub.created_at });
+      // Stamp a stable key onto each file so click handlers can look it up
+      // without round-tripping the URL through the DOM.
+      let fileIndex = 0;
+      for (const f of files) {
+        const key = `${sub.id}-${fileIndex++}`;
+        g.files.push({ ...f, key, submission_id: sub.id, submitted_at: sub.created_at });
+      }
     }
     // Sort groups: most-recently active first; sort each group's files newest first.
     const arr = [...map.values()];
@@ -289,17 +340,20 @@
            <div class="text-3xl">📄</div>
            <div class="file-ext mt-1">${escapeHtml((f.ext || 'FILE').toUpperCase())}</div>
          </div>`;
+    // Tile click opens the in-dashboard preview; the ⬇ link still
+    // downloads directly without ever opening the preview.
     return `
-      <div class="file-tile bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <a href="${escapeAttr(openUrl)}" target="_blank" rel="noopener">
-          ${preview}
-        </a>
+      <div class="file-tile bg-white border border-gray-200 rounded-lg overflow-hidden"
+           data-fkey="${escapeAttr(f.key)}"
+           onclick="openPreviewByKey(event, '${escapeAttr(f.key)}')">
+        ${preview}
         <div class="p-2">
           <div class="text-xs font-medium text-gray-900 truncate" title="${escapeAttr(f.filename)}">${escapeHtml(f.filename)}</div>
           ${f.doc_name ? `<div class="text-xs text-purple-700 truncate" title="${escapeAttr(f.doc_name)}">${escapeHtml(f.doc_name)}</div>` : ''}
           <div class="text-xs text-gray-400 mt-0.5 flex items-center justify-between">
             <span>${fmtDate(f.submitted_at)}</span>
-            <a href="${escapeAttr(dlUrl)}" class="text-purple-600 hover:underline" title="Download">⬇</a>
+            <a href="${escapeAttr(dlUrl)}" class="text-purple-600 hover:underline" title="Download"
+               onclick="event.stopPropagation()">⬇</a>
           </div>
         </div>
       </div>
@@ -390,6 +444,109 @@
   function escapeAttr(s) { return escapeHtml(s); }
   function show(id) { document.getElementById(id).classList.remove('hidden'); }
   function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+  // ----------------------------------------------------------------------
+  // Preview lightbox
+  // ----------------------------------------------------------------------
+  // Files that the browser can render inline: images and PDFs.
+  // For anything else we show a "no preview" card with download.
+  const PDF_EXTS    = new Set(['pdf']);
+  // Track which file we're currently previewing + the list it belongs to
+  // so ← / → navigates within the same student.
+  let previewContext = { list: [], index: 0 };
+
+  // Find a file by its stable key across all currently-rendered groups.
+  function findFileByKey(key) {
+    for (const g of groups) {
+      const idx = g.files.findIndex(f => f.key === key);
+      if (idx !== -1) return { list: g.files, index: idx };
+    }
+    return null;
+  }
+
+  function openPreviewByKey(event, key) {
+    event.preventDefault();
+    event.stopPropagation();
+    const found = findFileByKey(key);
+    if (!found) return;
+    previewContext = found;
+    renderPreview();
+    document.getElementById('preview-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closePreview() {
+    document.getElementById('preview-overlay').classList.remove('open');
+    document.getElementById('preview-stage').innerHTML = '';
+    document.body.style.overflow = '';
+  }
+
+  function stepPreview(delta) {
+    const { list, index } = previewContext;
+    if (!list.length) return;
+    const next = Math.min(list.length - 1, Math.max(0, index + delta));
+    if (next === index) return;
+    previewContext.index = next;
+    renderPreview();
+  }
+
+  function renderPreview() {
+    const { list, index } = previewContext;
+    const f = list[index];
+    if (!f) return;
+    const openUrl = proxiedFileUrl(f.url);
+    const dlUrl   = proxiedFileUrl(f.url, { download: true });
+    const stage   = document.getElementById('preview-stage');
+
+    document.getElementById('preview-filename').textContent = f.filename;
+    document.getElementById('preview-counter').textContent  =
+      list.length > 1 ? `${index + 1} of ${list.length}` : '';
+    document.getElementById('preview-open').href     = openUrl;
+    document.getElementById('preview-download').href = dlUrl;
+
+    const prevBtn = document.getElementById('preview-prev');
+    const nextBtn = document.getElementById('preview-next');
+    prevBtn.disabled = index === 0;
+    nextBtn.disabled = index >= list.length - 1;
+
+    if (IMAGE_EXTS.has(f.ext)) {
+      stage.innerHTML = `<img src="${escapeAttr(openUrl)}" alt="${escapeAttr(f.filename)}">`;
+    } else if (PDF_EXTS.has(f.ext)) {
+      // Native PDF rendering in every modern browser.
+      stage.innerHTML = `<iframe src="${escapeAttr(openUrl)}#view=FitH" title="${escapeAttr(f.filename)}"></iframe>`;
+    } else {
+      stage.innerHTML = `
+        <div class="fallback">
+          <div class="icon">📄</div>
+          <div class="text-lg font-semibold text-gray-900 mb-1">${escapeHtml(f.filename)}</div>
+          <div class="text-sm text-gray-500 mb-4">
+            Preview isn't supported in the browser for <span class="font-mono">.${escapeHtml(f.ext || 'file')}</span> files.
+          </div>
+          <div class="flex gap-2 justify-center">
+            <a href="${escapeAttr(openUrl)}" target="_blank" rel="noopener"
+               class="px-3 py-1.5 bg-purple-600 text-white rounded text-sm hover:bg-purple-700">Open in new tab</a>
+            <a href="${escapeAttr(dlUrl)}"
+               class="px-3 py-1.5 bg-gray-100 text-gray-800 rounded text-sm hover:bg-gray-200">Download</a>
+          </div>
+        </div>`;
+    }
+  }
+
+  // Wire close + nav controls
+  document.getElementById('preview-close').addEventListener('click', closePreview);
+  document.getElementById('preview-prev').addEventListener('click', () => stepPreview(-1));
+  document.getElementById('preview-next').addEventListener('click', () => stepPreview(1));
+  document.getElementById('preview-overlay').addEventListener('click', e => {
+    // Click on the dark backdrop (not on the toolbar/stage children) closes
+    if (e.target.id === 'preview-overlay') closePreview();
+  });
+  document.addEventListener('keydown', e => {
+    const open = document.getElementById('preview-overlay').classList.contains('open');
+    if (!open) return;
+    if (e.key === 'Escape') closePreview();
+    else if (e.key === 'ArrowLeft')  stepPreview(-1);
+    else if (e.key === 'ArrowRight') stepPreview(1);
+  });
 
   // Kick it off
   loadData();
