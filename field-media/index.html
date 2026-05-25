@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Media</title>
+<meta name="description" content="Photos and videos uploaded by field staff, grouped by season + program.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .spinner { border: 4px solid #e5e7eb; border-top: 4px solid #0891b2; border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tile { transition: box-shadow 0.15s, transform 0.15s; cursor: pointer; position: relative; }
+  .tile:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.10); transform: translateY(-1px); }
+  .tile.selected { outline: 3px solid #0891b2; outline-offset: 0; }
+  .thumb { aspect-ratio: 4 / 3; width: 100%; object-fit: cover; background: #e5e7eb; }
+  .thumb-fallback { aspect-ratio: 4 / 3; width: 100%; background: linear-gradient(135deg,#06b6d4,#0891b2); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 14px; }
+  .video-badge {
+    position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.7); color: #fff;
+    border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600;
+  }
+  .select-check {
+    position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; border-radius: 4px;
+    background: rgba(255,255,255,0.9); border: 1px solid #d1d5db; display: flex;
+    align-items: center; justify-content: center; cursor: pointer; font-size: 14px; color: transparent;
+  }
+  .tile.selected .select-check { background: #0891b2; border-color: #0891b2; color: #fff; }
+
+  /* Selection toolbar */
+  #sel-bar {
+    position: sticky; top: 8px; z-index: 30; background: #0f172a; color: #fff;
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+    display: none; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  }
+  #sel-bar.open { display: flex; }
+  #sel-bar .count { font-weight: 600; font-size: 14px; }
+  #sel-bar button {
+    padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: #fff;
+  }
+  #sel-bar button.primary { background: #0891b2; border-color: #0891b2; }
+  #sel-bar button.primary:hover { background: #0e7490; }
+  #sel-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Share modal */
+  #share-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 60; display: none; align-items: center; justify-content: center; padding: 16px; }
+  #share-modal.open { display: flex; }
+  #share-modal .card { background: #fff; border-radius: 12px; max-width: 520px; width: 100%; padding: 24px; }
+  #share-modal h3 { font-size: 18px; font-weight: 600; margin: 0 0 8px; color: #0f172a; }
+  #share-modal p { font-size: 14px; color: #475569; margin: 8px 0; }
+  #share-modal .link-row {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  #share-modal input { flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+  #share-modal .progress-line { font-size: 13px; color: #475569; margin-top: 12px; }
+  #share-modal .progress-line.err { color: #b91c1c; }
+
+  /* Preview lightbox (same pattern as student-uploads) */
+  #preview-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.92); z-index: 50; display: none; }
+  #preview-overlay.open { display: flex; flex-direction: column; }
+  #preview-overlay .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; color: #fff; background: rgba(0,0,0,0.3); }
+  #preview-overlay .filename { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #preview-overlay .icon-btn {
+    color: #fff; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+    padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; text-decoration: none; line-height: 1;
+  }
+  #preview-overlay .icon-btn:hover { background: rgba(255,255,255,0.2); }
+  #preview-overlay .icon-btn[disabled] { opacity: 0.4; cursor: default; }
+  #preview-overlay .stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: hidden; }
+  #preview-overlay .stage img, #preview-overlay .stage video { max-width: 100%; max-height: 100%; background: #000; border-radius: 6px; }
+  #preview-overlay .stage iframe { width: min(1100px, 100%); height: 100%; border: 0; background: #fff; border-radius: 6px; }
+  #preview-overlay .fallback { background: #fff; border-radius: 8px; padding: 32px; max-width: 480px; text-align: center; }
+  .nav-counter { color: rgba(255,255,255,0.7); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="max-w-7xl mx-auto px-6 py-6">
+
+  <div class="mb-5 flex items-start justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">🎬 Field Media</h1>
+      <p class="text-sm text-gray-500 mt-1">Photos and videos uploaded by field staff from <a class="underline" href="https://media.pacificdiscovery.org" target="_blank">media.pacificdiscovery.org</a>.</p>
+    </div>
+    <button id="refresh-btn" onclick="loadData()" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">↻ Refresh</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white border border-gray-200 rounded-lg p-3 mb-4 flex flex-wrap gap-3 items-end">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Trip</label>
+      <select id="filter-trip" class="px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+        <option value="">All trips</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Media</label>
+      <select id="filter-media" class="px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+        <option value="">All</option>
+        <option value="image">Photos only</option>
+        <option value="video">Videos only</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-xs text-gray-500 mb-1">Search</label>
+      <input id="filter-q" type="search" placeholder="Filename / uploader / notes" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+    </div>
+  </div>
+
+  <!-- Selection toolbar -->
+  <div id="sel-bar">
+    <div class="count"><span id="sel-count">0</span> selected</div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <button id="sel-clear">Clear</button>
+      <button id="sel-push" class="primary">📤 Push to Google Photos</button>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div id="kpis" class="hidden grid-cols-3 gap-3 mb-4 grid">
+    <div class="bg-white border border-gray-200 rounded-lg p-3">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Items</div>
+      <div id="kpi-items" class="text-xl font-bold text-gray-900 mt-1">—</div>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-3">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Trips</div>
+      <div id="kpi-trips" class="text-xl font-bold text-gray-900 mt-1">—</div>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-3">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Latest</div>
+      <div id="kpi-latest" class="text-base font-medium text-gray-900 mt-1">—</div>
+    </div>
+  </div>
+
+  <div id="loading" class="flex flex-col items-center justify-center py-24">
+    <div class="spinner mb-3"></div>
+    <p class="text-gray-500 text-sm">Loading field uploads…</p>
+  </div>
+
+  <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+    <div class="font-medium text-red-800 mb-1">Couldn't load field uploads</div>
+    <div id="error-msg" class="text-red-700"></div>
+    <button onclick="loadData()" class="mt-3 px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700">Retry</button>
+  </div>
+
+  <div id="empty" class="hidden bg-white border border-gray-200 rounded-lg p-8 text-center text-gray-500">
+    No uploads match these filters.
+  </div>
+
+  <div id="grouped" class="hidden space-y-6"></div>
+</div>
+
+<!-- Share modal (shown after push completes) -->
+<div id="share-modal" role="dialog" aria-modal="true">
+  <div class="card">
+    <h3 id="share-title">Pushing to Google Photos…</h3>
+    <p id="share-sub" class="text-gray-500"></p>
+    <div id="share-progress" class="progress-line"></div>
+    <div id="share-result" style="display:none;">
+      <p>Album created. Anyone with this link can view:</p>
+      <div class="link-row">
+        <input id="share-url" type="text" readonly>
+        <button id="share-copy" class="px-3 py-2 bg-cyan-600 text-white rounded text-sm">Copy</button>
+      </div>
+      <p class="text-xs text-gray-400 mt-3">The album lives in your personal Google Photos. You can also <a id="share-open" target="_blank" rel="noopener" class="text-cyan-700 underline">open it directly</a>.</p>
+    </div>
+    <div style="text-align:right;margin-top:16px;">
+      <button id="share-close" class="px-3 py-1.5 bg-gray-100 rounded text-sm">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Preview lightbox -->
+<div id="preview-overlay" role="dialog" aria-modal="true">
+  <div class="toolbar">
+    <div class="flex items-center gap-3 min-w-0 flex-1">
+      <button class="icon-btn" id="preview-prev" title="Previous (←)">←</button>
+      <button class="icon-btn" id="preview-next" title="Next (→)">→</button>
+      <span class="nav-counter" id="preview-counter"></span>
+      <span class="filename" id="preview-filename"></span>
+    </div>
+    <div class="flex gap-2 flex-shrink-0">
+      <a class="icon-btn" id="preview-open" target="_blank" rel="noopener" title="Open file directly">↗ Open</a>
+      <a class="icon-btn" id="preview-download" title="Download">⬇ Download</a>
+      <a class="icon-btn" id="preview-drive" target="_blank" rel="noopener" title="Open in Drive">📁 Drive</a>
+      <button class="icon-btn" id="preview-close" title="Close (Esc)">✕</button>
+    </div>
+  </div>
+  <div class="stage" id="preview-stage"></div>
+</div>
+
+<script>
+  // ============== Config ==================================================
+  // The pd-media app hosts the read API. Change if you DNS to a different domain.
+  const MEDIA_ORIGIN = 'https://media.pacificdiscovery.org';
+  const API_LIST     = `${MEDIA_ORIGIN}/api/uploads-list`;
+  const API_TRIPS    = `${MEDIA_ORIGIN}/api/trips`;
+  const API_FILE     = `${MEDIA_ORIGIN}/api/file-proxy`;
+
+  let uploads = [];
+  let trips   = [];
+
+  function fileUrl(id, opts = {}) {
+    return `${API_FILE}?id=${encodeURIComponent(id)}` + (opts.download ? '&download=1' : '');
+  }
+
+  // ============== Loaders =================================================
+  async function loadTrips() {
+    try {
+      const r = await fetch(API_TRIPS);
+      const d = await r.json();
+      trips = d.trips || [];
+      const sel = document.getElementById('filter-trip');
+      sel.innerHTML = '<option value="">All trips</option>' +
+        trips.map(t => `<option value="${t.id}">${t.season} ${t.year} · ${escapeHtml(t.program)}</option>`).join('');
+    } catch (e) {
+      console.warn('trip load failed', e);
+    }
+  }
+
+  async function loadData() {
+    show('loading'); hide('error'); hide('empty'); hide('grouped'); document.getElementById('kpis').classList.add('hidden');
+    const qs = new URLSearchParams();
+    const tripId = document.getElementById('filter-trip').value;
+    const media  = document.getElementById('filter-media').value;
+    const q      = document.getElementById('filter-q').value.trim();
+    if (tripId) qs.set('trip_id', tripId);
+    if (media)  qs.set('media',   media);
+    if (q)      qs.set('q',       q);
+    qs.set('limit', '500');
+
+    try {
+      const r = await fetch(`${API_LIST}?${qs}`);
+      const text = await r.text();
+      let d;
+      try { d = JSON.parse(text); } catch { throw new Error(`Non-JSON (HTTP ${r.status})`); }
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      uploads = d.uploads || [];
+    } catch (e) {
+      document.getElementById('error-msg').textContent = e.message;
+      hide('loading'); show('error'); return;
+    }
+
+    if (!uploads.length) { hide('loading'); show('empty'); return; }
+    renderKpis();
+    renderGrouped();
+    hide('loading');
+    document.getElementById('kpis').classList.remove('hidden');
+    show('grouped');
+  }
+
+  // ============== Render ==================================================
+  function renderKpis() {
+    const tripIds = new Set(uploads.map(u => u.trip_id));
+    document.getElementById('kpi-items').textContent  = uploads.length;
+    document.getElementById('kpi-trips').textContent  = tripIds.size;
+    const latest = uploads.reduce((max, u) => (!max || u.created_at > max ? u.created_at : max), null);
+    document.getElementById('kpi-latest').textContent = latest ? fmtDate(latest) : '—';
+  }
+
+  function renderGrouped() {
+    // Group by trip_id, then sort groups by most-recent upload
+    const map = new Map();
+    for (const u of uploads) {
+      if (!map.has(u.trip_id)) map.set(u.trip_id, []);
+      map.get(u.trip_id).push(u);
+    }
+    const groups = [...map.values()];
+    groups.sort((a, b) => (b[0]?.created_at || '').localeCompare(a[0]?.created_at || ''));
+
+    document.getElementById('grouped').innerHTML = groups.map(items => {
+      const first = items[0];
+      const tripLabel = `${first.season} ${first.year} · ${first.program}`;
+      const driveLink = first.drive_folder_url
+        ? `<a class="text-sm text-cyan-700 hover:underline" href="${escapeAttr(first.drive_folder_url)}" target="_blank">Open folder in Drive ↗</a>`
+        : '';
+      const tiles = items.map(tile).join('');
+      return `
+        <section>
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-base font-semibold text-gray-900">${escapeHtml(tripLabel)}</h2>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-gray-500">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+              ${driveLink}
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">${tiles}</div>
+        </section>
+      `;
+    }).join('');
+  }
+
+  function tile(u) {
+    const isVideo = (u.mime_type || '').startsWith('video/');
+    const isImage = (u.mime_type || '').startsWith('image/');
+    // Drive's thumbnailLink expires periodically; prefer the proxied file URL
+    // for images so it always works. Video poster falls back to thumbnail.
+    const thumbSrc = isImage ? fileUrl(u.drive_file_id) : (u.thumbnail_url || '');
+    const thumb = thumbSrc
+      ? `<img class="thumb" src="${escapeAttr(thumbSrc)}" alt="${escapeAttr(u.filename)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'thumb-fallback',textContent:'${escapeAttr((u.filename.split('.').pop()||'FILE').toUpperCase())}'}))">`
+      : `<div class="thumb-fallback">${escapeHtml((u.filename.split('.').pop() || 'FILE').toUpperCase())}</div>`;
+    const isSelected = selectedIds.has(u.id);
+    return `
+      <div class="tile bg-white border border-gray-200 rounded-lg overflow-hidden ${isSelected ? 'selected' : ''}"
+           data-upload-id="${u.id}"
+           onclick="onTileClick(event, ${u.id})">
+        <div class="select-check" onclick="event.stopPropagation(); toggleSelect(${u.id});">✓</div>
+        ${thumb}
+        ${isVideo ? '<span class="video-badge">▶ VIDEO</span>' : ''}
+        <div class="p-2">
+          <div class="text-xs font-medium text-gray-900 truncate" title="${escapeAttr(u.filename)}">${escapeHtml(u.filename)}</div>
+          <div class="text-[11px] text-gray-500 mt-0.5">
+            ${escapeHtml(u.uploader_name || 'unknown')} · ${fmtDate(u.created_at)}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ============== Preview lightbox ========================================
+  let previewIndex = 0;
+  let previewList  = [];
+
+  function openPreview(uploadId) {
+    previewList  = uploads;
+    previewIndex = uploads.findIndex(u => u.id === uploadId);
+    if (previewIndex < 0) return;
+    renderPreview();
+    document.getElementById('preview-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closePreview() {
+    document.getElementById('preview-overlay').classList.remove('open');
+    document.getElementById('preview-stage').innerHTML = '';
+    document.body.style.overflow = '';
+  }
+  function step(delta) {
+    const next = Math.min(previewList.length - 1, Math.max(0, previewIndex + delta));
+    if (next === previewIndex) return;
+    previewIndex = next; renderPreview();
+  }
+  function renderPreview() {
+    const u = previewList[previewIndex];
+    const stage = document.getElementById('preview-stage');
+    document.getElementById('preview-filename').textContent = u.filename;
+    document.getElementById('preview-counter').textContent  = previewList.length > 1 ? `${previewIndex+1} of ${previewList.length}` : '';
+    document.getElementById('preview-open').href     = fileUrl(u.drive_file_id);
+    document.getElementById('preview-download').href = fileUrl(u.drive_file_id, { download: true });
+    document.getElementById('preview-drive').href    = u.drive_file_url || '#';
+    document.getElementById('preview-prev').disabled = previewIndex === 0;
+    document.getElementById('preview-next').disabled = previewIndex >= previewList.length - 1;
+
+    const mime = u.mime_type || '';
+    const src  = fileUrl(u.drive_file_id);
+    if (mime.startsWith('image/')) {
+      stage.innerHTML = `<img src="${escapeAttr(src)}" alt="${escapeAttr(u.filename)}">`;
+    } else if (mime.startsWith('video/')) {
+      stage.innerHTML = `<video src="${escapeAttr(src)}" controls autoplay playsinline></video>`;
+    } else if (mime === 'application/pdf') {
+      stage.innerHTML = `<iframe src="${escapeAttr(src)}#view=FitH" title="${escapeAttr(u.filename)}"></iframe>`;
+    } else {
+      stage.innerHTML = `
+        <div class="fallback">
+          <div style="font-size:48px;margin-bottom:8px;">📄</div>
+          <div class="text-lg font-semibold text-gray-900 mb-1">${escapeHtml(u.filename)}</div>
+          <div class="text-sm text-gray-500 mb-3">No inline preview for this file type.</div>
+          <a href="${escapeAttr(src)}" target="_blank" rel="noopener" class="px-3 py-1.5 bg-cyan-600 text-white rounded text-sm inline-block">Open in new tab</a>
+        </div>`;
+    }
+  }
+  document.getElementById('preview-close').addEventListener('click', closePreview);
+  document.getElementById('preview-prev').addEventListener('click', () => step(-1));
+  document.getElementById('preview-next').addEventListener('click', () => step(1));
+  document.getElementById('preview-overlay').addEventListener('click', e => { if (e.target.id === 'preview-overlay') closePreview(); });
+  document.addEventListener('keydown', e => {
+    if (!document.getElementById('preview-overlay').classList.contains('open')) return;
+    if (e.key === 'Escape')         closePreview();
+    else if (e.key === 'ArrowLeft') step(-1);
+    else if (e.key === 'ArrowRight') step(1);
+  });
+
+  // ============== Wire filters ============================================
+  document.getElementById('filter-trip').addEventListener('change',  loadData);
+  document.getElementById('filter-media').addEventListener('change', loadData);
+  let qTimer;
+  document.getElementById('filter-q').addEventListener('input', () => {
+    clearTimeout(qTimer); qTimer = setTimeout(loadData, 250);
+  });
+
+  // ============== Helpers =================================================
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+  function fmtDate(s) {
+    if (!s) return '';
+    const d = new Date(s.replace(' ', 'T'));
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('en-NZ', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+  function show(id) { document.getElementById(id).classList.remove('hidden'); }
+  function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+  // ============== Selection + Push to Google Photos =======================
+  const selectedIds = new Set();
+
+  function toggleSelect(id) {
+    if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+    updateSelUI();
+    // Update just that one tile's class without re-rendering everything
+    const el = document.querySelector(`.tile[data-upload-id="${id}"]`);
+    if (el) el.classList.toggle('selected', selectedIds.has(id));
+  }
+
+  // Tile click logic: if there's already a selection going on, treat click
+  // as toggle-select instead of opening the preview. This is the typical
+  // photo-selection UX users expect.
+  window.onTileClick = function(event, id) {
+    if (selectedIds.size > 0) { toggleSelect(id); return; }
+    openPreview(id);
+  };
+  window.toggleSelect = toggleSelect;
+
+  function updateSelUI() {
+    const bar = document.getElementById('sel-bar');
+    document.getElementById('sel-count').textContent = selectedIds.size;
+    bar.classList.toggle('open', selectedIds.size > 0);
+    document.getElementById('sel-push').disabled = selectedIds.size === 0;
+  }
+
+  document.getElementById('sel-clear').addEventListener('click', () => {
+    selectedIds.clear();
+    document.querySelectorAll('.tile.selected').forEach(el => el.classList.remove('selected'));
+    updateSelUI();
+  });
+
+  // Which program is the selection from? Albums are per-program, so we can
+  // allow selecting across multiple seasons of the same program (Spring +
+  // Fall Bali both go into the same "Bali" album). Spanning programs is an
+  // error.
+  function selectionProgram() {
+    const programs = new Set();
+    for (const id of selectedIds) {
+      const u = uploads.find(x => x.id === id);
+      if (u) programs.add(u.program);
+    }
+    return programs.size === 1 ? [...programs][0] : null;
+  }
+
+  // -- Google Photos OAuth helpers ----------------------------------------
+  function getStoredEmail() { return localStorage.getItem('pd-gphotos-email') || ''; }
+  function setStoredEmail(e) { localStorage.setItem('pd-gphotos-email', e); }
+
+  // Open Google's consent in a popup; resolves with the user's email or rejects.
+  function openOAuthPopup() {
+    return new Promise((resolve, reject) => {
+      const w = 480, h = 720;
+      const x = (screen.width  - w) / 2;
+      const y = (screen.height - h) / 2;
+      const popup = window.open(
+        `${MEDIA_ORIGIN}/api/gphotos-auth-start?return_origin=${encodeURIComponent(location.origin)}`,
+        'gphotos-auth',
+        `popup=1,width=${w},height=${h},left=${x},top=${y}`
+      );
+      if (!popup) return reject(new Error('Popup blocked'));
+
+      const handler = (e) => {
+        // Only accept messages from the pd-media origin
+        try { if (new URL(MEDIA_ORIGIN).origin !== e.origin) return; } catch { return; }
+        if (e.data?.type === 'gphotos-auth-success') {
+          window.removeEventListener('message', handler);
+          setStoredEmail(e.data.email);
+          resolve(e.data.email);
+        } else if (e.data?.type === 'gphotos-auth-error') {
+          window.removeEventListener('message', handler);
+          reject(new Error(e.data.error || 'OAuth failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+
+      // If user closes the popup without finishing, eventually reject.
+      const poll = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(poll);
+          // Give the message a tiny grace period in case it raced with close
+          setTimeout(() => {
+            window.removeEventListener('message', handler);
+            reject(new Error('Popup closed before authorization completed'));
+          }, 300);
+        }
+      }, 500);
+    });
+  }
+
+  // -- Push flow ----------------------------------------------------------
+  function showShareModal({ title, sub, progress, share }) {
+    const m = document.getElementById('share-modal');
+    if (title)    document.getElementById('share-title').textContent = title;
+    if (sub)      document.getElementById('share-sub').textContent   = sub;
+    const prog = document.getElementById('share-progress');
+    if (progress) {
+      prog.textContent = progress.text;
+      prog.className   = 'progress-line ' + (progress.kind || '');
+    } else {
+      prog.textContent = '';
+      prog.className   = 'progress-line';
+    }
+    const result = document.getElementById('share-result');
+    if (share?.url) {
+      document.getElementById('share-url').value = share.url;
+      document.getElementById('share-open').href = share.url;
+      result.style.display = '';
+    } else {
+      result.style.display = 'none';
+    }
+    m.classList.add('open');
+  }
+  document.getElementById('share-close').addEventListener('click', () => {
+    document.getElementById('share-modal').classList.remove('open');
+  });
+  document.getElementById('share-copy').addEventListener('click', () => {
+    const input = document.getElementById('share-url');
+    input.select();
+    navigator.clipboard.writeText(input.value);
+    document.getElementById('share-copy').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('share-copy').textContent = 'Copy', 1500);
+  });
+
+  document.getElementById('sel-push').addEventListener('click', async () => {
+    const program = selectionProgram();
+    if (!program) {
+      alert('Selected items span multiple programs. Pick photos from one program at a time — multiple seasons of the same program (e.g. Spring + Fall Bali) is fine.');
+      return;
+    }
+    const ids = [...selectedIds];
+
+    showShareModal({ title: 'Pushing to Google Photos…', sub: `${ids.length} item${ids.length !== 1 ? 's' : ''} → "${program}" album`, progress: { text: 'Checking authorization…' } });
+
+    // 1. Make sure we know the user and have a fresh-ish token
+    let email = getStoredEmail();
+    if (email) {
+      try {
+        const r = await fetch(`${MEDIA_ORIGIN}/api/gphotos-status?email=${encodeURIComponent(email)}`);
+        const d = await r.json();
+        if (!d.authorized) email = '';
+      } catch { email = ''; }
+    }
+    if (!email) {
+      showShareModal({ title: 'Connect Google Photos', sub: 'A Google sign-in window will open. Approve access so we can create an album.', progress: { text: 'Waiting for sign-in…' } });
+      try {
+        email = await openOAuthPopup();
+      } catch (e) {
+        showShareModal({ title: 'Couldn\'t connect', sub: '', progress: { text: e.message, kind: 'err' } });
+        return;
+      }
+    }
+
+    // 2. Ensure the album exists + is shareable
+    showShareModal({ title: 'Pushing to Google Photos…', sub: `Signed in as ${email}`, progress: { text: `Preparing "${program}" album…` } });
+    let album;
+    try {
+      const r = await fetch(`${MEDIA_ORIGIN}/api/gphotos-album-ensure`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, program }),
+      });
+      const d = await r.json();
+      if (r.status === 401) {
+        // Token revoked — start over
+        setStoredEmail('');
+        showShareModal({ title: 'Reconnect Google Photos', sub: 'Your previous authorization expired.', progress: { text: 'Click Push again to re-authorize.', kind: 'err' } });
+        return;
+      }
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      album = d.album;
+    } catch (e) {
+      showShareModal({ title: 'Album setup failed', sub: '', progress: { text: e.message, kind: 'err' } });
+      return;
+    }
+
+    // 3. Push the bytes (this is the slow step)
+    showShareModal({
+      title: 'Pushing to Google Photos…',
+      sub:   `Uploading ${ids.length} item${ids.length !== 1 ? 's' : ''} to "${album.album_title}"`,
+      progress: { text: 'This can take a minute for videos — leave the tab open.' },
+    });
+    try {
+      const r = await fetch(`${MEDIA_ORIGIN}/api/gphotos-push`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, program, upload_ids: ids }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      const okCount   = d.created?.length || 0;
+      const failCount = d.failed?.length || 0;
+      const failNote  = failCount ? ` · ${failCount} failed` : '';
+      showShareModal({
+        title: '✅ Pushed to Google Photos',
+        sub:   `${okCount} item${okCount !== 1 ? 's' : ''} added to "${album.album_title}"${failNote}`,
+        progress: failCount ? { text: `Failed items: ${d.failed.map(f => f.error).slice(0,3).join('; ')}`, kind: 'err' } : null,
+        share: { url: album.share_url, product_url: album.product_url },
+      });
+      // Clear selection on success
+      selectedIds.clear();
+      document.querySelectorAll('.tile.selected').forEach(el => el.classList.remove('selected'));
+      updateSelUI();
+    } catch (e) {
+      showShareModal({ title: 'Push failed', sub: '', progress: { text: e.message, kind: 'err' } });
+    }
+  });
+
+  // ============== Boot ====================================================
+  loadTrips().then(loadData);
+</script>
+</body>
+</html>

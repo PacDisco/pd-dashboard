@@ -1,0 +1,9 @@
+{
+  "title": "Field Media",
+  "description": "Photos and videos uploaded by field staff via the media.pacificdiscovery.org app. Grouped by season + program.",
+  "category": "Programs",
+  "icon": "🎬",
+  "colors": ["#0891b2", "#22d3ee"],
+  "allowedRoles": ["admin", "admissions", "outreach", "operations"],
+  "order": 35
+}
