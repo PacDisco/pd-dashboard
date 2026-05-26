@@ -198,3 +198,24 @@ CREATE TABLE IF NOT EXISTS gphotos_albums (
 );
 
 CREATE INDEX IF NOT EXISTS gphotos_albums_program_idx ON gphotos_albums(program);
+
+-- ==========================================================================
+-- Family-facing curated gallery
+--   - approved_for_gallery: per-upload flag toggled by office staff
+--   - gallery_secrets: per-trip secret. Signed gallery URLs are HMACs that
+--                      depend on this secret. Rotating it revokes all
+--                      outstanding family links for that trip.
+-- ==========================================================================
+ALTER TABLE field_uploads
+  ADD COLUMN IF NOT EXISTS approved_for_gallery BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS field_uploads_approved_idx
+  ON field_uploads(trip_id, approved_for_gallery)
+  WHERE approved_for_gallery = TRUE;
+
+CREATE TABLE IF NOT EXISTS gallery_secrets (
+  trip_id     INTEGER PRIMARY KEY REFERENCES field_trips(id) ON DELETE CASCADE,
+  secret      TEXT NOT NULL,                          -- random per trip
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  rotated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

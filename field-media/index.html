@@ -27,6 +27,19 @@
   }
   .tile.selected .select-check { background: #0891b2; border-color: #0891b2; color: #fff; }
 
+  /* Approval star — top-right corner, visible always */
+  .approve-star {
+    position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(255,255,255,0.85); border: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; cursor: pointer; color: #94a3b8; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: background 0.15s, color 0.15s, transform 0.1s;
+  }
+  .approve-star:hover { transform: scale(1.08); }
+  .tile.approved .approve-star { background: #fbbf24; color: #fff; }
+  .tile.approved { box-shadow: 0 0 0 2px #fbbf24; }
+  .tile.video.approved { /* video badge moves left to avoid overlap with star */ }
+  .tile .video-badge { right: 36px; }
+
   /* Selection toolbar */
   #sel-bar {
     position: sticky; top: 8px; z-index: 30; background: #0f172a; color: #fff;
@@ -154,7 +167,8 @@
     <div class="count"><span id="sel-count">0</span> selected</div>
     <div class="flex items-center gap-2 flex-wrap">
       <button id="sel-clear">Clear</button>
-      <button id="sel-push" class="primary">📤 Push to Google Photos</button>
+      <button id="sel-approve"   class="primary">⭐ Approve for family gallery</button>
+      <button id="sel-unapprove">Remove approval</button>
     </div>
   </div>
 
@@ -357,12 +371,14 @@
         ? `<a class="text-sm text-cyan-700 hover:underline" href="${escapeAttr(first.drive_folder_url)}" target="_blank">Open folder in Drive ↗</a>`
         : '';
       const tiles = items.map(tile).join('');
+      const approvedCount = items.filter(x => x.approved_for_gallery).length;
       return `
         <section>
-          <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
             <h2 class="text-base font-semibold text-gray-900">${escapeHtml(tripLabel)}</h2>
-            <div class="flex items-center gap-3">
-              <span class="text-xs text-gray-500">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-xs text-gray-500">${items.length} item${items.length !== 1 ? 's' : ''} · ${approvedCount} approved</span>
+              <button class="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded hover:bg-amber-200" onclick="openGalleryShare(${first.trip_id})">🔗 Family link</button>
               ${driveLink}
             </div>
           </div>
@@ -382,11 +398,14 @@
       ? `<img class="thumb" src="${escapeAttr(thumbSrc)}" alt="${escapeAttr(u.filename)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'thumb-fallback',textContent:'${escapeAttr((u.filename.split('.').pop()||'FILE').toUpperCase())}'}))">`
       : `<div class="thumb-fallback">${escapeHtml((u.filename.split('.').pop() || 'FILE').toUpperCase())}</div>`;
     const isSelected = selectedIds.has(u.id);
+    const isApproved = !!u.approved_for_gallery;
     return `
-      <div class="tile bg-white border border-gray-200 rounded-lg overflow-hidden ${isSelected ? 'selected' : ''}"
+      <div class="tile bg-white border border-gray-200 rounded-lg overflow-hidden ${isSelected ? 'selected' : ''} ${isApproved ? 'approved' : ''}"
            data-upload-id="${u.id}"
            onclick="onTileClick(event, ${u.id})">
         <div class="select-check" onclick="event.stopPropagation(); toggleSelect(${u.id});">✓</div>
+        <button class="approve-star" title="${isApproved ? 'Approved — click to remove' : 'Approve for family gallery'}"
+                onclick="event.stopPropagation(); toggleApproval(${u.id}, ${!isApproved});">${isApproved ? '★' : '☆'}</button>
         ${thumb}
         ${isVideo ? '<span class="video-badge">▶ VIDEO</span>' : ''}
         <div class="p-2">
@@ -483,20 +502,16 @@
   function show(id) { document.getElementById(id).classList.remove('hidden'); }
   function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
-  // ============== Selection + Push to Google Photos =======================
+  // ============== Selection + Approval + Gallery ==========================
   const selectedIds = new Set();
 
   function toggleSelect(id) {
     if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
     updateSelUI();
-    // Update just that one tile's class without re-rendering everything
     const el = document.querySelector(`.tile[data-upload-id="${id}"]`);
     if (el) el.classList.toggle('selected', selectedIds.has(id));
   }
 
-  // Tile click logic: if there's already a selection going on, treat click
-  // as toggle-select instead of opening the preview. This is the typical
-  // photo-selection UX users expect.
   window.onTileClick = function(event, id) {
     if (selectedIds.size > 0) { toggleSelect(id); return; }
     openPreview(id);
@@ -507,7 +522,8 @@
     const bar = document.getElementById('sel-bar');
     document.getElementById('sel-count').textContent = selectedIds.size;
     bar.classList.toggle('open', selectedIds.size > 0);
-    document.getElementById('sel-push').disabled = selectedIds.size === 0;
+    document.getElementById('sel-approve').disabled   = selectedIds.size === 0;
+    document.getElementById('sel-unapprove').disabled = selectedIds.size === 0;
   }
 
   document.getElementById('sel-clear').addEventListener('click', () => {
@@ -516,69 +532,67 @@
     updateSelUI();
   });
 
-  // Which program is the selection from? Albums are per-program, so we can
-  // allow selecting across multiple seasons of the same program (Spring +
-  // Fall Bali both go into the same "Bali" album). Spanning programs is an
-  // error.
-  function selectionProgram() {
-    const programs = new Set();
-    for (const id of selectedIds) {
+  // -- Single-tile approval toggle (called from the ⭐ button) ------------
+  window.toggleApproval = async function(id, approved) {
+    try {
+      const r = await fetch(`${MEDIA_ORIGIN}/api/upload-approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, approved }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      // Patch local state so re-renders show the new value without a full reload
       const u = uploads.find(x => x.id === id);
-      if (u) programs.add(u.program);
+      if (u) u.approved_for_gallery = approved;
+      // Update the tile in place
+      const el = document.querySelector(`.tile[data-upload-id="${id}"]`);
+      if (el) {
+        el.classList.toggle('approved', approved);
+        const star = el.querySelector('.approve-star');
+        if (star) {
+          star.textContent = approved ? '★' : '☆';
+          star.title = approved ? 'Approved — click to remove' : 'Approve for family gallery';
+          star.setAttribute('onclick', `event.stopPropagation(); toggleApproval(${id}, ${!approved});`);
+        }
+      }
+      // Refresh approved counts on the section header (cheap; re-render groups)
+      renderGrouped();
+    } catch (e) {
+      alert('Couldn\'t update approval: ' + e.message);
     }
-    return programs.size === 1 ? [...programs][0] : null;
+  };
+
+  // -- Bulk approve/unapprove via toolbar ---------------------------------
+  async function bulkApprove(approved) {
+    if (!selectedIds.size) return;
+    const ids = [...selectedIds];
+    try {
+      const r = await fetch(`${MEDIA_ORIGIN}/api/upload-approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, approved }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      for (const id of ids) {
+        const u = uploads.find(x => x.id === id);
+        if (u) u.approved_for_gallery = approved;
+      }
+      selectedIds.clear();
+      updateSelUI();
+      renderGrouped();
+    } catch (e) {
+      alert('Bulk approval failed: ' + e.message);
+    }
   }
+  document.getElementById('sel-approve').addEventListener('click',   () => bulkApprove(true));
+  document.getElementById('sel-unapprove').addEventListener('click', () => bulkApprove(false));
 
-  // -- Google Photos OAuth helpers ----------------------------------------
-  function getStoredEmail() { return localStorage.getItem('pd-gphotos-email') || ''; }
-  function setStoredEmail(e) { localStorage.setItem('pd-gphotos-email', e); }
-
-  // Open Google's consent in a popup; resolves with the user's email or rejects.
-  function openOAuthPopup() {
-    return new Promise((resolve, reject) => {
-      const w = 480, h = 720;
-      const x = (screen.width  - w) / 2;
-      const y = (screen.height - h) / 2;
-      const popup = window.open(
-        `${MEDIA_ORIGIN}/api/gphotos-auth-start?return_origin=${encodeURIComponent(location.origin)}`,
-        'gphotos-auth',
-        `popup=1,width=${w},height=${h},left=${x},top=${y}`
-      );
-      if (!popup) return reject(new Error('Popup blocked'));
-
-      const handler = (e) => {
-        // Only accept messages from the pd-media origin
-        try { if (new URL(MEDIA_ORIGIN).origin !== e.origin) return; } catch { return; }
-        if (e.data?.type === 'gphotos-auth-success') {
-          window.removeEventListener('message', handler);
-          setStoredEmail(e.data.email);
-          resolve(e.data.email);
-        } else if (e.data?.type === 'gphotos-auth-error') {
-          window.removeEventListener('message', handler);
-          reject(new Error(e.data.error || 'OAuth failed'));
-        }
-      };
-      window.addEventListener('message', handler);
-
-      // If user closes the popup without finishing, eventually reject.
-      const poll = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(poll);
-          // Give the message a tiny grace period in case it raced with close
-          setTimeout(() => {
-            window.removeEventListener('message', handler);
-            reject(new Error('Popup closed before authorization completed'));
-          }, 300);
-        }
-      }, 500);
-    });
-  }
-
-  // -- Push flow ----------------------------------------------------------
+  // ============== Family gallery share modal ==============================
+  // Repurposes the existing #share-modal markup (title, sub, progress, result).
   function showShareModal({ title, sub, progress, share }) {
     const m = document.getElementById('share-modal');
-    if (title)    document.getElementById('share-title').textContent = title;
-    if (sub)      document.getElementById('share-sub').textContent   = sub;
+    if (title) document.getElementById('share-title').textContent = title;
+    if (sub)   document.getElementById('share-sub').textContent   = sub;
     const prog = document.getElementById('share-progress');
     if (progress) {
       prog.textContent = progress.text;
@@ -608,87 +622,53 @@
     setTimeout(() => document.getElementById('share-copy').textContent = 'Copy', 1500);
   });
 
-  document.getElementById('sel-push').addEventListener('click', async () => {
-    const program = selectionProgram();
-    if (!program) {
-      alert('Selected items span multiple programs. Pick photos from one program at a time — multiple seasons of the same program (e.g. Spring + Fall Bali) is fine.');
-      return;
-    }
-    const ids = [...selectedIds];
-
-    showShareModal({ title: 'Pushing to Google Photos…', sub: `${ids.length} item${ids.length !== 1 ? 's' : ''} → "${program}" album`, progress: { text: 'Checking authorization…' } });
-
-    // 1. Make sure we know the user and have a fresh-ish token
-    let email = getStoredEmail();
-    if (email) {
-      try {
-        const r = await fetch(`${MEDIA_ORIGIN}/api/gphotos-status?email=${encodeURIComponent(email)}`);
-        const d = await r.json();
-        if (!d.authorized) email = '';
-      } catch { email = ''; }
-    }
-    if (!email) {
-      showShareModal({ title: 'Connect Google Photos', sub: 'A Google sign-in window will open. Approve access so we can create an album.', progress: { text: 'Waiting for sign-in…' } });
-      try {
-        email = await openOAuthPopup();
-      } catch (e) {
-        showShareModal({ title: 'Couldn\'t connect', sub: '', progress: { text: e.message, kind: 'err' } });
-        return;
-      }
-    }
-
-    // 2. Ensure the album exists + is shareable
-    showShareModal({ title: 'Pushing to Google Photos…', sub: `Signed in as ${email}`, progress: { text: `Preparing "${program}" album…` } });
-    let album;
-    try {
-      const r = await fetch(`${MEDIA_ORIGIN}/api/gphotos-album-ensure`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, program }),
-      });
-      const d = await r.json();
-      if (r.status === 401) {
-        // Token revoked — start over
-        setStoredEmail('');
-        showShareModal({ title: 'Reconnect Google Photos', sub: 'Your previous authorization expired.', progress: { text: 'Click Push again to re-authorize.', kind: 'err' } });
-        return;
-      }
-      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-      album = d.album;
-    } catch (e) {
-      showShareModal({ title: 'Album setup failed', sub: '', progress: { text: e.message, kind: 'err' } });
-      return;
-    }
-
-    // 3. Push the bytes (this is the slow step)
+  // Called from the "🔗 Family link" button on each trip section header.
+  window.openGalleryShare = async function(tripId) {
     showShareModal({
-      title: 'Pushing to Google Photos…',
-      sub:   `Uploading ${ids.length} item${ids.length !== 1 ? 's' : ''} to "${album.album_title}"`,
-      progress: { text: 'This can take a minute for videos — leave the tab open.' },
+      title: 'Family gallery link',
+      sub:   'Generating signed link…',
+      progress: { text: 'One moment.' },
     });
     try {
-      const r = await fetch(`${MEDIA_ORIGIN}/api/gphotos-push`, {
+      const r = await fetch(`${MEDIA_ORIGIN}/api/gallery-link`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, program, upload_ids: ids }),
+        body: JSON.stringify({ trip_id: tripId, ttl_days: 30 }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-      const okCount   = d.created?.length || 0;
-      const failCount = d.failed?.length || 0;
-      const failNote  = failCount ? ` · ${failCount} failed` : '';
+      const expires = new Date(d.expires_at * 1000).toLocaleDateString('en-NZ', { year:'numeric', month:'short', day:'numeric' });
+      const count   = d.trip.approved_count;
+      const tripLbl = `${d.trip.season} ${d.trip.year} · ${d.trip.program}`;
       showShareModal({
-        title: '✅ Pushed to Google Photos',
-        sub:   `${okCount} item${okCount !== 1 ? 's' : ''} added to "${album.album_title}"${failNote}`,
-        progress: failCount ? { text: `Failed items: ${d.failed.map(f => f.error).slice(0,3).join('; ')}`, kind: 'err' } : null,
-        share: { url: album.share_url, product_url: album.product_url },
+        title: '🔗 Family link for ' + tripLbl,
+        sub:   `${count} approved photo${count !== 1 ? 's' : ''} · Link works until ${expires}.`,
+        progress: count === 0 ? { text: 'No approved photos yet — star the ones to include first.', kind: 'err' } : null,
+        share: { url: d.url },
       });
-      // Clear selection on success
-      selectedIds.clear();
-      document.querySelectorAll('.tile.selected').forEach(el => el.classList.remove('selected'));
-      updateSelUI();
+      // Inject a "Revoke" button if it's not already there
+      const result = document.getElementById('share-result');
+      if (!document.getElementById('share-revoke')) {
+        const revoke = document.createElement('button');
+        revoke.id = 'share-revoke';
+        revoke.textContent = 'Revoke + regenerate';
+        revoke.style.cssText = 'margin-top:10px;padding:6px 12px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:6px;font-size:12px;cursor:pointer;';
+        revoke.onclick = async () => {
+          if (!confirm('Revoke this link? Any family using the current URL will lose access. A new URL will be created.')) return;
+          const rr = await fetch(`${MEDIA_ORIGIN}/api/gallery-link`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_id: tripId, ttl_days: 30, action: 'revoke' }),
+          });
+          const dd = await rr.json();
+          if (!rr.ok) return alert('Revoke failed: ' + dd.error);
+          document.getElementById('share-url').value = dd.url;
+          document.getElementById('share-open').href = dd.url;
+        };
+        result.appendChild(revoke);
+      }
     } catch (e) {
-      showShareModal({ title: 'Push failed', sub: '', progress: { text: e.message, kind: 'err' } });
+      showShareModal({ title: 'Couldn\'t generate link', sub: '', progress: { text: e.message, kind: 'err' } });
     }
-  });
+  };
 
   // ============== Manage Trips ============================================
   async function openTripsModal() {
