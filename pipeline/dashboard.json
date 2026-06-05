@@ -1,6 +1,6 @@
 {
   "title": "Pipeline",
-  "description": "Live deal pipeline across all season programs with stage-by-stage drill-downs.",
+  "description": "Live, editable replica of the advisor pipeline tab from the Pipeline & Commission Reports sheet — filter, sort, and edit cells straight back to Google Sheets.",
   "category": "Enrollment",
   "icon": "🪜",
   "colors": ["#d97706", "#fbbf24"],
