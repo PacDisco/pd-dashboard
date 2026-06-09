@@ -216,6 +216,44 @@ function primaryContactId(deal) {
   return assocs.length ? String(assocs[0].id) : null;
 }
 
+// Resolve the "Student"-labeled contact for each deal via v4 associations.
+// Pacific Discovery deals associate the student AND parents/guardians. Parents
+// are almost always OFFLINE, so taking the first associated contact corrupts
+// source attribution. The student carries the real acquisition source.
+// Falls back to the first associated contact when no Student label is present.
+async function fetchDealStudentContacts(dealIds) {
+  const unique = Array.from(new Set(dealIds.map(String)));
+  const map = new Map();
+  for (let i = 0; i < unique.length; i += 100) {
+    const batch = unique.slice(i, i + 100);
+    let data;
+    try {
+      data = await hsPost("/crm/v4/associations/deals/contacts/batch/read", {
+        inputs: batch.map((id) => ({ id })),
+      });
+    } catch (err) {
+      console.warn("v4 deal->contact association read failed:", err.message);
+      continue;
+    }
+    for (const row of data.results || []) {
+      const dealId = String(row.from?.id ?? "");
+      const tos = row.to || [];
+      let chosen = null;
+      for (const t of tos) {
+        const labels = (t.associationTypes || []).map((a) => (a.label || "").toLowerCase());
+        if (labels.some((l) => l.includes("student"))) {
+          chosen = String(t.toObjectId);
+          break;
+        }
+      }
+      if (!chosen && tos.length) chosen = String(tos[0].toObjectId);
+      if (dealId && chosen) map.set(dealId, chosen);
+    }
+    if (i + 100 < unique.length) await sleep(150);
+  }
+  return map;
+}
+
 function hubspotSourceLabel(raw) {
   if (!raw) return UNKNOWN_LABEL;
   return HUBSPOT_SOURCE_LABELS[raw] || raw;
@@ -378,12 +416,29 @@ export default async (req) => {
       searchStageEntries(STAGES.cw, windowStart, windowEnd),
     ]);
 
-    // Phase 2: batch-resolve source properties for every contact ID referenced
+    // Phase 2a: resolve the Student-labeled contact for each deal so parents/
+    // guardians (usually OFFLINE) don't drive the deal's source attribution.
+    const allDealIds = new Set();
+    for (const list of [afDeals, dpDeals, cwDeals]) {
+      for (const d of list) {
+        if (isExcluded(d)) continue;
+        allDealIds.add(String(d.id));
+      }
+    }
+    const dealStudentMap = await fetchDealStudentContacts([...allDealIds]);
+
+    // The contact whose source represents the deal: the Student, falling back
+    // to the first associated contact when no Student label exists.
+    function dealContactId(deal) {
+      return dealStudentMap.get(String(deal.id)) || primaryContactId(deal);
+    }
+
+    // Phase 2b: batch-resolve source properties for every student contact referenced
     const allContactIds = new Set();
     for (const list of [afDeals, dpDeals, cwDeals]) {
       for (const d of list) {
         if (isExcluded(d)) continue;
-        const cid = primaryContactId(d);
+        const cid = dealContactId(d);
         if (cid) allContactIds.add(cid);
       }
     }
@@ -391,7 +446,7 @@ export default async (req) => {
     const sourceMap = await fetchContactSources([...allContactIds]);
 
     function dealSource(deal, mode) {
-      const cid = primaryContactId(deal);
+      const cid = dealContactId(deal);
       if (!cid) return UNKNOWN_LABEL;
       const entry = sourceMap.get(cid);
       if (!entry) return UNKNOWN_LABEL;
@@ -403,7 +458,7 @@ export default async (req) => {
     function dealSubSource(deal, jotformPrimary) {
       const fieldName = JOTFORM_DETAIL_FIELDS[jotformPrimary];
       if (!fieldName) return null;
-      const cid = primaryContactId(deal);
+      const cid = dealContactId(deal);
       if (!cid) return UNKNOWN_LABEL;
       const entry = sourceMap.get(cid);
       if (!entry) return UNKNOWN_LABEL;
