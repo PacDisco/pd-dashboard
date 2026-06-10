@@ -22,6 +22,13 @@ const HS_BASE = "https://api.hubapi.com";
 
 const ANALYTICS_VIEW_ID = "16405";
 
+// Jotform: the PD application form(s) carry the real "How did you find us?"
+// answer, which often is NOT synced to the HubSpot how_did_you_find_us_
+// property. We pull it straight from Jotform and match by participant email.
+const JOTFORM_API_KEY = process.env.JOTFORM_API_KEY;
+const JOTFORM_APP_FORM_IDS = (process.env.JOTFORM_APP_FORM_IDS || "240277257210046")
+  .split(",").map((x) => x.trim()).filter(Boolean);
+
 const STAGES = {
   af: ["143518986", "143518993", "143476012", "143502767", "1015966368"],
   dp: ["143518989", "143518996", "143476015", "143502770", "1015966371"],
@@ -183,6 +190,7 @@ async function fetchContactSources(contactIds) {
   if (unique.length === 0) return new Map();
 
   const props = [
+    "email",
     SOURCE_PROPS.hubspot,
     SOURCE_PROPS.jotform,
     ...Object.values(JOTFORM_DETAIL_FIELDS),
@@ -199,6 +207,7 @@ async function fetchContactSources(contactIds) {
     for (const c of data.results || []) {
       const p = c.properties || {};
       map.set(String(c.id), {
+        email: p.email || null,
         hubspot: p[SOURCE_PROPS.hubspot] || null,
         jotform: p[SOURCE_PROPS.jotform] || null,
         advisor_name: p.advisor_name || null,
@@ -262,6 +271,7 @@ function hubspotSourceLabel(raw) {
 async function fetchPdContacts(startISO, endISO) {
   const props = [
     "createdate",
+    "email",
     SOURCE_PROPS.hubspot,
     SOURCE_PROPS.jotform,
     ...Object.values(JOTFORM_DETAIL_FIELDS),
@@ -293,6 +303,7 @@ async function fetchPdContacts(startISO, endISO) {
       const p = r.properties || {};
       all.push({
         createdate: p.createdate,
+        email: p.email || null,
         hubspot: p[SOURCE_PROPS.hubspot] || null,
         jotform: p[SOURCE_PROPS.jotform] || null,
         advisor_name: p.advisor_name || null,
@@ -305,6 +316,89 @@ async function fetchPdContacts(startISO, endISO) {
     if (page >= 1) await sleep(200);
   }
   return all;
+}
+
+// ============================================================
+// Jotform "How did you find us?" — pulled directly from the application
+// form submissions and keyed by participant email. Questions are matched by
+// label text so this survives form re-versioning.
+// ============================================================
+function jfAnswerToString(a) {
+  if (a == null) return null;
+  if (typeof a === "string") return a.trim() || null;
+  if (Array.isArray(a)) return a.filter(Boolean).join(", ") || null;
+  if (typeof a === "object") {
+    const v = Object.values(a).filter((x) => x !== "" && x != null);
+    return v.length ? v.join(" ").trim() : null;
+  }
+  return String(a);
+}
+
+async function fetchJotformAttribution() {
+  // Map<emailLower, { primary, advisor, event, wordOfMouth }>
+  const map = new Map();
+  if (!JOTFORM_API_KEY) {
+    console.warn("JOTFORM_API_KEY not set — skipping Jotform attribution enrichment");
+    return map;
+  }
+  for (const formId of JOTFORM_APP_FORM_IDS) {
+    let offset = 0;
+    for (let page = 0; page < 30; page++) {
+      const url = `https://api.jotform.com/form/${formId}/submissions` +
+        `?apiKey=${JOTFORM_API_KEY}&limit=100&offset=${offset}`;
+      let data;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) { console.warn(`Jotform form ${formId} ${res.status}`); break; }
+        data = await res.json();
+      } catch (err) {
+        console.warn("Jotform fetch threw:", err.message);
+        break;
+      }
+      const content = data.content || [];
+      for (const sub of content) {
+        const answers = sub.answers || {};
+        let email = null, primary = null, advisor = null, event = null, wom = null;
+        for (const qid of Object.keys(answers)) {
+          const q = answers[qid] || {};
+          const t = (q.text || "").toLowerCase();
+          const val = jfAnswerToString(q.answer);
+          if (!val) continue;
+          if (t.includes("participant") && t.includes("email")) email = val.toLowerCase();
+          else if (t.includes("how did you find")) primary = val;
+          else if (t.includes("advisor") && t.includes("consultant")) advisor = val;
+          else if (t.includes("name and location of the event")) event = val;
+          else if (t.includes("word of mouth referral")) wom = val;
+        }
+        if (!email) continue;
+        const prev = map.get(email) || {};
+        map.set(email, {
+          primary: primary || prev.primary || null,
+          advisor: advisor || prev.advisor || null,
+          event: event || prev.event || null,
+          wordOfMouth: wom || prev.wordOfMouth || null,
+        });
+      }
+      if (content.length < 100) break;
+      offset += 100;
+    }
+  }
+  return map;
+}
+
+// Overwrite a contact's Jotform fields with the answer from their application
+// submission (matched by email). HubSpot values are kept only as a fallback.
+function enrichJotform(entry, jotformMap) {
+  if (!entry) return entry;
+  const email = (entry.email || "").trim().toLowerCase();
+  if (!email) return entry;
+  const jf = jotformMap.get(email);
+  if (!jf) return entry;
+  if (jf.primary) entry.jotform = jf.primary;
+  if (jf.advisor) entry.advisor_name = jf.advisor;
+  if (jf.event) entry.event_name_and_location = jf.event;
+  if (jf.wordOfMouth) entry.word_of_mouth_referral_name = jf.wordOfMouth;
+  return entry;
 }
 
 // ============================================================
@@ -409,6 +503,9 @@ export default async (req) => {
     const [windowStart] = monthRange(months[0]);
     const [, windowEnd] = monthRange(months[months.length - 1]);
 
+    // Kick off the Jotform attribution pull in parallel with HubSpot work.
+    const jotformMapPromise = fetchJotformAttribution();
+
     // Phase 1: deal stage queries with associated contact IDs
     const [afDeals, dpDeals, cwDeals] = await Promise.all([
       searchStageEntries(STAGES.af, windowStart, windowEnd),
@@ -444,6 +541,10 @@ export default async (req) => {
     }
     await sleep(300);
     const sourceMap = await fetchContactSources([...allContactIds]);
+
+    // Override deal-contact Jotform answers with the real values from Jotform.
+    const jotformMap = await jotformMapPromise;
+    for (const entry of sourceMap.values()) enrichJotform(entry, jotformMap);
 
     function dealSource(deal, mode) {
       const cid = dealContactId(deal);
@@ -580,6 +681,7 @@ export default async (req) => {
         if (idx < 0) continue;
         contactsTotal[idx] += contacts.length;
         for (const c of contacts) {
+          enrichJotform(c, jotformMap);
           const hsLabel = hubspotSourceLabel(c.hubspot);
           const jfLabel = c.jotform || UNKNOWN_LABEL;
           ensure(contactsBySource, "hubspot", hsLabel)[idx]++;
