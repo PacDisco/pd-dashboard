@@ -200,8 +200,8 @@ async function fetchDealContactAssociations(token, dealIds) {
   return map;
 }
 
-async function fetchContactEmails(token, contactIds) {
-  const map = new Map(); // contactId -> email
+async function fetchContactDetails(token, contactIds) {
+  const map = new Map(); // contactId -> { id, name, email, phone }
   const unique = [...new Set(contactIds.map(String))];
   if (!unique.length) return map;
 
@@ -211,7 +211,7 @@ async function fetchContactEmails(token, contactIds) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        properties: ['email'],
+        properties: ['email', 'firstname', 'lastname', 'phone', 'mobilephone'],
         inputs: chunk.map(id => ({ id: String(id) }))
       })
     });
@@ -222,11 +222,19 @@ async function fetchContactEmails(token, contactIds) {
     }
     const data = await resp.json();
     for (const c of (data.results || [])) {
-      const email = c.properties && c.properties.email;
-      if (email) map.set(String(c.id), email);
+      const p = c.properties || {};
+      const name = [p.firstname, p.lastname].filter(Boolean).join(' ').trim();
+      map.set(String(c.id), {
+        id: String(c.id),
+        name: name || '',
+        email: p.email || '',
+        // Prefer the primary phone, fall back to mobile.
+        phone: p.phone || p.mobilephone || '',
+        hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-1/${c.id}`
+      });
     }
   }
-  console.log(`fetchContactEmails: ${unique.length} unique contact IDs → ${map.size} emails resolved`);
+  console.log(`fetchContactDetails: ${unique.length} unique contact IDs → ${map.size} resolved`);
   return map;
 }
 
@@ -267,9 +275,9 @@ function parsePayment(val) {
   }
 }
 
-function processDeals(rawDeals, dealToEmails, excludedStageIds, liveStageLabels) {
+function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels) {
   const processed = [];
-  dealToEmails = dealToEmails || new Map();
+  dealToContacts = dealToContacts || new Map();
   excludedStageIds = excludedStageIds || new Set();
   liveStageLabels = liveStageLabels || new Map();
 
@@ -354,7 +362,10 @@ function processDeals(rawDeals, dealToEmails, excludedStageIds, liveStageLabels)
       internalFlightDepartureTime: props.internal_flight_departure_time || '',
       departureFlightNumber: props.departure_flight_number || '',
       departureTime: props.departure_time || '',
-      contactEmails: dealToEmails.get(deal.id) || []
+      // Full associated-contact records (name, email, phone) for the popup.
+      contacts: dealToContacts.get(deal.id) || [],
+      // Kept for backward compatibility with anything reading just emails.
+      contactEmails: (dealToContacts.get(deal.id) || []).map(c => c.email).filter(Boolean)
     });
   }
 
@@ -426,25 +437,25 @@ export default async (req) => {
     const dealIds = rawDeals.map(d => String(d.id));
     const dealToContactIds = await fetchDealContactAssociations(token, dealIds);
 
-    // Flatten contact IDs and resolve their emails in one batched pass.
+    // Flatten contact IDs and resolve their details (name/email/phone) in one batched pass.
     const allContactIds = [];
     for (const contactIds of dealToContactIds.values()) {
       for (const id of contactIds) allContactIds.push(id);
     }
-    const emailMap = await fetchContactEmails(token, allContactIds);
+    const contactMap = await fetchContactDetails(token, allContactIds);
 
-    const dealToEmails = new Map();
+    const dealToContacts = new Map();
     for (const [dealId, contactIds] of dealToContactIds.entries()) {
-      const emails = contactIds.map(id => emailMap.get(id)).filter(Boolean);
-      dealToEmails.set(dealId, emails);
+      const contacts = contactIds.map(id => contactMap.get(id)).filter(Boolean);
+      dealToContacts.set(dealId, contacts);
     }
-    console.log(`enrollment: ${rawDeals.length} deals fetched, ${dealToEmails.size} have at least one resolved email`);
+    console.log(`enrollment: ${rawDeals.length} deals fetched, ${dealToContacts.size} have at least one resolved contact`);
 
     // Pull insurance_policy dropdown options in parallel with the rest so the
     // dashboard can render the same picklist HubSpot has.
     const insurancePolicyOptions = await fetchPropertyOptions(token, 'insurance_policy');
 
-    const processed = processDeals(rawDeals, dealToEmails, excludedStageIds, liveStageLabels);
+    const processed = processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels);
     const { current, past } = groupBySeason(processed);
 
     // Summary stats (exclude College Credit / empty PD Program from counts)
