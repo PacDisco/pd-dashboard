@@ -75,6 +75,21 @@
   </div>
 </div>
 
+<!-- Contacts Modal -->
+<div id="contacts-modal" class="hidden" style="position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center;">
+  <div id="contacts-modal-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.5);"></div>
+  <div style="position:relative; background:white; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); width:92%; max-width:520px; max-height:80vh; overflow:hidden; display:flex; flex-direction:column;">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+      <div>
+        <h3 class="text-lg font-bold text-gray-900">Associated Contacts</h3>
+        <p id="contacts-modal-sub" class="text-sm text-gray-500"></p>
+      </div>
+      <button onclick="closeContacts()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none px-2" aria-label="Close">&times;</button>
+    </div>
+    <div id="contacts-modal-body" class="px-5 py-4 overflow-y-auto"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════
 // UTILITIES
@@ -125,6 +140,11 @@ function renderTable(deals, tableId) {
       '<td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-medium ' + stageBadge(d.stage) + '">' + d.stage + '</span></td>' +
       '<td class="px-4 py-3 text-right text-sm font-medium">' + fmt(d.amount) + '</td>' +
       '<td class="px-4 py-3 text-right text-sm font-medium text-green-700">' + fmt(d.totalPaid) + '</td>' +
+      '<td class="px-4 py-3 text-center text-sm whitespace-nowrap">' +
+        '<button type="button" data-contacts-deal="' + d.id + '" class="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100 border border-blue-200">' +
+          '&#128100; Contacts' + ((d.contacts && d.contacts.length) ? ' <span class="ml-0.5 text-xs bg-blue-200 text-blue-800 px-1.5 rounded-full">' + d.contacts.length + '</span>' : '') +
+        '</button>' +
+      '</td>' +
     '</tr>';
   }
 
@@ -138,6 +158,7 @@ function renderTable(deals, tableId) {
       '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="4">Stage &#x25B4;&#x25BE;</th>' +
       '<th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="5">Total Amount &#x25B4;&#x25BE;</th>' +
       '<th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="6">Total Paid &#x25B4;&#x25BE;</th>' +
+      '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Contacts</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
@@ -172,6 +193,19 @@ function renderSubTabs(deals, parentId) {
 // ═══════════════════════════════════════════
 function renderDashboard(data) {
   var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
+
+  // Build a registry of contacts keyed by deal id so the Contacts button can
+  // look them up without re-embedding JSON in the DOM.
+  window.__dealRegistry = {};
+  for (var t = 0; t < allTabs.length; t++) {
+    var tDeals = allTabs[t].deals || [];
+    for (var k = 0; k < tDeals.length; k++) {
+      window.__dealRegistry[tDeals[k].id] = {
+        studentName: tDeals[k].studentName,
+        contacts: tDeals[k].contacts || []
+      };
+    }
+  }
 
   document.getElementById('stat-students').textContent = data.totalStudents;
   document.getElementById('stat-amount').textContent = fmt(data.totalAmount);
@@ -243,6 +277,12 @@ function attachListeners() {
     });
   });
 
+  document.querySelectorAll('[data-contacts-deal]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      showContacts(this.dataset.contactsDeal);
+    });
+  });
+
   document.querySelectorAll('th[data-col]').forEach(function(th) {
     th.addEventListener('click', function() {
       var colIndex = parseInt(this.dataset.col);
@@ -267,6 +307,64 @@ function attachListeners() {
     });
   });
 }
+
+// ═══════════════════════════════════════════
+// CONTACTS MODAL
+// ═══════════════════════════════════════════
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function showContacts(dealId) {
+  var entry = (window.__dealRegistry || {})[dealId] || { studentName: '', contacts: [] };
+  var contacts = entry.contacts || [];
+  document.getElementById('contacts-modal-sub').textContent =
+    entry.studentName + ' · ' + contacts.length + (contacts.length === 1 ? ' contact' : ' contacts');
+
+  var body = document.getElementById('contacts-modal-body');
+  if (!contacts.length) {
+    body.innerHTML = '<p class="text-sm text-gray-500 py-4 text-center">No associated contacts found for this deal.</p>';
+  } else {
+    var html = '';
+    for (var i = 0; i < contacts.length; i++) {
+      var c = contacts[i];
+      var name = escapeHtml(c.name || 'Unnamed contact');
+      var emailRow = c.email
+        ? '<div class="text-sm text-gray-700 mt-1">&#9993; <a href="mailto:' + escapeHtml(c.email) + '" class="text-blue-600 hover:underline">' + escapeHtml(c.email) + '</a></div>'
+        : '<div class="text-sm text-gray-400 mt-1">&#9993; No email</div>';
+      var phoneRow = c.phone
+        ? '<div class="text-sm text-gray-700 mt-1">&#9742; <a href="tel:' + escapeHtml(c.phone) + '" class="text-blue-600 hover:underline">' + escapeHtml(c.phone) + '</a></div>'
+        : '<div class="text-sm text-gray-400 mt-1">&#9742; No phone</div>';
+      var link = c.hubspotUrl
+        ? '<a href="' + escapeHtml(c.hubspotUrl) + '" target="_blank" class="text-xs text-blue-600 hover:underline">View in HubSpot &#8599;</a>'
+        : '';
+      html += '<div class="border border-gray-200 rounded-lg p-3 mb-3">' +
+        '<div class="flex items-center justify-between"><div class="font-semibold text-gray-900">' + name + '</div>' + link + '</div>' +
+        emailRow + phoneRow +
+      '</div>';
+    }
+    body.innerHTML = html;
+  }
+
+  var modal = document.getElementById('contacts-modal');
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+}
+
+function closeContacts() {
+  var modal = document.getElementById('contacts-modal');
+  modal.classList.add('hidden');
+  modal.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'contacts-modal-overlay') closeContacts();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeContacts();
+});
 
 // ═══════════════════════════════════════════
 // DATA FETCH — runs on every page load
