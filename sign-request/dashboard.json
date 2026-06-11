@@ -1,0 +1,9 @@
+{
+  "title": "Send for Signature",
+  "description": "Fill in document fields and email a prefilled signing link to the recipient.",
+  "category": "Admissions",
+  "icon": "✍️",
+  "colors": ["#2563eb", "#7c9bff"],
+  "allowedRoles": ["admin", "admissions", "operations"],
+  "order": 35
+}
