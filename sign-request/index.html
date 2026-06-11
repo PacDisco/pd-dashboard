@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Send Document for Signature</title>
+<meta name="description" content="Fill in document fields and email a prefilled signing link to the recipient.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .field-label { font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 4px; display: block; }
+  .field-input { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+  .field-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(37,99,235,0.4); border-color: #2563eb; }
+  .spinner { border: 3px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; width: 16px; height: 16px; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="max-w-2xl mx-auto px-6 py-8">
+
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Send Document for Signature</h1>
+    <p class="text-sm text-gray-500 mt-1">Enter the instructor's name and email. JotForm sends the agreement to the signers in order — Pacific Discovery first, then the instructor.</p>
+  </div>
+
+  <form id="sign-form" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
+
+    <!-- Second signer (the instructor) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="field-label" for="signerName">Instructor name (second signer)</label>
+        <input class="field-input" id="signerName" type="text" placeholder="Jane Doe">
+      </div>
+      <div>
+        <label class="field-label" for="signerEmail">Instructor email (second signer) <span class="text-red-500">*</span></label>
+        <input class="field-input" id="signerEmail" type="email" required placeholder="instructor@example.com">
+      </div>
+    </div>
+
+    <!-- Optional extra fields passed to the workflow's starting form (from CONFIG.EXTRA_FIELDS) -->
+    <div id="doc-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" id="submit-btn" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
+        Send for Signature
+      </button>
+      <span id="status" class="text-sm"></span>
+    </div>
+  </form>
+
+  <!-- Result panel -->
+  <div id="result" class="hidden mt-5 bg-white rounded-xl shadow-sm border border-gray-200 p-5"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIG — OPTIONAL extra fields to pass to the JotForm Workflow's starting form.
+//
+// The instructor's name + email are handled by the dedicated inputs above and
+// don't need to be listed here. Only add entries if your starting form has
+// EXTRA fields you want the dashboard to fill. `qid` MUST be the JotForm
+// QUESTION ID (the number, e.g. "5"), not the label — find it in the form's
+// API/Properties. Leave EXTRA_FIELDS empty if you don't need any.
+//
+// type: "text" | "email" | "tel" | "number" | "date" | "textarea"
+// ═══════════════════════════════════════════════════════════════════════════
+const CONFIG = {
+  EXTRA_FIELDS: [
+    // { qid: '6', label: 'Program', type: 'text', required: false },
+  ],
+};
+
+// ── Render optional extra fields ─────────────────────────────────────────────
+function renderFields() {
+  var wrap = document.getElementById('doc-fields');
+  var html = '';
+  CONFIG.EXTRA_FIELDS.forEach(function (f) {
+    var req = f.required ? ' <span class="text-red-500">*</span>' : '';
+    var full = (f.type === 'textarea') ? ' md:col-span-2' : '';
+    var control = (f.type === 'textarea')
+      ? '<textarea class="field-input" id="f_' + f.qid + '" data-qid="' + f.qid + '" rows="2"' + (f.required ? ' required' : '') + '></textarea>'
+      : '<input class="field-input" id="f_' + f.qid + '" data-qid="' + f.qid + '" type="' + f.type + '"' + (f.required ? ' required' : '') + '>';
+    html += '<div class="' + full + '"><label class="field-label" for="f_' + f.qid + '">' + f.label + req + '</label>' + control + '</div>';
+  });
+  wrap.innerHTML = html;
+}
+
+// ── Collect extra field values keyed by QID ──────────────────────────────────
+function collectExtra() {
+  var extra = {};
+  document.querySelectorAll('[data-qid]').forEach(function (el) {
+    var v = (el.value || '').trim();
+    if (v) extra[el.dataset.qid] = v;
+  });
+  return extra;
+}
+
+// ── Submit ───────────────────────────────────────────────────────────────────
+document.getElementById('sign-form').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  var btn = document.getElementById('submit-btn');
+  var statusEl = document.getElementById('status');
+  var resultEl = document.getElementById('result');
+  resultEl.classList.add('hidden');
+
+  var payload = {
+    instructorName:  document.getElementById('signerName').value.trim(),
+    instructorEmail: document.getElementById('signerEmail').value.trim(),
+    extra:           collectExtra(),
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Sending…';
+  statusEl.textContent = '';
+
+  try {
+    var resp = await fetch('/api/send-sign-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    var data = await resp.json();
+    if (!resp.ok || !data.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+
+    resultEl.className = 'mt-5 bg-green-50 border border-green-200 rounded-xl p-5';
+    resultEl.innerHTML =
+      '<p class="text-green-800 font-semibold text-sm">✓ Sent to JotForm for ' + escapeHtml(data.instructorEmail) + '</p>' +
+      '<p class="text-sm text-gray-600 mt-2">The workflow will send the agreement to the signers in order (Pacific Discovery first, then the instructor).</p>';
+    resultEl.classList.remove('hidden');
+    document.getElementById('sign-form').reset();
+  } catch (err) {
+    resultEl.className = 'mt-5 bg-red-50 border border-red-200 rounded-xl p-5';
+    resultEl.innerHTML = '<p class="text-red-800 font-semibold text-sm">Could not send</p>' +
+      '<p class="text-sm text-gray-700 mt-1">' + escapeHtml(err.message) + '</p>';
+    resultEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send for Signature';
+  }
+});
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+renderFields();
+</script>
+</body>
+</html>
