@@ -115,11 +115,53 @@ export default async (req) => {
   try { data = JSON.parse(text); } catch {}
   const submissionId = data.content && data.content.submissionID ? data.content.submissionID : null;
 
+  if (!submissionId) {
+    return reply(502, { ok: false, error: 'Submission created but no submission ID returned by JotForm.' });
+  }
+
+  // A submission created via the API does NOT start the workflow on its own —
+  // JotForm only fires workflows/notifications on a "real" submission. We kick
+  // it off with this (undocumented but supported) endpoint. The `referer`
+  // header is required, and the host must be www.jotform.com (not api.*).
+  let workflowStarted = false;
+  let workflowError = null;
+  try {
+    const startResp = await fetch(
+      `https://www.jotform.com/API/workflow/submission/${encodeURIComponent(submissionId)}/start`,
+      {
+        method: 'POST',
+        headers: {
+          'apiKey': apiKey,
+          'referer': 'https://www.jotform.com/',
+        },
+      }
+    );
+    const startText = await startResp.text();
+    if (startResp.ok) {
+      workflowStarted = true;
+    } else {
+      let detail = startText;
+      try { detail = JSON.parse(startText).message || startText; } catch {}
+      workflowError = `HTTP ${startResp.status}: ${String(detail).slice(0, 200)}`;
+    }
+  } catch (err) {
+    workflowError = err.message;
+  }
+
+  if (!workflowStarted) {
+    // Submission saved, but the workflow couldn't be started automatically.
+    return reply(502, {
+      ok: false,
+      submissionId,
+      error: `Saved the submission, but couldn't start the JotForm workflow: ${workflowError}. The agreement was NOT sent — check the workflow is published and the form ID is correct.`,
+    });
+  }
+
   return reply(200, {
     ok: true,
     submissionId,
     instructorEmail,
-    message: 'Submitted to JotForm. The workflow will send the agreement to the signers in order.',
+    message: 'Submitted to JotForm and workflow started. The agreement will be sent to the signers in order.',
   });
 };
 
