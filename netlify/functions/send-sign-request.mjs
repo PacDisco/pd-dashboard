@@ -71,7 +71,17 @@ export default async (req) => {
   const params = new URLSearchParams();
   params.append(`submission[${emailQid}]`, instructorEmail);
   if (nameQid && instructorName) {
-    params.append(`submission[${nameQid}]`, instructorName);
+    // SIGN_WF_NAME_QID points to a JotForm "Full Name" field, which the
+    // submission API expects as separate first/last sub-fields:
+    //   submission[6_first]=Jane  submission[6_last]=Doe
+    // We split the typed name on the first space (first word = first name,
+    // the rest = last name). If your form uses a single-line text field for
+    // the name instead, see SETUP-sign-request.md for the one-line change.
+    const parts = instructorName.trim().split(/\s+/);
+    const first = parts.shift() || '';
+    const last = parts.join(' ');
+    params.append(`submission[${nameQid}_first]`, first);
+    if (last) params.append(`submission[${nameQid}_last]`, last);
   }
   // Any additional starting-form fields the dashboard wants to pass through.
   const extra = (input.extra && typeof input.extra === 'object') ? input.extra : {};
