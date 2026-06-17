@@ -11,10 +11,21 @@ without anyone logging into JotForm.
   API key lives in this HTML.**
 - For each tracked document it pulls `/form/{id}/submissions`, then derives a
   signer name, email, status, and submitted date for each record.
-- **Status logic:** if the document has a signature field, a filled signature →
-  `Signed`, an empty one → `Awaiting signature`. If there's no signature field, a
-  completed submission shows as `Signed`. JotForm Sign has no API for invitations
-  that were sent but never opened, so those don't appear until there's a submission.
+- **Status logic (important):** each row is a signature *request* created from the
+  Send Document page. Status is resolved in this order:
+  1. A **Flow Status** field on the form (best signal): values like
+     `completed` / `signed` → **Signed**, `in progress` / `pending` →
+     **Awaiting signature**, `declined` / `void` → **Declined**.
+  2. A filled **signature field** → **Signed**; empty → **Awaiting signature**.
+  3. Otherwise → **Sent** (a request was created, but signing can't be confirmed).
+
+  JotForm Sign has **no API for live signing progress**. The contract trigger
+  form's `Flow Status` field is currently empty on every submission, so all rows
+  show **Sent**. To get real `Signed` status, configure the JotForm **Workflow**
+  to write the outcome back into the `Flow Status` field when the document is
+  completed (Workflow → after the Sign step, add an "Update Field" / "Edit
+  Submission" action that sets Flow Status = Completed). Once that runs, this
+  dashboard will show **Signed** automatically — no code change needed.
 
 ## Configuring which documents to track
 

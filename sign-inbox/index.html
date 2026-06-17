@@ -140,6 +140,8 @@
   }
   .badge.signed { background: #d1fae5; color: var(--success); }
   .badge.pending { background: #fef3c7; color: var(--warn); }
+  .badge.sent { background: #e0e7ff; color: #4338ca; }
+  .badge.declined { background: #fee2e2; color: var(--danger); }
   .badge.unknown { background: #f3f4f6; color: #4b5563; }
   .badge.doc { background: var(--accent-light); color: var(--accent); }
   .new-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 2px; }
@@ -222,7 +224,7 @@
 
   <div class="info-note">
     <span>ℹ️</span>
-    <span><b>How status is determined:</b> a record appears here once someone submits/completes a document. If the document has a signature field, a filled signature counts as <b>Signed</b> and an empty one as <b>Awaiting signature</b>; otherwise a completed submission is shown as <b>Signed</b>. JotForm Sign has no API for invitations that haven't been opened yet, so requests sent but never started won't appear until there's a submission. Edit the tracked documents in the config block of this page.</span>
+    <span><b>How status works:</b> each row is a signature <b>request</b> created from the Send Document page. Status comes from the document's <b>Flow Status</b> field: it reads <b>Signed</b> when that field says completed/signed, <b>Awaiting signature</b> while in progress, and <b>Sent</b> when no status has been written back yet. JotForm Sign has no API for live signing progress, so confirmed signing only shows once the JotForm workflow writes the outcome into the Flow Status field (see README). <b>Sent</b> does <i>not</i> mean signed.</span>
   </div>
 
   <div id="content">
@@ -312,7 +314,7 @@
   // ---------- normalize a submission into a signing record ----------
   function normalize(sub, form) {
     const answers = sub.answers || {};
-    let signerName = "", signerEmail = "", hasSigField = false, signFilled = false;
+    let signerName = "", signerEmail = "", hasSigField = false, signFilled = false, flowStatusRaw = "";
     const fields = [];
 
     for (const qid of Object.keys(answers)) {
@@ -332,17 +334,33 @@
       } else if (!signerEmail && /@/.test(txt) && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim())) {
         signerEmail = txt.trim();
       }
-      if (type === "control_signature" || type === "control_widget" && /sign/i.test(q.name || "")) {
+      if (type === "control_signature" || (type === "control_widget" && /sign/i.test(q.name || ""))) {
         hasSigField = true;
         if (txt && txt.trim()) signFilled = true;
+      }
+      // A workflow "status" field (e.g. "Flow Status") is the source of truth
+      // when present, since the trigger form itself has no signature data.
+      if (/flow\s*status|sign(?:ing)?\s*status|^status$|document\s*status/i.test(q.text || q.name || "") && txt) {
+        flowStatusRaw = txt;
       }
       if (txt) fields.push({ order: Number(q.order) || 999, label: q.text || q.name || qid, value: txt, type });
     }
 
-    // Status heuristic
+    // Status resolution, most-trustworthy signal first.
     let status;
-    if (hasSigField) status = signFilled ? "Signed" : "Awaiting signature";
-    else status = (sub.status === "ACTIVE" || sub.status === "COMPLETED") ? "Signed" : "Pending";
+    if (flowStatusRaw) {
+      const v = flowStatusRaw.toLowerCase();
+      if (/complet|signed|finish|done|approv/.test(v)) status = "Signed";
+      else if (/declin|void|cancel|reject/.test(v)) status = "Declined";
+      else if (/await|pending|progress|sent|wait|partial|view/.test(v)) status = "Awaiting signature";
+      else status = flowStatusRaw; // show the raw workflow value as-is
+    } else if (hasSigField) {
+      status = signFilled ? "Signed" : "Awaiting signature";
+    } else {
+      // No signature field and no status field — this is a request that was
+      // created/sent. We genuinely can't confirm signing via the API.
+      status = "Sent";
+    }
 
     return {
       id: sub.id,
@@ -450,7 +468,8 @@
             <option value="">All statuses</option>
             <option value="Signed">Signed</option>
             <option value="Awaiting signature">Awaiting signature</option>
-            <option value="Pending">Pending</option>
+            <option value="Sent">Sent</option>
+            <option value="Declined">Declined</option>
           </select>
           <select id="unread-filter">
             <option value="">All</option>
@@ -530,28 +549,30 @@
   function renderStats() {
     const total = rangeScoped.length;
     const signed = rangeScoped.filter((r) => r.isSigned).length;
-    const awaiting = rangeScoped.filter((r) => r.status === "Awaiting signature").length;
+    const open = rangeScoped.filter((r) => r.status === "Awaiting signature" || r.status === "Sent").length;
     const unread = rangeScoped.filter((r) => r.unread).length;
     const pct = total ? Math.round((signed / total) * 100) : 0;
     $("stats").innerHTML = `
-      <div class="stat-card"><div class="stat-label">Total records</div><div class="stat-value">${total.toLocaleString()}</div><div class="stat-sub">across ${SIGN_FORMS.length} document${SIGN_FORMS.length > 1 ? "s" : ""}</div></div>
-      <div class="stat-card"><div class="stat-label">Signed</div><div class="stat-value green">${signed.toLocaleString()}</div><div class="stat-sub">${pct}% of records</div></div>
-      <div class="stat-card"><div class="stat-label">Awaiting signature</div><div class="stat-value amber">${awaiting.toLocaleString()}</div><div class="stat-sub">signature field empty</div></div>
+      <div class="stat-card"><div class="stat-label">Total requests</div><div class="stat-value">${total.toLocaleString()}</div><div class="stat-sub">across ${SIGN_FORMS.length} document${SIGN_FORMS.length > 1 ? "s" : ""}</div></div>
+      <div class="stat-card"><div class="stat-label">Signed</div><div class="stat-value green">${signed.toLocaleString()}</div><div class="stat-sub">${pct}% of requests</div></div>
+      <div class="stat-card"><div class="stat-label">Open / awaiting</div><div class="stat-value amber">${open.toLocaleString()}</div><div class="stat-sub">sent, not yet confirmed signed</div></div>
       <div class="stat-card"><div class="stat-label">Unread</div><div class="stat-value">${unread.toLocaleString()}</div><div class="stat-sub">new in JotForm inbox</div></div>
     `;
   }
 
   // ---------- charts ----------
   function renderCharts() {
-    const counts = { Signed: 0, "Awaiting signature": 0, Pending: 0 };
+    const COLORS = { "Signed": "#059669", "Awaiting signature": "#d97706", "Sent": "#6366f1", "Declined": "#dc2626" };
+    const counts = {};
     rangeScoped.forEach((r) => { counts[r.status] = (counts[r.status] || 0) + 1; });
+    const labels = Object.keys(counts);
 
     if (statusChart) statusChart.destroy();
     statusChart = new Chart($("statusChart"), {
       type: "doughnut",
       data: {
-        labels: Object.keys(counts),
-        datasets: [{ data: Object.values(counts), backgroundColor: ["#059669", "#d97706", "#9ca3af"], borderWidth: 0 }]
+        labels,
+        datasets: [{ data: labels.map((l) => counts[l]), backgroundColor: labels.map((l) => COLORS[l] || "#9ca3af"), borderWidth: 0 }]
       },
       options: { responsive: true, maintainAspectRatio: false, cutout: "62%",
         plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 12 } } } } }
@@ -622,7 +643,10 @@
     });
   }
   function statusBadge(r) {
-    const cls = r.status === "Signed" ? "signed" : r.status === "Awaiting signature" ? "pending" : "unknown";
+    const cls = r.status === "Signed" ? "signed"
+      : r.status === "Awaiting signature" ? "pending"
+      : r.status === "Declined" ? "declined"
+      : r.status === "Sent" ? "sent" : "unknown";
     return `<span class="badge ${cls}">${escapeHtml(r.status)}</span>`;
   }
   function renderTable() {
