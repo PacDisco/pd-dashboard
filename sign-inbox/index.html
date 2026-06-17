@@ -224,7 +224,7 @@
 
   <div class="info-note">
     <span>ℹ️</span>
-    <span><b>How status works:</b> each row is a signature <b>request</b> created from the Send Document page. Status comes from the document's <b>Flow Status</b> field: it reads <b>Signed</b> when that field says completed/signed, <b>Awaiting signature</b> while in progress, and <b>Sent</b> when no status has been written back yet. JotForm Sign has no API for live signing progress, so confirmed signing only shows once the JotForm workflow writes the outcome into the Flow Status field (see README). <b>Sent</b> does <i>not</i> mean signed.</span>
+    <span><b>How status works:</b> status comes from JotForm's live <b>workflow status</b> (via <code>addWorkflowStatus</code>): <b>Signed</b> when the workflow reports completed/signed, <b>Awaiting signature</b> while in progress, <b>Declined</b> if rejected, and <b>Sent</b> only when JotForm returns no workflow status yet. Open a row to see the exact workflow value JotForm returned. If a status looks wrong, that's the raw value JotForm reported — tell me the value shown and I'll map it.</span>
   </div>
 
   <div id="content">
@@ -302,7 +302,7 @@
     let offset = 0;
     const out = [];
     while (true) {
-      const j = await fetchJSON(proxyUrl(`/form/${form.id}/submissions`, { limit, offset, orderby: "created_at" }));
+      const j = await fetchJSON(proxyUrl(`/form/${form.id}/submissions`, { limit, offset, orderby: "created_at", addWorkflowStatus: 1 }));
       const batch = j.content || [];
       out.push(...batch.map((s) => normalize(s, form)));
       if (batch.length < limit) break;
@@ -346,21 +346,18 @@
       if (txt) fields.push({ order: Number(q.order) || 999, label: q.text || q.name || qid, value: txt, type });
     }
 
-    // Status resolution, most-trustworthy signal first.
+    // Status resolution, most-trustworthy signal first:
+    //   1) workflowStatus from the API (requested via ?addWorkflowStatus=1)
+    //   2) a "Flow Status" answer field on the form
+    //   3) a filled signature field
+    //   4) otherwise → Sent (request created; signing can't be confirmed)
+    const wf = (sub.workflowStatus == null ? "" : String(sub.workflowStatus)).trim();
+    const rawStatus = wf || flowStatusRaw || "";
     let status;
-    if (flowStatusRaw) {
-      const v = flowStatusRaw.toLowerCase();
-      if (/complet|signed|finish|done|approv/.test(v)) status = "Signed";
-      else if (/declin|void|cancel|reject/.test(v)) status = "Declined";
-      else if (/await|pending|progress|sent|wait|partial|view/.test(v)) status = "Awaiting signature";
-      else status = flowStatusRaw; // show the raw workflow value as-is
-    } else if (hasSigField) {
-      status = signFilled ? "Signed" : "Awaiting signature";
-    } else {
-      // No signature field and no status field — this is a request that was
-      // created/sent. We genuinely can't confirm signing via the API.
-      status = "Sent";
-    }
+    if (wf && wf !== "0") status = mapStatus(wf);
+    else if (flowStatusRaw) status = mapStatus(flowStatusRaw);
+    else if (hasSigField) status = signFilled ? "Signed" : "Awaiting signature";
+    else status = "Sent";
 
     return {
       id: sub.id,
@@ -369,6 +366,7 @@
       signerName: signerName || "—",
       signerEmail: signerEmail || "",
       status,
+      rawStatus,
       isSigned: status === "Signed",
       unread: String(sub.new) === "1",
       date: sub.created_at || "",
@@ -392,6 +390,16 @@
       return vals.join(" ");
     }
     return String(a);
+  }
+
+  // Map a raw workflow/flow-status value to one of our display statuses.
+  // Unknown values are shown verbatim rather than guessed.
+  function mapStatus(raw) {
+    const v = String(raw).toLowerCase();
+    if (/complet|signed|fulfil|finish|done|approv|fully.?executed/.test(v)) return "Signed";
+    if (/declin|denie|reject|void|cancel/.test(v)) return "Declined";
+    if (/await|pending|progress|sent|wait|partial|view|open|started/.test(v)) return "Awaiting signature";
+    return raw;
   }
 
   // ---------- load ----------
@@ -684,7 +692,8 @@
   function openModal(r) {
     if (!r) return;
     $("modal-title").innerHTML = `${escapeHtml(r.signerName)} ${statusBadge(r)}`;
-    $("modal-meta").textContent = `${r.docLabel} · Submitted ${fmtDate(r.date)} · Submission ID ${r.id}`;
+    $("modal-meta").textContent = `${r.docLabel} · Submitted ${fmtDate(r.date)} · Submission ID ${r.id}` +
+      (r.rawStatus ? ` · Workflow: ${r.rawStatus}` : "");
     $("modal-body").innerHTML = r.fields.map((f) => `
       <div class="detail-item">
         <div class="detail-label">${escapeHtml(f.label)}</div>
