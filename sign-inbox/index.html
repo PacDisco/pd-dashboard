@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign Inbox — Document Signing Status</title>
+<meta name="description" content="Track signing status across your JotForm Sign documents — who's signed, who's still pending, and when.">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --border: #e5e9f0;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --danger: #dc2626;
+    --warn: #d97706;
+    --success: #059669;
+    --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+  header { margin-bottom: 20px; }
+  h1 { margin: 0 0 4px 0; font-size: 24px; font-weight: 700; }
+  .subtitle { color: var(--muted); font-size: 14px; }
+  .status-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 8px; font-size: 13px; color: var(--muted);
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+  .status-dot.live { background: var(--success); animation: pulse 2s infinite; }
+  .status-dot.error { background: var(--danger); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  button {
+    background: var(--accent); color: white; border: none;
+    padding: 6px 14px; border-radius: 6px; font-size: 13px;
+    cursor: pointer; font-weight: 500;
+  }
+  button:hover { background: #1d4ed8; }
+  button.secondary { background: white; color: var(--text); border: 1px solid var(--border); }
+  button.secondary:hover { background: #f9fafb; }
+
+  .info-note {
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+    border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 18px;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .info-note b { font-weight: 600; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px; margin-bottom: 22px;
+  }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px; box-shadow: var(--shadow);
+  }
+  .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .stat-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .stat-value.green { color: var(--success); }
+  .stat-value.amber { color: var(--warn); }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 16px; margin-bottom: 22px;
+  }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px; box-shadow: var(--shadow);
+  }
+  .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .chart-wrap { position: relative; height: 240px; }
+
+  .range-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; box-shadow: var(--shadow);
+    margin-bottom: 16px;
+  }
+  .range-bar label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .range-bar input[type="date"] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: white;
+  }
+  .range-bar .preset {
+    padding: 4px 10px; border: 1px solid var(--border); background: white; color: var(--text);
+    border-radius: 16px; font-size: 12px; cursor: pointer; font-weight: 500;
+  }
+  .range-bar .preset:hover { background: #f9fafb; }
+  .range-bar .preset.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .range-bar .range-summary { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  .table-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .table-controls {
+    padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-controls input, .table-controls select {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: white;
+  }
+  .table-controls input[type="search"] { min-width: 200px; flex: 1; max-width: 300px; }
+  .result-count { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 10px 14px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;
+    background: #f9fafb; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  th:hover { background: #f3f4f6; }
+  th.sorted-asc::after { content: " ↑"; color: var(--accent); }
+  th.sorted-desc::after { content: " ↓"; color: var(--accent); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr.row-click { cursor: pointer; }
+  tr.row-click:hover { background: #f9fafb; }
+  td.unread { font-weight: 600; }
+
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+  .badge.signed { background: #d1fae5; color: var(--success); }
+  .badge.pending { background: #fef3c7; color: var(--warn); }
+  .badge.unknown { background: #f3f4f6; color: #4b5563; }
+  .badge.doc { background: var(--accent-light); color: var(--accent); }
+  .new-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 2px; }
+
+  .pagination { padding: 14px 18px; display: flex; gap: 8px; align-items: center; justify-content: center; border-top: 1px solid var(--border); }
+  .pagination span { font-size: 13px; color: var(--muted); }
+
+  /* Modal */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 100; justify-content: center; align-items: flex-start; padding: 40px 20px; overflow-y: auto;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: white; border-radius: 12px; max-width: 720px; width: 100%;
+    padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px; gap: 12px; }
+  .modal-header h2 { margin: 0; font-size: 18px; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; padding: 0 8px; }
+  .modal-close:hover { color: var(--text); }
+  .modal-meta { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .detail-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .detail-item:last-child { border: none; }
+  .detail-label { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+  .detail-value { font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
+  .detail-value a { color: var(--accent); word-break: break-all; }
+
+  .loading, .error-msg { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .error-msg { color: var(--danger); }
+  .spinner {
+    display: inline-block; width: 28px; height: 28px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!--
+    ============================================================
+    CONFIG — edit SIGN_FORMS to list the JotForm Sign documents
+    (or workflow forms) you want to track in this inbox.
+
+      • label : friendly name shown in the dashboard
+      • id    : the numeric JotForm form ID (from the form's URL)
+
+    The API key is NOT here. It lives in the Netlify environment
+    variable JOTFORM_API_KEY and is read server-side by
+    /netlify/functions/jotform.js. This HTML file has no secrets.
+    ============================================================
+  -->
+  <script>
+    window.CONFIG = {
+      // Add or remove documents here. These are pre-filled from your account's
+      // contract / waiver forms — confirm the IDs match the documents you send
+      // for signature, and delete any that aren't sign documents.
+      SIGN_FORMS: [
+        { label: "Instructor Contract",            id: "261608232937056" },
+        { label: "Student Waiver & Liability",     id: "240655314816052" },
+        { label: "Permissions & Waiver (U18)",     id: "251468552846063" }
+      ],
+      PROXY: "/.netlify/functions/jotform",
+      AUTO_REFRESH_MS: 5 * 60 * 1000   // auto-refresh every 5 min; set 0 to disable
+    };
+  </script>
+
+  <header>
+    <h1>🖊️ Sign Inbox</h1>
+    <div class="subtitle">Signing status across your JotForm Sign documents — who's signed, who's still pending, and when.</div>
+    <div class="status-bar">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Loading…</span>
+      <button class="secondary" id="refresh-btn" style="margin-left:8px">Refresh</button>
+      <a href="/sign-request/" class="secondary" style="text-decoration:none;display:inline-block;background:white;color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;font-weight:500">✍️ Send a contract</a>
+    </div>
+  </header>
+
+  <div class="info-note">
+    <span>ℹ️</span>
+    <span><b>How status is determined:</b> a record appears here once someone submits/completes a document. If the document has a signature field, a filled signature counts as <b>Signed</b> and an empty one as <b>Awaiting signature</b>; otherwise a completed submission is shown as <b>Signed</b>. JotForm Sign has no API for invitations that haven't been opened yet, so requests sent but never started won't appear until there's a submission. Edit the tracked documents in the config block of this page.</span>
+  </div>
+
+  <div id="content">
+    <div class="loading"><div class="spinner"></div><div style="margin-top:12px">Loading sign documents…</div></div>
+  </div>
+
+</div>
+
+<!-- Detail modal -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Submission</h2>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <div class="modal-meta" id="modal-meta"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const { SIGN_FORMS, PROXY, AUTO_REFRESH_MS } = window.CONFIG;
+
+  // ---------- state ----------
+  let allRecords = [];      // normalized records across all forms
+  let rangeScoped = [];     // after date range
+  let filtered = [];        // after search + filters
+  let page = 1;
+  const PAGE_SIZE = 25;
+  let sortKey = "date";
+  let sortDir = "desc";
+  let statusChart = null, timeChart = null;
+  let refreshTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+  const fmtDate = (s) => {
+    if (!s) return "";
+    const d = new Date(s.replace(" ", "T"));
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) +
+      " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  };
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // ---------- fetch ----------
+  function proxyUrl(path, params) {
+    const u = new URL(PROXY, window.location.origin);
+    u.searchParams.set("path", path);
+    if (params) for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+    return u.toString();
+  }
+  async function fetchJSON(url) {
+    const res = await fetch(url);
+    const text = await res.text();
+    let j;
+    try { j = JSON.parse(text); }
+    catch (_) { throw new Error(`Non-JSON response (HTTP ${res.status}): ${text.slice(0, 160)}`); }
+    if (!res.ok || j.error) {
+      const detail = j.detail ? ` — ${j.detail}` : "";
+      throw new Error((j.error || `HTTP ${res.status}`) + detail);
+    }
+    if (j.responseCode && j.responseCode !== 200) {
+      throw new Error(j.message || `Jotform error ${j.responseCode}`);
+    }
+    return j;
+  }
+  async function fetchSubmissionsFor(form) {
+    const limit = 500;
+    let offset = 0;
+    const out = [];
+    while (true) {
+      const j = await fetchJSON(proxyUrl(`/form/${form.id}/submissions`, { limit, offset, orderby: "created_at" }));
+      const batch = j.content || [];
+      out.push(...batch.map((s) => normalize(s, form)));
+      if (batch.length < limit) break;
+      offset += limit;
+    }
+    return out;
+  }
+
+  // ---------- normalize a submission into a signing record ----------
+  function normalize(sub, form) {
+    const answers = sub.answers || {};
+    let signerName = "", signerEmail = "", hasSigField = false, signFilled = false;
+    const fields = [];
+
+    for (const qid of Object.keys(answers)) {
+      const q = answers[qid];
+      if (!q) continue;
+      const type = q.type || "";
+      const ans = q.answer;
+      const txt = answerToText(ans);
+
+      if (type === "control_fullname" && !signerName) {
+        signerName = txt;
+      } else if (type === "control_textbox" && !signerName && /name/i.test(q.text || q.name || "") && txt) {
+        signerName = txt;
+      }
+      if (type === "control_email" && !signerEmail) {
+        signerEmail = txt;
+      } else if (!signerEmail && /@/.test(txt) && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim())) {
+        signerEmail = txt.trim();
+      }
+      if (type === "control_signature" || type === "control_widget" && /sign/i.test(q.name || "")) {
+        hasSigField = true;
+        if (txt && txt.trim()) signFilled = true;
+      }
+      if (txt) fields.push({ order: Number(q.order) || 999, label: q.text || q.name || qid, value: txt, type });
+    }
+
+    // Status heuristic
+    let status;
+    if (hasSigField) status = signFilled ? "Signed" : "Awaiting signature";
+    else status = (sub.status === "ACTIVE" || sub.status === "COMPLETED") ? "Signed" : "Pending";
+
+    return {
+      id: sub.id,
+      docLabel: form.label,
+      docId: form.id,
+      signerName: signerName || "—",
+      signerEmail: signerEmail || "",
+      status,
+      isSigned: status === "Signed",
+      unread: String(sub.new) === "1",
+      date: sub.created_at || "",
+      updated: sub.updated_at || "",
+      fields: fields.sort((a, b) => a.order - b.order)
+    };
+  }
+
+  function answerToText(a) {
+    if (a == null) return "";
+    if (typeof a === "string") return a;
+    if (typeof a === "number") return String(a);
+    if (Array.isArray(a)) return a.filter((x) => x !== "" && x != null).join(", ");
+    if (typeof a === "object") {
+      // full name {first,last}, date {month,day,year,...}, etc.
+      if (a.first || a.last) return [a.first, a.last].filter(Boolean).join(" ");
+      if (a.prettyFormat) return a.prettyFormat;
+      const vals = Object.entries(a)
+        .filter(([k, v]) => v !== "" && v != null && k !== "datetime")
+        .map(([, v]) => v);
+      return vals.join(" ");
+    }
+    return String(a);
+  }
+
+  // ---------- load ----------
+  async function load() {
+    setStatus("loading", "Loading sign documents…");
+    try {
+      const results = await Promise.all(SIGN_FORMS.map((f) =>
+        fetchSubmissionsFor(f).catch((e) => {
+          console.warn(`Failed to load ${f.label} (${f.id}):`, e.message);
+          return { __error: true, label: f.label, message: e.message };
+        })
+      ));
+      const errors = [];
+      allRecords = [];
+      results.forEach((r) => {
+        if (Array.isArray(r)) allRecords.push(...r);
+        else if (r && r.__error) errors.push(r);
+      });
+      if (allRecords.length === 0 && errors.length) {
+        throw new Error(errors.map((e) => `${e.label}: ${e.message}`).join(" · "));
+      }
+      renderShell();
+      applyRange();
+      const note = errors.length ? ` (${errors.length} document${errors.length > 1 ? "s" : ""} failed to load)` : "";
+      setStatus("live", `Updated ${new Date().toLocaleTimeString()} · ${allRecords.length} records${note}`);
+    } catch (err) {
+      setStatus("error", "Error loading data");
+      $("content").innerHTML = `<div class="error-msg"><b>Couldn't load sign documents.</b><br>${escapeHtml(err.message)}` +
+        `<br><br><span style="color:var(--muted);font-size:13px">Check that JOTFORM_API_KEY is set in Netlify and that the form IDs in this page's config are correct.</span></div>`;
+    }
+  }
+
+  function setStatus(state, text) {
+    const dot = $("status-dot"), t = $("status-text");
+    if (dot) dot.className = "status-dot" + (state === "live" ? " live" : state === "error" ? " error" : "");
+    if (t) t.textContent = text;
+  }
+
+  // ---------- render shell (controls + containers) ----------
+  function renderShell() {
+    if ($("sign-table")) return; // already built
+    const docOptions = SIGN_FORMS.map((f) => `<option value="${escapeHtml(f.label)}">${escapeHtml(f.label)}</option>`).join("");
+    $("content").innerHTML = `
+      <div class="stats-grid" id="stats"></div>
+
+      <div class="range-bar">
+        <label>Range</label>
+        <button class="preset" data-preset="30">30d</button>
+        <button class="preset" data-preset="90">90d</button>
+        <button class="preset" data-preset="ytd">YTD</button>
+        <button class="preset active" data-preset="all">All</button>
+        <input type="date" id="range-from">
+        <span style="color:var(--muted)">→</span>
+        <input type="date" id="range-to">
+        <span class="range-summary" id="range-summary"></span>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">Signing status</div>
+          <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Submissions over time</div>
+          <div class="chart-wrap"><canvas id="timeChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-controls">
+          <input type="search" id="search" placeholder="Search name, email, document…">
+          <select id="doc-filter"><option value="">All documents</option>${docOptions}</select>
+          <select id="status-filter">
+            <option value="">All statuses</option>
+            <option value="Signed">Signed</option>
+            <option value="Awaiting signature">Awaiting signature</option>
+            <option value="Pending">Pending</option>
+          </select>
+          <select id="unread-filter">
+            <option value="">All</option>
+            <option value="unread">Unread only</option>
+          </select>
+          <button class="secondary" id="export-btn">Export CSV</button>
+          <span class="result-count" id="result-count"></span>
+        </div>
+        <div class="table-scroll">
+          <table id="sign-table">
+            <thead><tr>
+              <th data-sort="docLabel">Document</th>
+              <th data-sort="signerName">Signer</th>
+              <th data-sort="signerEmail">Email</th>
+              <th data-sort="status">Status</th>
+              <th data-sort="date">Submitted</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    `;
+
+    document.querySelectorAll(".range-bar .preset").forEach((b) =>
+      b.addEventListener("click", () => setPreset(b.dataset.preset)));
+    $("range-from").addEventListener("change", () => { setActivePreset(null); applyRange(); });
+    $("range-to").addEventListener("change", () => { setActivePreset(null); applyRange(); });
+    $("search").addEventListener("input", () => { page = 1; applyFilters(); });
+    $("doc-filter").addEventListener("change", () => { page = 1; applyFilters(); });
+    $("status-filter").addEventListener("change", () => { page = 1; applyFilters(); });
+    $("unread-filter").addEventListener("change", () => { page = 1; applyFilters(); });
+    $("export-btn").addEventListener("click", exportCsv);
+    document.querySelectorAll("th[data-sort]").forEach((th) =>
+      th.addEventListener("click", () => toggleSort(th.dataset.sort)));
+  }
+
+  // ---------- date range ----------
+  function getRange() {
+    return { from: $("range-from").value || null, to: $("range-to").value || null };
+  }
+  function inRange(dateStr, from, to) {
+    const d = (dateStr || "").split(" ")[0];
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  }
+  function setActivePreset(name) {
+    document.querySelectorAll(".range-bar .preset").forEach((b) =>
+      b.classList.toggle("active", b.dataset.preset === name));
+  }
+  function setPreset(name) {
+    setActivePreset(name);
+    const today = new Date();
+    const toStr = today.toISOString().slice(0, 10);
+    if (name === "all") { $("range-from").value = ""; $("range-to").value = ""; }
+    else if (name === "ytd") { $("range-from").value = `${today.getFullYear()}-01-01`; $("range-to").value = toStr; }
+    else {
+      const days = parseInt(name, 10);
+      $("range-from").value = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10);
+      $("range-to").value = toStr;
+    }
+    applyRange();
+  }
+  function applyRange() {
+    const { from, to } = getRange();
+    rangeScoped = (from || to) ? allRecords.filter((r) => inRange(r.date, from, to)) : allRecords.slice();
+    const label = (!from && !to) ? "all time" : `${from || "start"} → ${to || "today"}`;
+    $("range-summary").textContent = `${rangeScoped.length.toLocaleString()} records, ${label}`;
+    page = 1;
+    renderStats();
+    renderCharts();
+    applyFilters();
+  }
+
+  // ---------- stats ----------
+  function renderStats() {
+    const total = rangeScoped.length;
+    const signed = rangeScoped.filter((r) => r.isSigned).length;
+    const awaiting = rangeScoped.filter((r) => r.status === "Awaiting signature").length;
+    const unread = rangeScoped.filter((r) => r.unread).length;
+    const pct = total ? Math.round((signed / total) * 100) : 0;
+    $("stats").innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total records</div><div class="stat-value">${total.toLocaleString()}</div><div class="stat-sub">across ${SIGN_FORMS.length} document${SIGN_FORMS.length > 1 ? "s" : ""}</div></div>
+      <div class="stat-card"><div class="stat-label">Signed</div><div class="stat-value green">${signed.toLocaleString()}</div><div class="stat-sub">${pct}% of records</div></div>
+      <div class="stat-card"><div class="stat-label">Awaiting signature</div><div class="stat-value amber">${awaiting.toLocaleString()}</div><div class="stat-sub">signature field empty</div></div>
+      <div class="stat-card"><div class="stat-label">Unread</div><div class="stat-value">${unread.toLocaleString()}</div><div class="stat-sub">new in JotForm inbox</div></div>
+    `;
+  }
+
+  // ---------- charts ----------
+  function renderCharts() {
+    const counts = { Signed: 0, "Awaiting signature": 0, Pending: 0 };
+    rangeScoped.forEach((r) => { counts[r.status] = (counts[r.status] || 0) + 1; });
+
+    if (statusChart) statusChart.destroy();
+    statusChart = new Chart($("statusChart"), {
+      type: "doughnut",
+      data: {
+        labels: Object.keys(counts),
+        datasets: [{ data: Object.values(counts), backgroundColor: ["#059669", "#d97706", "#9ca3af"], borderWidth: 0 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: "62%",
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 12 } } } } }
+    });
+
+    // submissions over time — by month
+    const byMonth = {};
+    rangeScoped.forEach((r) => {
+      const m = (r.date || "").slice(0, 7);
+      if (!m) return;
+      byMonth[m] = byMonth[m] || { signed: 0, other: 0 };
+      if (r.isSigned) byMonth[m].signed++; else byMonth[m].other++;
+    });
+    const months = Object.keys(byMonth).sort();
+    if (timeChart) timeChart.destroy();
+    timeChart = new Chart($("timeChart"), {
+      type: "bar",
+      data: {
+        labels: months,
+        datasets: [
+          { label: "Signed", data: months.map((m) => byMonth[m].signed), backgroundColor: "#059669" },
+          { label: "Awaiting / pending", data: months.map((m) => byMonth[m].other), backgroundColor: "#d97706" }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 12 } } } } }
+    });
+  }
+
+  // ---------- filters + table ----------
+  function applyFilters() {
+    const q = ($("search").value || "").toLowerCase().trim();
+    const doc = $("doc-filter").value;
+    const st = $("status-filter").value;
+    const unreadOnly = $("unread-filter").value === "unread";
+    filtered = rangeScoped.filter((r) => {
+      if (doc && r.docLabel !== doc) return false;
+      if (st && r.status !== st) return false;
+      if (unreadOnly && !r.unread) return false;
+      if (q) {
+        const hay = `${r.signerName} ${r.signerEmail} ${r.docLabel} ${r.status}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    sortRecords();
+    renderTable();
+  }
+  function toggleSort(key) {
+    if (sortKey === key) sortDir = sortDir === "asc" ? "desc" : "asc";
+    else { sortKey = key; sortDir = key === "date" ? "desc" : "asc"; }
+    sortRecords();
+    renderTable();
+  }
+  function sortRecords() {
+    filtered.sort((a, b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (sortKey === "date") { av = av || ""; bv = bv || ""; }
+      else { av = String(av || "").toLowerCase(); bv = String(bv || "").toLowerCase(); }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    document.querySelectorAll("th[data-sort]").forEach((th) => {
+      th.classList.remove("sorted-asc", "sorted-desc");
+      if (th.dataset.sort === sortKey) th.classList.add(sortDir === "asc" ? "sorted-asc" : "sorted-desc");
+    });
+  }
+  function statusBadge(r) {
+    const cls = r.status === "Signed" ? "signed" : r.status === "Awaiting signature" ? "pending" : "unknown";
+    return `<span class="badge ${cls}">${escapeHtml(r.status)}</span>`;
+  }
+  function renderTable() {
+    const tbody = $("tbody");
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (page > totalPages) page = totalPages;
+    const start = (page - 1) * PAGE_SIZE;
+    const rows = filtered.slice(start, start + PAGE_SIZE);
+    $("result-count").textContent = `${filtered.length.toLocaleString()} record${filtered.length === 1 ? "" : "s"}`;
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:40px">No records match your filters.</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map((r, i) => `
+        <tr class="row-click" data-idx="${start + i}">
+          <td><span class="badge doc">${escapeHtml(r.docLabel)}</span></td>
+          <td class="${r.unread ? "unread" : ""}">${r.unread ? '<span class="new-dot" title="Unread"></span>' : ""}${escapeHtml(r.signerName)}</td>
+          <td>${escapeHtml(r.signerEmail)}</td>
+          <td>${statusBadge(r)}</td>
+          <td>${escapeHtml(fmtDate(r.date))}</td>
+        </tr>`).join("");
+      tbody.querySelectorAll("tr.row-click").forEach((tr) =>
+        tr.addEventListener("click", () => openModal(filtered[Number(tr.dataset.idx)])));
+    }
+
+    $("pagination").innerHTML = totalPages <= 1 ? "" : `
+      <button class="secondary" ${page === 1 ? "disabled" : ""} id="prev">‹ Prev</button>
+      <span>Page ${page} of ${totalPages}</span>
+      <button class="secondary" ${page === totalPages ? "disabled" : ""} id="next">Next ›</button>`;
+    if ($("prev")) $("prev").addEventListener("click", () => { page--; renderTable(); });
+    if ($("next")) $("next").addEventListener("click", () => { page++; renderTable(); });
+  }
+
+  // ---------- modal ----------
+  function openModal(r) {
+    if (!r) return;
+    $("modal-title").innerHTML = `${escapeHtml(r.signerName)} ${statusBadge(r)}`;
+    $("modal-meta").textContent = `${r.docLabel} · Submitted ${fmtDate(r.date)} · Submission ID ${r.id}`;
+    $("modal-body").innerHTML = r.fields.map((f) => `
+      <div class="detail-item">
+        <div class="detail-label">${escapeHtml(f.label)}</div>
+        <div class="detail-value">${linkify(f.value)}</div>
+      </div>`).join("") || `<div class="detail-value" style="color:var(--muted)">No field data.</div>`;
+    $("modal").classList.add("show");
+  }
+  function linkify(v) {
+    const s = escapeHtml(v);
+    if (/^https?:\/\//i.test(v)) return `<a href="${s}" target="_blank" rel="noopener">${s}</a>`;
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return `<a href="mailto:${s}">${s}</a>`;
+    return s;
+  }
+  $("modal-close").addEventListener("click", () => $("modal").classList.remove("show"));
+  $("modal").addEventListener("click", (e) => { if (e.target === $("modal")) $("modal").classList.remove("show"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.remove("show"); });
+
+  // ---------- CSV export ----------
+  function exportCsv() {
+    const cols = ["Document", "Signer", "Email", "Status", "Submitted", "Unread"];
+    const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const lines = [cols.join(",")];
+    filtered.forEach((r) => lines.push([r.docLabel, r.signerName, r.signerEmail, r.status, r.date, r.unread ? "yes" : "no"].map(esc).join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `sign-inbox-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  // ---------- refresh ----------
+  $("refresh-btn").addEventListener("click", () => load());
+  if (AUTO_REFRESH_MS && AUTO_REFRESH_MS > 0) {
+    refreshTimer = setInterval(() => { if (!document.hidden) load(); }, AUTO_REFRESH_MS);
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

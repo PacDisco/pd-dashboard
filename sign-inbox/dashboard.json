@@ -1,0 +1,9 @@
+{
+  "title": "Sign Inbox",
+  "description": "Track signing status across your JotForm Sign documents — who's signed, who's still pending, and when.",
+  "category": "Operations",
+  "icon": "🖊️",
+  "colors": ["#2563eb", "#22c55e"],
+  "allowedRoles": ["admin", "admissions", "operations"],
+  "order": 36
+}
