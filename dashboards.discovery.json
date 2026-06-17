@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-19T23:28:52.331Z",
+  "generatedAt": "2026-06-16T23:45:59.918Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -53,6 +53,27 @@
         "operations"
       ],
       "url": "/enrollment/"
+    },
+    {
+      "slug": "field-media",
+      "title": "Field Media",
+      "description": "Photos and videos uploaded by field staff via the media.pacificdiscovery.org app. Grouped by season + program.",
+      "category": "Programs",
+      "icon": "🎬",
+      "owner": "",
+      "pinned": false,
+      "order": 35,
+      "colors": [
+        "#0891b2",
+        "#22d3ee"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "outreach",
+        "operations"
+      ],
+      "url": "/field-media/"
     },
     {
       "slug": "flights",
@@ -205,6 +226,46 @@
       "url": "/sales-funnel/"
     },
     {
+      "slug": "sign-inbox",
+      "title": "Sign Inbox",
+      "description": "Track signing status across your JotForm Sign documents — who's signed, who's still pending, and when.",
+      "category": "Operations",
+      "icon": "🖊️",
+      "owner": "",
+      "pinned": false,
+      "order": 36,
+      "colors": [
+        "#2563eb",
+        "#22c55e"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "operations"
+      ],
+      "url": "/sign-inbox/"
+    },
+    {
+      "slug": "sign-request",
+      "title": "Send Instructor Contracts",
+      "description": "Fill in document fields and email a prefilled signing link to the recipient.",
+      "category": "Operations",
+      "icon": "✍️",
+      "owner": "",
+      "pinned": false,
+      "order": 35,
+      "colors": [
+        "#2563eb",
+        "#7c9bff"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "operations"
+      ],
+      "url": "/sign-request/"
+    },
+    {
       "slug": "slider",
       "title": "Slider Manager",
       "description": "Manage dashboard sliders and homepage content.",
@@ -238,6 +299,26 @@
         "operations"
       ],
       "url": "/stripe/"
+    },
+    {
+      "slug": "student-uploads",
+      "title": "Student Document Uploads",
+      "description": "Files students have submitted via the Document Upload Jotform — grouped by email, so every file a student has ever sent shows up under one card.",
+      "category": "Admissions",
+      "icon": "📤",
+      "owner": "",
+      "pinned": false,
+      "order": 30,
+      "colors": [
+        "#7c3aed",
+        "#a78bfa"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "operations"
+      ],
+      "url": "/student-uploads/"
     },
     {
       "slug": "unearthed-whatsapp",
