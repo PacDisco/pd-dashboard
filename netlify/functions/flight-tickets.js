@@ -304,19 +304,20 @@ async function handleList() {
       includeItemsFromAllDrives: true,
     });
     for (const f of (res.data.files || [])) {
-      // Count files inside each student folder.
-      let count = 0;
+      // List the files uploaded inside each student folder.
+      let files = [];
       try {
         const inner = await d.files.list({
           q: `'${driveEsc(f.id)}' in parents and trashed = false`,
-          fields: 'files(id)',
+          fields: 'files(id, name, webViewLink)',
+          orderBy: 'name',
           pageSize: 1000,
           supportsAllDrives: true,
           includeItemsFromAllDrives: true,
         });
-        count = (inner.data.files || []).length;
+        files = (inner.data.files || []).map(x => ({ name: x.name, url: x.webViewLink }));
       } catch (_) {}
-      folders.push({ student: f.name, folder_id: f.id, url: f.webViewLink, file_count: count });
+      folders.push({ student: f.name, folder_id: f.id, url: f.webViewLink, file_count: files.length, files });
     }
     pageToken = res.data.nextPageToken;
   } while (pageToken);
