@@ -1,0 +1,9 @@
+{
+  "title": "Flight Ticket Upload",
+  "description": "Upload flight ticket PDFs — Claude reads each passenger name and files the ticket into that student's Google Drive folder automatically.",
+  "category": "Operations",
+  "icon": "🎫",
+  "colors": ["#0ea5e9", "#6ee7b7"],
+  "allowedRoles": ["admin", "operations", "flights"],
+  "order": 21
+}
