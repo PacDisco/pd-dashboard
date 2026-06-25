@@ -3,415 +3,84 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Student Flights Dashboard</title>
-<meta name="description" content="Student flights tracker mirroring the enrollment pipeline, focused on logistics and program assignments (no payment data).">
+<title>Flight Ticket Upload</title>
+<meta name="description" content="Upload flight ticket PDFs — Claude reads each passenger name and files the ticket into that student's Google Drive folder automatically.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
-  .tab-btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; color: #6b7280; background: transparent; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-  .tab-btn:hover { background: #e5e7eb; color: #374151; }
-  .tab-btn-active { background: #2563eb !important; color: white !important; }
-  .tab-btn[data-past="true"] { border: 1px dashed #9ca3af; opacity: 0.75; }
-  .tab-btn[data-past="true"].tab-btn-active { opacity: 1; }
-  .sub-tab-btn { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #6b7280; background: #f3f4f6; border: 1px solid #e5e7eb; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-  .sub-tab-btn:hover { background: #e5e7eb; color: #374151; }
-  .sub-tab-active { background: #1e40af !important; color: white !important; border-color: #1e40af !important; }
-  .tab-content.hidden { display: none; }
-  .sub-tab-content.hidden { display: none; }
-  .table-scroll { max-height: 600px; overflow-y: auto; overflow-x: auto; }
-  thead th { position: sticky; top: 0; z-index: 10; background: #f9fafb; }
-  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  .loading-spinner { border: 3px solid #e5e7eb; border-top: 3px solid #2563eb; border-radius: 50%; width: 18px; height: 18px; display: inline-block; vertical-align: middle; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* Editable cell inputs */
-  .cell-input {
-    width: 100%; min-width: 130px;
-    padding: 4px 6px; font-size: 13px;
-    background: transparent;
-    border: 1px solid transparent; border-radius: 4px;
-    color: #111827; font-family: inherit;
-    transition: all 0.12s;
-  }
-  .cell-input:hover { background: #f9fafb; border-color: #e5e7eb; }
-  .cell-input:focus { background: #fff; border-color: #2563eb; outline: none; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
-  .cell-input[data-saving="true"] { background: #fef3c7; border-color: #f59e0b; }
-  .cell-input[data-saved="true"]  { background: #d1fae5; border-color: #10b981; }
-  .cell-input[data-error="true"]  { background: #fee2e2; border-color: #ef4444; }
-  .cell-input[type="datetime-local"] { min-width: 175px; }
-  select.cell-input { min-width: 150px; appearance: auto; background-color: #fff; }
-  select.cell-input:focus { background: #fff; }
-  .email-list { font-size: 12px; max-width: 240px; }
-  .email-item {
-    display: block;
-    padding: 3px 8px;
-    margin-bottom: 4px;
-    background: #f3f4f6;
-    border-left: 2px solid #93c5fd;
-    border-radius: 3px;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-  .email-item:last-child { margin-bottom: 0; }
-  .email-item a { color: #2563eb; text-decoration: none; }
-  .email-item a:hover { text-decoration: underline; }
-  /* Toast for save errors */
   #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
   #toast.show { opacity: 1; transform: translateY(0); }
   #toast.error { background: #b91c1c; }
   #toast.success { background: #065f46; }
+  .dropzone.dragover { border-color: #2563eb; background: #eff6ff; }
 </style>
 </head>
 <body>
-<div id="app" class="max-w-full mx-auto px-6 py-6">
+<div id="app" class="max-w-4xl mx-auto px-6 py-8">
 
-  <!-- Loading State -->
-  <div id="loading" class="flex flex-col items-center justify-center py-32">
-    <div class="loading-spinner mb-4"></div>
-    <p class="text-gray-500 text-sm">Loading flights data from HubSpot...</p>
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">&#127915; Flight Ticket Upload</h1>
+    <p class="text-sm text-gray-500 mt-1">Upload ticket PDFs &mdash; each is read for the passenger name and filed into that student's Drive folder automatically. The per-student folder link is what you share with the student.</p>
   </div>
 
-  <!-- Error State -->
-  <div id="error" class="hidden flex flex-col items-center justify-center py-32">
-    <div class="text-red-500 text-4xl mb-4">&#x26A0;</div>
-    <p class="text-gray-700 font-medium mb-2">Failed to load data</p>
-    <p id="error-msg" class="text-gray-500 text-sm mb-4"></p>
-    <button onclick="loadData()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Retry</button>
+  <!-- Upload card -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+    <label id="dropzone" for="ticket-files"
+           class="dropzone block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer transition hover:border-blue-400 hover:bg-blue-50">
+      <div class="text-3xl mb-2">&#128228;</div>
+      <div class="text-sm font-medium text-gray-700">Click to choose tickets, or drag &amp; drop here</div>
+      <div class="text-xs text-gray-400 mt-1">PDF or image files &middot; multiple allowed</div>
+      <input id="ticket-files" type="file" accept="application/pdf,image/*" multiple class="hidden" />
+    </label>
+
+    <div class="flex flex-wrap items-center gap-3 mt-4">
+      <button id="ticket-upload-btn" onclick="uploadTickets()"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        Upload &amp; file
+      </button>
+      <span id="file-count" class="text-xs text-gray-500"></span>
+      <span id="ticket-progress" class="text-xs text-gray-500 ml-auto"></span>
+    </div>
+
+    <!-- Per-file results -->
+    <div id="ticket-results" class="mt-4 space-y-2 hidden"></div>
   </div>
 
-  <!-- Dashboard (hidden until data loads) -->
-  <div id="dashboard" class="hidden">
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Student Flights Dashboard</h1>
-      <p class="text-sm text-gray-500 mt-1"><span id="subtitle"></span></p>
+  <!-- Uploaded tickets, grouped by student -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+    <div class="flex items-center justify-between mb-1">
+      <h2 class="text-base font-semibold text-gray-900">Uploaded tickets by student</h2>
+      <button onclick="refreshTicketFolders(event)" class="text-xs text-blue-600 hover:underline">Refresh</button>
     </div>
-
-    <!-- Ticket Upload -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div>
-          <h2 class="text-base font-semibold text-gray-900">&#9992;&#65039; Upload flight tickets</h2>
-          <p class="text-xs text-gray-500 mt-0.5">Drop in ticket PDFs &mdash; each is read for the passenger name and filed into that student's Drive folder automatically.</p>
-        </div>
-        <a id="ticket-folders-link" href="#" onclick="refreshTicketFolders(event)" class="text-xs text-blue-600 hover:underline">View student folders</a>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-3">
-        <input id="ticket-files" type="file" accept="application/pdf,image/*" multiple
-               class="text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-        <button id="ticket-upload-btn" onclick="uploadTickets()"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          Upload &amp; file
-        </button>
-        <span id="ticket-progress" class="text-xs text-gray-500"></span>
-      </div>
-
-      <!-- Per-file results -->
-      <div id="ticket-results" class="mt-4 space-y-2 hidden"></div>
-
-      <!-- Student folder list (lazy-loaded) -->
-      <div id="ticket-folders" class="mt-4 hidden">
-        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Student folders</div>
-        <div id="ticket-folders-body" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
-      </div>
+    <p id="ticket-folders-summary" class="text-xs text-gray-400 mb-3"></p>
+    <input id="student-search" type="text" placeholder="Search students…" oninput="filterStudents()"
+           class="w-full mb-3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400" />
+    <div id="ticket-folders-body" class="space-y-2">
+      <span class="text-xs text-gray-400">Loading…</span>
     </div>
-
-    <!-- Overall Stats (non-revenue) -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-sm p-4 text-white">
-        <div class="text-sm opacity-80">All Students</div>
-        <div id="stat-students" class="text-3xl font-bold">-</div>
-      </div>
-      <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-sm p-4 text-white">
-        <div class="text-sm opacity-80">Confirmed (Closed Won)</div>
-        <div id="stat-confirmed" class="text-3xl font-bold">-</div>
-      </div>
-      <div class="bg-gradient-to-br from-sky-500 to-sky-600 rounded-xl shadow-sm p-4 text-white">
-        <div class="text-sm opacity-80">Deposit Paid</div>
-        <div id="stat-deposit" class="text-3xl font-bold">-</div>
-      </div>
-      <div class="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-sm p-4 text-white">
-        <div class="text-sm opacity-80">In Application</div>
-        <div id="stat-app" class="text-3xl font-bold">-</div>
-      </div>
-    </div>
-
-    <!-- Season Tabs -->
-    <div id="season-tabs" class="flex flex-wrap gap-2 mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-3"></div>
-
-    <!-- Tab Content Container -->
-    <div id="tab-content"></div>
   </div>
+
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
-// ═══════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════
-function stageBadge(stage) {
-  if (stage.includes('Closed Won')) return 'bg-green-100 text-green-800';
-  if (stage.includes('Deposit')) return 'bg-blue-100 text-blue-800';
-  if (stage.includes('Interview')) return 'bg-yellow-100 text-yellow-800';
-  if (stage.includes('Application')) return 'bg-purple-100 text-purple-800';
-  return 'bg-gray-100 text-gray-800';
-}
-
-function summaryFor(deals) {
-  var counted = deals.filter(function(d) { return !d.excludeFromCount; });
-  var confirmed = counted.filter(function(d) { return (d.stage || '').indexOf('Closed Won') !== -1; }).length;
-  var deposit = counted.filter(function(d) { return (d.stage || '').indexOf('Deposit') !== -1; }).length;
-  var app = counted.filter(function(d) { return (d.stage || '').indexOf('Application') !== -1 || (d.stage || '').indexOf('Interview') !== -1; }).length;
-  return { count: counted.length, confirmed: confirmed, deposit: deposit, app: app };
-}
-
-// ═══════════════════════════════════════════
-// RENDER FUNCTIONS
-// ═══════════════════════════════════════════
-function renderSummaryCards(summary) {
-  return '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">' +
-    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Total Students</div><div class="text-2xl font-bold text-gray-900">' + summary.count + '</div></div>' +
-    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Confirmed</div><div class="text-2xl font-bold text-green-700">' + summary.confirmed + '</div></div>' +
-    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Deposit Paid</div><div class="text-2xl font-bold text-blue-700">' + summary.deposit + '</div></div>' +
-    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">In Application</div><div class="text-2xl font-bold text-amber-700">' + summary.app + '</div></div>' +
-  '</div>';
-}
-
-// HTML-escape any string headed for innerHTML.
 function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
-    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
-  });
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Convert a HubSpot ISO 8601 datetime string to the format datetime-local
-// inputs expect ("YYYY-MM-DDTHH:MM"). Returns '' if unparseable / empty.
-function isoToLocalInput(iso) {
-  if (!iso) return '';
-  var d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  var pad = function(n) { return (n < 10 ? '0' : '') + n; };
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-         'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+function showToast(message, kind) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = message;
+  t.className = 'show ' + (kind || '');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(function() { t.className = ''; }, 3500);
 }
 
-// 7 editable flight columns. `field` is the HubSpot internal property name.
-// `type` is 'text' | 'datetime' | 'select'. Picklist options for 'select'
-// columns come from data.propertyOptions[field] at load time.
-var FLIGHT_COLS = [
-  { field: 'insurance_policy',               key: 'insurancePolicy',             label: 'Insurance Policy',           type: 'select' },
-  { field: 'arrival_flight_number',          key: 'arrivalFlightNumber',         label: 'Arrival Flight Number',      type: 'text' },
-  { field: 'arrival_flight_time',            key: 'arrivalFlightTime',           label: 'Arrival Flight Time',        type: 'datetime' },
-  { field: 'internal_flight_number',         key: 'internalFlightNumber',        label: 'Internal Flight Number',     type: 'text' },
-  { field: 'internal_flight_departure_time', key: 'internalFlightDepartureTime', label: 'Internal Flight Departure',  type: 'datetime' },
-  { field: 'departure_flight_number',        key: 'departureFlightNumber',       label: 'Departure Flight Number',    type: 'text' },
-  { field: 'departure_time',                 key: 'departureTime',               label: 'Departure Time',             type: 'datetime' }
-];
-
-// Picklist options keyed by HubSpot internal property name — populated from
-// the API response at render time. Each entry is [{label, value}, ...].
-var PROPERTY_OPTIONS = {};
-
-function renderEmails(emails) {
-  if (!emails || !emails.length) return '<span class="text-gray-400">—</span>';
-  return '<div class="email-list">' + emails.map(function(e) {
-    var safe = esc(e);
-    return '<span class="email-item"><a href="mailto:' + safe + '">' + safe + '</a></span>';
-  }).join('') + '</div>';
-}
-
-function renderEditableCell(dealId, col, value) {
-  // Select (HubSpot enumeration) — render <select> with picklist options.
-  if (col.type === 'select') {
-    var current = value == null ? '' : String(value);
-    var options = PROPERTY_OPTIONS[col.field] || [];
-    var optionsHtml = '<option value=""></option>';
-    var matched = current === '';
-    for (var i = 0; i < options.length; i++) {
-      var v = String(options[i].value);
-      var l = options[i].label;
-      var selAttr = v === current ? ' selected' : '';
-      if (v === current) matched = true;
-      optionsHtml += '<option value="' + esc(v) + '"' + selAttr + '>' + esc(l) + '</option>';
-    }
-    // If the stored value isn't in the picklist (e.g. legacy / typo / option
-    // recently renamed), keep it visible so the user can see what's there.
-    if (!matched && current) {
-      optionsHtml += '<option value="' + esc(current) + '" selected>' + esc(current) + ' (legacy)</option>';
-    }
-    return '<td class="px-2 py-2">' +
-      '<select class="cell-input cell-select" ' +
-        'data-deal-id="' + esc(dealId) + '" ' +
-        'data-field="' + esc(col.field) + '" ' +
-        'data-original="' + esc(current) + '">' + optionsHtml +
-      '</select>' +
-    '</td>';
-  }
-
-  // Text / datetime — plain input.
-  var displayVal = col.type === 'datetime' ? isoToLocalInput(value) : (value || '');
-  var inputType = col.type === 'datetime' ? 'datetime-local' : 'text';
-  // data-original tracks the unsaved-baseline so we don't fire a save on blur
-  // when nothing actually changed.
-  return '<td class="px-2 py-2">' +
-    '<input class="cell-input" type="' + inputType + '" ' +
-      'data-deal-id="' + esc(dealId) + '" ' +
-      'data-field="' + esc(col.field) + '" ' +
-      'data-original="' + esc(displayVal) + '" ' +
-      'value="' + esc(displayVal) + '" />' +
-  '</td>';
-}
-
-function renderTable(deals, tableId) {
-  var sorted = deals.slice().sort(function(a, b) { return a.studentName.localeCompare(b.studentName); });
-  var rows = '';
-  for (var i = 0; i < sorted.length; i++) {
-    var d = sorted[i];
-    rows += '<tr class="hover:bg-gray-50 border-b border-gray-100 data-row align-top">' +
-      '<td class="px-4 py-3 text-sm font-medium whitespace-nowrap"><a href="' + d.hubspotUrl + '" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">' + esc(d.studentName) + '</a></td>' +
-      '<td class="px-4 py-3 text-sm text-gray-700">' + esc(d.pdProgram || '-') + '</td>' +
-      '<td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">' + esc(d.pipeline) + '</td>' +
-      '<td class="px-4 py-3 text-sm text-gray-700 text-center">' + esc(d.travelYear) + '</td>' +
-      '<td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-medium ' + stageBadge(d.stage) + '">' + esc(d.stage) + '</span></td>' +
-      '<td class="px-4 py-3 text-sm">' + renderEmails(d.contactEmails) + '</td>';
-    for (var c = 0; c < FLIGHT_COLS.length; c++) {
-      rows += renderEditableCell(d.id, FLIGHT_COLS[c], d[FLIGHT_COLS[c].key]);
-    }
-    rows += '</tr>';
-  }
-
-  var headers =
-    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="0">Student Name &#x25B4;&#x25BE;</th>' +
-    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="1">PD Program &#x25B4;&#x25BE;</th>' +
-    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="2">Pipeline &#x25B4;&#x25BE;</th>' +
-    '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="3">Travel Year &#x25B4;&#x25BE;</th>' +
-    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="4">Stage &#x25B4;&#x25BE;</th>' +
-    '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact Emails</th>';
-  for (var h = 0; h < FLIGHT_COLS.length; h++) {
-    // Editable columns are not sortable (no data-col, no cursor-pointer arrows).
-    headers += '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">' + esc(FLIGHT_COLS[h].label) + '</th>';
-  }
-
-  return '<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">' +
-    '<div class="p-4 border-b border-gray-200"><input type="text" placeholder="Search students..." class="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" data-search="' + tableId + '"></div>' +
-    '<div class="table-scroll"><table class="min-w-full" data-table="' + tableId + '"><thead><tr class="bg-gray-50 border-b border-gray-200">' +
-      headers +
-    '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
-}
-
-function renderSubTabs(deals, parentId) {
-  var byProgram = {};
-  for (var i = 0; i < deals.length; i++) {
-    var prog = deals[i].pdProgram || 'No Program';
-    if (!byProgram[prog]) byProgram[prog] = [];
-    byProgram[prog].push(deals[i]);
-  }
-  var sortedPrograms = Object.entries(byProgram).sort(function(a, b) { return b[1].length - a[1].length; });
-
-  var allCountedDeals = deals.filter(function(d) { return !d.excludeFromCount; });
-  var buttons = '<button class="sub-tab-btn sub-tab-active" data-subtab="' + parentId + '_all">All <span class="ml-1 text-xs opacity-70">' + allCountedDeals.length + '</span></button>';
-  for (var j = 0; j < sortedPrograms.length; j++) {
-    var progCounted = sortedPrograms[j][1].filter(function(d) { return !d.excludeFromCount; });
-    buttons += '<button class="sub-tab-btn" data-subtab="' + parentId + '_p' + j + '">' + sortedPrograms[j][0] + ' <span class="ml-1 text-xs opacity-70">' + progCounted.length + '</span></button>';
-  }
-
-  var allSummary = summaryFor(deals);
-  var content = '<div id="' + parentId + '_all" class="sub-tab-content">' + renderSummaryCards(allSummary) + renderTable(deals, parentId + '_all_tbl') + '</div>';
-  for (var j = 0; j < sortedPrograms.length; j++) {
-    var pSummary = summaryFor(sortedPrograms[j][1]);
-    content += '<div id="' + parentId + '_p' + j + '" class="sub-tab-content hidden">' + renderSummaryCards(pSummary) + renderTable(sortedPrograms[j][1], parentId + '_p' + j + '_tbl') + '</div>';
-  }
-
-  return '<div class="flex flex-wrap gap-2 mb-5 pb-3 border-b border-gray-200 sub-tab-bar">' + buttons + '</div>' + content;
-}
-
-// ═══════════════════════════════════════════
-// BUILD FULL DASHBOARD
-// ═══════════════════════════════════════════
-// Stage substrings that should never appear in the Flights view. The API
-// already drops most of these, but this catches HubSpot stage IDs that aren't
-// in the STAGE_LABELS map and fall through as raw IDs or partially-labelled
-// strings.
-var FLIGHT_EXCLUDED_STAGE_SUBSTRINGS = ['closed lost', 'cancelled', 'canceled', 'lost'];
-
-function isExcludedFromFlights(deal) {
-  var s = (deal && deal.stage ? String(deal.stage) : '').toLowerCase();
-  if (!s) return false;
-  for (var i = 0; i < FLIGHT_EXCLUDED_STAGE_SUBSTRINGS.length; i++) {
-    if (s.indexOf(FLIGHT_EXCLUDED_STAGE_SUBSTRINGS[i]) !== -1) return true;
-  }
-  return false;
-}
-
-function renderDashboard(data) {
-  // Picklist options (insurance_policy, etc.) — populated for renderEditableCell.
-  PROPERTY_OPTIONS = (data && data.propertyOptions) || {};
-
-  // Rebuild each season tab with Closed Lost / Cancelled deals stripped out,
-  // and refresh the per-tab "counted" badge so the headers match what's shown.
-  var rawTabs = (data.currentTabs || []).concat(data.pastTabs || []);
-  var allTabs = rawTabs.map(function(tab) {
-    var filtered = (tab.deals || []).filter(function(d) { return !isExcludedFromFlights(d); });
-    var countedDeals = filtered.filter(function(d) { return !d.excludeFromCount; }).length;
-    return {
-      key: tab.key,
-      season: tab.season,
-      year: tab.year,
-      deals: filtered,
-      countedDeals: countedDeals,
-      _isPast: (data.pastTabs || []).indexOf(tab) !== -1
-    };
-  });
-
-  // Compute overall non-revenue stats from the filtered tabs.
-  var overall = { count: 0, confirmed: 0, deposit: 0, app: 0 };
-  for (var t = 0; t < allTabs.length; t++) {
-    var s = summaryFor(allTabs[t].deals || []);
-    overall.count += s.count;
-    overall.confirmed += s.confirmed;
-    overall.deposit += s.deposit;
-    overall.app += s.app;
-  }
-
-  document.getElementById('stat-students').textContent = overall.count;
-  document.getElementById('stat-confirmed').textContent = overall.confirmed;
-  document.getElementById('stat-deposit').textContent = overall.deposit;
-  document.getElementById('stat-app').textContent = overall.app;
-
-  var updatedDate = new Date(data.updatedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  document.getElementById('subtitle').textContent = overall.count + ' students with flights to coordinate · Live from HubSpot · Updated ' + updatedDate;
-
-  // Season tab buttons
-  var tabBar = document.getElementById('season-tabs');
-  var tabHtml = '';
-  for (var i = 0; i < allTabs.length; i++) {
-    var tab = allTabs[i];
-    var isPast = !!tab._isPast;
-    var active = i === 0 ? ' tab-btn-active' : '';
-    var pastAttr = isPast ? ' data-past="true"' : '';
-    var pastLabel = isPast ? ' (Past)' : '';
-    var badgeCount = typeof tab.countedDeals === 'number' ? tab.countedDeals : tab.deals.length;
-    tabHtml += '<button class="tab-btn' + active + '" data-tab="tab_' + i + '"' + pastAttr + '>' + tab.key + pastLabel + ' <span class="ml-1 text-xs bg-white bg-opacity-30 px-1.5 py-0.5 rounded-full">' + badgeCount + '</span></button>';
-  }
-  tabBar.innerHTML = tabHtml;
-
-  // Tab content
-  var contentEl = document.getElementById('tab-content');
-  var contentHtml = '';
-  for (var i = 0; i < allTabs.length; i++) {
-    var hidden = i === 0 ? '' : ' hidden';
-    contentHtml += '<div id="tab_' + i + '" class="tab-content' + hidden + '">' + renderSubTabs(allTabs[i].deals, 'tab_' + i) + '</div>';
-  }
-  contentEl.innerHTML = contentHtml;
-
-  document.getElementById('loading').classList.add('hidden');
-  document.getElementById('dashboard').classList.remove('hidden');
-
-  attachListeners();
-}
-
-// ═══════════════════════════════════════════
-// TICKET UPLOAD — POST to /api/flight-tickets
-// ═══════════════════════════════════════════
 // Read a File as base64 (strips the "data:...;base64," prefix).
 function fileToBase64(file) {
   return new Promise(function(resolve, reject) {
@@ -436,6 +105,12 @@ function ticketRow(html) {
   return div;
 }
 
+function updateFileCount() {
+  var input = document.getElementById('ticket-files');
+  var n = (input.files || []).length;
+  document.getElementById('file-count').textContent = n ? (n + ' file' + (n === 1 ? '' : 's') + ' selected') : '';
+}
+
 async function uploadTickets() {
   var input = document.getElementById('ticket-files');
   var btn = document.getElementById('ticket-upload-btn');
@@ -450,8 +125,8 @@ async function uploadTickets() {
   var done = 0, failed = 0;
   for (var i = 0; i < files.length; i++) {
     var file = files[i];
-    progress.textContent = 'Filing ' + (i + 1) + ' of ' + files.length + '…';
-    var row = ticketRow('<span class="text-gray-500">⏳ ' + esc(file.name) + ' — reading passenger name…</span>');
+    progress.innerHTML = '<span class="loading-spinner"></span> Filing ' + (i + 1) + ' of ' + files.length + '…';
+    var row = ticketRow('<span class="text-gray-500">&#9203; ' + esc(file.name) + ' — reading passenger name…</span>');
 
     try {
       var data = await fileToBase64(file);
@@ -468,11 +143,11 @@ async function uploadTickets() {
         return '<a href="' + esc(f.folder.url) + '" target="_blank" class="text-blue-600 hover:underline font-medium">' + esc(f.student) + '</a>';
       }).join(', ');
       var multi = body.multi_passenger ? ' <span class="text-amber-600">(group booking — filed to each)</span>' : '';
-      row.innerHTML = '<span class="text-green-700">✓</span> <span class="font-medium">' + esc(file.name) +
-                      '</span> → filed to ' + links + multi;
+      row.innerHTML = '<span class="text-green-700">&#10003;</span> <span class="font-medium">' + esc(file.name) +
+                      '</span> &rarr; filed to ' + links + multi;
       done++;
     } catch (err) {
-      row.innerHTML = '<span class="text-red-600">✗ ' + esc(file.name) + ' — ' + esc(err.message) + '</span>';
+      row.innerHTML = '<span class="text-red-600">&#10007; ' + esc(file.name) + ' — ' + esc(err.message) + '</span>';
       failed++;
     }
   }
@@ -481,178 +156,82 @@ async function uploadTickets() {
   showToast(done + ' ticket(s) filed' + (failed ? ', ' + failed + ' failed' : ''), failed ? 'error' : 'success');
   btn.disabled = false;
   input.value = '';
-  if (done) refreshTicketFolders();
+  updateFileCount();
+  refreshTicketFolders();
+}
+
+function filterStudents() {
+  var q = (document.getElementById('student-search').value || '').toLowerCase();
+  var groups = document.querySelectorAll('#ticket-folders-body [data-student]');
+  groups.forEach(function(g) {
+    g.style.display = g.getAttribute('data-student').indexOf(q) !== -1 ? '' : 'none';
+  });
 }
 
 async function refreshTicketFolders(ev) {
   if (ev) ev.preventDefault();
-  var wrap = document.getElementById('ticket-folders');
   var body = document.getElementById('ticket-folders-body');
-  wrap.classList.remove('hidden');
+  var summary = document.getElementById('ticket-folders-summary');
   body.innerHTML = '<span class="text-xs text-gray-400">Loading…</span>';
+  summary.textContent = '';
   try {
     var resp = await fetch('/api/flight-tickets?action=list', { credentials: 'include' });
     var data = await resp.json();
     if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
-    if (!data.students || !data.students.length) { body.innerHTML = '<span class="text-xs text-gray-400">No student folders yet.</span>'; return; }
-    body.innerHTML = data.students.map(function(s) {
-      return '<a href="' + esc(s.url) + '" target="_blank" class="flex items-center justify-between gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50">' +
-               '<span class="font-medium text-gray-800 truncate">' + esc(s.student) + '</span>' +
-               '<span class="text-xs text-gray-400 whitespace-nowrap">' + s.file_count + ' file' + (s.file_count === 1 ? '' : 's') + '</span>' +
-             '</a>';
+    var students = data.students || [];
+    if (!students.length) {
+      body.innerHTML = '<span class="text-xs text-gray-400">Nothing uploaded yet — upload a ticket to get started.</span>';
+      return;
+    }
+
+    var totalFiles = students.reduce(function(n, s) { return n + (s.file_count || 0); }, 0);
+    summary.textContent = students.length + ' student' + (students.length === 1 ? '' : 's') +
+                          ' · ' + totalFiles + ' ticket' + (totalFiles === 1 ? '' : 's') + ' uploaded';
+
+    body.innerHTML = students.map(function(s) {
+      var files = (s.files || []).map(function(f) {
+        return '<li class="flex items-center gap-2 text-sm py-0.5">' +
+                 '<span class="text-gray-300">📄</span>' +
+                 '<a href="' + esc(f.url) + '" target="_blank" class="text-blue-600 hover:underline truncate">' + esc(f.name) + '</a>' +
+               '</li>';
+      }).join('');
+      if (!files) files = '<li class="text-xs text-gray-400 py-0.5">No files</li>';
+
+      return '<div data-student="' + esc(String(s.student).toLowerCase()) + '" class="border border-gray-200 rounded-lg p-3">' +
+               '<div class="flex items-center justify-between gap-2 mb-1">' +
+                 '<a href="' + esc(s.url) + '" target="_blank" class="font-medium text-gray-800 hover:underline truncate">' + esc(s.student) + '</a>' +
+                 '<span class="text-xs text-gray-400 whitespace-nowrap">' + s.file_count + ' ticket' + (s.file_count === 1 ? '' : 's') + '</span>' +
+               '</div>' +
+               '<ul class="pl-1">' + files + '</ul>' +
+             '</div>';
     }).join('');
+    filterStudents();
   } catch (err) {
     body.innerHTML = '<span class="text-xs text-red-500">' + esc(err.message) + '</span>';
   }
 }
 
-// ═══════════════════════════════════════════
-// SAVE — POST to /api/flights-update
-// ═══════════════════════════════════════════
-function showToast(message, kind) {
-  var t = document.getElementById('toast');
-  if (!t) return;
-  t.textContent = message;
-  t.className = 'show ' + (kind || '');
-  clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(function() { t.className = ''; }, 3500);
-}
-
-async function saveCell(input) {
-  var dealId = input.dataset.dealId;
-  var field = input.dataset.field;
-  var newVal = input.value;
-  var original = input.dataset.original || '';
-  if (newVal === original) return; // nothing changed
-
-  input.dataset.saving = 'true';
-  delete input.dataset.saved;
-  delete input.dataset.error;
-
-  try {
-    var resp = await fetch('/api/flights-update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ dealId: dealId, field: field, value: newVal })
-    });
-    var body = await resp.json().catch(function() { return {}; });
-    if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
-
-    delete input.dataset.saving;
-    input.dataset.saved = 'true';
-    input.dataset.original = newVal;
-    setTimeout(function() { delete input.dataset.saved; }, 1500);
-  } catch (err) {
-    delete input.dataset.saving;
-    input.dataset.error = 'true';
-    showToast('Save failed: ' + err.message, 'error');
-    setTimeout(function() { delete input.dataset.error; }, 4000);
-  }
-}
-
-// ═══════════════════════════════════════════
-// EVENT LISTENERS
-// ═══════════════════════════════════════════
-function attachListeners() {
-  document.querySelectorAll('.tab-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('tab-btn-active'); });
-      document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.add('hidden'); });
-      this.classList.add('tab-btn-active');
-      document.getElementById(this.dataset.tab).classList.remove('hidden');
-    });
+// Wire up file input + drag/drop.
+(function() {
+  var input = document.getElementById('ticket-files');
+  var zone = document.getElementById('dropzone');
+  input.addEventListener('change', updateFileCount);
+  ['dragenter', 'dragover'].forEach(function(evt) {
+    zone.addEventListener(evt, function(e) { e.preventDefault(); zone.classList.add('dragover'); });
   });
-
-  document.querySelectorAll('.sub-tab-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var parent = this.closest('.tab-content');
-      parent.querySelectorAll('.sub-tab-btn').forEach(function(b) { b.classList.remove('sub-tab-active'); });
-      parent.querySelectorAll('.sub-tab-content').forEach(function(c) { c.classList.add('hidden'); });
-      this.classList.add('sub-tab-active');
-      document.getElementById(this.dataset.subtab).classList.remove('hidden');
-    });
+  ['dragleave', 'drop'].forEach(function(evt) {
+    zone.addEventListener(evt, function(e) { e.preventDefault(); zone.classList.remove('dragover'); });
   });
-
-  document.querySelectorAll('[data-search]').forEach(function(input) {
-    input.addEventListener('keyup', function() {
-      var filter = this.value.toLowerCase();
-      var container = this.closest('.sub-tab-content');
-      container.querySelectorAll('.data-row').forEach(function(row) {
-        row.style.display = row.textContent.toLowerCase().indexOf(filter) !== -1 ? '' : 'none';
-      });
-    });
-  });
-
-  // Auto-save editable flight cells. Inputs save on blur (and on Enter via blur);
-  // selects save the moment the value changes.
-  document.querySelectorAll('.cell-input').forEach(function(input) {
-    input.addEventListener('blur', function() { saveCell(this); });
-    if (input.tagName === 'SELECT') {
-      input.addEventListener('change', function() { saveCell(this); });
-    } else {
-      input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-        if (e.key === 'Escape') {
-          this.value = this.dataset.original || '';
-          this.blur();
-        }
-      });
+  zone.addEventListener('drop', function(e) {
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      updateFileCount();
     }
   });
+})();
 
-  document.querySelectorAll('th[data-col]').forEach(function(th) {
-    th.addEventListener('click', function() {
-      var colIndex = parseInt(this.dataset.col);
-      var table = this.closest('table');
-      var tbody = table.querySelector('tbody');
-      var rows = Array.from(tbody.querySelectorAll('tr'));
-      var asc = this.dataset.sortDir !== 'asc';
-      this.dataset.sortDir = asc ? 'asc' : 'desc';
-      var self = this;
-      this.closest('tr').querySelectorAll('th').forEach(function(h) { if (h !== self) delete h.dataset.sortDir; });
-      rows.sort(function(a, b) {
-        var aVal = a.cells[colIndex].textContent.trim();
-        var bVal = b.cells[colIndex].textContent.trim();
-        // Travel Year column (3) sorts numerically; everything else lexicographically.
-        if (colIndex === 3) {
-          aVal = parseFloat(aVal) || 0;
-          bVal = parseFloat(bVal) || 0;
-          return asc ? aVal - bVal : bVal - aVal;
-        }
-        return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      });
-      rows.forEach(function(row) { tbody.appendChild(row); });
-    });
-  });
-}
-
-// ═══════════════════════════════════════════
-// DATA FETCH — runs on every page load
-// ═══════════════════════════════════════════
-async function loadData() {
-  document.getElementById('loading').classList.remove('hidden');
-  document.getElementById('error').classList.add('hidden');
-  document.getElementById('dashboard').classList.add('hidden');
-
-  try {
-    // Flights dashboard reuses the enrollment data source — same students,
-    // same season/program structure. Payment fields in the response are
-    // ignored on the UI side.
-    var resp = await fetch('/api/enrollment');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    var data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    renderDashboard(data);
-  } catch (err) {
-    document.getElementById('loading').classList.add('hidden');
-    document.getElementById('error').classList.remove('hidden');
-    document.getElementById('error-msg').textContent = err.message;
-  }
-}
-
-// Load fresh data on every page load / refresh
-loadData();
+// Load the folder list on open.
+refreshTicketFolders();
 </script>
 </body>
 </html>
