@@ -37,7 +37,7 @@ const MANIFEST = path.join(ROOT, "dashboards.json");
 const REDIRECTS = path.join(ROOT, "_redirects");
 
 // Roles supported by the system (kept in one place for consistency)
-const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights"];
+const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed"];
 const ALL_ROLES = ["admin", ...FUNCTIONAL_ROLES];
 
 // Folders that look like dashboards but aren't
