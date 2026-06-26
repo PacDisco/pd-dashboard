@@ -27,6 +27,15 @@
 
   <!-- Upload card -->
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+    <div class="mb-4">
+      <label for="program-select" class="block text-sm font-medium text-gray-700 mb-1">Program <span class="text-red-500">*</span></label>
+      <select id="program-select" onchange="onProgramChange()"
+              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400">
+        <option value="">Loading programs…</option>
+      </select>
+      <p class="text-xs text-gray-400 mt-1">Tickets are matched against this program's students and filed into its folder.</p>
+    </div>
+
     <label id="dropzone" for="ticket-files"
            class="dropzone block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer transition hover:border-blue-400 hover:bg-blue-50">
       <div class="text-3xl mb-2">&#128228;</div>
@@ -36,7 +45,7 @@
     </label>
 
     <div class="flex flex-wrap items-center gap-3 mt-4">
-      <button id="ticket-upload-btn" onclick="uploadTickets()"
+      <button id="ticket-upload-btn" onclick="uploadTickets()" disabled
               class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
         Upload &amp; file
       </button>
@@ -89,6 +98,38 @@ function showToast(message, kind) {
   t.className = 'show ' + (kind || '');
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(function() { t.className = ''; }, 3500);
+}
+
+// ── Programs ────────────────────────────────────────────────────────────
+function selectedProgramId() {
+  var sel = document.getElementById('program-select');
+  return sel ? sel.value : '';
+}
+
+async function loadPrograms() {
+  var sel = document.getElementById('program-select');
+  try {
+    var resp = await fetch('/api/flight-tickets?action=programs', { credentials: 'include' });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+    var progs = data.programs || [];
+    if (!progs.length) { sel.innerHTML = '<option value="">No Unearthed programs found</option>'; return; }
+    sel.innerHTML = '<option value="">— Select a program —</option>' +
+      progs.map(function(p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('');
+  } catch (err) {
+    sel.innerHTML = '<option value="">Could not load programs</option>';
+    showToast('Programs: ' + err.message, 'error');
+  }
+  onProgramChange();
+}
+
+function onProgramChange() {
+  var has = !!selectedProgramId();
+  var btn = document.getElementById('ticket-upload-btn');
+  if (btn) btn.disabled = !has;
+  // Refresh the program-scoped views.
+  refreshTicketFolders();
+  document.getElementById('dedupe-body').innerHTML = '';
 }
 
 // Read a File as base64 (strips the "data:...;base64," prefix).
@@ -145,6 +186,8 @@ async function uploadTickets() {
   var btn = document.getElementById('ticket-upload-btn');
   var progress = document.getElementById('ticket-progress');
   var files = Array.from(input.files || []);
+  var programId = selectedProgramId();
+  if (!programId) { showToast('Select a program first', 'error'); return; }
   if (!files.length) { showToast('Choose one or more ticket files first', 'error'); return; }
 
   btn.disabled = true;
@@ -163,7 +206,7 @@ async function uploadTickets() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ action: 'upload', filename: file.name, mimeType: file.type || 'application/pdf', data: data })
+        body: JSON.stringify({ action: 'upload', program_id: programId, filename: file.name, mimeType: file.type || 'application/pdf', data: data })
       });
       var body = await resp.json().catch(function() { return {}; });
       if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
@@ -208,10 +251,12 @@ async function refreshTicketFolders(ev) {
   if (ev) ev.preventDefault();
   var body = document.getElementById('ticket-folders-body');
   var summary = document.getElementById('ticket-folders-summary');
-  body.innerHTML = '<span class="text-xs text-gray-400">Loading…</span>';
   summary.textContent = '';
+  var programId = selectedProgramId();
+  if (!programId) { body.innerHTML = '<span class="text-xs text-gray-400">Select a program to see its uploaded tickets.</span>'; return; }
+  body.innerHTML = '<span class="text-xs text-gray-400">Loading…</span>';
   try {
-    var resp = await fetch('/api/flight-tickets?action=list', { credentials: 'include' });
+    var resp = await fetch('/api/flight-tickets?action=list&program_id=' + encodeURIComponent(programId), { credentials: 'include' });
     var data = await resp.json();
     if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
     var students = data.students || [];
@@ -248,32 +293,40 @@ async function refreshTicketFolders(ev) {
 }
 
 // ── Merge duplicate folders ─────────────────────────────────────────────
+var DEDUPE_GROUPS = [];
+
 async function scanDuplicates() {
   var body = document.getElementById('dedupe-body');
   var btn = document.getElementById('dedupe-btn');
+  var programId = selectedProgramId();
+  if (!programId) { showToast('Select a program first', 'error'); return; }
   btn.disabled = true;
   body.innerHTML = '<span class="text-xs text-gray-400">Scanning…</span>';
   try {
-    var resp = await fetch('/api/flight-tickets?action=dedupe-scan', { credentials: 'include' });
+    var resp = await fetch('/api/flight-tickets?action=dedupe-scan&program_id=' + encodeURIComponent(programId), { credentials: 'include' });
     var data = await resp.json();
     if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
-    var groups = (data.groups || []).filter(function(g) { return (g.merge || []).length; });
-    if (!groups.length) { body.innerHTML = '<span class="text-xs text-gray-400">No duplicate folders found.</span>'; return; }
+    DEDUPE_GROUPS = (data.groups || []).filter(function(g) { return (g.candidates || []).length > 1; });
+    if (!DEDUPE_GROUPS.length) { body.innerHTML = '<span class="text-xs text-gray-400">No duplicate folders found in this program.</span>'; return; }
 
-    body.innerHTML = groups.map(function(g, i) {
-      var rows = '<div class="text-sm"><span class="text-green-700">keep</span> → <a href="' + esc(g.keep.url) + '" target="_blank" class="text-blue-600 hover:underline font-medium">' + esc(g.canonical_name) + '</a>' +
-                 (g.keep.name !== g.canonical_name ? ' <span class="text-xs text-gray-400">(rename from "' + esc(g.keep.name) + '")</span>' : '') +
-                 ' <span class="text-xs text-gray-400">' + g.keep.file_count + ' file' + (g.keep.file_count === 1 ? '' : 's') + '</span></div>';
-      rows += g.merge.map(function(m) {
-        return '<div class="text-sm text-gray-500 pl-4">merge "' + esc(m.name) + '" <span class="text-xs text-gray-400">' + m.file_count + ' file' + (m.file_count === 1 ? '' : 's') + '</span></div>';
+    body.innerHTML = DEDUPE_GROUPS.map(function(g, i) {
+      // Each candidate: radio (keep target) + checkbox (include in merge).
+      var rows = (g.candidates || []).map(function(c) {
+        var isKeep = c.id === g.keep.id;
+        return '<label class="flex items-center gap-2 text-sm py-1">' +
+                 '<input type="radio" name="keep-' + i + '" value="' + esc(c.id) + '" ' + (isKeep ? 'checked' : '') + ' onchange="syncMergeRow(' + i + ')"> ' +
+                 '<span class="text-xs text-gray-400 w-10">keep</span>' +
+                 '<input type="checkbox" class="merge-cb-' + i + '" value="' + esc(c.id) + '" ' + (isKeep ? '' : 'checked') + '> ' +
+                 '<span class="text-xs text-gray-400 w-12">merge</span>' +
+                 '<span class="font-medium text-gray-800">' + esc(c.name) + '</span>' +
+                 ' <span class="text-xs text-gray-400">' + c.file_count + ' file' + (c.file_count === 1 ? '' : 's') + '</span>' +
+               '</label>';
       }).join('');
-      var payload = encodeURIComponent(JSON.stringify({
-        keep_folder_id: g.keep.id,
-        merge_folder_ids: g.merge.map(function(m) { return m.id; }),
-        canonical_name: g.canonical_name
-      }));
-      return '<div data-group="' + i + '" class="border border-gray-200 rounded-lg p-3">' + rows +
-             '<div class="mt-2"><button onclick="doMerge(this,\'' + payload + '\')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">Merge into ' + esc(g.canonical_name) + '</button></div></div>';
+      return '<div data-group="' + i + '" class="border border-gray-200 rounded-lg p-3">' +
+               '<div class="text-xs text-gray-500 mb-1">Will consolidate into <span class="font-medium text-gray-700">' + esc(g.canonical_name) + '</span> and update the deal link.</div>' +
+               rows +
+               '<div class="mt-2"><button onclick="doMerge(' + i + ', this)" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">Merge selected</button></div>' +
+             '</div>';
     }).join('');
   } catch (err) {
     body.innerHTML = '<span class="text-xs text-red-500">' + esc(err.message) + '</span>';
@@ -282,8 +335,26 @@ async function scanDuplicates() {
   }
 }
 
-async function doMerge(btnEl, payloadEnc) {
-  var payload = JSON.parse(decodeURIComponent(payloadEnc));
+// Keep the "keep" folder from also being checked for merge.
+function syncMergeRow(i) {
+  var keep = document.querySelector('input[name="keep-' + i + '"]:checked');
+  var keepId = keep ? keep.value : null;
+  document.querySelectorAll('.merge-cb-' + i).forEach(function(cb) {
+    if (cb.value === keepId) { cb.checked = false; cb.disabled = true; }
+    else { cb.disabled = false; }
+  });
+}
+
+async function doMerge(i, btnEl) {
+  var g = DEDUPE_GROUPS[i];
+  if (!g) return;
+  var keep = document.querySelector('input[name="keep-' + i + '"]:checked');
+  var keepId = keep ? keep.value : g.keep.id;
+  var mergeIds = Array.from(document.querySelectorAll('.merge-cb-' + i + ':checked'))
+    .map(function(cb) { return cb.value; })
+    .filter(function(id) { return id !== keepId; });
+  if (!mergeIds.length) { showToast('Select at least one folder to merge', 'error'); return; }
+
   btnEl.disabled = true;
   btnEl.textContent = 'Merging…';
   try {
@@ -291,7 +362,14 @@ async function doMerge(btnEl, payloadEnc) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify(Object.assign({ action: 'merge' }, payload))
+      body: JSON.stringify({
+        action: 'merge',
+        program_id: selectedProgramId(),
+        program_folder_id: g.program_folder_id,
+        keep_folder_id: keepId,
+        merge_folder_ids: mergeIds,
+        canonical_name: g.canonical_name
+      })
     });
     var data = await resp.json();
     if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
@@ -302,7 +380,7 @@ async function doMerge(btnEl, payloadEnc) {
     refreshTicketFolders();
   } catch (err) {
     btnEl.disabled = false;
-    btnEl.textContent = 'Merge';
+    btnEl.textContent = 'Merge selected';
     showToast('Merge failed: ' + err.message, 'error');
   }
 }
@@ -326,8 +404,8 @@ async function doMerge(btnEl, payloadEnc) {
   });
 })();
 
-// Load the folder list on open.
-refreshTicketFolders();
+// Load programs on open (which gates upload + refreshes the program views).
+loadPrograms();
 </script>
 </body>
 </html>
