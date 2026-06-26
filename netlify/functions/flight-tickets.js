@@ -204,13 +204,14 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 function driveEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 
-// Find a child subfolder by name; create it (shareable) if missing.
-async function ensureStudentFolder(studentName) {
+// Find a child folder by name under `parentId`; create it if missing.
+// `shareable` makes it anyone-with-link readable (used for student folders —
+// that link is what gets written to the deal / shared with the student).
+async function findOrCreateFolder(name, parentId, { shareable = false } = {}) {
   const d = await drive();
-  const parent = parentFolderId();
-  const safe = safeFolderName(studentName);
+  const safe = safeFolderName(name);
 
-  const q = `'${driveEsc(parent)}' in parents and name = '${driveEsc(safe)}' ` +
+  const q = `'${driveEsc(parentId)}' in parents and name = '${driveEsc(safe)}' ` +
             `and mimeType = '${FOLDER_MIME}' and trashed = false`;
   const found = await d.files.list({
     q,
@@ -226,27 +227,49 @@ async function ensureStudentFolder(studentName) {
   }
 
   const created = await d.files.create({
-    requestBody: { name: safe, mimeType: FOLDER_MIME, parents: [parent] },
+    requestBody: { name: safe, mimeType: FOLDER_MIME, parents: [parentId] },
     fields: 'id, name, webViewLink',
     supportsAllDrives: true,
   });
 
-  // Make the folder shareable: anyone with the link can VIEW. This is the
-  // link you hand to the student. Remove this block if you'd rather keep
-  // folders private and share explicitly.
-  try {
-    await d.permissions.create({
-      fileId: created.data.id,
-      requestBody: { role: 'reader', type: 'anyone' },
-      supportsAllDrives: true,
-    });
-  } catch (e) {
-    // Non-fatal: folder still exists, just not link-shared (e.g. domain policy
-    // blocks anyone-links). Surface it but don't fail the upload.
-    console.warn(`Could not set anyone-link on folder ${created.data.id}: ${e.message}`);
+  if (shareable) {
+    try {
+      await d.permissions.create({
+        fileId: created.data.id,
+        requestBody: { role: 'reader', type: 'anyone' },
+        supportsAllDrives: true,
+      });
+    } catch (e) {
+      // Non-fatal: folder exists, just not link-shared (e.g. domain policy
+      // blocks anyone-links).
+      console.warn(`Could not set anyone-link on folder ${created.data.id}: ${e.message}`);
+    }
   }
 
   return { id: created.data.id, name: created.data.name, url: created.data.webViewLink, created: true };
+}
+
+// Program container folder (under the root parent) — not link-shared.
+function ensureProgramFolder(programName) {
+  return findOrCreateFolder(programName, parentFolderId(), { shareable: false });
+}
+
+// Student folder, nested under a program folder — link-shared.
+function ensureStudentFolder(studentName, programFolderId) {
+  return findOrCreateFolder(studentName, programFolderId || parentFolderId(), { shareable: true });
+}
+
+// Find a folder by name under a parent without creating it. Returns null if absent.
+async function findFolderByName(name, parentId) {
+  const d = await drive();
+  const safe = safeFolderName(name);
+  const res = await d.files.list({
+    q: `'${driveEsc(parentId)}' in parents and name = '${driveEsc(safe)}' and mimeType = '${FOLDER_MIME}' and trashed = false`,
+    fields: 'files(id, name, webViewLink)', pageSize: 1,
+    supportsAllDrives: true, includeItemsFromAllDrives: true,
+  });
+  const f = res.data.files && res.data.files[0];
+  return f ? { id: f.id, name: f.name, url: f.webViewLink } : null;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -295,7 +318,6 @@ const HUBSPOT_API = 'https://api.hubapi.com';
 const HUBSPOT_PORTAL_ID = '3855728';
 const PROGRAM_OBJECT_TYPE = '2-58411705';
 const UE_TICKETS_PROPERTY = 'ue_airline_tickets';
-const UNMATCHED_FOLDER_NAME = 'Unmatched — Needs Review';
 
 function hubspotToken() { return process.env.HUBSPOT_TOKEN || null; }
 
@@ -319,17 +341,17 @@ async function hsFetch(path, opts = {}) {
   return resp;
 }
 
-// Cache the Unearthed name->deals index briefly so a batch of uploads doesn't
-// rebuild it for every file. (Warm-Lambda memory; TTL keeps it fresh-ish.)
-let _ueIndex = { at: 0, data: null };
-const UE_INDEX_TTL_MS = 60 * 1000;
+// Cache TTLs (warm-Lambda memory).
+const CACHE_TTL_MS = 60 * 1000;
 
-async function getUnearthedIndex() {
-  if (_ueIndex.data && Date.now() - _ueIndex.at < UE_INDEX_TTL_MS) return _ueIndex.data;
+// ---- Unearthed programs list (for the uploader's dropdown) ----------------
+let _programs = { at: 0, data: null };
+async function getProgramsList() {
+  if (_programs.data && Date.now() - _programs.at < CACHE_TTL_MS) return _programs.data;
+  if (!hubspotToken()) throw new Error('HUBSPOT_TOKEN not set');
 
-  // 1. Unearthed program objects.
   const isUnearthed = unearthedMatcher();
-  const programIds = [];
+  const programs = [];
   let after = 0, more = true;
   while (more) {
     const params = new URLSearchParams({ limit: '100', properties: 'pacific_discovery_program' });
@@ -338,35 +360,52 @@ async function getUnearthedIndex() {
     if (!resp.ok) throw new Error(`Program objects fetch failed: ${resp.status}`);
     const data = await resp.json();
     for (const obj of (data.results || [])) {
-      if (isUnearthed(obj.properties && obj.properties.pacific_discovery_program)) programIds.push(String(obj.id));
+      const name = obj.properties && obj.properties.pacific_discovery_program;
+      if (isUnearthed(name)) programs.push({ id: String(obj.id), name });
     }
     if (data.paging && data.paging.next) after = data.paging.next.after; else more = false;
   }
+  programs.sort((a, b) => a.name.localeCompare(b.name));
+  _programs = { at: Date.now(), data: programs };
+  return programs;
+}
 
-  // 2. Deals associated to those programs.
+async function programNameById(programId) {
+  const list = await getProgramsList();
+  const p = list.find(x => x.id === String(programId));
+  return p ? p.name : null;
+}
+
+// ---- Per-program contact roster (the names we match a ticket against) ------
+// Keyed by programId so switching programs doesn't reuse the wrong roster.
+const _progIndex = new Map(); // programId -> { at, data:{contacts, dealCount} }
+
+async function getProgramIndex(programId) {
+  const cached = _progIndex.get(String(programId));
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
+
+  // 1. Deals associated to THIS program only.
   const dealIdSet = new Set();
-  for (let i = 0; i < programIds.length; i += 100) {
-    const batch = programIds.slice(i, i + 100);
-    const resp = await hsFetch(`/crm/v4/associations/${PROGRAM_OBJECT_TYPE}/deals/batch/read`, {
-      method: 'POST', body: JSON.stringify({ inputs: batch.map(id => ({ id })) }),
-    });
-    if (!resp.ok) continue;
+  const resp = await hsFetch(`/crm/v4/associations/${PROGRAM_OBJECT_TYPE}/deals/batch/read`, {
+    method: 'POST', body: JSON.stringify({ inputs: [{ id: String(programId) }] }),
+  });
+  if (resp.ok) {
     const data = await resp.json();
     for (const r of (data.results || [])) for (const t of (r.to || [])) dealIdSet.add(String(t.toObjectId));
   }
   const dealIds = [...dealIdSet];
 
-  // 3. Deal -> contacts associations.
+  // 2. Deal -> contacts.
   const dealToContacts = new Map();
   const contactIdSet = new Set();
   for (let i = 0; i < dealIds.length; i += 100) {
     const batch = dealIds.slice(i, i + 100);
-    const resp = await hsFetch(`/crm/v4/associations/deals/contacts/batch/read`, {
+    const r2 = await hsFetch(`/crm/v4/associations/deals/contacts/batch/read`, {
       method: 'POST', body: JSON.stringify({ inputs: batch.map(id => ({ id })) }),
     });
-    if (!resp.ok) continue;
-    const data = await resp.json();
-    for (const r of (data.results || [])) {
+    if (!r2.ok) continue;
+    const d2 = await r2.json();
+    for (const r of (d2.results || [])) {
       const dealId = r.from && String(r.from.id);
       const cIds = (r.to || []).map(t => String(t.toObjectId));
       if (dealId) dealToContacts.set(dealId, cIds);
@@ -374,25 +413,24 @@ async function getUnearthedIndex() {
     }
   }
 
-  // 4. Contact names.
+  // 3. Contact names.
   const contactName = new Map();
   const cIds = [...contactIdSet];
   for (let i = 0; i < cIds.length; i += 100) {
     const batch = cIds.slice(i, i + 100);
-    const resp = await hsFetch(`/crm/v3/objects/contacts/batch/read`, {
+    const r3 = await hsFetch(`/crm/v3/objects/contacts/batch/read`, {
       method: 'POST',
       body: JSON.stringify({ properties: ['firstname', 'lastname'], inputs: batch.map(id => ({ id })) }),
     });
-    if (!resp.ok) continue;
-    const data = await resp.json();
-    for (const c of (data.results || [])) {
+    if (!r3.ok) continue;
+    const d3 = await r3.json();
+    for (const c of (d3.results || [])) {
       const p = c.properties || {};
       contactName.set(String(c.id), [p.firstname, p.lastname].filter(Boolean).join(' ').trim());
     }
   }
 
-  // 5. Build one record per Unearthed CONTACT (the roster we match against).
-  //    contactId -> { canonicalName, fullKey, lastKey, firstToken, dealIds:Set }
+  // 4. One record per contact.
   const contactToDeals = new Map();
   for (const [dealId, cList] of dealToContacts.entries()) {
     for (const cId of cList) {
@@ -402,22 +440,19 @@ async function getUnearthedIndex() {
   }
   const contacts = [];
   for (const [cId, deals] of contactToDeals.entries()) {
-    const raw = contactName.get(cId);
-    const canonicalName = normalizeName(raw);
+    const canonicalName = normalizeName(contactName.get(cId));
     if (!canonicalName) continue;
     const tokens = canonicalName.toLowerCase().split(/\s+/).filter(Boolean);
     contacts.push({
-      contactId: cId,
-      canonicalName,
-      fullKey: tokens.join(' '),
-      lastKey: tokens[tokens.length - 1],
-      firstToken: tokens[0],
+      contactId: cId, canonicalName,
+      fullKey: tokens.join(' '), lastKey: tokens[tokens.length - 1], firstToken: tokens[0],
       dealIds: [...deals],
     });
   }
 
-  _ueIndex = { at: Date.now(), data: { contacts, programCount: programIds.length, dealCount: dealIds.length } };
-  return _ueIndex.data;
+  const out = { contacts, dealCount: dealIds.length };
+  _progIndex.set(String(programId), { at: Date.now(), data: out });
+  return out;
 }
 
 function dealUrl(dealId) {
@@ -434,14 +469,14 @@ function firstNameCompatible(a, b) {
   return shorter.length >= 2 && longer.startsWith(shorter);
 }
 
-// Resolve a ticket name against the Unearthed roster.
+// Resolve a ticket name against the SELECTED program's contact roster.
 // Returns: { roster, person, canonicalName, dealIds }
 //   roster:  true if the roster was available to match against
 //   person:  'matched' | 'none' | 'ambiguous'
-async function resolveStudent(ticketName) {
-  if (!hubspotToken()) return { roster: false };
+async function resolveStudent(ticketName, programId) {
+  if (!hubspotToken() || !programId) return { roster: false };
   let data;
-  try { data = await getUnearthedIndex(); }
+  try { data = await getProgramIndex(programId); }
   catch (e) { return { roster: false, error: e.message }; }
 
   const contacts = data.contacts || [];
@@ -497,6 +532,25 @@ async function handleUpload(body) {
   const buffer = Buffer.from(body.data, 'base64');
   const mimeType = body.mimeType || 'application/pdf';
 
+  // 0. Program is required — it scopes matching and nests the Drive folders.
+  const programId = body.program_id;
+  if (!programId) return bad('program_id required — pick an Unearthed program before uploading.', 400);
+  let programName;
+  try {
+    programName = await programNameById(programId);
+  } catch (e) {
+    return bad(`Couldn't load programs: ${e.message}`, 502);
+  }
+  if (!programName) return bad(`Unknown program_id "${programId}".`, 400);
+
+  // Program container folder (under the root parent).
+  let programFolder;
+  try {
+    programFolder = await ensureProgramFolder(programName);
+  } catch (e) {
+    return bad(`Couldn't create the program folder "${programName}": ${e.message}. Check the service account is a Content Manager member of the Shared Drive.`, 502);
+  }
+
   // 1. Read the passenger name(s) off the ticket.
   let names;
   try {
@@ -508,28 +562,26 @@ async function handleUpload(body) {
     return bad('No passenger name could be read from this file — please file it manually.', 422);
   }
 
-  // 2. For each passenger: resolve to the Unearthed roster, then file.
-  //    - Matched  → folder named by the canonical HubSpot contact name (so
-  //                 ticket spelling variants land in ONE folder), URL written
-  //                 to the deal.
-  //    - No / ambiguous match → BACKUP: the student gets their OWN folder named
-  //                 from the ticket, flagged for review (not a shared bucket).
-  //    - Roster unavailable (no HUBSPOT_TOKEN) → fall back to the ticket name.
+  // 2. For each passenger: resolve against THIS program's roster, then file
+  //    into a student folder NESTED under the program folder.
+  //    - Matched  → folder named by the canonical HubSpot contact name; URL
+  //                 written to that student's deal.
+  //    - No / ambiguous match → BACKUP: own folder from the ticket name,
+  //                 flagged for review.
   //    (Group bookings on one PDF land in every passenger's folder.)
   const filed = [];
   for (const student of names) {
-    const resolved = await resolveStudent(student);
+    const resolved = await resolveStudent(student, programId);
 
     let folderName, hubspot;
     if (resolved.person === 'matched') {
-      folderName = resolved.canonicalName;        // canonical name unifies variants
+      folderName = resolved.canonicalName;
     } else {
-      // Backup: each unmatched student gets their own folder from the ticket name.
-      folderName = student;
+      folderName = student; // backup: own folder from the ticket name
       if (!resolved.roster) {
         hubspot = { status: 'skipped', reason: resolved.error ? `roster error: ${resolved.error}` : 'HUBSPOT_TOKEN not set' };
       } else if (resolved.person === 'ambiguous') {
-        hubspot = { status: 'ambiguous', reason: 'name matched more than one Unearthed contact', candidates: resolved.candidates };
+        hubspot = { status: 'ambiguous', reason: 'name matched more than one contact in this program', candidates: resolved.candidates };
       } else {
         hubspot = { status: 'no_match' };
       }
@@ -537,7 +589,7 @@ async function handleUpload(body) {
 
     let folder, file;
     try {
-      folder = await ensureStudentFolder(folderName);
+      folder = await ensureStudentFolder(folderName, programFolder.id);
     } catch (e) {
       return bad(`Couldn't create the Drive folder "${folderName}": ${e.message}. Check that the service account is a Content Manager member of the Shared Drive.`, 502);
     }
@@ -547,13 +599,13 @@ async function handleUpload(body) {
       return bad(`Created the folder "${folderName}" but couldn't upload the ticket into it: ${e.message}. This usually means the service account lacks write access to the Shared Drive, or the configured folder isn't actually inside a Shared Drive (service accounts have no personal storage quota). Run ?action=debug to confirm.`, 502);
     }
 
-    // Write the folder URL to the matched deal (only when we have a clean match).
+    // Write the student folder URL to their matched deal.
     if (resolved.roster && resolved.person === 'matched') {
       hubspot = await writeDealUrl(resolved.dealIds, folder.url);
     }
 
     filed.push({
-      student,                                   // name as read off the ticket
+      student,
       matched_name: resolved.person === 'matched' ? resolved.canonicalName : null,
       needs_review: !!(resolved.roster && resolved.person !== 'matched'),
       folder, file, hubspot,
@@ -563,41 +615,49 @@ async function handleUpload(body) {
   return ok({
     ok: true,
     filename: body.filename,
+    program: { id: String(programId), name: programName, url: programFolder.url },
     students: names,
     multi_passenger: names.length > 1,
     filed,
   });
 }
 
+// Resolve the program folder (no create) for a given program_id. Returns
+// { program:{id,name}, folder:{id,url}|null } or throws on bad id.
+async function resolveProgramFolder(programId) {
+  if (!programId) { const e = new Error('program_id required'); e.code = 400; throw e; }
+  const name = await programNameById(programId);
+  if (!name) { const e = new Error(`Unknown program_id "${programId}"`); e.code = 400; throw e; }
+  const folder = await findFolderByName(name, parentFolderId());
+  return { program: { id: String(programId), name }, folder };
+}
+
 // --------------------------------------------------------------------------
-// Action: list (student folders + links)
+// Action: list (student folders + links) — scoped to one program
 // --------------------------------------------------------------------------
-async function handleList() {
+async function handleList(qs) {
+  let pf;
+  try { pf = await resolveProgramFolder(qs.program_id); }
+  catch (e) { return bad(e.message, e.code || 500); }
+  if (!pf.folder) return ok({ program: pf.program, students: [] });
+
   const d = await drive();
-  const parent = parentFolderId();
   const folders = [];
   let pageToken;
   do {
     const res = await d.files.list({
-      q: `'${driveEsc(parent)}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      q: `'${driveEsc(pf.folder.id)}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
       fields: 'nextPageToken, files(id, name, webViewLink)',
-      orderBy: 'name',
-      pageSize: 200,
-      pageToken,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
+      orderBy: 'name', pageSize: 200, pageToken,
+      supportsAllDrives: true, includeItemsFromAllDrives: true,
     });
     for (const f of (res.data.files || [])) {
-      // List the files uploaded inside each student folder.
       let files = [];
       try {
         const inner = await d.files.list({
           q: `'${driveEsc(f.id)}' in parents and trashed = false`,
-          fields: 'files(id, name, webViewLink)',
-          orderBy: 'name',
-          pageSize: 1000,
-          supportsAllDrives: true,
-          includeItemsFromAllDrives: true,
+          fields: 'files(id, name, webViewLink)', orderBy: 'name', pageSize: 1000,
+          supportsAllDrives: true, includeItemsFromAllDrives: true,
         });
         files = (inner.data.files || []).map(x => ({ name: x.name, url: x.webViewLink }));
       } catch (_) {}
@@ -606,22 +666,21 @@ async function handleList() {
     pageToken = res.data.nextPageToken;
   } while (pageToken);
 
-  return ok({ students: folders });
+  return ok({ program: pf.program, students: folders });
 }
 
 // --------------------------------------------------------------------------
 // Action: dedupe-scan — find duplicate student folders (same person, different
-// spelling) by resolving each folder name to the Unearthed roster. Folders that
-// resolve to the same canonical contact are a merge group.
+// spelling) within ONE program by resolving each folder name to that program's
+// roster. Folders resolving to the same canonical contact are a merge group.
 // --------------------------------------------------------------------------
-async function listStudentFolders() {
+async function listStudentFolders(programFolderId) {
   const d = await drive();
-  const parent = parentFolderId();
   const out = [];
   let pageToken;
   do {
     const res = await d.files.list({
-      q: `'${driveEsc(parent)}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      q: `'${driveEsc(programFolderId)}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
       fields: 'nextPageToken, files(id, name, webViewLink)',
       orderBy: 'name', pageSize: 200, pageToken,
       supportsAllDrives: true, includeItemsFromAllDrives: true,
@@ -643,15 +702,19 @@ async function listStudentFolders() {
   return out;
 }
 
-async function handleDedupeScan() {
-  if (!hubspotToken()) return bad('Dedupe needs HUBSPOT_TOKEN (it matches folders to the Unearthed roster).', 400);
-  const folders = await listStudentFolders();
+async function handleDedupeScan(qs) {
+  if (!hubspotToken()) return bad('Dedupe needs HUBSPOT_TOKEN (it matches folders to the program roster).', 400);
+  let pf;
+  try { pf = await resolveProgramFolder(qs.program_id); }
+  catch (e) { return bad(e.message, e.code || 500); }
+  if (!pf.folder) return ok({ program: pf.program, groups: [] });
 
-  // Group folders by the canonical contact their name resolves to.
+  const folders = await listStudentFolders(pf.folder.id);
+
+  // Group folders by the canonical contact their name resolves to (within program).
   const groups = new Map(); // canonicalName -> [folder, ...]
   for (const f of folders) {
-    if (f.name === UNMATCHED_FOLDER_NAME) continue;
-    const r = await resolveStudent(f.name);
+    const r = await resolveStudent(f.name, pf.program.id);
     if (r.roster && r.person === 'matched') {
       const key = r.canonicalName;
       if (!groups.has(key)) groups.set(key, []);
@@ -659,24 +722,24 @@ async function handleDedupeScan() {
     }
   }
 
-  // Keep only groups with a real duplicate (2+ folders) or a single mis-named
-  // folder that should be renamed to canonical.
+  // Keep groups with a real duplicate (2+ folders) or a single mis-named folder.
   const result = [];
   for (const [canonical, fols] of groups.entries()) {
     const needsRename = fols.length === 1 && fols[0].name !== canonical;
     if (fols.length < 2 && !needsRename) continue;
-    // Keep target: prefer the folder already named canonically, else most files.
     const exact = fols.find(f => f.name === canonical);
     const keep = exact || fols.slice().sort((a, b) => b.file_count - a.file_count || a.name.length - b.name.length)[0];
     const merge = fols.filter(f => f.id !== keep.id);
     result.push({
       canonical_name: canonical,
+      program_folder_id: pf.folder.id,
       keep: { id: keep.id, name: keep.name, url: keep.url, file_count: keep.file_count },
+      candidates: fols.map(f => ({ id: f.id, name: f.name, file_count: f.file_count })),
       merge: merge.map(f => ({ id: f.id, name: f.name, file_count: f.file_count })),
       needs_rename: needsRename,
     });
   }
-  return ok({ groups: result });
+  return ok({ program: pf.program, groups: result });
 }
 
 // --------------------------------------------------------------------------
@@ -689,15 +752,25 @@ async function handleMerge(body) {
   const mergeIds = Array.isArray(body.merge_folder_ids) ? body.merge_folder_ids : [];
   if (!keepId) return bad('keep_folder_id required');
   if (!mergeIds.length) return bad('merge_folder_ids (non-empty array) required');
+  if (!body.program_id) return bad('program_id required');
 
   const d = await drive();
-  const parent = parentFolderId();
 
-  // Safety: confirm every folder is a direct child of our parent folder.
+  // Determine the program folder the targets must live inside.
+  let programFolderId = body.program_folder_id;
+  if (!programFolderId) {
+    let pf;
+    try { pf = await resolveProgramFolder(body.program_id); }
+    catch (e) { return bad(e.message, e.code || 500); }
+    if (!pf.folder) return bad('Program folder not found.', 400);
+    programFolderId = pf.folder.id;
+  }
+
+  // Safety: confirm every folder is a direct child of THIS program folder.
   async function assertChild(id) {
     const meta = await d.files.get({ fileId: id, fields: 'id, name, parents', supportsAllDrives: true });
-    if (!(meta.data.parents || []).includes(parent)) {
-      throw new Error(`Folder ${id} is not inside the configured flights folder — refusing to touch it.`);
+    if (!(meta.data.parents || []).includes(programFolderId)) {
+      throw new Error(`Folder ${id} is not inside the selected program folder — refusing to touch it.`);
     }
     return meta.data;
   }
@@ -757,9 +830,9 @@ async function handleMerge(body) {
   }
 
   // The merged-away folder URLs are now dead — push the surviving folder's URL
-  // to the matched Unearthed deal so HubSpot points at the right place.
+  // to the matched deal so HubSpot points at the right place.
   let hubspot = { status: 'skipped' };
-  const resolved = await resolveStudent(keepName);
+  const resolved = await resolveStudent(keepName, body.program_id);
   if (resolved.roster && resolved.person === 'matched') {
     hubspot = await writeDealUrl(resolved.dealIds, keepMeta.data.webViewLink);
   } else if (resolved.roster) {
@@ -773,6 +846,19 @@ async function handleMerge(body) {
     trashed_folders: trashed,
     hubspot,
   });
+}
+
+// --------------------------------------------------------------------------
+// Action: programs — Unearthed programs for the uploader's dropdown
+// --------------------------------------------------------------------------
+async function handlePrograms() {
+  if (!hubspotToken()) return bad('HUBSPOT_TOKEN not set — cannot load programs.', 400);
+  try {
+    const programs = await getProgramsList();
+    return ok({ programs });
+  } catch (e) {
+    return bad(`Couldn't load programs: ${e.message}`, 502);
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -845,8 +931,9 @@ exports.handler = async (event) => {
     const action = qs.action || body.action;
 
     if (method === 'GET'  && action === 'debug')        return await handleDebug();
-    if (method === 'GET'  && action === 'list')         return await handleList();
-    if (method === 'GET'  && action === 'dedupe-scan')  return await handleDedupeScan();
+    if (method === 'GET'  && action === 'programs')     return await handlePrograms();
+    if (method === 'GET'  && action === 'list')         return await handleList(qs);
+    if (method === 'GET'  && action === 'dedupe-scan')  return await handleDedupeScan(qs);
     if (method === 'POST' && action === 'upload')       return await handleUpload(body);
     if (method === 'POST' && action === 'merge')        return await handleMerge(body);
 
