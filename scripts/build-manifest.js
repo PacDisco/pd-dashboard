@@ -136,6 +136,10 @@ function scan() {
       allowedRoles: Array.isArray(meta.allowedRoles) ? meta.allowedRoles.slice() : [],
       // URL preserves original folder case (Netlify is case-sensitive)
       url: meta.url || `/${folderName}/`,
+      // Which fields were EXPLICITLY set in this folder's dashboard.json.
+      // merge() uses this so dashboard.json always wins for fields the author
+      // actually set, while still preserving hand-edits to discovery for the rest.
+      _explicit: Object.keys(meta),
     });
   }
   return out;
@@ -153,18 +157,21 @@ function merge(existing, scanned) {
     const prev = prevBySlug.get(s.slug);
     if (!prev) return s;
 
-    // Preserve human-set metadata where it differs from the auto-detected default
+    // A field set explicitly in dashboard.json ALWAYS wins (so edits propagate).
+    // For fields NOT in dashboard.json, preserve any hand-edit in discovery,
+    // else fall back to the auto-detected/scanned default.
+    const ex = new Set(s._explicit || []);
     return {
       ...s,
-      title: nonDefault(prev.title, s.slug, prettifySlug(s.slug)) ? prev.title : s.title,
-      description: prev.description || s.description,
-      category: prev.category && prev.category !== "General" ? prev.category : s.category,
-      icon: prev.icon && prev.icon !== "📊" ? prev.icon : s.icon,
-      owner: prev.owner || s.owner,
-      pinned: typeof prev.pinned === "boolean" ? prev.pinned : s.pinned,
-      order: prev.order !== undefined ? prev.order : s.order,
-      colors: prev.colors || s.colors,
-      allowedRoles: Array.isArray(prev.allowedRoles) ? prev.allowedRoles : s.allowedRoles,
+      title:        ex.has("title")        ? s.title        : (nonDefault(prev.title, s.slug, prettifySlug(s.slug)) ? prev.title : s.title),
+      description:  ex.has("description")  ? s.description  : (prev.description || s.description),
+      category:     ex.has("category")     ? s.category     : (prev.category && prev.category !== "General" ? prev.category : s.category),
+      icon:         ex.has("icon")         ? s.icon         : (prev.icon && prev.icon !== "📊" ? prev.icon : s.icon),
+      owner:        ex.has("owner")        ? s.owner        : (prev.owner || s.owner),
+      pinned:       ex.has("pinned")       ? s.pinned       : (typeof prev.pinned === "boolean" ? prev.pinned : s.pinned),
+      order:        ex.has("order")        ? s.order        : (prev.order !== undefined ? prev.order : s.order),
+      colors:       ex.has("colors")       ? s.colors       : (prev.colors || s.colors),
+      allowedRoles: ex.has("allowedRoles") ? s.allowedRoles : (Array.isArray(prev.allowedRoles) ? prev.allowedRoles : s.allowedRoles),
     };
   });
 }
@@ -208,8 +215,8 @@ function main() {
   const scanned = scan();
   const merged = merge(existing, scanned);
 
-  // Strip `folderName` from public output (internal helper only)
-  const publicForm = merged.map(({ folderName, ...rest }) => rest);
+  // Strip internal-only helpers from public output
+  const publicForm = merged.map(({ folderName, _explicit, ...rest }) => rest);
 
   const payload = {
     generatedAt: new Date().toISOString(),
