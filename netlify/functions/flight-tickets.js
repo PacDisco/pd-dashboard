@@ -295,6 +295,7 @@ const HUBSPOT_API = 'https://api.hubapi.com';
 const HUBSPOT_PORTAL_ID = '3855728';
 const PROGRAM_OBJECT_TYPE = '2-58411705';
 const UE_TICKETS_PROPERTY = 'ue_airline_tickets';
+const UNMATCHED_FOLDER_NAME = 'Unmatched — Needs Review';
 
 function hubspotToken() { return process.env.HUBSPOT_TOKEN || null; }
 
@@ -390,18 +391,32 @@ async function getUnearthedIndex() {
     }
   }
 
-  // 5. Build nameKey -> Set(dealId).
-  const index = new Map();
+  // 5. Build one record per Unearthed CONTACT (the roster we match against).
+  //    contactId -> { canonicalName, fullKey, lastKey, firstToken, dealIds:Set }
+  const contactToDeals = new Map();
   for (const [dealId, cList] of dealToContacts.entries()) {
     for (const cId of cList) {
-      const key = nameKey(contactName.get(cId));
-      if (!key) continue;
-      if (!index.has(key)) index.set(key, new Set());
-      index.get(key).add(dealId);
+      if (!contactToDeals.has(cId)) contactToDeals.set(cId, new Set());
+      contactToDeals.get(cId).add(dealId);
     }
   }
+  const contacts = [];
+  for (const [cId, deals] of contactToDeals.entries()) {
+    const raw = contactName.get(cId);
+    const canonicalName = normalizeName(raw);
+    if (!canonicalName) continue;
+    const tokens = canonicalName.toLowerCase().split(/\s+/).filter(Boolean);
+    contacts.push({
+      contactId: cId,
+      canonicalName,
+      fullKey: tokens.join(' '),
+      lastKey: tokens[tokens.length - 1],
+      firstToken: tokens[0],
+      dealIds: [...deals],
+    });
+  }
 
-  _ueIndex = { at: Date.now(), data: { index, programCount: programIds.length, dealCount: dealIds.length } };
+  _ueIndex = { at: Date.now(), data: { contacts, programCount: programIds.length, dealCount: dealIds.length } };
   return _ueIndex.data;
 }
 
@@ -409,18 +424,57 @@ function dealUrl(dealId) {
   return `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/record/0-3/${dealId}`;
 }
 
-// Match a student to a single Unearthed deal and write the folder URL.
-// Returns a status object (never throws — HubSpot issues must not fail the upload).
-async function writeFolderToHubspot(student, folderUrl) {
-  if (!hubspotToken()) return { status: 'skipped', reason: 'HUBSPOT_TOKEN not set' };
-  try {
-    const { index } = await getUnearthedIndex();
-    const key = nameKey(student);
-    const deals = index.get(key);
-    if (!deals || deals.size === 0) return { status: 'no_match' };
-    if (deals.size > 1) return { status: 'ambiguous', deal_ids: [...deals] };
+// Are two first-name tokens compatible? Equal, or one is a prefix of the other
+// (handles "Alana" vs "Alanajoyce" where the airline ran first+middle together).
+function firstNameCompatible(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  return shorter.length >= 2 && longer.startsWith(shorter);
+}
 
-    const dealId = [...deals][0];
+// Resolve a ticket name against the Unearthed roster.
+// Returns: { roster, person, canonicalName, dealIds }
+//   roster:  true if the roster was available to match against
+//   person:  'matched' | 'none' | 'ambiguous'
+async function resolveStudent(ticketName) {
+  if (!hubspotToken()) return { roster: false };
+  let data;
+  try { data = await getUnearthedIndex(); }
+  catch (e) { return { roster: false, error: e.message }; }
+
+  const contacts = data.contacts || [];
+  const norm = normalizeName(ticketName);
+  if (!norm) return { roster: true, person: 'none' };
+  const tokens = norm.toLowerCase().split(/\s+/).filter(Boolean);
+  const full = tokens.join(' ');
+  const last = tokens[tokens.length - 1];
+  const first = tokens[0];
+
+  // Strongest signal: exact full-name key. Otherwise last name + compatible first.
+  let cands = contacts.filter(c => c.fullKey === full);
+  if (!cands.length) {
+    cands = contacts.filter(c => c.lastKey === last && firstNameCompatible(c.firstToken, first));
+  }
+  // Collapse candidates that are the same person (same canonical name).
+  const distinct = [...new Map(cands.map(c => [c.canonicalName.toLowerCase(), c])).values()];
+
+  if (distinct.length === 0) return { roster: true, person: 'none' };
+  if (distinct.length > 1) {
+    return { roster: true, person: 'ambiguous', candidates: distinct.map(c => c.canonicalName) };
+  }
+  const c = distinct[0];
+  return { roster: true, person: 'matched', canonicalName: c.canonicalName, dealIds: c.dealIds };
+}
+
+// Write the folder URL to the deal's ue_airline_tickets property.
+// Never throws — returns a status object.
+async function writeDealUrl(dealIds, folderUrl) {
+  if (!dealIds || !dealIds.length) return { status: 'no_match' };
+  if (dealIds.length > 1) return { status: 'ambiguous', reason: 'contact is on multiple Unearthed deals', deal_ids: dealIds };
+  const dealId = dealIds[0];
+  try {
     const resp = await hsFetch(`/crm/v3/objects/deals/${encodeURIComponent(dealId)}`, {
       method: 'PATCH',
       body: JSON.stringify({ properties: { [UE_TICKETS_PROPERTY]: folderUrl } }),
@@ -454,27 +508,56 @@ async function handleUpload(body) {
     return bad('No passenger name could be read from this file — please file it manually.', 422);
   }
 
-  // 2. For each passenger: ensure their folder, drop the file in.
+  // 2. For each passenger: resolve to the Unearthed roster, then file.
+  //    - Matched  → folder named by the canonical HubSpot contact name (so
+  //                 ticket spelling variants land in ONE folder), URL written
+  //                 to the deal.
+  //    - No / ambiguous match → BACKUP: the student gets their OWN folder named
+  //                 from the ticket, flagged for review (not a shared bucket).
+  //    - Roster unavailable (no HUBSPOT_TOKEN) → fall back to the ticket name.
   //    (Group bookings on one PDF land in every passenger's folder.)
   const filed = [];
   for (const student of names) {
+    const resolved = await resolveStudent(student);
+
+    let folderName, hubspot;
+    if (resolved.person === 'matched') {
+      folderName = resolved.canonicalName;        // canonical name unifies variants
+    } else {
+      // Backup: each unmatched student gets their own folder from the ticket name.
+      folderName = student;
+      if (!resolved.roster) {
+        hubspot = { status: 'skipped', reason: resolved.error ? `roster error: ${resolved.error}` : 'HUBSPOT_TOKEN not set' };
+      } else if (resolved.person === 'ambiguous') {
+        hubspot = { status: 'ambiguous', reason: 'name matched more than one Unearthed contact', candidates: resolved.candidates };
+      } else {
+        hubspot = { status: 'no_match' };
+      }
+    }
+
     let folder, file;
     try {
-      folder = await ensureStudentFolder(student);
+      folder = await ensureStudentFolder(folderName);
     } catch (e) {
-      return bad(`Couldn't create the Drive folder for "${student}": ${e.message}. Check that the service account is a Content Manager member of the Shared Drive.`, 502);
+      return bad(`Couldn't create the Drive folder "${folderName}": ${e.message}. Check that the service account is a Content Manager member of the Shared Drive.`, 502);
     }
     try {
       file = await uploadIntoFolder({ folderId: folder.id, filename: body.filename, mimeType, buffer });
     } catch (e) {
-      return bad(`Created the folder for "${student}" but couldn't upload the ticket into it: ${e.message}. This usually means the service account lacks write access to the Shared Drive, or the configured folder isn't actually inside a Shared Drive (service accounts have no personal storage quota). Run ?action=debug to confirm.`, 502);
+      return bad(`Created the folder "${folderName}" but couldn't upload the ticket into it: ${e.message}. This usually means the service account lacks write access to the Shared Drive, or the configured folder isn't actually inside a Shared Drive (service accounts have no personal storage quota). Run ?action=debug to confirm.`, 502);
     }
 
-    // Push the folder URL into the matching Unearthed deal's ue_airline_tickets.
-    // Never fails the upload — HubSpot result is reported per student.
-    const hubspot = await writeFolderToHubspot(student, folder.url);
+    // Write the folder URL to the matched deal (only when we have a clean match).
+    if (resolved.roster && resolved.person === 'matched') {
+      hubspot = await writeDealUrl(resolved.dealIds, folder.url);
+    }
 
-    filed.push({ student, folder, file, hubspot });
+    filed.push({
+      student,                                   // name as read off the ticket
+      matched_name: resolved.person === 'matched' ? resolved.canonicalName : null,
+      needs_review: !!(resolved.roster && resolved.person !== 'matched'),
+      folder, file, hubspot,
+    });
   }
 
   return ok({
@@ -524,6 +607,172 @@ async function handleList() {
   } while (pageToken);
 
   return ok({ students: folders });
+}
+
+// --------------------------------------------------------------------------
+// Action: dedupe-scan — find duplicate student folders (same person, different
+// spelling) by resolving each folder name to the Unearthed roster. Folders that
+// resolve to the same canonical contact are a merge group.
+// --------------------------------------------------------------------------
+async function listStudentFolders() {
+  const d = await drive();
+  const parent = parentFolderId();
+  const out = [];
+  let pageToken;
+  do {
+    const res = await d.files.list({
+      q: `'${driveEsc(parent)}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      fields: 'nextPageToken, files(id, name, webViewLink)',
+      orderBy: 'name', pageSize: 200, pageToken,
+      supportsAllDrives: true, includeItemsFromAllDrives: true,
+    });
+    for (const f of (res.data.files || [])) {
+      let count = 0;
+      try {
+        const inner = await d.files.list({
+          q: `'${driveEsc(f.id)}' in parents and trashed = false`,
+          fields: 'files(id)', pageSize: 1000,
+          supportsAllDrives: true, includeItemsFromAllDrives: true,
+        });
+        count = (inner.data.files || []).length;
+      } catch (_) {}
+      out.push({ id: f.id, name: f.name, url: f.webViewLink, file_count: count });
+    }
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+  return out;
+}
+
+async function handleDedupeScan() {
+  if (!hubspotToken()) return bad('Dedupe needs HUBSPOT_TOKEN (it matches folders to the Unearthed roster).', 400);
+  const folders = await listStudentFolders();
+
+  // Group folders by the canonical contact their name resolves to.
+  const groups = new Map(); // canonicalName -> [folder, ...]
+  for (const f of folders) {
+    if (f.name === UNMATCHED_FOLDER_NAME) continue;
+    const r = await resolveStudent(f.name);
+    if (r.roster && r.person === 'matched') {
+      const key = r.canonicalName;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(f);
+    }
+  }
+
+  // Keep only groups with a real duplicate (2+ folders) or a single mis-named
+  // folder that should be renamed to canonical.
+  const result = [];
+  for (const [canonical, fols] of groups.entries()) {
+    const needsRename = fols.length === 1 && fols[0].name !== canonical;
+    if (fols.length < 2 && !needsRename) continue;
+    // Keep target: prefer the folder already named canonically, else most files.
+    const exact = fols.find(f => f.name === canonical);
+    const keep = exact || fols.slice().sort((a, b) => b.file_count - a.file_count || a.name.length - b.name.length)[0];
+    const merge = fols.filter(f => f.id !== keep.id);
+    result.push({
+      canonical_name: canonical,
+      keep: { id: keep.id, name: keep.name, url: keep.url, file_count: keep.file_count },
+      merge: merge.map(f => ({ id: f.id, name: f.name, file_count: f.file_count })),
+      needs_rename: needsRename,
+    });
+  }
+  return ok({ groups: result });
+}
+
+// --------------------------------------------------------------------------
+// Action: merge — move all files from merge_folder_ids into keep_folder_id,
+// trash the emptied folders, rename keep to the canonical name, then re-write
+// the (now canonical) folder URL to the matched Unearthed deal.
+// --------------------------------------------------------------------------
+async function handleMerge(body) {
+  const keepId = body.keep_folder_id;
+  const mergeIds = Array.isArray(body.merge_folder_ids) ? body.merge_folder_ids : [];
+  if (!keepId) return bad('keep_folder_id required');
+  if (!mergeIds.length) return bad('merge_folder_ids (non-empty array) required');
+
+  const d = await drive();
+  const parent = parentFolderId();
+
+  // Safety: confirm every folder is a direct child of our parent folder.
+  async function assertChild(id) {
+    const meta = await d.files.get({ fileId: id, fields: 'id, name, parents', supportsAllDrives: true });
+    if (!(meta.data.parents || []).includes(parent)) {
+      throw new Error(`Folder ${id} is not inside the configured flights folder — refusing to touch it.`);
+    }
+    return meta.data;
+  }
+  try { await assertChild(keepId); } catch (e) { return bad(e.message, 400); }
+
+  let movedFiles = 0;
+  const trashed = [];
+  for (const mId of mergeIds) {
+    let meta;
+    try { meta = await assertChild(mId); } catch (e) { return bad(e.message, 400); }
+
+    // Move every file out of the merge folder into keep.
+    let pageToken;
+    do {
+      const res = await d.files.list({
+        q: `'${driveEsc(mId)}' in parents and trashed = false`,
+        fields: 'nextPageToken, files(id, parents)', pageSize: 200, pageToken,
+        supportsAllDrives: true, includeItemsFromAllDrives: true,
+      });
+      for (const f of (res.data.files || [])) {
+        await d.files.update({
+          fileId: f.id,
+          addParents: keepId,
+          removeParents: (f.parents || [mId]).join(','),
+          fields: 'id',
+          supportsAllDrives: true,
+        });
+        movedFiles++;
+      }
+      pageToken = res.data.nextPageToken;
+    } while (pageToken);
+
+    // Trash the now-empty merge folder (reversible, unlike delete).
+    try {
+      await d.files.update({ fileId: mId, requestBody: { trashed: true }, supportsAllDrives: true });
+      trashed.push({ id: mId, name: meta.name });
+    } catch (e) {
+      console.warn(`Could not trash merged folder ${mId}: ${e.message}`);
+    }
+  }
+
+  // Rename keep to canonical if requested, and re-resolve for the HubSpot write.
+  const keepMeta = await d.files.get({ fileId: keepId, fields: 'id, name, webViewLink', supportsAllDrives: true });
+  let keepName = keepMeta.data.name;
+  if (body.canonical_name && safeFolderName(body.canonical_name) !== keepName) {
+    try {
+      const renamed = await d.files.update({
+        fileId: keepId,
+        requestBody: { name: safeFolderName(body.canonical_name) },
+        fields: 'id, name, webViewLink',
+        supportsAllDrives: true,
+      });
+      keepName = renamed.data.name;
+    } catch (e) {
+      console.warn(`Could not rename keep folder ${keepId}: ${e.message}`);
+    }
+  }
+
+  // The merged-away folder URLs are now dead — push the surviving folder's URL
+  // to the matched Unearthed deal so HubSpot points at the right place.
+  let hubspot = { status: 'skipped' };
+  const resolved = await resolveStudent(keepName);
+  if (resolved.roster && resolved.person === 'matched') {
+    hubspot = await writeDealUrl(resolved.dealIds, keepMeta.data.webViewLink);
+  } else if (resolved.roster) {
+    hubspot = { status: resolved.person === 'ambiguous' ? 'ambiguous' : 'no_match' };
+  }
+
+  return ok({
+    ok: true,
+    keep: { id: keepId, name: keepName, url: keepMeta.data.webViewLink },
+    moved_files: movedFiles,
+    trashed_folders: trashed,
+    hubspot,
+  });
 }
 
 // --------------------------------------------------------------------------
@@ -595,9 +844,11 @@ exports.handler = async (event) => {
       : {};
     const action = qs.action || body.action;
 
-    if (method === 'GET'  && action === 'debug')  return await handleDebug();
-    if (method === 'GET'  && action === 'list')   return await handleList();
-    if (method === 'POST' && action === 'upload') return await handleUpload(body);
+    if (method === 'GET'  && action === 'debug')        return await handleDebug();
+    if (method === 'GET'  && action === 'list')         return await handleList();
+    if (method === 'GET'  && action === 'dedupe-scan')  return await handleDedupeScan();
+    if (method === 'POST' && action === 'upload')       return await handleUpload(body);
+    if (method === 'POST' && action === 'merge')        return await handleMerge(body);
 
     return bad(`unknown action '${action}' for method ${method}`);
   } catch (err) {
