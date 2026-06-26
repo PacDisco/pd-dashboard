@@ -62,6 +62,16 @@
     </div>
   </div>
 
+  <!-- Merge duplicate folders -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mt-6">
+    <div class="flex items-center justify-between mb-1">
+      <h2 class="text-base font-semibold text-gray-900">Merge duplicate folders</h2>
+      <button id="dedupe-btn" onclick="scanDuplicates()" class="text-xs text-blue-600 hover:underline">Scan for duplicates</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-3">Finds folders that resolve to the same Unearthed contact (e.g. different ticket spellings). Merging moves all files into the canonical folder, removes the empties, and updates the deal's ticket link in HubSpot.</p>
+    <div id="dedupe-body" class="space-y-3"></div>
+  </div>
+
 </div>
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -159,7 +169,14 @@ async function uploadTickets() {
       if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
 
       var links = (body.filed || []).map(function(f) {
-        return '<a href="' + esc(f.folder.url) + '" target="_blank" class="text-blue-600 hover:underline font-medium">' + esc(f.student) + '</a>' + hubspotTag(f.hubspot);
+        var landed = f.matched_name || f.student;
+        var note = '';
+        if (f.needs_review) {
+          note = ' <span class="text-xs text-amber-600">(no roster match — needs review)</span>';
+        } else if (f.matched_name && f.matched_name.toLowerCase() !== String(f.student).toLowerCase()) {
+          note = ' <span class="text-xs text-gray-400">(ticket: ' + esc(f.student) + ')</span>';
+        }
+        return '<a href="' + esc(f.folder.url) + '" target="_blank" class="text-blue-600 hover:underline font-medium">' + esc(landed) + '</a>' + note + hubspotTag(f.hubspot);
       }).join(', ');
       var multi = body.multi_passenger ? ' <span class="text-amber-600">(group booking — filed to each)</span>' : '';
       row.innerHTML = '<span class="text-green-700">&#10003;</span> <span class="font-medium">' + esc(file.name) +
@@ -227,6 +244,66 @@ async function refreshTicketFolders(ev) {
     filterStudents();
   } catch (err) {
     body.innerHTML = '<span class="text-xs text-red-500">' + esc(err.message) + '</span>';
+  }
+}
+
+// ── Merge duplicate folders ─────────────────────────────────────────────
+async function scanDuplicates() {
+  var body = document.getElementById('dedupe-body');
+  var btn = document.getElementById('dedupe-btn');
+  btn.disabled = true;
+  body.innerHTML = '<span class="text-xs text-gray-400">Scanning…</span>';
+  try {
+    var resp = await fetch('/api/flight-tickets?action=dedupe-scan', { credentials: 'include' });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+    var groups = (data.groups || []).filter(function(g) { return (g.merge || []).length; });
+    if (!groups.length) { body.innerHTML = '<span class="text-xs text-gray-400">No duplicate folders found.</span>'; return; }
+
+    body.innerHTML = groups.map(function(g, i) {
+      var rows = '<div class="text-sm"><span class="text-green-700">keep</span> → <a href="' + esc(g.keep.url) + '" target="_blank" class="text-blue-600 hover:underline font-medium">' + esc(g.canonical_name) + '</a>' +
+                 (g.keep.name !== g.canonical_name ? ' <span class="text-xs text-gray-400">(rename from "' + esc(g.keep.name) + '")</span>' : '') +
+                 ' <span class="text-xs text-gray-400">' + g.keep.file_count + ' file' + (g.keep.file_count === 1 ? '' : 's') + '</span></div>';
+      rows += g.merge.map(function(m) {
+        return '<div class="text-sm text-gray-500 pl-4">merge "' + esc(m.name) + '" <span class="text-xs text-gray-400">' + m.file_count + ' file' + (m.file_count === 1 ? '' : 's') + '</span></div>';
+      }).join('');
+      var payload = encodeURIComponent(JSON.stringify({
+        keep_folder_id: g.keep.id,
+        merge_folder_ids: g.merge.map(function(m) { return m.id; }),
+        canonical_name: g.canonical_name
+      }));
+      return '<div data-group="' + i + '" class="border border-gray-200 rounded-lg p-3">' + rows +
+             '<div class="mt-2"><button onclick="doMerge(this,\'' + payload + '\')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">Merge into ' + esc(g.canonical_name) + '</button></div></div>';
+    }).join('');
+  } catch (err) {
+    body.innerHTML = '<span class="text-xs text-red-500">' + esc(err.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doMerge(btnEl, payloadEnc) {
+  var payload = JSON.parse(decodeURIComponent(payloadEnc));
+  btnEl.disabled = true;
+  btnEl.textContent = 'Merging…';
+  try {
+    var resp = await fetch('/api/flight-tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(Object.assign({ action: 'merge' }, payload))
+    });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+    var hs = data.hubspot && data.hubspot.status === 'written' ? ' · HubSpot updated' : '';
+    showToast('Merged ' + data.moved_files + ' file(s) into ' + data.keep.name + hs, 'success');
+    var card = btnEl.closest('[data-group]');
+    if (card) card.innerHTML = '<div class="text-sm text-green-700">✓ Merged into ' + esc(data.keep.name) + ' (' + data.moved_files + ' file(s) moved)' + esc(hs) + '</div>';
+    refreshTicketFolders();
+  } catch (err) {
+    btnEl.disabled = false;
+    btnEl.textContent = 'Merge';
+    showToast('Merge failed: ' + err.message, 'error');
   }
 }
 
