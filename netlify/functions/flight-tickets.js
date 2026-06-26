@@ -237,15 +237,36 @@ async function ensureStudentFolder(studentName) {
   return { id: created.data.id, name: created.data.name, url: created.data.webViewLink, created: true };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function uploadIntoFolder({ folderId, filename, mimeType, buffer }) {
   const d = await drive();
-  const res = await d.files.create({
-    requestBody: { name: filename, parents: [folderId] },
-    media: { mimeType, body: require('stream').Readable.from(buffer) },
-    fields: 'id, name, webViewLink',
-    supportsAllDrives: true,
-  });
-  return { id: res.data.id, name: res.data.name, url: res.data.webViewLink };
+  // Shared Drives are eventually consistent: a folder we just created can
+  // briefly 404 ("File not found") on the immediately-following write. Retry
+  // a few times with backoff before giving up.
+  const MAX_TRIES = 4;
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    try {
+      const res = await d.files.create({
+        requestBody: { name: filename, parents: [folderId] },
+        media: { mimeType, body: require('stream').Readable.from(buffer) },
+        fields: 'id, name, webViewLink',
+        supportsAllDrives: true,
+      });
+      return { id: res.data.id, name: res.data.name, url: res.data.webViewLink };
+    } catch (e) {
+      lastErr = e;
+      const status = e && (e.code || e.status || (e.response && e.response.status));
+      const isNotFound = status === 404 || /not found/i.test(e.message || '');
+      if (isNotFound && attempt < MAX_TRIES) {
+        await sleep(400 * attempt); // 400, 800, 1200ms
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
 }
 
 // --------------------------------------------------------------------------
@@ -271,8 +292,17 @@ async function handleUpload(body) {
   //    (Group bookings on one PDF land in every passenger's folder.)
   const filed = [];
   for (const student of names) {
-    const folder = await ensureStudentFolder(student);
-    const file = await uploadIntoFolder({ folderId: folder.id, filename: body.filename, mimeType, buffer });
+    let folder, file;
+    try {
+      folder = await ensureStudentFolder(student);
+    } catch (e) {
+      return bad(`Couldn't create the Drive folder for "${student}": ${e.message}. Check that the service account is a Content Manager member of the Shared Drive.`, 502);
+    }
+    try {
+      file = await uploadIntoFolder({ folderId: folder.id, filename: body.filename, mimeType, buffer });
+    } catch (e) {
+      return bad(`Created the folder for "${student}" but couldn't upload the ticket into it: ${e.message}. This usually means the service account lacks write access to the Shared Drive, or the configured folder isn't actually inside a Shared Drive (service accounts have no personal storage quota). Run ?action=debug to confirm.`, 502);
+    }
     filed.push({ student, folder, file });
   }
 
@@ -334,17 +364,51 @@ async function handleDebug() {
   report.env.GOOGLE_SERVICE_ACCOUNT_JSON = !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   report.env.FLIGHT_TICKETS_DRIVE_FOLDER_ID = !!process.env.FLIGHT_TICKETS_DRIVE_FOLDER_ID;
 
+  let d;
   try {
-    const d = await drive();
+    d = await drive();
     const meta = await d.files.get({
       fileId: parentFolderId(),
-      fields: 'id, name, mimeType',
+      // driveId tells us if it lives in a Shared Drive; capabilities tells us
+      // whether the service account may actually create children here.
+      fields: 'id, name, mimeType, driveId, capabilities(canAddChildren)',
       supportsAllDrives: true,
     });
-    report.parent_folder = { ok: true, id: meta.data.id, name: meta.data.name };
+    report.parent_folder = {
+      ok: true,
+      id: meta.data.id,
+      name: meta.data.name,
+      in_shared_drive: !!meta.data.driveId,
+      drive_id: meta.data.driveId || null,
+      can_add_children: meta.data.capabilities ? meta.data.capabilities.canAddChildren : null,
+    };
   } catch (e) {
     report.parent_folder = { ok: false, error: e.message };
+    return ok(report);
   }
+
+  // Real write test: create a tiny file in the parent, then delete it. This
+  // reproduces exactly what an upload does and surfaces the true error
+  // (quota / permission / shared-drive) instead of a vague 404 later.
+  try {
+    const created = await d.files.create({
+      requestBody: { name: `__write-test-${Date.now()}.txt`, parents: [parentFolderId()] },
+      media: { mimeType: 'text/plain', body: require('stream').Readable.from(Buffer.from('ping')) },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+    report.write_test = { ok: true, created_id: created.data.id };
+    try {
+      await d.files.delete({ fileId: created.data.id, supportsAllDrives: true });
+      report.write_test.cleaned_up = true;
+    } catch (e) {
+      report.write_test.cleaned_up = false;
+      report.write_test.cleanup_error = e.message;
+    }
+  } catch (e) {
+    report.write_test = { ok: false, error: e.message };
+  }
+
   return ok(report);
 }
 
