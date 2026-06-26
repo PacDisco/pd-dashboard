@@ -160,11 +160,17 @@ Return ONLY a JSON array of the PASSENGER name(s) on this document — no markdo
   { "name": "First Last" }
 ]
 
+This document may be a GROUP booking listing several passengers. Read the
+ENTIRE document — including passenger tables/manifests, multiple pages, and
+names that repeat across flight segments — and return EVERY distinct traveller.
+
 Rules:
   - Return the TRAVELLER / passenger name(s). Ignore travel-agent names, airline staff, emergency contacts, and the name of whoever booked it if they are not travelling.
+  - GROUP / FAMILY bookings: one element per passenger. A passenger list, a table of names, or "Passenger 1 / Passenger 2…" all mean multiple travellers — return each one. Do NOT merge two people into one entry, and do NOT collapse a family onto a single name.
+  - The SAME passenger often appears multiple times (once per flight leg). List each distinct person only ONCE.
+  - Do NOT split a single person's first/middle names into separate entries.
   - If the name is printed in airline "LAST/FIRST" order (e.g. "SMITH/JOHN MR"), reorder it to natural "First Last" and drop the honorific -> "John Smith".
   - Title-case the name (not ALL CAPS).
-  - If multiple passengers appear on the SAME document (group/family booking), return one element per passenger.
   - If you genuinely cannot find any passenger name, return [].`;
 
   const content = mimeType === 'application/pdf'
@@ -173,7 +179,7 @@ Rules:
 
   const msg = await anthropic().messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 800,
+    max_tokens: 1500,
     messages: [{ role: 'user', content: [...content, { type: 'text', text: prompt }] }],
   });
 
