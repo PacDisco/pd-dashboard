@@ -95,6 +95,25 @@ function fileToBase64(file) {
   });
 }
 
+// Small badge describing the HubSpot write-back result for a student.
+function hubspotTag(h) {
+  if (!h) return '';
+  switch (h.status) {
+    case 'written':
+      return ' <a href="' + esc(h.deal_url) + '" target="_blank" class="text-xs text-green-700 hover:underline">✓ HubSpot</a>';
+    case 'no_match':
+      return ' <span class="text-xs text-amber-600" title="No Unearthed deal matched this name">⚠ no HubSpot match</span>';
+    case 'ambiguous':
+      return ' <span class="text-xs text-amber-600" title="Matched more than one Unearthed deal — skipped">⚠ multiple matches</span>';
+    case 'skipped':
+      return ' <span class="text-xs text-gray-400" title="' + esc(h.reason || '') + '">HubSpot off</span>';
+    case 'error':
+      return ' <span class="text-xs text-red-500" title="' + esc((h.reason || '') + ' ' + (h.detail || '')) + '">HubSpot error</span>';
+    default:
+      return '';
+  }
+}
+
 function ticketRow(html) {
   var box = document.getElementById('ticket-results');
   box.classList.remove('hidden');
@@ -140,7 +159,7 @@ async function uploadTickets() {
       if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
 
       var links = (body.filed || []).map(function(f) {
-        return '<a href="' + esc(f.folder.url) + '" target="_blank" class="text-blue-600 hover:underline font-medium">' + esc(f.student) + '</a>';
+        return '<a href="' + esc(f.folder.url) + '" target="_blank" class="text-blue-600 hover:underline font-medium">' + esc(f.student) + '</a>' + hubspotTag(f.hubspot);
       }).join(', ');
       var multi = body.multi_passenger ? ' <span class="text-amber-600">(group booking — filed to each)</span>' : '';
       row.innerHTML = '<span class="text-green-700">&#10003;</span> <span class="font-medium">' + esc(file.name) +
