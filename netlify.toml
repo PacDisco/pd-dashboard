@@ -17,6 +17,13 @@
     "dashboards.json"
   ]
 
+# Ticket upload does Claude reads + Drive uploads + HubSpot writes, which can
+# exceed the default 10s. Request the max synchronous timeout. NOTE: Netlify
+# only enforces >10s after support activates the extended timeout for the site
+# (paid plans); otherwise this is a no-op and the code optimizations carry it.
+[functions."flight-tickets"]
+  timeout = 26
+
 # Route /api/config → config function, /api/users[/*] → users function.
 [[redirects]]
   from = "/api/config"
