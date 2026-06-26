@@ -362,6 +362,18 @@ let _nameProp = null;
 async function getProgramNameProp() {
   if (_nameProp) return _nameProp;
   if (process.env.UE_PROGRAM_NAME_PROP) { _nameProp = process.env.UE_PROGRAM_NAME_PROP; return _nameProp; }
+
+  // 1. Authoritative: the object schema's primary display property.
+  try {
+    const sresp = await hsFetch(`/crm/v3/schemas/${PROGRAM_OBJECT_TYPE}`);
+    if (sresp.ok) {
+      const schema = await sresp_json(sresp);
+      const primary = schema && schema.primaryDisplayProperty;
+      if (primary) { _nameProp = primary; return _nameProp; }
+    }
+  } catch (_) {}
+
+  // 2. Fallback: heuristic over property metadata.
   try {
     const resp = await hsFetch(`/crm/v3/properties/${PROGRAM_OBJECT_TYPE}`);
     if (resp.ok) {
@@ -375,6 +387,7 @@ async function getProgramNameProp() {
   _nameProp = 'name';
   return _nameProp;
 }
+async function sresp_json(r) { try { return await r.json(); } catch { return null; } }
 
 // ---- Unearthed programs list (for the uploader's dropdown) ----------------
 let _programs = { at: 0, data: null };
@@ -898,27 +911,58 @@ async function handlePrograms() {
 async function handleProgramProps() {
   if (!hubspotToken()) return bad('HUBSPOT_TOKEN not set.', 400);
   const report = { object_type: PROGRAM_OBJECT_TYPE };
+
+  // Schema primary display property.
   try {
-    report.name_property = await getProgramNameProp();
-  } catch (e) {
-    report.name_property_error = e.message;
-  }
+    const sresp = await hsFetch(`/crm/v3/schemas/${PROGRAM_OBJECT_TYPE}`);
+    if (sresp.ok) {
+      const schema = await sresp.json();
+      report.schema_primary_display_property = schema.primaryDisplayProperty || null;
+      report.object_labels = schema.labels || null;
+    } else {
+      report.schema_status = sresp.status;
+    }
+  } catch (e) { report.schema_error = e.message; }
+
+  // String properties available on the object.
+  try {
+    const presp = await hsFetch(`/crm/v3/properties/${PROGRAM_OBJECT_TYPE}`);
+    if (presp.ok) {
+      const pdata = await presp.json();
+      report.string_properties = (pdata.results || [])
+        .filter(p => (p.type === 'string' || p.fieldType === 'text') && !String(p.name).startsWith('hs_'))
+        .map(p => ({ name: p.name, label: p.label }));
+    }
+  } catch (e) { report.properties_error = e.message; }
+
+  try { report.detected_name_property = await getProgramNameProp(); }
+  catch (e) { report.name_property_error = e.message; }
+
+  // A raw sample record with ALL its property values, so you can spot the right field.
+  try {
+    const r = await hsFetch(`/crm/v3/objects/${PROGRAM_OBJECT_TYPE}?limit=3&properties=${encodeURIComponent((report.string_properties || []).map(p => p.name).join(','))}`);
+    if (r.ok) {
+      const d = await r.json();
+      report.sample_records = (d.results || []).map(o => ({ id: o.id, properties: o.properties }));
+    }
+  } catch (e) { report.sample_records_error = e.message; }
+
+  // What the dropdown currently produces + first program's contact/deal resolution.
   try {
     const programs = await getProgramsList();
-    report.program_count = programs.length;
-    report.sample = programs.slice(0, 10);
+    report.dropdown_count = programs.length;
+    report.dropdown_sample = programs.slice(0, 10);
     if (programs.length) {
       const idx = await getProgramIndex(programs[0].id);
       report.first_program = {
         name: programs[0].name,
-        deal_count: idx.dealCount,
         contact_count: idx.contacts.length,
+        deal_count: idx.dealCount,
         sample_contacts: idx.contacts.slice(0, 5).map(c => c.canonicalName),
       };
     }
-  } catch (e) {
-    report.error = e.message;
-  }
+  } catch (e) { report.dropdown_error = e.message; }
+
   return ok(report);
 }
 
