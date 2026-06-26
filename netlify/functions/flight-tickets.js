@@ -187,7 +187,9 @@ Rules:
     : [{ type: 'image', source: { type: 'base64', media_type: mimeType, data: buffer.toString('base64') } }];
 
   const msg = await anthropic().messages.create({
-    model: 'claude-sonnet-4-6',
+    // Default to a fast model so the request stays within the function timeout;
+    // override with FLIGHT_TICKETS_MODEL (e.g. a Sonnet for tricky group docs).
+    model: process.env.FLIGHT_TICKETS_MODEL || 'claude-haiku-4-5-20251001',
     max_tokens: 1500,
     messages: [{ role: 'user', content: [...content, { type: 'text', text: prompt }] }],
   });
@@ -282,6 +284,20 @@ async function findFolderByName(name, parentId) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Run an async fn over items with bounded concurrency, preserving input order.
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 async function uploadIntoFolder({ folderId, filename, mimeType, buffer }) {
   const d = await drive();
@@ -607,15 +623,16 @@ async function handleUpload(body) {
     return bad('No passenger name could be read from this file — please file it manually.', 422);
   }
 
-  // 2. For each passenger: resolve against THIS program's roster, then file
-  //    into a student folder NESTED under the program folder.
+  // Pre-build the program roster ONCE so the parallel filing below all hits the
+  // warm cache instead of each passenger triggering a rebuild.
+  if (hubspotToken()) { try { await getProgramIndex(programId); } catch (_) {} }
+
+  // 2. File each passenger CONCURRENTLY (bounded) so big group tickets don't
+  //    serialize into a timeout. Per-passenger errors are captured, not fatal.
   //    - Matched  → folder named by the canonical HubSpot contact name; URL
   //                 written to that student's deal.
-  //    - No / ambiguous match → BACKUP: own folder from the ticket name,
-  //                 flagged for review.
-  //    (Group bookings on one PDF land in every passenger's folder.)
-  const filed = [];
-  for (const student of names) {
+  //    - No / ambiguous match → BACKUP: own folder from the ticket name.
+  const filed = await mapLimit(names, 4, async (student) => {
     const resolved = await resolveStudent(student, programId);
 
     let folderName, hubspot;
@@ -632,31 +649,24 @@ async function handleUpload(body) {
       }
     }
 
-    let folder, file;
     try {
-      folder = await ensureStudentFolder(folderName, programFolder.id);
+      const folder = await ensureStudentFolder(folderName, programFolder.id);
+      const file = await uploadIntoFolder({ folderId: folder.id, filename: body.filename, mimeType, buffer });
+      if (resolved.roster && resolved.person === 'matched') {
+        hubspot = await writeDealUrl(resolved.dealIds, folder.url);
+      }
+      return {
+        student,
+        matched_name: resolved.person === 'matched' ? resolved.canonicalName : null,
+        needs_review: !!(resolved.roster && resolved.person !== 'matched'),
+        folder, file, hubspot,
+      };
     } catch (e) {
-      return bad(`Couldn't create the Drive folder "${folderName}": ${e.message}. Check that the service account is a Content Manager member of the Shared Drive.`, 502);
+      return { student, error: e.message, hubspot };
     }
-    try {
-      file = await uploadIntoFolder({ folderId: folder.id, filename: body.filename, mimeType, buffer });
-    } catch (e) {
-      return bad(`Created the folder "${folderName}" but couldn't upload the ticket into it: ${e.message}. This usually means the service account lacks write access to the Shared Drive, or the configured folder isn't actually inside a Shared Drive (service accounts have no personal storage quota). Run ?action=debug to confirm.`, 502);
-    }
+  });
 
-    // Write the student folder URL to their matched deal.
-    if (resolved.roster && resolved.person === 'matched') {
-      hubspot = await writeDealUrl(resolved.dealIds, folder.url);
-    }
-
-    filed.push({
-      student,
-      matched_name: resolved.person === 'matched' ? resolved.canonicalName : null,
-      needs_review: !!(resolved.roster && resolved.person !== 'matched'),
-      folder, file, hubspot,
-    });
-  }
-
+  const failed = filed.filter(f => f.error).length;
   return ok({
     ok: true,
     filename: body.filename,
@@ -664,6 +674,7 @@ async function handleUpload(body) {
     students: names,
     multi_passenger: names.length > 1,
     filed,
+    failed,
   });
 }
 
