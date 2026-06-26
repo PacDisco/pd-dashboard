@@ -31,8 +31,17 @@
  * Optional env vars (HubSpot write-back of the folder URL):
  *   HUBSPOT_TOKEN                   (Private App token; same one enrollment.js
  *                                    uses. If unset, the HubSpot step is skipped.)
- *   UNEARTHED_PROGRAM_MATCH         (substring that identifies Unearthed program
- *                                    objects by name; default "unearthed")
+ *   UE_PROGRAM_OBJECT_TYPE          (custom object that holds the Unearthed
+ *                                    programs / dropdown source; default
+ *                                    "2-58156993")
+ *   UE_PROGRAM_NAME_PROP            (the property on that object holding the
+ *                                    program's display name; auto-detected if
+ *                                    unset)
+ *   UNEARTHED_PROGRAM_MATCH         (optional substring filter on program name;
+ *                                    off by default since the object is already
+ *                                    Unearthed-specific)
+ *
+ * Verify the object wiring any time at:  /api/flight-tickets?action=program-props
  *
  * NOTE: the service account only sees Drive folders explicitly shared with it.
  * Share FLIGHT_TICKETS_DRIVE_FOLDER_ID with the service-account email (Editor)
@@ -308,15 +317,18 @@ async function uploadIntoFolder({ folderId, filename, mimeType, buffer }) {
 // HubSpot — match a student to their Unearthed deal and write the folder URL
 // into the `ue_airline_tickets` deal property.
 //
-// "Unearthed programs" = entries in the custom Program object (2-58411705)
-// whose name matches UNEARTHED_PROGRAM_MATCH (default "unearthed"). We pull the
-// deals associated to those programs, then the contacts on those deals, and
-// build a name -> deal index. A folder is only written when its student name
-// resolves to EXACTLY ONE Unearthed deal; otherwise we skip and report.
+// "Unearthed programs" = records in the custom Program object
+// (UE_PROGRAM_OBJECT_TYPE, default 2-58156993). Association chain is:
+//   program -> CONTACTS -> deals
+// i.e. we pull the contacts associated to the selected program, then the deals
+// associated to each of those contacts, and build a name -> deal index. A deal
+// is only written when the student name resolves to exactly one contact whose
+// contact is on exactly one deal; otherwise we skip and report.
 // --------------------------------------------------------------------------
 const HUBSPOT_API = 'https://api.hubapi.com';
 const HUBSPOT_PORTAL_ID = '3855728';
-const PROGRAM_OBJECT_TYPE = '2-58411705';
+// The custom object that holds the Unearthed programs (the dropdown source).
+const PROGRAM_OBJECT_TYPE = process.env.UE_PROGRAM_OBJECT_TYPE || '2-58156993';
 const UE_TICKETS_PROPERTY = 'ue_airline_tickets';
 
 function hubspotToken() { return process.env.HUBSPOT_TOKEN || null; }
@@ -344,24 +356,49 @@ async function hsFetch(path, opts = {}) {
 // Cache TTLs (warm-Lambda memory).
 const CACHE_TTL_MS = 60 * 1000;
 
+// Discover which property on the program object holds its display name.
+// Override with UE_PROGRAM_NAME_PROP; otherwise auto-detect from metadata.
+let _nameProp = null;
+async function getProgramNameProp() {
+  if (_nameProp) return _nameProp;
+  if (process.env.UE_PROGRAM_NAME_PROP) { _nameProp = process.env.UE_PROGRAM_NAME_PROP; return _nameProp; }
+  try {
+    const resp = await hsFetch(`/crm/v3/properties/${PROGRAM_OBJECT_TYPE}`);
+    if (resp.ok) {
+      const data = await resp.json();
+      const props = (data.results || []).filter(p => !String(p.name).startsWith('hs_'));
+      const strings = props.filter(p => p.type === 'string' || p.fieldType === 'text');
+      const pick = strings.find(p => /program|name|title/i.test(p.name)) || strings[0] || props[0];
+      if (pick) { _nameProp = pick.name; return _nameProp; }
+    }
+  } catch (_) {}
+  _nameProp = 'name';
+  return _nameProp;
+}
+
 // ---- Unearthed programs list (for the uploader's dropdown) ----------------
 let _programs = { at: 0, data: null };
 async function getProgramsList() {
   if (_programs.data && Date.now() - _programs.at < CACHE_TTL_MS) return _programs.data;
   if (!hubspotToken()) throw new Error('HUBSPOT_TOKEN not set');
 
-  const isUnearthed = unearthedMatcher();
+  const nameProp = await getProgramNameProp();
+  // Optional name filter — off by default, since this object is already the
+  // Unearthed-programs object. Set UNEARTHED_PROGRAM_MATCH to filter.
+  const filterStr = (process.env.UNEARTHED_PROGRAM_MATCH || '').toLowerCase();
   const programs = [];
   let after = 0, more = true;
   while (more) {
-    const params = new URLSearchParams({ limit: '100', properties: 'pacific_discovery_program' });
+    const params = new URLSearchParams({ limit: '100', properties: nameProp });
     if (after) params.set('after', String(after));
     const resp = await hsFetch(`/crm/v3/objects/${PROGRAM_OBJECT_TYPE}?${params}`);
     if (!resp.ok) throw new Error(`Program objects fetch failed: ${resp.status}`);
     const data = await resp.json();
     for (const obj of (data.results || [])) {
-      const name = obj.properties && obj.properties.pacific_discovery_program;
-      if (isUnearthed(name)) programs.push({ id: String(obj.id), name });
+      const name = obj.properties && obj.properties[nameProp];
+      if (!name) continue;
+      if (filterStr && !String(name).toLowerCase().includes(filterStr)) continue;
+      programs.push({ id: String(obj.id), name });
     }
     if (data.paging && data.paging.next) after = data.paging.next.after; else more = false;
   }
@@ -384,34 +421,35 @@ async function getProgramIndex(programId) {
   const cached = _progIndex.get(String(programId));
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
 
-  // 1. Deals associated to THIS program only.
-  const dealIdSet = new Set();
-  const resp = await hsFetch(`/crm/v4/associations/${PROGRAM_OBJECT_TYPE}/deals/batch/read`, {
+  // 1. CONTACTS associated to THIS program.
+  const contactIdSet = new Set();
+  const resp = await hsFetch(`/crm/v4/associations/${PROGRAM_OBJECT_TYPE}/contacts/batch/read`, {
     method: 'POST', body: JSON.stringify({ inputs: [{ id: String(programId) }] }),
   });
   if (resp.ok) {
     const data = await resp.json();
-    for (const r of (data.results || [])) for (const t of (r.to || [])) dealIdSet.add(String(t.toObjectId));
+    for (const r of (data.results || [])) for (const t of (r.to || [])) contactIdSet.add(String(t.toObjectId));
   }
-  const dealIds = [...dealIdSet];
 
-  // 2. Deal -> contacts.
-  const dealToContacts = new Map();
-  const contactIdSet = new Set();
-  for (let i = 0; i < dealIds.length; i += 100) {
-    const batch = dealIds.slice(i, i + 100);
-    const r2 = await hsFetch(`/crm/v4/associations/deals/contacts/batch/read`, {
+  // 2. Deals associated to each of those contacts.
+  const contactToDeals = new Map(); // contactId -> Set(dealId)
+  const dealIdSet = new Set();
+  const cIds0 = [...contactIdSet];
+  for (let i = 0; i < cIds0.length; i += 100) {
+    const batch = cIds0.slice(i, i + 100);
+    const r2 = await hsFetch(`/crm/v4/associations/contacts/deals/batch/read`, {
       method: 'POST', body: JSON.stringify({ inputs: batch.map(id => ({ id })) }),
     });
     if (!r2.ok) continue;
     const d2 = await r2.json();
     for (const r of (d2.results || [])) {
-      const dealId = r.from && String(r.from.id);
-      const cIds = (r.to || []).map(t => String(t.toObjectId));
-      if (dealId) dealToContacts.set(dealId, cIds);
-      cIds.forEach(c => contactIdSet.add(c));
+      const cId = r.from && String(r.from.id);
+      const dIds = (r.to || []).map(t => String(t.toObjectId));
+      if (cId) contactToDeals.set(cId, new Set(dIds));
+      dIds.forEach(id => dealIdSet.add(id));
     }
   }
+  const dealIds = [...dealIdSet];
 
   // 3. Contact names.
   const contactName = new Map();
@@ -430,16 +468,10 @@ async function getProgramIndex(programId) {
     }
   }
 
-  // 4. One record per contact.
-  const contactToDeals = new Map();
-  for (const [dealId, cList] of dealToContacts.entries()) {
-    for (const cId of cList) {
-      if (!contactToDeals.has(cId)) contactToDeals.set(cId, new Set());
-      contactToDeals.get(cId).add(dealId);
-    }
-  }
+  // 4. One record per contact (deals come from the contact's associations).
   const contacts = [];
-  for (const [cId, deals] of contactToDeals.entries()) {
+  for (const cId of contactIdSet) {
+    const deals = contactToDeals.get(cId) || new Set();
     const canonicalName = normalizeName(contactName.get(cId));
     if (!canonicalName) continue;
     const tokens = canonicalName.toLowerCase().split(/\s+/).filter(Boolean);
@@ -861,6 +893,35 @@ async function handlePrograms() {
   }
 }
 
+// Introspection: confirm the object id, detected name property, a few sample
+// program names, and whether the first program actually associates to deals.
+async function handleProgramProps() {
+  if (!hubspotToken()) return bad('HUBSPOT_TOKEN not set.', 400);
+  const report = { object_type: PROGRAM_OBJECT_TYPE };
+  try {
+    report.name_property = await getProgramNameProp();
+  } catch (e) {
+    report.name_property_error = e.message;
+  }
+  try {
+    const programs = await getProgramsList();
+    report.program_count = programs.length;
+    report.sample = programs.slice(0, 10);
+    if (programs.length) {
+      const idx = await getProgramIndex(programs[0].id);
+      report.first_program = {
+        name: programs[0].name,
+        deal_count: idx.dealCount,
+        contact_count: idx.contacts.length,
+        sample_contacts: idx.contacts.slice(0, 5).map(c => c.canonicalName),
+      };
+    }
+  } catch (e) {
+    report.error = e.message;
+  }
+  return ok(report);
+}
+
 // --------------------------------------------------------------------------
 // Action: debug
 // --------------------------------------------------------------------------
@@ -932,6 +993,7 @@ exports.handler = async (event) => {
 
     if (method === 'GET'  && action === 'debug')        return await handleDebug();
     if (method === 'GET'  && action === 'programs')     return await handlePrograms();
+    if (method === 'GET'  && action === 'program-props') return await handleProgramProps();
     if (method === 'GET'  && action === 'list')         return await handleList(qs);
     if (method === 'GET'  && action === 'dedupe-scan')  return await handleDedupeScan(qs);
     if (method === 'POST' && action === 'upload')       return await handleUpload(body);
