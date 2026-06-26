@@ -28,6 +28,12 @@
  *   FLIGHT_TICKETS_DRIVE_FOLDER_ID  (the shared parent folder; per-student
  *                                    subfolders are created inside it)
  *
+ * Optional env vars (HubSpot write-back of the folder URL):
+ *   HUBSPOT_TOKEN                   (Private App token; same one enrollment.js
+ *                                    uses. If unset, the HubSpot step is skipped.)
+ *   UNEARTHED_PROGRAM_MATCH         (substring that identifies Unearthed program
+ *                                    objects by name; default "unearthed")
+ *
  * NOTE: the service account only sees Drive folders explicitly shared with it.
  * Share FLIGHT_TICKETS_DRIVE_FOLDER_ID with the service-account email (Editor)
  * before first use, exactly like the invoices folder.
@@ -270,6 +276,160 @@ async function uploadIntoFolder({ folderId, filename, mimeType, buffer }) {
 }
 
 // --------------------------------------------------------------------------
+// HubSpot — match a student to their Unearthed deal and write the folder URL
+// into the `ue_airline_tickets` deal property.
+//
+// "Unearthed programs" = entries in the custom Program object (2-58411705)
+// whose name matches UNEARTHED_PROGRAM_MATCH (default "unearthed"). We pull the
+// deals associated to those programs, then the contacts on those deals, and
+// build a name -> deal index. A folder is only written when its student name
+// resolves to EXACTLY ONE Unearthed deal; otherwise we skip and report.
+// --------------------------------------------------------------------------
+const HUBSPOT_API = 'https://api.hubapi.com';
+const HUBSPOT_PORTAL_ID = '3855728';
+const PROGRAM_OBJECT_TYPE = '2-58411705';
+const UE_TICKETS_PROPERTY = 'ue_airline_tickets';
+
+function hubspotToken() { return process.env.HUBSPOT_TOKEN || null; }
+
+function unearthedMatcher() {
+  const needle = (process.env.UNEARTHED_PROGRAM_MATCH || 'unearthed').toLowerCase();
+  return (name) => String(name || '').toLowerCase().includes(needle);
+}
+
+// Comparable key for matching a ticket/folder name to a HubSpot contact name.
+function nameKey(name) {
+  const n = normalizeName(name);
+  return n ? n.toLowerCase() : '';
+}
+
+async function hsFetch(path, opts = {}) {
+  const token = hubspotToken();
+  const resp = await fetch(`${HUBSPOT_API}${path}`, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  return resp;
+}
+
+// Cache the Unearthed name->deals index briefly so a batch of uploads doesn't
+// rebuild it for every file. (Warm-Lambda memory; TTL keeps it fresh-ish.)
+let _ueIndex = { at: 0, data: null };
+const UE_INDEX_TTL_MS = 60 * 1000;
+
+async function getUnearthedIndex() {
+  if (_ueIndex.data && Date.now() - _ueIndex.at < UE_INDEX_TTL_MS) return _ueIndex.data;
+
+  // 1. Unearthed program objects.
+  const isUnearthed = unearthedMatcher();
+  const programIds = [];
+  let after = 0, more = true;
+  while (more) {
+    const params = new URLSearchParams({ limit: '100', properties: 'pacific_discovery_program' });
+    if (after) params.set('after', String(after));
+    const resp = await hsFetch(`/crm/v3/objects/${PROGRAM_OBJECT_TYPE}?${params}`);
+    if (!resp.ok) throw new Error(`Program objects fetch failed: ${resp.status}`);
+    const data = await resp.json();
+    for (const obj of (data.results || [])) {
+      if (isUnearthed(obj.properties && obj.properties.pacific_discovery_program)) programIds.push(String(obj.id));
+    }
+    if (data.paging && data.paging.next) after = data.paging.next.after; else more = false;
+  }
+
+  // 2. Deals associated to those programs.
+  const dealIdSet = new Set();
+  for (let i = 0; i < programIds.length; i += 100) {
+    const batch = programIds.slice(i, i + 100);
+    const resp = await hsFetch(`/crm/v4/associations/${PROGRAM_OBJECT_TYPE}/deals/batch/read`, {
+      method: 'POST', body: JSON.stringify({ inputs: batch.map(id => ({ id })) }),
+    });
+    if (!resp.ok) continue;
+    const data = await resp.json();
+    for (const r of (data.results || [])) for (const t of (r.to || [])) dealIdSet.add(String(t.toObjectId));
+  }
+  const dealIds = [...dealIdSet];
+
+  // 3. Deal -> contacts associations.
+  const dealToContacts = new Map();
+  const contactIdSet = new Set();
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const batch = dealIds.slice(i, i + 100);
+    const resp = await hsFetch(`/crm/v4/associations/deals/contacts/batch/read`, {
+      method: 'POST', body: JSON.stringify({ inputs: batch.map(id => ({ id })) }),
+    });
+    if (!resp.ok) continue;
+    const data = await resp.json();
+    for (const r of (data.results || [])) {
+      const dealId = r.from && String(r.from.id);
+      const cIds = (r.to || []).map(t => String(t.toObjectId));
+      if (dealId) dealToContacts.set(dealId, cIds);
+      cIds.forEach(c => contactIdSet.add(c));
+    }
+  }
+
+  // 4. Contact names.
+  const contactName = new Map();
+  const cIds = [...contactIdSet];
+  for (let i = 0; i < cIds.length; i += 100) {
+    const batch = cIds.slice(i, i + 100);
+    const resp = await hsFetch(`/crm/v3/objects/contacts/batch/read`, {
+      method: 'POST',
+      body: JSON.stringify({ properties: ['firstname', 'lastname'], inputs: batch.map(id => ({ id })) }),
+    });
+    if (!resp.ok) continue;
+    const data = await resp.json();
+    for (const c of (data.results || [])) {
+      const p = c.properties || {};
+      contactName.set(String(c.id), [p.firstname, p.lastname].filter(Boolean).join(' ').trim());
+    }
+  }
+
+  // 5. Build nameKey -> Set(dealId).
+  const index = new Map();
+  for (const [dealId, cList] of dealToContacts.entries()) {
+    for (const cId of cList) {
+      const key = nameKey(contactName.get(cId));
+      if (!key) continue;
+      if (!index.has(key)) index.set(key, new Set());
+      index.get(key).add(dealId);
+    }
+  }
+
+  _ueIndex = { at: Date.now(), data: { index, programCount: programIds.length, dealCount: dealIds.length } };
+  return _ueIndex.data;
+}
+
+function dealUrl(dealId) {
+  return `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/record/0-3/${dealId}`;
+}
+
+// Match a student to a single Unearthed deal and write the folder URL.
+// Returns a status object (never throws — HubSpot issues must not fail the upload).
+async function writeFolderToHubspot(student, folderUrl) {
+  if (!hubspotToken()) return { status: 'skipped', reason: 'HUBSPOT_TOKEN not set' };
+  try {
+    const { index } = await getUnearthedIndex();
+    const key = nameKey(student);
+    const deals = index.get(key);
+    if (!deals || deals.size === 0) return { status: 'no_match' };
+    if (deals.size > 1) return { status: 'ambiguous', deal_ids: [...deals] };
+
+    const dealId = [...deals][0];
+    const resp = await hsFetch(`/crm/v3/objects/deals/${encodeURIComponent(dealId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ properties: { [UE_TICKETS_PROPERTY]: folderUrl } }),
+    });
+    if (!resp.ok) {
+      const detail = await resp.text().catch(() => '');
+      return { status: 'error', reason: `HubSpot PATCH ${resp.status}`, detail: detail.slice(0, 200) };
+    }
+    return { status: 'written', deal_id: dealId, deal_url: dealUrl(dealId) };
+  } catch (e) {
+    return { status: 'error', reason: e.message };
+  }
+}
+
+// --------------------------------------------------------------------------
 // Action: upload
 // --------------------------------------------------------------------------
 async function handleUpload(body) {
@@ -303,7 +463,12 @@ async function handleUpload(body) {
     } catch (e) {
       return bad(`Created the folder for "${student}" but couldn't upload the ticket into it: ${e.message}. This usually means the service account lacks write access to the Shared Drive, or the configured folder isn't actually inside a Shared Drive (service accounts have no personal storage quota). Run ?action=debug to confirm.`, 502);
     }
-    filed.push({ student, folder, file });
+
+    // Push the folder URL into the matching Unearthed deal's ue_airline_tickets.
+    // Never fails the upload — HubSpot result is reported per student.
+    const hubspot = await writeFolderToHubspot(student, folder.url);
+
+    filed.push({ student, folder, file, hubspot });
   }
 
   return ok({
