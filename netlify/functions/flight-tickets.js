@@ -530,6 +530,45 @@ function firstNameCompatible(a, b) {
   return shorter.length >= 2 && longer.startsWith(shorter);
 }
 
+// Remove a single occurrence of `v` from `arr` (non-mutating).
+function removeOneToken(arr, v) {
+  const i = arr.indexOf(v);
+  if (i < 0) return arr.slice();
+  const out = arr.slice();
+  out.splice(i, 1);
+  return out;
+}
+
+// Given-name tokens compatible after collapsing to one string. Handles a
+// concatenated first+middle ("Alexismarcella" = Alexis+Marcella) and a
+// middle name that's present on only one side ("John" vs "John Michael").
+function givensCompatible(g1, g2) {
+  return firstNameCompatible(g1.join(''), g2.join(''));
+}
+
+// Order-insensitive "same person" check between two names.
+//
+// Flight tickets don't reliably tell us which token is the surname — the same
+// passenger can be read "Alexis Marcella Patey" OR surname-first as
+// "Patey Alexismarcella". The old matcher assumed the LAST token was always the
+// surname, so any surname-first reading silently failed to match and the ticket
+// landed in a backup folder. This compares names regardless of token order:
+//   1. same tokens in any order -> match;
+//   2. otherwise anchor on a surname token that appears (whole) on BOTH sides,
+//      then check the remaining given names are compatible (prefix / concat).
+function namesMatch(aName, bName) {
+  const a = (normalizeName(aName) || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const b = (normalizeName(bName) || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!a.length || !b.length) return false;
+  if ([...a].sort().join(' ') === [...b].sort().join(' ')) return true;
+  const shared = a.filter(x => x.length >= 2 && b.includes(x)); // surname anchor candidates
+  for (const s of shared) {
+    const aG = removeOneToken(a, s), bG = removeOneToken(b, s);
+    if (aG.length && bG.length && givensCompatible(aG, bG)) return true;
+  }
+  return false;
+}
+
 // Resolve a ticket name against the SELECTED program's contact roster.
 // Returns: { roster, person, canonicalName, dealIds }
 //   roster:  true if the roster was available to match against
@@ -543,15 +582,14 @@ async function resolveStudent(ticketName, programId) {
   const contacts = data.contacts || [];
   const norm = normalizeName(ticketName);
   if (!norm) return { roster: true, person: 'none' };
-  const tokens = norm.toLowerCase().split(/\s+/).filter(Boolean);
-  const full = tokens.join(' ');
-  const last = tokens[tokens.length - 1];
-  const first = tokens[0];
+  const full = norm.toLowerCase().split(/\s+/).filter(Boolean).join(' ');
 
-  // Strongest signal: exact full-name key. Otherwise last name + compatible first.
+  // Strongest signal: exact full-name key. Otherwise fall back to an
+  // order-insensitive match so surname-first ticket reads (e.g.
+  // "Patey Alexismarcella" -> contact "Alexis Marcella Patey") still resolve.
   let cands = contacts.filter(c => c.fullKey === full);
   if (!cands.length) {
-    cands = contacts.filter(c => c.lastKey === last && firstNameCompatible(c.firstToken, first));
+    cands = contacts.filter(c => namesMatch(norm, c.canonicalName));
   }
   // Collapse candidates that are the same person (same canonical name).
   const distinct = [...new Map(cands.map(c => [c.canonicalName.toLowerCase(), c])).values()];
