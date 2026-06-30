@@ -546,6 +546,30 @@ function givensCompatible(g1, g2) {
   return firstNameCompatible(g1.join(''), g2.join(''));
 }
 
+// Surname particles that tickets run together but HubSpot often stores split
+// (e.g. "O Connor" / "O'Connor" -> "Oconnor", "Mc Donald" -> "Mcdonald",
+// "Van Der" ...). We glue a particle onto the following token so both sides
+// tokenise the same way. NOTE: deliberately excludes bare middle initials
+// (e.g. the "Q" in "John Q Smith") so those aren't fused onto the surname.
+const NAME_PARTICLES = new Set([
+  'o', 'mc', 'mac', 'van', 'von', 'de', 'del', 'della', 'der', 'den', 'di', 'da',
+  'la', 'le', 'du', 'st', 'saint', 'el', 'al', 'bin', 'ibn', 'san', 'dos', 'das',
+]);
+
+// Tokenise a name for matching: lower-case, drop apostrophes/periods, split on
+// spaces and hyphens, then fuse surname particles into the next token.
+function matchTokens(name) {
+  const n = normalizeName(name);
+  if (!n) return [];
+  const raw = n.toLowerCase().replace(/['’.]/g, '').split(/[\s-]+/).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (NAME_PARTICLES.has(raw[i]) && i < raw.length - 1) { out.push(raw[i] + raw[i + 1]); i++; }
+    else out.push(raw[i]);
+  }
+  return out;
+}
+
 // Order-insensitive "same person" check between two names.
 //
 // Flight tickets don't reliably tell us which token is the surname — the same
@@ -556,9 +580,11 @@ function givensCompatible(g1, g2) {
 //   1. same tokens in any order -> match;
 //   2. otherwise anchor on a surname token that appears (whole) on BOTH sides,
 //      then check the remaining given names are compatible (prefix / concat).
+// Surname spacing/punctuation ("O Connor" vs "Oconnor") is normalised by
+// matchTokens before comparison.
 function namesMatch(aName, bName) {
-  const a = (normalizeName(aName) || '').toLowerCase().split(/\s+/).filter(Boolean);
-  const b = (normalizeName(bName) || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const a = matchTokens(aName);
+  const b = matchTokens(bName);
   if (!a.length || !b.length) return false;
   if ([...a].sort().join(' ') === [...b].sort().join(' ')) return true;
   const shared = a.filter(x => x.length >= 2 && b.includes(x)); // surname anchor candidates
