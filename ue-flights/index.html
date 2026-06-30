@@ -158,6 +158,46 @@ function fileToBase64(file) {
   });
 }
 
+// POST an upload, retrying transient gateway timeouts (502/503/504) and network
+// blips. The first attempt can time out on a cold start while the program
+// roster is being built; by the retry that roster is warm-cached, so the
+// second attempt usually returns quickly. onRetry(attempt, reason) lets the
+// caller show progress.
+async function postUpload(payload, onRetry) {
+  var TRANSIENT = [502, 503, 504];
+  var MAX_TRIES = 3;
+  var lastErr;
+  for (var attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    try {
+      var resp = await fetch('/api/flight-tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+      if (TRANSIENT.indexOf(resp.status) !== -1 && attempt < MAX_TRIES) {
+        lastErr = new Error('HTTP ' + resp.status);
+        if (onRetry) onRetry(attempt, resp.status);
+        await new Promise(function(r) { setTimeout(r, 1500 * attempt); });
+        continue;
+      }
+      var body = await resp.json().catch(function() { return {}; });
+      if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
+      return body;
+    } catch (err) {
+      lastErr = err;
+      // A TypeError from fetch means a network/abort error — worth one retry.
+      if (err instanceof TypeError && attempt < MAX_TRIES) {
+        if (onRetry) onRetry(attempt, 'network');
+        await new Promise(function(r) { setTimeout(r, 1500 * attempt); });
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr || new Error('Upload failed');
+}
+
 // Small badge describing the HubSpot write-back result for a student.
 function hubspotTag(h) {
   if (!h) return '';
@@ -214,14 +254,13 @@ async function uploadTickets() {
 
     try {
       var data = await fileToBase64(file);
-      var resp = await fetch('/api/flight-tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ action: 'upload', program_id: programId, filename: file.name, mimeType: file.type || 'application/pdf', data: data })
-      });
-      var body = await resp.json().catch(function() { return {}; });
-      if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
+      var body = await postUpload(
+        { action: 'upload', program_id: programId, filename: file.name, mimeType: file.type || 'application/pdf', data: data },
+        function(attempt) {
+          row.innerHTML = '<span class="text-gray-500"><span class="loading-spinner"></span> ' + esc(file.name) +
+                          ' — timed out, retrying (attempt ' + (attempt + 1) + ')…</span>';
+        }
+      );
 
       var links = (body.filed || []).map(function(f) {
         var landed = f.matched_name || f.student;
