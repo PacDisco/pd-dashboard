@@ -26,7 +26,7 @@
   <div class="flex items-center justify-between mb-2">
     <div>
       <h1 class="text-2xl font-bold text-gray-900">🗓️ Flight Programs</h1>
-      <p class="text-sm text-gray-500 mt-1">These programs power the student flight booking portal. Set the arrival airport, arrival date/time, and program end date/time.</p>
+      <p class="text-sm text-gray-500 mt-1">These programs power the student flight booking portal. Set the arrival airport, the <strong>arrive-by</strong> date/time (latest a student may land), and the <strong>earliest departure</strong> date/time (they shouldn't fly out before this).</p>
     </div>
     <a href="/" class="text-sm text-blue-600 hover:underline">← Dashboards</a>
   </div>
@@ -44,11 +44,11 @@
         <input id="f-airport" class="fld uppercase" maxlength="3" placeholder="BCN">
       </div>
       <div class="md:col-span-3">
-        <label class="block text-xs font-medium text-gray-600 mb-1">Arrival date/time</label>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Arrive-by date/time <span class="text-gray-400 font-normal">(latest landing)</span></label>
         <input id="f-arrival" type="datetime-local" class="fld">
       </div>
       <div class="md:col-span-3">
-        <label class="block text-xs font-medium text-gray-600 mb-1">Program end date/time</label>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Earliest departure date/time <span class="text-gray-400 font-normal">(don't fly out before)</span></label>
         <input id="f-ends" type="datetime-local" class="fld">
       </div>
     </div>
@@ -73,8 +73,8 @@
           <tr>
             <th class="px-4 py-3 font-medium">Program</th>
             <th class="px-4 py-3 font-medium">Airport</th>
-            <th class="px-4 py-3 font-medium">Arrival</th>
-            <th class="px-4 py-3 font-medium">Program end</th>
+            <th class="px-4 py-3 font-medium">Arrive by</th>
+            <th class="px-4 py-3 font-medium">Earliest departure</th>
             <th class="px-4 py-3 font-medium">Order</th>
             <th class="px-4 py-3 font-medium">Active</th>
             <th class="px-4 py-3 font-medium text-right">Actions</th>
