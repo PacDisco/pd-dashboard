@@ -1,0 +1,9 @@
+{
+  "title": "Programs Flight Booking Portal Configuration",
+  "description": "Manage the programs students choose in the flight booking portal — arrival airport, arrival date/time, and program end date/time.",
+  "category": "Operations",
+  "icon": "🗓️",
+  "colors": ["#0ea5e9", "#6ee7b7"],
+  "allowedRoles": ["admin", "operations", "flights"],
+  "order": 22
+}
