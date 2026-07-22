@@ -53,16 +53,14 @@
     <details class="mt-3">
       <summary class="text-sm font-medium text-blue-700">➕ Group gateway flight (optional)</summary>
       <div class="grp-box">
-        <p class="text-xs text-gray-500 mb-3">If the group flies together from a central gateway, set it here. The portal will show this flight and offer one-way searches for students to reach the gateway.</p>
+        <p class="text-xs text-gray-500 mb-3">If the group flies together on a <strong>one-way</strong> flight from a central gateway, set it here. The portal shows this flight and offers independent one-way searches: home→gateway, the group flight, and the return home (which departs from the return airport below — usually different from the arrival city). The return date is the "Earliest departure" field above.</p>
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
           <div class="md:col-span-3"><label class="lbl">Gateway (IATA)</label><input id="f-gw" class="fld uppercase" maxlength="3" placeholder="LAX"></div>
-          <div class="md:col-span-9"></div>
-          <div class="md:col-span-3"><label class="lbl">Group OUT airline</label><input id="f-go-air" class="fld" placeholder="United"></div>
-          <div class="md:col-span-3"><label class="lbl">Group OUT flight #</label><input id="f-go-no" class="fld" placeholder="UA123"></div>
-          <div class="md:col-span-6"><label class="lbl">Group OUT departs (gateway → destination)</label><input id="f-go-at" type="datetime-local" class="fld"></div>
-          <div class="md:col-span-3"><label class="lbl">Group BACK airline</label><input id="f-gb-air" class="fld" placeholder="Avianca"></div>
-          <div class="md:col-span-3"><label class="lbl">Group BACK flight #</label><input id="f-gb-no" class="fld" placeholder="AV456"></div>
-          <div class="md:col-span-6"><label class="lbl">Group BACK departs (destination → gateway)</label><input id="f-gb-at" type="datetime-local" class="fld"></div>
+          <div class="md:col-span-3"><label class="lbl">Return dep. airport (IATA)</label><input id="f-ret" class="fld uppercase" maxlength="3" placeholder="LIM"></div>
+          <div class="md:col-span-6"></div>
+          <div class="md:col-span-3"><label class="lbl">Group flight airline</label><input id="f-go-air" class="fld" placeholder="United"></div>
+          <div class="md:col-span-3"><label class="lbl">Group flight #</label><input id="f-go-no" class="fld" placeholder="UA123"></div>
+          <div class="md:col-span-6"><label class="lbl">Group flight departs (gateway → destination, one-way)</label><input id="f-go-at" type="datetime-local" class="fld"></div>
         </div>
       </div>
     </details>
@@ -136,16 +134,14 @@ function render(programs){
           fieldRow('Arrive-by (fallback)','arrival_at',toLocalInput(p.arrival_at),'datetime','md:col-span-6')+
           fieldRow('Earliest departure','ends_at',toLocalInput(p.ends_at),'datetime','md:col-span-6')+
         '</div>'+
-        '<div class="grp-box"><div class="text-xs font-semibold text-gray-600 mb-2">Group gateway flight (leave gateway blank for a direct program)</div>'+
+        '<div class="grp-box"><div class="text-xs font-semibold text-gray-600 mb-2">Group gateway flight — one-way (leave gateway blank for a direct program). Return date = "Earliest departure" above.</div>'+
           '<div class="grid grid-cols-1 md:grid-cols-12 gap-3">'+
             fieldRow('Gateway (IATA)','gateway_airport',p.gateway_airport||'','iata','md:col-span-3')+
-            '<div class="md:col-span-9"></div>'+
-            fieldRow('Group OUT airline','group_out_airline',p.group_out_airline||'','text','md:col-span-3')+
-            fieldRow('Group OUT flight #','group_out_flight_no',p.group_out_flight_no||'','text','md:col-span-3')+
-            fieldRow('Group OUT departs','group_out_depart_at',toLocalInput(p.group_out_depart_at),'datetime','md:col-span-6')+
-            fieldRow('Group BACK airline','group_back_airline',p.group_back_airline||'','text','md:col-span-3')+
-            fieldRow('Group BACK flight #','group_back_flight_no',p.group_back_flight_no||'','text','md:col-span-3')+
-            fieldRow('Group BACK departs','group_back_depart_at',toLocalInput(p.group_back_depart_at),'datetime','md:col-span-6')+
+            fieldRow('Return dep. airport (IATA)','return_airport',p.return_airport||'','iata','md:col-span-3')+
+            '<div class="md:col-span-6"></div>'+
+            fieldRow('Group flight airline','group_out_airline',p.group_out_airline||'','text','md:col-span-3')+
+            fieldRow('Group flight #','group_out_flight_no',p.group_out_flight_no||'','text','md:col-span-3')+
+            fieldRow('Group flight departs (one-way)','group_out_depart_at',toLocalInput(p.group_out_depart_at),'datetime','md:col-span-6')+
           '</div>'+
         '</div>'+
         '<div class="flex items-center justify-between mt-4">'+
@@ -184,14 +180,13 @@ document.getElementById('add-btn').addEventListener('click', async function(){
   var payload={ action:'create',
     name:g('f-name').trim(), airport_code:g('f-airport').trim().toUpperCase(),
     arrival_at:g('f-arrival'), ends_at:g('f-ends'), sort_order:g('f-sort'),
-    gateway_airport:g('f-gw').trim().toUpperCase(),
-    group_out_airline:g('f-go-air'), group_out_flight_no:g('f-go-no'), group_out_depart_at:g('f-go-at'),
-    group_back_airline:g('f-gb-air'), group_back_flight_no:g('f-gb-no'), group_back_depart_at:g('f-gb-at')
+    gateway_airport:g('f-gw').trim().toUpperCase(), return_airport:g('f-ret').trim().toUpperCase(),
+    group_out_airline:g('f-go-air'), group_out_flight_no:g('f-go-no'), group_out_depart_at:g('f-go-at')
   };
   if(!payload.name||!payload.airport_code||!payload.arrival_at||!payload.ends_at){ errEl.textContent='Fill in name, destination, arrive-by and earliest-departure.'; return; }
   try {
     await api('POST',payload);
-    ['f-name','f-airport','f-arrival','f-ends','f-gw','f-go-air','f-go-no','f-go-at','f-gb-air','f-gb-no','f-gb-at'].forEach(function(id){document.getElementById(id).value='';});
+    ['f-name','f-airport','f-arrival','f-ends','f-gw','f-ret','f-go-air','f-go-no','f-go-at'].forEach(function(id){document.getElementById(id).value='';});
     document.getElementById('f-sort').value='100';
     toast('Program added'); load();
   } catch(err){ errEl.textContent=err.message; }
