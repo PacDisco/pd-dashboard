@@ -74,15 +74,13 @@ async function handleList(qs) {
   const rows = includeInactive
     ? await sql()`
         SELECT id, name, airport_code, arrival_at, ends_at, is_active, sort_order, notes, updated_at,
-               gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no,
-               group_back_depart_at, group_back_airline, group_back_flight_no
+               gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no, return_airport
         FROM flight_programs
         ORDER BY sort_order, name
       `
     : await sql()`
         SELECT id, name, airport_code, arrival_at, ends_at, sort_order,
-               gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no,
-               group_back_depart_at, group_back_airline, group_back_flight_no
+               gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no, return_airport
         FROM flight_programs
         WHERE is_active = TRUE
         ORDER BY sort_order, name
@@ -104,27 +102,23 @@ async function handleCreate(body) {
   const sortOrder = Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 100;
   const notes = body.notes ? String(body.notes) : null;
 
-  let gw, gOutAt, gOutAir, gOutNo, gBackAt, gBackAir, gBackNo;
+  let gw, gOutAt, gOutAir, gOutNo, retAir;
   try {
     gw      = optAirport('gateway_airport', body.gateway_airport);
     gOutAt  = optDatetime('group_out_depart_at', body.group_out_depart_at);
     gOutAir = optText(body.group_out_airline);
     gOutNo  = optText(body.group_out_flight_no);
-    gBackAt = optDatetime('group_back_depart_at', body.group_back_depart_at);
-    gBackAir= optText(body.group_back_airline);
-    gBackNo = optText(body.group_back_flight_no);
+    retAir  = optAirport('return_airport', body.return_airport);
   } catch (e) { return bad(e.message); }
 
   try {
     const rows = await sql()`
       INSERT INTO flight_programs
         (name, airport_code, arrival_at, ends_at, sort_order, notes,
-         gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no,
-         group_back_depart_at, group_back_airline, group_back_flight_no)
+         gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no, return_airport)
       VALUES
         (${name}, ${airport}, ${arrivalAt}, ${endsAt}, ${sortOrder}, ${notes},
-         ${gw}, ${gOutAt}, ${gOutAir}, ${gOutNo},
-         ${gBackAt}, ${gBackAir}, ${gBackNo})
+         ${gw}, ${gOutAt}, ${gOutAir}, ${gOutNo}, ${retAir})
       RETURNING *
     `;
     return ok({ program: rows[0] });
@@ -141,8 +135,7 @@ async function handleUpdate(body) {
   const sets = [];
   const args = [];
   const allow = ['name', 'airport_code', 'arrival_at', 'ends_at', 'is_active', 'sort_order', 'notes',
-    'gateway_airport', 'group_out_depart_at', 'group_out_airline', 'group_out_flight_no',
-    'group_back_depart_at', 'group_back_airline', 'group_back_flight_no'];
+    'gateway_airport', 'group_out_depart_at', 'group_out_airline', 'group_out_flight_no', 'return_airport'];
   try {
     for (const k of Object.keys(patch)) {
       if (!allow.includes(k)) continue;
@@ -154,10 +147,9 @@ async function handleUpdate(body) {
       else if (k === 'is_active')             v = !!v;
       else if (k === 'sort_order')            v = Number(v) || 0;
       else if (k === 'gateway_airport')       v = optAirport('gateway_airport', v);
+      else if (k === 'return_airport')        v = optAirport('return_airport', v);
       else if (k === 'group_out_depart_at')   v = optDatetime('group_out_depart_at', v);
-      else if (k === 'group_back_depart_at')  v = optDatetime('group_back_depart_at', v);
-      else if (k === 'group_out_airline' || k === 'group_out_flight_no'
-            || k === 'group_back_airline' || k === 'group_back_flight_no') v = optText(v);
+      else if (k === 'group_out_airline' || k === 'group_out_flight_no') v = optText(v);
       args.push(v);
       sets.push(`${k} = $${args.length}`);
     }
