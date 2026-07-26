@@ -252,18 +252,16 @@ async function getContactContactLabels() {
   return _ccLabels.data;
 }
 
-// Pick the label to use for parent -> student. Override with
-// UE_PARENT_ASSOC_LABEL (exact, case-insensitive); otherwise the first
-// contact-to-contact label matching /parent|guardian/i; otherwise null
+// Pick the label to use for parent -> student. Exact match on
+// UE_PARENT_ASSOC_LABEL (default "Parent", case-insensitive); falls back to
+// the first parent/guardian-ish label that isn't marked DNU; otherwise null
 // (default unlabeled association).
 async function getParentAssocType() {
   const labels = await getContactContactLabels();
-  const want = (process.env.UE_PARENT_ASSOC_LABEL || "").trim().toLowerCase();
-  if (want) {
-    const hit = labels.find((l) => (l.label || "").toLowerCase() === want);
-    if (hit) return hit;
-  }
-  return labels.find((l) => /parent|guardian/i.test(l.label || "")) || null;
+  const want = (process.env.UE_PARENT_ASSOC_LABEL || "Parent").trim().toLowerCase();
+  const exact = labels.find((l) => (l.label || "").trim().toLowerCase() === want);
+  if (exact) return exact;
+  return labels.find((l) => /parent|guardian/i.test(l.label || "") && !/dnu/i.test(l.label || "")) || null;
 }
 
 async function getContactDeals(contactId) {
@@ -406,6 +404,15 @@ export default async (req) => {
 
   try {
     if (req.method === "GET" && act === "meta") return await handleMeta();
+    if (req.method === "GET" && act === "cc-labels") {
+      // Debug: contact-to-contact labels + which one family-linking will use.
+      const [labels, pick] = await Promise.all([getContactContactLabels(), getParentAssocType()]);
+      return json(200, {
+        available: labels,
+        willUse: pick || { label: null, note: "no parent/guardian label found — default unlabeled association" },
+        override: process.env.UE_PARENT_ASSOC_LABEL || null,
+      });
+    }
     if (req.method === "POST" && act === "assignments") return await handleAssignments(body);
     if (req.method === "POST" && act === "assign") return await handleAssign(body);
     if (req.method === "POST" && act === "unassign") return await handleUnassign(body);
