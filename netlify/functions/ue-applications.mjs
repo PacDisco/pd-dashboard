@@ -21,6 +21,12 @@
  *   POST ?action=unassign      { contactId, programId }
  *        -> { ok: true }   (removes the association and all its labels)
  *
+ *   POST ?action=create-contact  { email, firstname?, lastname?, phone? }
+ *        -> { id, created: true|false }
+ *           Creates the contact; if HubSpot reports the email already exists
+ *           (race with another user), falls back to a search and returns the
+ *           existing id with created: false.
+ *
  * Env vars:
  *   HUBSPOT_TOKEN            (required — same Private App token as elsewhere)
  *   UE_PROGRAM_OBJECT_TYPE   (default "2-58156993")
@@ -222,6 +228,47 @@ async function handleUnassign(body) {
   return json(200, { ok: true });
 }
 
+async function handleCreateContact(body) {
+  const email = String(body.email || "").trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    return json(400, { error: "A valid email is required" });
+  }
+
+  const properties = { email };
+  for (const k of ["firstname", "lastname", "phone"]) {
+    const v = String(body[k] || "").trim();
+    if (v) properties[k] = v.slice(0, 200);
+  }
+
+  const resp = await hsFetch(`/crm/v3/objects/contacts`, {
+    method: "POST",
+    body: JSON.stringify({ properties }),
+  });
+  let data = null;
+  try { data = await resp.json(); } catch (_) {}
+
+  if (resp.ok && data && data.id) {
+    return json(200, { id: String(data.id), created: true });
+  }
+
+  // 409 = contact with this email already exists — look it up and return it.
+  if (resp.status === 409) {
+    const search = await hsJson(`/crm/v3/objects/contacts/search`, {
+      method: "POST",
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: "email", operator: "EQ", value: email }] }],
+        properties: ["email"],
+        limit: 1,
+      }),
+    });
+    const hit = (search.results || [])[0];
+    if (hit) return json(200, { id: String(hit.id), created: false });
+  }
+
+  const msg = (data && (data.message || data.error)) || `HubSpot HTTP ${resp.status}`;
+  return json(resp.status >= 500 ? 502 : resp.status || 502, { error: msg });
+}
+
 // ---------------------------------------------------------------------------
 export default async (req) => {
   if (!token()) return json(500, { error: "HUBSPOT_TOKEN env var is not set" });
@@ -244,6 +291,7 @@ export default async (req) => {
     if (req.method === "POST" && act === "assignments") return await handleAssignments(body);
     if (req.method === "POST" && act === "assign") return await handleAssign(body);
     if (req.method === "POST" && act === "unassign") return await handleUnassign(body);
+    if (req.method === "POST" && act === "create-contact") return await handleCreateContact(body);
     return json(400, { error: `Unknown action "${act}" for ${req.method}` });
   } catch (err) {
     console.error("ue-applications error:", err);
