@@ -27,6 +27,19 @@
  *           (race with another user), falls back to a search and returns the
  *           existing id with created: false.
  *
+ *   POST ?action=link-family   { studentContactId, parentContactIds: [...] }
+ *        -> { ok: true, label, dealsLinked, dealIds }
+ *           Associates each parent contact to the student contact using the
+ *           contact-to-contact label matching UE_PARENT_ASSOC_LABEL (or the
+ *           first label matching /parent|guardian/i; unlabeled if none), then
+ *           associates each parent to every deal the student is on (default
+ *           contact->deal association).
+ *
+ *   POST ?action=family-links  { contactIds: [...] }
+ *        -> { links: { [contactId]: ["<associatedContactId>", ...] } }
+ *           Which contacts each given contact is already associated to
+ *           (contact-to-contact) — used to show "linked" status in the UI.
+ *
  * Env vars:
  *   HUBSPOT_TOKEN            (required — same Private App token as elsewhere)
  *   UE_PROGRAM_OBJECT_TYPE   (default "2-58156993")
@@ -228,6 +241,111 @@ async function handleUnassign(body) {
   return json(200, { ok: true });
 }
 
+// ---------------------------------------------------------------------------
+// Family linking: parent contact -> student contact (+ student's deals)
+// ---------------------------------------------------------------------------
+let _ccLabels = { at: 0, data: null };
+async function getContactContactLabels() {
+  if (_ccLabels.data && Date.now() - _ccLabels.at < 5 * 60 * 1000) return _ccLabels.data;
+  const data = await hsJson(`/crm/v4/associations/contacts/contacts/labels`);
+  _ccLabels = { at: Date.now(), data: data.results || [] };
+  return _ccLabels.data;
+}
+
+// Pick the label to use for parent -> student. Override with
+// UE_PARENT_ASSOC_LABEL (exact, case-insensitive); otherwise the first
+// contact-to-contact label matching /parent|guardian/i; otherwise null
+// (default unlabeled association).
+async function getParentAssocType() {
+  const labels = await getContactContactLabels();
+  const want = (process.env.UE_PARENT_ASSOC_LABEL || "").trim().toLowerCase();
+  if (want) {
+    const hit = labels.find((l) => (l.label || "").toLowerCase() === want);
+    if (hit) return hit;
+  }
+  return labels.find((l) => /parent|guardian/i.test(l.label || "")) || null;
+}
+
+async function getContactDeals(contactId) {
+  const dealIds = [];
+  let after = null;
+  do {
+    const params = new URLSearchParams({ limit: "100" });
+    if (after) params.set("after", after);
+    const page = await hsJson(`/crm/v4/objects/contacts/${contactId}/associations/deals?${params}`);
+    for (const r of page.results || []) {
+      if (r.toObjectId != null) dealIds.push(String(r.toObjectId));
+    }
+    after = page.paging && page.paging.next ? page.paging.next.after : null;
+  } while (after);
+  return [...new Set(dealIds)];
+}
+
+async function handleLinkFamily(body) {
+  const studentId = validId(body.studentContactId, "studentContactId");
+  const parentIds = [...new Set((body.parentContactIds || []).map(String).filter((s) => /^\d+$/.test(s)))]
+    .filter((id) => id !== studentId);
+  if (!parentIds.length) return json(400, { error: "parentContactIds is required" });
+
+  const [parentType, dealIds] = await Promise.all([
+    getParentAssocType(),
+    getContactDeals(studentId),
+  ]);
+
+  for (const pid of parentIds) {
+    // 1. parent -> student (labeled if a parent-ish label exists)
+    if (parentType) {
+      await hsJson(`/crm/v4/objects/contacts/${pid}/associations/contacts/${studentId}`, {
+        method: "PUT",
+        body: JSON.stringify([{
+          associationCategory: parentType.category || "USER_DEFINED",
+          associationTypeId: Number(parentType.typeId),
+        }]),
+      });
+    } else {
+      await hsJson(`/crm/v4/objects/contacts/${pid}/associations/default/contacts/${studentId}`, {
+        method: "PUT",
+      });
+    }
+    // 2. parent -> each of the student's deals (default association)
+    for (const did of dealIds) {
+      await hsJson(`/crm/v4/objects/contacts/${pid}/associations/default/deals/${did}`, {
+        method: "PUT",
+      });
+    }
+  }
+
+  return json(200, {
+    ok: true,
+    label: parentType ? parentType.label : null,
+    dealsLinked: dealIds.length,
+    dealIds,
+  });
+}
+
+async function handleFamilyLinks(body) {
+  const ids = [...new Set((body.contactIds || []).map(String).filter((s) => /^\d+$/.test(s)))];
+  if (!ids.length) return json(200, { links: {} });
+
+  const links = {};
+  for (const id of ids) links[id] = [];
+
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    const data = await hsJson(`/crm/v4/associations/contacts/contacts/batch/read`, {
+      method: "POST",
+      body: JSON.stringify({ inputs: batch.map((id) => ({ id })) }),
+    });
+    for (const r of data.results || []) {
+      const fromId = r.from && String(r.from.id);
+      if (!fromId) continue;
+      links[fromId] = (r.to || []).map((t) => String(t.toObjectId));
+    }
+  }
+
+  return json(200, { links });
+}
+
 async function handleCreateContact(body) {
   const email = String(body.email || "").trim().toLowerCase();
   if (!email || !email.includes("@")) {
@@ -292,6 +410,8 @@ export default async (req) => {
     if (req.method === "POST" && act === "assign") return await handleAssign(body);
     if (req.method === "POST" && act === "unassign") return await handleUnassign(body);
     if (req.method === "POST" && act === "create-contact") return await handleCreateContact(body);
+    if (req.method === "POST" && act === "link-family") return await handleLinkFamily(body);
+    if (req.method === "POST" && act === "family-links") return await handleFamilyLinks(body);
     return json(400, { error: `Unknown action "${act}" for ${req.method}` });
   } catch (err) {
     console.error("ue-applications error:", err);
