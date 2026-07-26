@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UE Application Assignments</title>
+<meta name="description" content="UE Application Form submissions — filter and assign to Unearthed Program records with association labels.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #0d9488; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; }
+  .chip button { line-height: 1; opacity: 0.6; }
+  .chip button:hover { opacity: 1; }
+  .row-card { transition: box-shadow 0.15s; }
+  .row-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  select, input[type="date"] { background: #fff; }
+  .assign-panel { border-top: 1px dashed #e5e7eb; }
+  .spin-inline { display:inline-block; width:12px; height:12px; border:2px solid #e5e7eb; border-top-color:#0d9488; border-radius:50%; animation: spin 0.8s linear infinite; vertical-align: -2px; }
+</style>
+</head>
+<body>
+<!-- pd-back-button -->
+<a href="/" style="display:inline-flex;align-items:center;gap:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:500;color:#374151;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;margin:12px 0 0 16px;padding:6px 14px;box-shadow:0 1px 2px rgba(0,0,0,0.05);" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">&larr; Back to dashboards</a>
+
+<div id="app" class="max-w-7xl mx-auto px-6 py-6">
+
+  <!-- Header -->
+  <div class="mb-5 flex items-start justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">🗂️ UE Application Assignments</h1>
+      <p class="text-sm text-gray-500 mt-1">UE Application Form submissions, matched to HubSpot contacts — assign each to an Unearthed Program with association labels.</p>
+    </div>
+    <button id="refresh-btn" onclick="loadAll()"
+            class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+      ↻ Refresh
+    </button>
+  </div>
+
+  <!-- KPIs -->
+  <div id="kpis" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 hidden">
+    <div class="bg-white rounded-lg p-4 border border-gray-200">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Submissions</div>
+      <div id="kpi-total" class="text-2xl font-bold text-gray-900 mt-1">—</div>
+    </div>
+    <div class="bg-white rounded-lg p-4 border border-gray-200">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Assigned</div>
+      <div id="kpi-assigned" class="text-2xl font-bold text-teal-700 mt-1">—</div>
+    </div>
+    <div class="bg-white rounded-lg p-4 border border-gray-200">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Unassigned</div>
+      <div id="kpi-unassigned" class="text-2xl font-bold text-amber-600 mt-1">—</div>
+    </div>
+    <div class="bg-white rounded-lg p-4 border border-gray-200">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">No contact match</div>
+      <div id="kpi-nomatch" class="text-2xl font-bold text-red-600 mt-1">—</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div id="filters" class="hidden bg-white border border-gray-200 rounded-lg p-3 mb-4 flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-48">
+      <label class="block text-xs text-gray-500 mb-1">Search</label>
+      <input id="f-search" type="search" placeholder="Name or email…"
+             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Program (form answer)</label>
+      <select id="f-program" class="px-3 py-2 border border-gray-300 rounded-lg text-sm"><option value="">All</option></select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">School</label>
+      <select id="f-school" class="px-3 py-2 border border-gray-300 rounded-lg text-sm"><option value="">All</option></select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Submitted from</label>
+      <input id="f-from" type="date" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">to</label>
+      <input id="f-to" type="date" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Status</label>
+      <select id="f-status" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        <option value="">All</option>
+        <option value="assigned">Assigned</option>
+        <option value="unassigned">Unassigned</option>
+        <option value="nomatch">No contact match</option>
+      </select>
+    </div>
+    <button onclick="clearFilters()" class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Clear</button>
+  </div>
+
+  <!-- Bulk bar -->
+  <div id="bulk-bar" class="hidden bg-teal-50 border border-teal-200 rounded-lg p-3 mb-4 flex flex-wrap items-center gap-3">
+    <span id="bulk-count" class="text-sm font-medium text-teal-900">0 selected</span>
+    <select id="bulk-program" class="px-3 py-2 border border-gray-300 rounded-lg text-sm"></select>
+    <div id="bulk-labels" class="flex flex-wrap items-center gap-2 text-sm"></div>
+    <button id="bulk-assign-btn" onclick="bulkAssign()"
+            class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">Assign selected</button>
+    <button onclick="clearSelection()" class="px-3 py-2 text-sm text-teal-700 hover:text-teal-900">Clear selection</button>
+    <span id="bulk-status" class="text-sm text-gray-600"></span>
+  </div>
+
+  <!-- Loading / error / empty -->
+  <div id="loading" class="flex flex-col items-center justify-center py-24">
+    <div class="loading-spinner mb-4"></div>
+    <p id="loading-msg" class="text-gray-500 text-sm">Loading submissions from Jotform…</p>
+  </div>
+  <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+    <div class="font-medium text-red-800 mb-1">Couldn't load data</div>
+    <div id="error-msg" class="text-red-700"></div>
+    <button onclick="loadAll()" class="mt-3 px-3 py-1.5 bg-red-600 text-white rounded text-xs hover:bg-red-700">Retry</button>
+  </div>
+  <div id="empty" class="hidden bg-white border border-gray-200 rounded-lg p-8 text-center text-gray-500">
+    No submissions match the current filters.
+  </div>
+
+  <!-- Rows -->
+  <div id="rows" class="hidden space-y-2"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+const FORM_ID          = '251396787451873';
+const API_SUBMISSIONS  = `/api/jotform?path=/form/${FORM_ID}/submissions&limit=1000`;
+const API_CONTACTS     = `/.netlify/functions/contact-lookup`;
+const API_UE           = `/.netlify/functions/ue-applications`;
+const HUBSPOT_PORTAL   = '3855728';
+
+// Question-text fragments used to locate form answers (robust to QID changes).
+const Q_PROGRAM = /what program are you attending/i;
+const Q_SCHOOL  = /what school do you attend/i;
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let subs = [];          // [{ id, created_at, name, email, program, school, contact, assignments }]
+let meta = { programs: [], labels: [] };
+let programById = {};
+let selected = new Set();   // submission ids selected for bulk assign
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const show = (id) => $(id).classList.remove('hidden');
+const hide = (id) => $(id).classList.add('hidden');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function fetchJson(url, opts) {
+  const r = await fetch(url, opts);
+  const text = await r.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Non-JSON response (HTTP ${r.status}): ${text.slice(0, 200)}`); }
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
+function extractIdentity(sub) {
+  let email = '', name = '';
+  const answers = sub.answers || {};
+  for (const qid of Object.keys(answers)) {
+    const a = answers[qid];
+    if (!a) continue;
+    const type = (a.type || '').toLowerCase();
+    if (!email && (type === 'control_email' || /email/i.test(a.name || ''))) {
+      email = typeof a.answer === 'string' ? a.answer.trim().toLowerCase() : '';
+    }
+    if (!name && type === 'control_fullname' && a.answer && typeof a.answer === 'object') {
+      name = [a.answer.first, a.answer.last].filter(Boolean).join(' ').trim();
+    } else if (!name && /^name$/i.test(a.name || '') && typeof a.answer === 'string') {
+      name = a.answer.trim();
+    }
+  }
+  return { email, name };
+}
+
+function answerByText(sub, re) {
+  const answers = sub.answers || {};
+  for (const qid of Object.keys(answers)) {
+    const a = answers[qid];
+    if (!a || !re.test(a.text || '')) continue;
+    const v = a.answer;
+    if (typeof v === 'string') return v.trim();
+    if (Array.isArray(v)) return v.join(', ');
+    if (v && typeof v === 'object') return Object.values(v).filter(Boolean).join(' ');
+  }
+  return '';
+}
+
+function labelName(l) { return l.label || 'Unlabeled (default)'; }
+
+// ---------------------------------------------------------------------------
+// Load
+// ---------------------------------------------------------------------------
+async function loadAll() {
+  show('loading'); hide('error'); hide('empty'); hide('rows'); hide('kpis'); hide('filters');
+  selected = new Set();
+  updateBulkBar();
+
+  try {
+    $('loading-msg').textContent = 'Loading submissions, programs, and labels…';
+    const [jf, m] = await Promise.all([
+      fetchJson(API_SUBMISSIONS),
+      fetchJson(`${API_UE}?action=meta`),
+    ]);
+    meta = m;
+    programById = Object.fromEntries((meta.programs || []).map(p => [String(p.id), p.name]));
+
+    subs = (jf.content || [])
+      .filter(s => s.status !== 'DELETED')
+      .map(s => {
+        const { email, name } = extractIdentity(s);
+        return {
+          id: s.id,
+          created_at: s.created_at,
+          name, email,
+          program: answerByText(s, Q_PROGRAM),
+          school:  answerByText(s, Q_SCHOOL),
+          contact: undefined,      // undefined = pending lookup, null = no match
+          assignments: [],
+        };
+      })
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+    $('loading-msg').textContent = 'Matching HubSpot contacts…';
+    await matchContacts();
+
+    $('loading-msg').textContent = 'Loading existing program assignments…';
+    await loadAssignments();
+
+    buildFilterOptions();
+    buildBulkControls();
+    hide('loading'); show('kpis'); show('filters');
+    render();
+  } catch (e) {
+    $('error-msg').textContent = e.message;
+    hide('loading'); show('error');
+  }
+}
+
+async function matchContacts() {
+  const emails = [...new Set(subs.map(s => s.email).filter(Boolean))];
+  if (!emails.length) return;
+  const { contacts = {} } = await fetchJson(API_CONTACTS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emails }),
+  });
+  for (const s of subs) s.contact = (s.email && contacts[s.email]) || null;
+}
+
+async function loadAssignments() {
+  const ids = [...new Set(subs.map(s => s.contact?.id).filter(Boolean).map(String))];
+  if (!ids.length) return;
+  const { assignments = {} } = await fetchJson(`${API_UE}?action=assignments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contactIds: ids }),
+  });
+  for (const s of subs) {
+    s.assignments = (s.contact && assignments[String(s.contact.id)]) || [];
+  }
+}
+
+// Refresh assignments for a single contact and re-render.
+async function refreshContact(contactId) {
+  const { assignments = {} } = await fetchJson(`${API_UE}?action=assignments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contactIds: [String(contactId)] }),
+  });
+  for (const s of subs) {
+    if (s.contact && String(s.contact.id) === String(contactId)) {
+      s.assignments = assignments[String(contactId)] || [];
+    }
+  }
+  render();
+}
+
+// ---------------------------------------------------------------------------
+// Filters
+// ---------------------------------------------------------------------------
+function buildFilterOptions() {
+  const fill = (id, values) => {
+    const sel = $(id);
+    const current = sel.value;
+    sel.innerHTML = '<option value="">All</option>' +
+      values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    sel.value = current;
+  };
+  fill('f-program', [...new Set(subs.map(s => s.program).filter(Boolean))].sort());
+  fill('f-school',  [...new Set(subs.map(s => s.school).filter(Boolean))].sort());
+}
+
+function clearFilters() {
+  for (const id of ['f-search', 'f-program', 'f-school', 'f-from', 'f-to', 'f-status']) $(id).value = '';
+  render();
+}
+
+function subStatus(s) {
+  if (!s.contact) return 'nomatch';
+  return s.assignments.length ? 'assigned' : 'unassigned';
+}
+
+function filteredSubs() {
+  const q = ($('f-search').value || '').trim().toLowerCase();
+  const prog = $('f-program').value;
+  const school = $('f-school').value;
+  const from = $('f-from').value;
+  const to = $('f-to').value;
+  const status = $('f-status').value;
+
+  return subs.filter(s => {
+    if (q && !((s.name || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q)
+        || (s.contact?.full_name || '').toLowerCase().includes(q))) return false;
+    if (prog && s.program !== prog) return false;
+    if (school && s.school !== school) return false;
+    const day = String(s.created_at || '').slice(0, 10);
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    if (status && subStatus(s) !== status) return false;
+    return true;
+  });
+}
+
+for (const id of ['f-search', 'f-program', 'f-school', 'f-from', 'f-to', 'f-status']) {
+  document.addEventListener('DOMContentLoaded', () => $(id).addEventListener('input', render));
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function renderKpis() {
+  $('kpi-total').textContent = subs.length;
+  $('kpi-assigned').textContent = subs.filter(s => subStatus(s) === 'assigned').length;
+  $('kpi-unassigned').textContent = subs.filter(s => subStatus(s) === 'unassigned').length;
+  $('kpi-nomatch').textContent = subs.filter(s => subStatus(s) === 'nomatch').length;
+}
+
+function assignmentChips(s) {
+  return s.assignments.map(a => {
+    const pname = programById[a.programId] || `Program ${a.programId}`;
+    const labels = a.types.filter(t => t.label).map(t => t.label);
+    const labelTxt = labels.length ? ` · ${labels.join(', ')}` : '';
+    return `<span class="chip bg-teal-50 text-teal-800 border border-teal-200">
+      ${esc(pname)}${esc(labelTxt)}
+      <button title="Remove association" onclick="unassign('${s.id}', '${esc(a.programId)}')">✕</button>
+    </span>`;
+  }).join(' ');
+}
+
+function contactCell(s) {
+  if (s.contact === undefined) return '<span class="text-gray-400 text-xs">…</span>';
+  if (!s.contact) return '<span class="chip bg-red-50 text-red-700 border border-red-200">No HubSpot match</span>';
+  const url = `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL}/contact/${s.contact.id}`;
+  return `<a class="text-teal-700 hover:underline text-sm" target="_blank" rel="noopener" href="${url}">${esc(s.contact.full_name || s.email)} ↗</a>`;
+}
+
+function render() {
+  renderKpis();
+  const list = filteredSubs();
+  const wrap = $('rows');
+
+  if (!list.length) { hide('rows'); show('empty'); return; }
+  hide('empty'); show('rows');
+
+  wrap.innerHTML = list.map(s => {
+    const canAssign = !!s.contact;
+    const checked = selected.has(s.id) ? 'checked' : '';
+    return `
+    <div class="row-card bg-white border border-gray-200 rounded-lg" id="row-${s.id}">
+      <div class="p-3 flex flex-wrap items-center gap-3">
+        <input type="checkbox" ${canAssign ? '' : 'disabled'} ${checked}
+               onchange="toggleSelect('${s.id}', this.checked)"
+               class="h-4 w-4 text-teal-600 rounded border-gray-300">
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-gray-900 truncate">${esc(s.name || s.email || '(no name)')}</div>
+          <div class="text-xs text-gray-500 truncate">${esc(s.email || 'no email')} · submitted ${esc(String(s.created_at).slice(0, 10))}</div>
+        </div>
+        <div class="hidden md:block text-sm text-gray-600 w-56 truncate" title="${esc(s.program)}">${esc(s.program || '—')}</div>
+        <div class="hidden lg:block text-sm text-gray-600 w-40 truncate" title="${esc(s.school)}">${esc(s.school || '—')}</div>
+        <div class="w-48">${contactCell(s)}</div>
+        <div class="flex-1 min-w-40 flex flex-wrap gap-1">${assignmentChips(s) || '<span class="text-xs text-gray-400">Not assigned</span>'}</div>
+        <button ${canAssign ? '' : 'disabled'} onclick="toggleAssignPanel('${s.id}')"
+                class="px-3 py-1.5 rounded-lg text-sm font-medium ${canAssign ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}">
+          Assign
+        </button>
+      </div>
+      <div class="assign-panel hidden p-3 bg-gray-50 rounded-b-lg" id="panel-${s.id}"></div>
+    </div>`;
+  }).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Per-row assign panel
+// ---------------------------------------------------------------------------
+function labelCheckboxes(idPrefix) {
+  return (meta.labels || []).map((l, i) => `
+    <label class="inline-flex items-center gap-1.5 text-sm text-gray-700 mr-3">
+      <input type="checkbox" id="${idPrefix}-label-${i}" class="h-4 w-4 text-teal-600 rounded border-gray-300">
+      ${esc(labelName(l))}
+    </label>`).join('');
+}
+
+function programSelect(id) {
+  return `<select id="${id}" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+    <option value="">Choose program…</option>
+    ${(meta.programs || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}
+  </select>`;
+}
+
+function toggleAssignPanel(subId) {
+  const panel = $(`panel-${subId}`);
+  if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
+  panel.innerHTML = `
+    <div class="flex flex-wrap items-center gap-3">
+      ${programSelect(`prog-${subId}`)}
+      <div class="flex flex-wrap items-center">${labelCheckboxes(`p${subId}`)}</div>
+      <button onclick="assignOne('${subId}')" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">Confirm</button>
+      <span class="text-xs text-gray-500">No label checked = default association.</span>
+      <span id="status-${subId}" class="text-sm"></span>
+    </div>`;
+  panel.classList.remove('hidden');
+}
+
+function collectLabels(idPrefix) {
+  return (meta.labels || []).filter((l, i) => {
+    const cb = $(`${idPrefix}-label-${i}`);
+    return cb && cb.checked;
+  }).map(l => ({ category: l.category, typeId: l.typeId }));
+}
+
+async function assignOne(subId) {
+  const s = subs.find(x => x.id === subId);
+  const programId = $(`prog-${subId}`).value;
+  const statusEl = $(`status-${subId}`);
+  if (!s || !s.contact) return;
+  if (!programId) { statusEl.innerHTML = '<span class="text-red-600">Choose a program first.</span>'; return; }
+
+  const types = collectLabels(`p${subId}`);
+  statusEl.innerHTML = '<span class="spin-inline"></span>';
+  try {
+    await fetchJson(`${API_UE}?action=assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactId: s.contact.id, programId, types }),
+    });
+    await refreshContact(s.contact.id);
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-red-600">${esc(e.message)}</span>`;
+  }
+}
+
+async function unassign(subId, programId) {
+  const s = subs.find(x => x.id === subId);
+  if (!s || !s.contact) return;
+  const pname = programById[programId] || programId;
+  if (!confirm(`Remove association to "${pname}" for ${s.name || s.email}?`)) return;
+  try {
+    await fetchJson(`${API_UE}?action=unassign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactId: s.contact.id, programId }),
+    });
+    await refreshContact(s.contact.id);
+  } catch (e) {
+    alert(`Failed to remove association: ${e.message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bulk assign
+// ---------------------------------------------------------------------------
+function buildBulkControls() {
+  $('bulk-program').innerHTML = `<option value="">Choose program…</option>` +
+    (meta.programs || []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  $('bulk-labels').innerHTML = labelCheckboxes('bulk');
+}
+
+function toggleSelect(subId, on) {
+  if (on) selected.add(subId); else selected.delete(subId);
+  updateBulkBar();
+}
+
+function clearSelection() {
+  selected = new Set();
+  updateBulkBar();
+  render();
+}
+
+function updateBulkBar() {
+  $('bulk-count').textContent = `${selected.size} selected`;
+  if (selected.size > 0) show('bulk-bar'); else hide('bulk-bar');
+}
+
+async function bulkAssign() {
+  const programId = $('bulk-program').value;
+  const statusEl = $('bulk-status');
+  if (!programId) { statusEl.textContent = 'Choose a program first.'; return; }
+  const types = collectLabels('bulk');
+
+  const targets = subs.filter(s => selected.has(s.id) && s.contact);
+  const btn = $('bulk-assign-btn');
+  btn.disabled = true;
+  let done = 0, failed = 0;
+
+  for (const s of targets) {
+    statusEl.textContent = `Assigning ${done + failed + 1} of ${targets.length}…`;
+    try {
+      await fetchJson(`${API_UE}?action=assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: s.contact.id, programId, types }),
+      });
+      done++;
+    } catch (e) {
+      console.error('Bulk assign failed for', s.email, e);
+      failed++;
+    }
+  }
+
+  statusEl.textContent = `Done — ${done} assigned${failed ? `, ${failed} failed (see console)` : ''}.`;
+  btn.disabled = false;
+  selected = new Set();
+  try { await loadAssignments(); } catch (_) {}
+  updateBulkBar();
+  render();
+}
+
+// ---------------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', loadAll);
+</script>
+</body>
+</html>
