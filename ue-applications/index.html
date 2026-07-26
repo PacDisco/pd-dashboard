@@ -119,6 +119,7 @@
         <option value="assigned">Fully assigned</option>
         <option value="partial">Partially assigned</option>
         <option value="unassigned">Unassigned</option>
+        <option value="nodeal">No deal</option>
       </select>
     </div>
     <button onclick="clearFilters()" class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Clear</button>
@@ -346,6 +347,7 @@ async function loadAll() {
     $('loading-msg').textContent = 'Loading existing program assignments…';
     await loadAssignments();
     await loadFamilyLinks();
+    await loadDealStatus();
 
     buildFilterOptions();
     buildBulkControls();
@@ -421,6 +423,51 @@ async function loadFamilyLinks() {
     }
   } catch (e) {
     console.warn('family-links failed:', e);
+  }
+}
+
+// Which students already have a deal in HubSpot.
+async function loadDealStatus() {
+  const students = allPersons().filter(p => p.role === 'student' && p.contact?.id);
+  const ids = [...new Set(students.map(p => String(p.contact.id)))];
+  if (!ids.length) return;
+  try {
+    const { deals = {} } = await fetchJson(`${API_UE}?action=deals-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactIds: ids }),
+    });
+    for (const p of students) p.dealIds = deals[String(p.contact.id)] || [];
+  } catch (e) {
+    console.warn('deals-status failed:', e);
+  }
+}
+
+// Create a deal for the submission's student and tie the family to it.
+async function createDeal(subId) {
+  const s = subs.find(x => x.id === subId);
+  const student = s && s.persons.find(p => p.role === 'student');
+  if (!student || (!student.contact && !student.email)) {
+    alert('No student contact (or email) on this submission.');
+    return;
+  }
+  const dealname = [student.name || student.email, s.program].filter(Boolean).join(' — ');
+  if (!confirm(`Create deal "${dealname}" for ${student.name || student.email}?`)) return;
+  try {
+    const contactId = await ensureContact(student);
+    const programId = student.assignments[0]?.programId || null;
+    const res = await fetchJson(`${API_UE}?action=create-deal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactId, dealname, programId }),
+    });
+    student.dealIds = [...(student.dealIds || []), String(res.id)];
+    // Tie parents to the student + the new deal.
+    await linkFamily(subId, { silent: true });
+    render();
+    alert(`Deal created in "${res.pipeline}" (stage: ${res.stage}).`);
+  } catch (e) {
+    alert(`Deal creation failed: ${e.message}`);
   }
 }
 
@@ -524,7 +571,10 @@ function filteredSubs() {
     const day = String(s.created_at || '').slice(0, 10);
     if (from && day < from) return false;
     if (to && day > to) return false;
-    if (status && subStatus(s) !== status) return false;
+    if (status === 'nodeal') {
+      const st = s.persons.find(p => p.role === 'student');
+      if (!st || !st.contact || (st.dealIds || []).length) return false;
+    } else if (status && subStatus(s) !== status) return false;
     return true;
   });
 }
@@ -575,6 +625,20 @@ function familyChip(p) {
   return '<span class="chip bg-gray-100 text-gray-500 border border-gray-200" title="Will be linked to the student (and their deals) when you assign, or use Link family">Not linked</span>';
 }
 
+function dealChip(p) {
+  // Students only. Unknown until contact exists + deals-status has run.
+  if (!p.contact) return '';
+  if (p.dealIds === undefined) return '';
+  if (p.dealIds.length) {
+    const url = `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL}/deal/${p.dealIds[0]}`;
+    return `<a class="chip bg-green-50 text-green-700 border border-green-200 hover:underline" target="_blank" rel="noopener" href="${url}" title="Open the deal in HubSpot">✓ Deal ↗</a>`;
+  }
+  return `<span class="chip bg-red-50 text-red-700 border border-red-200">No deal</span>
+    <button onclick="createDeal('${esc(p.subId)}')"
+            class="btn-assign px-2 py-1 rounded text-xs font-medium"
+            title="Create a deal for this student and tie the parents to it">+ Create deal</button>`;
+}
+
 function personRow(p) {
   const rm = ROLE_META[p.role];
   const canAssign = !!(p.contact || p.email);
@@ -593,8 +657,8 @@ function personRow(p) {
       <div class="text-xs text-gray-500 truncate">${esc(p.email || 'no email')}${p.phone ? ' · ' + esc(p.phone) : ''}</div>
     </div>
     <div class="w-48">${contactCell(p)}</div>
-    <div class="flex-1 min-w-40 flex flex-wrap gap-1">
-      ${p.role !== 'student' ? familyChip(p) : ''}
+    <div class="flex-1 min-w-40 flex flex-wrap gap-1 items-center">
+      ${p.role !== 'student' ? familyChip(p) : dealChip(p)}
       ${assignmentChips(p) || '<span class="text-xs text-gray-400">Not assigned</span>'}
     </div>
     <button ${canAssign ? '' : 'disabled'} onclick="toggleAssignPanel('${esc(p.key)}')"
