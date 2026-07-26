@@ -40,6 +40,16 @@
  *           Which contacts each given contact is already associated to
  *           (contact-to-contact) — used to show "linked" status in the UI.
  *
+ *   POST ?action=deals-status  { contactIds: [...] }
+ *        -> { deals: { [contactId]: ["<dealId>", ...] } }
+ *
+ *   POST ?action=create-deal   { contactId, dealname, programId? }
+ *        -> { id, pipeline, stage }
+ *           Creates a deal in the Unearthed pipeline (auto-detected by name,
+ *           or UE_DEAL_PIPELINE / UE_DEAL_STAGE env overrides; falls back to
+ *           the default pipeline's first stage), associates it to the student
+ *           contact and, when given, to the program record.
+ *
  * Env vars:
  *   HUBSPOT_TOKEN            (required — same Private App token as elsewhere)
  *   UE_PROGRAM_OBJECT_TYPE   (default "2-58156993")
@@ -344,6 +354,96 @@ async function handleFamilyLinks(body) {
   return json(200, { links });
 }
 
+// ---------------------------------------------------------------------------
+// Deals: status per contact + creation in the Unearthed pipeline
+// ---------------------------------------------------------------------------
+async function handleDealsStatus(body) {
+  const ids = [...new Set((body.contactIds || []).map(String).filter((s) => /^\d+$/.test(s)))];
+  if (!ids.length) return json(200, { deals: {} });
+
+  const deals = {};
+  for (const id of ids) deals[id] = [];
+
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    const data = await hsJson(`/crm/v4/associations/contacts/deals/batch/read`, {
+      method: "POST",
+      body: JSON.stringify({ inputs: batch.map((id) => ({ id })) }),
+    });
+    for (const r of data.results || []) {
+      const fromId = r.from && String(r.from.id);
+      if (!fromId) continue;
+      deals[fromId] = (r.to || []).map((t) => String(t.toObjectId));
+    }
+  }
+
+  return json(200, { deals });
+}
+
+// Pipeline/stage for new deals. Overrides: UE_DEAL_PIPELINE / UE_DEAL_STAGE
+// (id or label, case-insensitive). Otherwise: pipeline named like
+// unearthed/UE, else the default pipeline; first stage by displayOrder.
+let _dealPipeline = null;
+async function getDealPipelineStage() {
+  if (_dealPipeline) return _dealPipeline;
+  const data = await hsJson(`/crm/v3/pipelines/deals`);
+  const pipelines = data.results || [];
+  if (!pipelines.length) throw new Error("No deal pipelines found in HubSpot");
+
+  const wantP = (process.env.UE_DEAL_PIPELINE || "").trim().toLowerCase();
+  let pipeline = null;
+  if (wantP) {
+    pipeline = pipelines.find((p) => p.id === wantP || (p.label || "").toLowerCase() === wantP);
+  }
+  if (!pipeline) {
+    pipeline = pipelines.find((p) => /unearthed|\bue\b/i.test(p.label || ""));
+  }
+  if (!pipeline) {
+    pipeline = pipelines.find((p) => p.id === "default") || pipelines[0];
+  }
+
+  const stages = [...(pipeline.stages || [])].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  const wantS = (process.env.UE_DEAL_STAGE || "").trim().toLowerCase();
+  let stage = null;
+  if (wantS) {
+    stage = stages.find((s) => s.id === wantS || (s.label || "").toLowerCase() === wantS);
+  }
+  if (!stage) stage = stages[0];
+  if (!stage) throw new Error(`Pipeline "${pipeline.label}" has no stages`);
+
+  _dealPipeline = { pipelineId: pipeline.id, pipelineLabel: pipeline.label, stageId: stage.id, stageLabel: stage.label };
+  return _dealPipeline;
+}
+
+async function handleCreateDeal(body) {
+  const contactId = validId(body.contactId, "contactId");
+  const dealname = String(body.dealname || "").trim().slice(0, 250);
+  if (!dealname) return json(400, { error: "dealname is required" });
+  const programId = body.programId ? validId(body.programId, "programId") : null;
+
+  const { pipelineId, pipelineLabel, stageId, stageLabel } = await getDealPipelineStage();
+
+  const deal = await hsJson(`/crm/v3/objects/deals`, {
+    method: "POST",
+    body: JSON.stringify({
+      properties: { dealname, pipeline: pipelineId, dealstage: stageId },
+    }),
+  });
+  const dealId = String(deal.id);
+
+  // Associate deal -> student contact (default), and -> program record if given.
+  await hsJson(`/crm/v4/objects/deals/${dealId}/associations/default/contacts/${contactId}`, { method: "PUT" });
+  if (programId) {
+    try {
+      await hsJson(`/crm/v4/objects/deals/${dealId}/associations/default/${PROGRAM_OBJECT_TYPE}/${programId}`, { method: "PUT" });
+    } catch (e) {
+      console.warn("Deal->program association failed (non-fatal):", e.message);
+    }
+  }
+
+  return json(200, { id: dealId, pipeline: pipelineLabel, stage: stageLabel });
+}
+
 async function handleCreateContact(body) {
   const email = String(body.email || "").trim().toLowerCase();
   if (!email || !email.includes("@")) {
@@ -419,6 +519,8 @@ export default async (req) => {
     if (req.method === "POST" && act === "create-contact") return await handleCreateContact(body);
     if (req.method === "POST" && act === "link-family") return await handleLinkFamily(body);
     if (req.method === "POST" && act === "family-links") return await handleFamilyLinks(body);
+    if (req.method === "POST" && act === "deals-status") return await handleDealsStatus(body);
+    if (req.method === "POST" && act === "create-deal") return await handleCreateDeal(body);
     return json(400, { error: `Unknown action "${act}" for ${req.method}` });
   } catch (err) {
     console.error("ue-applications error:", err);
