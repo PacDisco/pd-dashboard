@@ -318,6 +318,7 @@ async function loadAll() {
 
     $('loading-msg').textContent = 'Loading existing program assignments…';
     await loadAssignments();
+    await loadFamilyLinks();
 
     buildFilterOptions();
     buildBulkControls();
@@ -370,6 +371,63 @@ async function refreshContacts(contactIds) {
     }
   }
   render();
+}
+
+// Which parent contacts are already contact-associated to their student.
+async function loadFamilyLinks() {
+  const parents = allPersons().filter(p => p.role !== 'student' && p.contact?.id);
+  const ids = [...new Set(parents.map(p => String(p.contact.id)))];
+  if (!ids.length) return;
+  try {
+    const { links = {} } = await fetchJson(`${API_UE}?action=family-links`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contactIds: ids }),
+    });
+    for (const s of subs) {
+      const student = s.persons.find(p => p.role === 'student');
+      const sid = student?.contact?.id && String(student.contact.id);
+      for (const p of s.persons) {
+        if (p.role === 'student' || !p.contact) continue;
+        p.linkedToStudent = !!(sid && (links[String(p.contact.id)] || []).includes(sid));
+      }
+    }
+  } catch (e) {
+    console.warn('family-links failed:', e);
+  }
+}
+
+// Link every parent contact on a submission to the student contact (labeled
+// "parent"-style) and to the student's deals. Creates missing contacts.
+async function linkFamily(subId, opts = {}) {
+  const s = subs.find(x => x.id === subId);
+  if (!s) return;
+  const student = s.persons.find(p => p.role === 'student');
+  const parents = s.persons.filter(p => p.role !== 'student' && (p.contact || p.email));
+  if (!student || !parents.length) {
+    if (!opts.silent) alert('Need both a student and at least one parent contact with an email.');
+    return;
+  }
+  try {
+    const studentContactId = await ensureContact(student);
+    const parentContactIds = [];
+    for (const p of parents) parentContactIds.push(await ensureContact(p));
+    const res = await fetchJson(`${API_UE}?action=link-family`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentContactId, parentContactIds }),
+    });
+    for (const p of parents) p.linkedToStudent = true;
+    if (!opts.silent) {
+      const labelTxt = res.label ? `labeled "${res.label}"` : 'with the default association';
+      alert(`Linked ${parents.length} contact(s) to the student ${labelTxt}` +
+            (res.dealsLinked ? ` and to ${res.dealsLinked} deal(s).` : '. No deals found on the student.'));
+    }
+    render();
+  } catch (e) {
+    if (!opts.silent) alert(`Family link failed: ${e.message}`);
+    else console.warn('Auto family-link failed:', e);
+  }
 }
 
 // Ensure a person has a HubSpot contact — create one if needed. Returns contact id.
@@ -483,6 +541,13 @@ function contactCell(p) {
   return `<a class="text-teal-700 hover:underline text-sm" target="_blank" rel="noopener" href="${url}">${esc(p.contact.full_name || p.email)} ↗</a>`;
 }
 
+function familyChip(p) {
+  if (p.linkedToStudent) {
+    return '<span class="chip bg-green-50 text-green-700 border border-green-200" title="Contact-associated to the student in HubSpot">⇄ Linked to student</span>';
+  }
+  return '<span class="chip bg-gray-100 text-gray-500 border border-gray-200" title="Will be linked to the student (and their deals) when you assign, or use Link family">Not linked</span>';
+}
+
 function personRow(p) {
   const rm = ROLE_META[p.role];
   const canAssign = !!(p.contact || p.email);
@@ -501,7 +566,10 @@ function personRow(p) {
       <div class="text-xs text-gray-500 truncate">${esc(p.email || 'no email')}${p.phone ? ' · ' + esc(p.phone) : ''}</div>
     </div>
     <div class="w-48">${contactCell(p)}</div>
-    <div class="flex-1 min-w-40 flex flex-wrap gap-1">${assignmentChips(p) || '<span class="text-xs text-gray-400">Not assigned</span>'}</div>
+    <div class="flex-1 min-w-40 flex flex-wrap gap-1">
+      ${p.role !== 'student' ? familyChip(p) : ''}
+      ${assignmentChips(p) || '<span class="text-xs text-gray-400">Not assigned</span>'}
+    </div>
     <button ${canAssign ? '' : 'disabled'} onclick="toggleAssignPanel('${esc(p.key)}')"
             class="px-3 py-1.5 rounded-lg text-sm font-medium ${canAssign ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}">
       Assign
@@ -524,7 +592,10 @@ function render() {
         <span class="font-medium text-gray-700">${esc(String(s.created_at).slice(0, 10))}</span>
         ${s.program ? `<span>· ${esc(s.program)}</span>` : ''}
         ${s.school ? `<span>· ${esc(s.school)}</span>` : ''}
-        <span class="ml-auto">${statusBadge(subStatus(s))}</span>
+        <span class="ml-auto flex items-center gap-2">
+          ${s.persons.some(p => p.role !== 'student') ? `<button onclick="linkFamily('${esc(s.id)}')" class="px-2 py-1 bg-white border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50" title="Associate parent contacts to the student (labeled) and to the student's deals">⇄ Link family</button>` : ''}
+          ${statusBadge(subStatus(s))}
+        </span>
       </div>
       ${s.persons.map(personRow).join('')}
     </div>`).join('');
@@ -600,6 +671,8 @@ async function assignOne(key) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contactId, programId, types }),
     });
+    // Automatically link parents ⇄ student (+ student's deals) for this submission.
+    await linkFamily(p.subId, { silent: true });
     await refreshContacts([contactId]);
   } catch (e) {
     statusEl.innerHTML = `<span class="text-red-600">${esc(e.message)}</span>`;
@@ -675,6 +748,13 @@ async function bulkAssign() {
       console.error('Bulk assign failed for', p.email || p.name, e);
       failed++;
     }
+  }
+
+  // Automatically link parents ⇄ students (+ deals) for every touched submission.
+  const subIds = [...new Set(targets.map(p => p.subId))];
+  for (const sid of subIds) {
+    statusEl.textContent = `Linking family contacts…`;
+    await linkFamily(sid, { silent: true });
   }
 
   statusEl.textContent = `Done — ${done} assigned${failed ? `, ${failed} failed (see console)` : ''}.`;
