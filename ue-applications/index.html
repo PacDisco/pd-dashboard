@@ -22,6 +22,33 @@
   .nested-row { margin-left: 28px; border-left: 3px solid #e5e7eb; background: #fafafa; }
   .nested-row:last-child { border-bottom-left-radius: 8px; }
   .spin-inline { display:inline-block; width:12px; height:12px; border:2px solid #e5e7eb; border-top-color:#0d9488; border-radius:50%; animation: spin 0.8s linear infinite; vertical-align: -2px; }
+
+  /* Tailwind v2's CDN build doesn't ship teal/amber/violet — define the ones we use. */
+  .bg-teal-50   { background-color: #f0fdfa; }
+  .bg-teal-100  { background-color: #ccfbf1; }
+  .bg-teal-600  { background-color: #0d9488; }
+  .hover\:bg-teal-700:hover { background-color: #0f766e; }
+  .text-teal-600 { color: #0d9488; }
+  .text-teal-700 { color: #0f766e; }
+  .text-teal-800 { color: #115e59; }
+  .text-teal-900 { color: #134e4a; }
+  .border-teal-200 { border-color: #99f6e4; }
+  .bg-amber-50  { background-color: #fffbeb; }
+  .border-amber-200 { border-color: #fde68a; }
+  .text-amber-600 { color: #d97706; }
+  .text-amber-700 { color: #b45309; }
+  .bg-violet-100 { background-color: #ede9fe; }
+  .text-violet-800 { color: #5b21b6; }
+  .focus\:ring-teal-500:focus { --tw-ring-color: #14b8a6; }
+
+  /* Primary action buttons — make them unmissable. */
+  #bulk-assign-btn, .btn-assign {
+    background-color: #0d9488;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(13,148,136,0.4);
+  }
+  #bulk-assign-btn:hover, .btn-assign:hover { background-color: #0f766e; }
+  #bulk-assign-btn:disabled { opacity: 0.5; }
 </style>
 </head>
 <body>
