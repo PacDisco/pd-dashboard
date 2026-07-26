@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UE Application Assignments</title>
-<meta name="description" content="UE Application Form submissions — filter and assign to Unearthed Program records with association labels.">
+<meta name="description" content="UE Application Form submissions — filter and assign students and their parent contacts to Unearthed Program records with association labels.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
@@ -13,10 +13,14 @@
   .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; }
   .chip button { line-height: 1; opacity: 0.6; }
   .chip button:hover { opacity: 1; }
+  .role-badge { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
   .row-card { transition: box-shadow 0.15s; }
   .row-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
   select, input[type="date"] { background: #fff; }
   .assign-panel { border-top: 1px dashed #e5e7eb; }
+  .person-row + .person-row { border-top: 1px solid #f3f4f6; }
+  .nested-row { margin-left: 28px; border-left: 3px solid #e5e7eb; background: #fafafa; }
+  .nested-row:last-child { border-bottom-left-radius: 8px; }
   .spin-inline { display:inline-block; width:12px; height:12px; border:2px solid #e5e7eb; border-top-color:#0d9488; border-radius:50%; animation: spin 0.8s linear infinite; vertical-align: -2px; }
 </style>
 </head>
@@ -30,7 +34,7 @@
   <div class="mb-5 flex items-start justify-between gap-4 flex-wrap">
     <div>
       <h1 class="text-2xl font-bold text-gray-900">🗂️ UE Application Assignments</h1>
-      <p class="text-sm text-gray-500 mt-1">UE Application Form submissions, matched to HubSpot contacts — assign each to an Unearthed Program with association labels.</p>
+      <p class="text-sm text-gray-500 mt-1">UE Application Form submissions — students and their parent/emergency contacts, matched to HubSpot and assigned to Unearthed Programs with association labels.</p>
     </div>
     <button id="refresh-btn" onclick="loadAll()"
             class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
@@ -45,16 +49,16 @@
       <div id="kpi-total" class="text-2xl font-bold text-gray-900 mt-1">—</div>
     </div>
     <div class="bg-white rounded-lg p-4 border border-gray-200">
-      <div class="text-xs text-gray-500 uppercase tracking-wide">Assigned</div>
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Students assigned</div>
       <div id="kpi-assigned" class="text-2xl font-bold text-teal-700 mt-1">—</div>
     </div>
     <div class="bg-white rounded-lg p-4 border border-gray-200">
-      <div class="text-xs text-gray-500 uppercase tracking-wide">Unassigned</div>
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Students unassigned</div>
       <div id="kpi-unassigned" class="text-2xl font-bold text-amber-600 mt-1">—</div>
     </div>
     <div class="bg-white rounded-lg p-4 border border-gray-200">
-      <div class="text-xs text-gray-500 uppercase tracking-wide">No contact match</div>
-      <div id="kpi-nomatch" class="text-2xl font-bold text-red-600 mt-1">—</div>
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Parents unassigned</div>
+      <div id="kpi-parents" class="text-2xl font-bold text-amber-600 mt-1">—</div>
     </div>
   </div>
 
@@ -62,7 +66,7 @@
   <div id="filters" class="hidden bg-white border border-gray-200 rounded-lg p-3 mb-4 flex flex-wrap items-end gap-3">
     <div class="flex-1 min-w-48">
       <label class="block text-xs text-gray-500 mb-1">Search</label>
-      <input id="f-search" type="search" placeholder="Name or email…"
+      <input id="f-search" type="search" placeholder="Student or parent name/email…"
              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
     </div>
     <div>
@@ -85,9 +89,9 @@
       <label class="block text-xs text-gray-500 mb-1">Status</label>
       <select id="f-status" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
         <option value="">All</option>
-        <option value="assigned">Assigned</option>
+        <option value="assigned">Fully assigned</option>
+        <option value="partial">Partially assigned</option>
         <option value="unassigned">Unassigned</option>
-        <option value="nomatch">No contact match</option>
       </select>
     </div>
     <button onclick="clearFilters()" class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Clear</button>
@@ -136,13 +140,31 @@ const HUBSPOT_PORTAL   = '3855728';
 const Q_PROGRAM = /what program are you attending/i;
 const Q_SCHOOL  = /what school do you attend/i;
 
+const Q_PRIMARY_NAME  = /^primary contact name/i;
+const Q_PRIMARY_EMAIL = /^primary contact email/i;
+const Q_PRIMARY_PHONE = /^primary contact phone/i;
+const Q_PRIMARY_REL   = /^relationship to student/i;
+const Q_SECONDARY_NAME  = /^secondary emergency contact name/i;
+const Q_SECONDARY_EMAIL = /^secondary emergency contact email/i;
+const Q_SECONDARY_PHONE = /^secondary emergency contact phone/i;
+const Q_SECONDARY_REL   = /^secondary emergency contact relationship/i;
+
+const ROLE_META = {
+  student:   { badge: 'bg-teal-100 text-teal-800',   label: 'Student' },
+  primary:   { badge: 'bg-indigo-100 text-indigo-800', label: 'Primary contact' },
+  secondary: { badge: 'bg-violet-100 text-violet-800', label: 'Secondary contact' },
+};
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-let subs = [];          // [{ id, created_at, name, email, program, school, contact, assignments }]
+// subs: [{ id, created_at, program, school, persons: [person] }]
+// person: { key, subId, role, name, email, phone, relationship,
+//           contact (undefined=pending, null=no match), assignments: [] }
+let subs = [];
 let meta = { programs: [], labels: [] };
 let programById = {};
-let selected = new Set();   // submission ids selected for bulk assign
+let selected = new Set();   // person keys selected for bulk assign
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -162,36 +184,100 @@ async function fetchJson(url, opts) {
   return data;
 }
 
-function extractIdentity(sub) {
-  let email = '', name = '';
-  const answers = sub.answers || {};
-  for (const qid of Object.keys(answers)) {
-    const a = answers[qid];
-    if (!a) continue;
-    const type = (a.type || '').toLowerCase();
-    if (!email && (type === 'control_email' || /email/i.test(a.name || ''))) {
-      email = typeof a.answer === 'string' ? a.answer.trim().toLowerCase() : '';
+function answerToString(v) {
+  if (typeof v === 'string') return v.trim();
+  if (Array.isArray(v)) return v.join(', ');
+  if (v && typeof v === 'object') {
+    if (v.first !== undefined || v.last !== undefined) {
+      return [v.prefix, v.first, v.middle, v.last].filter(Boolean).join(' ').trim();
     }
-    if (!name && type === 'control_fullname' && a.answer && typeof a.answer === 'object') {
-      name = [a.answer.first, a.answer.last].filter(Boolean).join(' ').trim();
-    } else if (!name && /^name$/i.test(a.name || '') && typeof a.answer === 'string') {
-      name = a.answer.trim();
-    }
+    return Object.values(v).filter(Boolean).join(' ').trim();
   }
-  return { email, name };
+  return '';
 }
 
 function answerByText(sub, re) {
   const answers = sub.answers || {};
   for (const qid of Object.keys(answers)) {
     const a = answers[qid];
-    if (!a || !re.test(a.text || '')) continue;
-    const v = a.answer;
-    if (typeof v === 'string') return v.trim();
-    if (Array.isArray(v)) return v.join(', ');
-    if (v && typeof v === 'object') return Object.values(v).filter(Boolean).join(' ');
+    if (!a || !re.test((a.text || '').trim())) continue;
+    return answerToString(a.answer);
   }
   return '';
+}
+
+function extractStudentIdentity(sub) {
+  let email = '', name = '';
+  const answers = sub.answers || {};
+  for (const qid of Object.keys(answers)) {
+    const a = answers[qid];
+    if (!a) continue;
+    const type = (a.type || '').toLowerCase();
+    const text = (a.text || '').trim();
+    // Skip parent-contact questions when hunting for the student's identity.
+    if (/contact/i.test(text)) continue;
+    if (!email && (type === 'control_email' || /^email address$/i.test(text))) {
+      const v = answerToString(a.answer).toLowerCase();
+      if (v.includes('@')) email = v;
+    }
+    if (!name && type === 'control_fullname') {
+      name = answerToString(a.answer);
+    } else if (!name && /^name$/i.test(text)) {
+      name = answerToString(a.answer);
+    }
+  }
+  return { email, name };
+}
+
+function splitName(full) {
+  const parts = String(full || '').trim().split(/\s+/);
+  if (!parts.length) return { firstname: '', lastname: '' };
+  return { firstname: parts[0], lastname: parts.slice(1).join(' ') };
+}
+
+function normEmail(raw) {
+  const e = String(raw || '').trim().toLowerCase();
+  return e.includes('@') ? e : '';
+}
+
+function buildPersons(subId, rawSub, studentIdentity) {
+  const persons = [];
+  const push = (role, name, email, phone, relationship) => {
+    email = normEmail(email);
+    name = String(name || '').trim();
+    if (!email && !name) return;   // nothing usable
+    persons.push({
+      key: `${subId}:${role}`,
+      subId, role, name, email,
+      phone: String(phone || '').trim(),
+      relationship: String(relationship || '').trim(),
+      contact: undefined,
+      assignments: [],
+    });
+  };
+
+  push('student', studentIdentity.name, studentIdentity.email, '', '');
+  push('primary',
+    answerByText(rawSub, Q_PRIMARY_NAME),
+    answerByText(rawSub, Q_PRIMARY_EMAIL),
+    answerByText(rawSub, Q_PRIMARY_PHONE),
+    answerByText(rawSub, Q_PRIMARY_REL));
+  push('secondary',
+    answerByText(rawSub, Q_SECONDARY_NAME),
+    answerByText(rawSub, Q_SECONDARY_EMAIL),
+    answerByText(rawSub, Q_SECONDARY_PHONE),
+    answerByText(rawSub, Q_SECONDARY_REL));
+
+  return persons;
+}
+
+function allPersons() {
+  return subs.flatMap(s => s.persons);
+}
+
+function personByKey(key) {
+  for (const s of subs) for (const p of s.persons) if (p.key === key) return p;
+  return null;
 }
 
 function labelName(l) { return l.label || 'Unlabeled (default)'; }
@@ -216,15 +302,13 @@ async function loadAll() {
     subs = (jf.content || [])
       .filter(s => s.status !== 'DELETED')
       .map(s => {
-        const { email, name } = extractIdentity(s);
+        const identity = extractStudentIdentity(s);
         return {
           id: s.id,
           created_at: s.created_at,
-          name, email,
           program: answerByText(s, Q_PROGRAM),
           school:  answerByText(s, Q_SCHOOL),
-          contact: undefined,      // undefined = pending lookup, null = no match
-          assignments: [],
+          persons: buildPersons(s.id, s, identity),
         };
       })
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
@@ -246,42 +330,64 @@ async function loadAll() {
 }
 
 async function matchContacts() {
-  const emails = [...new Set(subs.map(s => s.email).filter(Boolean))];
-  if (!emails.length) return;
+  const persons = allPersons();
+  const emails = [...new Set(persons.map(p => p.email).filter(Boolean))];
+  if (!emails.length) { persons.forEach(p => { p.contact = null; }); return; }
   const { contacts = {} } = await fetchJson(API_CONTACTS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ emails }),
   });
-  for (const s of subs) s.contact = (s.email && contacts[s.email]) || null;
+  for (const p of persons) p.contact = (p.email && contacts[p.email]) || null;
 }
 
 async function loadAssignments() {
-  const ids = [...new Set(subs.map(s => s.contact?.id).filter(Boolean).map(String))];
+  const persons = allPersons();
+  const ids = [...new Set(persons.map(p => p.contact?.id).filter(Boolean).map(String))];
   if (!ids.length) return;
   const { assignments = {} } = await fetchJson(`${API_UE}?action=assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contactIds: ids }),
   });
-  for (const s of subs) {
-    s.assignments = (s.contact && assignments[String(s.contact.id)]) || [];
+  for (const p of persons) {
+    p.assignments = (p.contact && assignments[String(p.contact.id)]) || [];
   }
 }
 
-// Refresh assignments for a single contact and re-render.
-async function refreshContact(contactId) {
+// Refresh assignments for specific contact ids and re-render.
+async function refreshContacts(contactIds) {
+  const ids = [...new Set(contactIds.map(String))];
+  if (!ids.length) { render(); return; }
   const { assignments = {} } = await fetchJson(`${API_UE}?action=assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contactIds: [String(contactId)] }),
+    body: JSON.stringify({ contactIds: ids }),
   });
-  for (const s of subs) {
-    if (s.contact && String(s.contact.id) === String(contactId)) {
-      s.assignments = assignments[String(contactId)] || [];
+  for (const p of allPersons()) {
+    if (p.contact && ids.includes(String(p.contact.id))) {
+      p.assignments = assignments[String(p.contact.id)] || [];
     }
   }
   render();
+}
+
+// Ensure a person has a HubSpot contact — create one if needed. Returns contact id.
+async function ensureContact(p) {
+  if (p.contact && p.contact.id) return p.contact.id;
+  if (!p.email) throw new Error(`${p.name || 'This person'} has no email on the form, so a contact can't be created.`);
+  const { firstname, lastname } = splitName(p.name);
+  const resp = await fetchJson(`${API_UE}?action=create-contact`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: p.email, firstname, lastname, phone: p.phone }),
+  });
+  const contact = { id: String(resp.id), full_name: p.name || p.email, email: p.email };
+  // Share the new contact with any other person rows using the same email.
+  for (const q of allPersons()) {
+    if (q.email === p.email && !q.contact) q.contact = { ...contact };
+  }
+  return contact.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,9 +410,15 @@ function clearFilters() {
   render();
 }
 
+// Submission status: assigned = every person with an email is assigned;
+// partial = some assigned; unassigned = none assigned.
 function subStatus(s) {
-  if (!s.contact) return 'nomatch';
-  return s.assignments.length ? 'assigned' : 'unassigned';
+  const assignable = s.persons;
+  if (!assignable.length) return 'unassigned';
+  const done = assignable.filter(p => p.assignments.length > 0).length;
+  if (done === 0) return 'unassigned';
+  if (done === assignable.length) return 'assigned';
+  return 'partial';
 }
 
 function filteredSubs() {
@@ -318,8 +430,10 @@ function filteredSubs() {
   const status = $('f-status').value;
 
   return subs.filter(s => {
-    if (q && !((s.name || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q)
-        || (s.contact?.full_name || '').toLowerCase().includes(q))) return false;
+    if (q) {
+      const hay = s.persons.flatMap(p => [p.name, p.email, p.contact?.full_name]).filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     if (prog && s.program !== prog) return false;
     if (school && s.school !== school) return false;
     const day = String(s.created_at || '').slice(0, 10);
@@ -338,29 +452,62 @@ for (const id of ['f-search', 'f-program', 'f-school', 'f-from', 'f-to', 'f-stat
 // Render
 // ---------------------------------------------------------------------------
 function renderKpis() {
+  const students = allPersons().filter(p => p.role === 'student');
+  const parents  = allPersons().filter(p => p.role !== 'student');
   $('kpi-total').textContent = subs.length;
-  $('kpi-assigned').textContent = subs.filter(s => subStatus(s) === 'assigned').length;
-  $('kpi-unassigned').textContent = subs.filter(s => subStatus(s) === 'unassigned').length;
-  $('kpi-nomatch').textContent = subs.filter(s => subStatus(s) === 'nomatch').length;
+  $('kpi-assigned').textContent = students.filter(p => p.assignments.length).length;
+  $('kpi-unassigned').textContent = students.filter(p => !p.assignments.length).length;
+  $('kpi-parents').textContent = parents.filter(p => !p.assignments.length).length;
 }
 
-function assignmentChips(s) {
-  return s.assignments.map(a => {
+function assignmentChips(p) {
+  return p.assignments.map(a => {
     const pname = programById[a.programId] || `Program ${a.programId}`;
     const labels = a.types.filter(t => t.label).map(t => t.label);
     const labelTxt = labels.length ? ` · ${labels.join(', ')}` : '';
     return `<span class="chip bg-teal-50 text-teal-800 border border-teal-200">
       ${esc(pname)}${esc(labelTxt)}
-      <button title="Remove association" onclick="unassign('${s.id}', '${esc(a.programId)}')">✕</button>
+      <button title="Remove association" onclick="unassign('${esc(p.key)}', '${esc(a.programId)}')">✕</button>
     </span>`;
   }).join(' ');
 }
 
-function contactCell(s) {
-  if (s.contact === undefined) return '<span class="text-gray-400 text-xs">…</span>';
-  if (!s.contact) return '<span class="chip bg-red-50 text-red-700 border border-red-200">No HubSpot match</span>';
-  const url = `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL}/contact/${s.contact.id}`;
-  return `<a class="text-teal-700 hover:underline text-sm" target="_blank" rel="noopener" href="${url}">${esc(s.contact.full_name || s.email)} ↗</a>`;
+function contactCell(p) {
+  if (p.contact === undefined) return '<span class="text-gray-400 text-xs">…</span>';
+  if (!p.contact) {
+    return p.email
+      ? '<span class="chip bg-amber-50 text-amber-700 border border-amber-200" title="A contact will be created automatically when you assign">New — will create</span>'
+      : '<span class="chip bg-red-50 text-red-700 border border-red-200">No email on form</span>';
+  }
+  const url = `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL}/contact/${p.contact.id}`;
+  return `<a class="text-teal-700 hover:underline text-sm" target="_blank" rel="noopener" href="${url}">${esc(p.contact.full_name || p.email)} ↗</a>`;
+}
+
+function personRow(p) {
+  const rm = ROLE_META[p.role];
+  const canAssign = !!(p.contact || p.email);
+  const checked = selected.has(p.key) ? 'checked' : '';
+  const rel = p.relationship ? ` · ${p.relationship}` : '';
+  const idSafe = p.key.replace(/[^A-Za-z0-9_-]/g, '_');
+  const nested = p.role !== 'student' ? ' nested-row' : '';
+  return `
+  <div class="person-row${nested} flex flex-wrap items-center gap-3 px-3 py-2">
+    <input type="checkbox" ${canAssign ? '' : 'disabled'} ${checked}
+           onchange="toggleSelect('${esc(p.key)}', this.checked)"
+           class="h-4 w-4 text-teal-600 rounded border-gray-300">
+    <span class="role-badge ${rm.badge} w-28 text-center">${rm.label}</span>
+    <div class="min-w-0 flex-1">
+      <div class="text-sm font-medium text-gray-900 truncate">${esc(p.name || p.email || '(no name)')}<span class="text-xs text-gray-400 font-normal">${esc(rel)}</span></div>
+      <div class="text-xs text-gray-500 truncate">${esc(p.email || 'no email')}${p.phone ? ' · ' + esc(p.phone) : ''}</div>
+    </div>
+    <div class="w-48">${contactCell(p)}</div>
+    <div class="flex-1 min-w-40 flex flex-wrap gap-1">${assignmentChips(p) || '<span class="text-xs text-gray-400">Not assigned</span>'}</div>
+    <button ${canAssign ? '' : 'disabled'} onclick="toggleAssignPanel('${esc(p.key)}')"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium ${canAssign ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}">
+      Assign
+    </button>
+    <div class="assign-panel hidden w-full p-3 bg-gray-50 rounded-lg" id="panel-${idSafe}"></div>
+  </div>`;
 }
 
 function render() {
@@ -371,35 +518,26 @@ function render() {
   if (!list.length) { hide('rows'); show('empty'); return; }
   hide('empty'); show('rows');
 
-  wrap.innerHTML = list.map(s => {
-    const canAssign = !!s.contact;
-    const checked = selected.has(s.id) ? 'checked' : '';
-    return `
-    <div class="row-card bg-white border border-gray-200 rounded-lg" id="row-${s.id}">
-      <div class="p-3 flex flex-wrap items-center gap-3">
-        <input type="checkbox" ${canAssign ? '' : 'disabled'} ${checked}
-               onchange="toggleSelect('${s.id}', this.checked)"
-               class="h-4 w-4 text-teal-600 rounded border-gray-300">
-        <div class="min-w-0 flex-1">
-          <div class="font-medium text-gray-900 truncate">${esc(s.name || s.email || '(no name)')}</div>
-          <div class="text-xs text-gray-500 truncate">${esc(s.email || 'no email')} · submitted ${esc(String(s.created_at).slice(0, 10))}</div>
-        </div>
-        <div class="hidden md:block text-sm text-gray-600 w-56 truncate" title="${esc(s.program)}">${esc(s.program || '—')}</div>
-        <div class="hidden lg:block text-sm text-gray-600 w-40 truncate" title="${esc(s.school)}">${esc(s.school || '—')}</div>
-        <div class="w-48">${contactCell(s)}</div>
-        <div class="flex-1 min-w-40 flex flex-wrap gap-1">${assignmentChips(s) || '<span class="text-xs text-gray-400">Not assigned</span>'}</div>
-        <button ${canAssign ? '' : 'disabled'} onclick="toggleAssignPanel('${s.id}')"
-                class="px-3 py-1.5 rounded-lg text-sm font-medium ${canAssign ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}">
-          Assign
-        </button>
+  wrap.innerHTML = list.map(s => `
+    <div class="row-card bg-white border border-gray-200 rounded-lg">
+      <div class="px-3 pt-2.5 pb-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+        <span class="font-medium text-gray-700">${esc(String(s.created_at).slice(0, 10))}</span>
+        ${s.program ? `<span>· ${esc(s.program)}</span>` : ''}
+        ${s.school ? `<span>· ${esc(s.school)}</span>` : ''}
+        <span class="ml-auto">${statusBadge(subStatus(s))}</span>
       </div>
-      <div class="assign-panel hidden p-3 bg-gray-50 rounded-b-lg" id="panel-${s.id}"></div>
-    </div>`;
-  }).join('');
+      ${s.persons.map(personRow).join('')}
+    </div>`).join('');
+}
+
+function statusBadge(st) {
+  if (st === 'assigned') return '<span class="chip bg-teal-50 text-teal-700 border border-teal-200">Fully assigned</span>';
+  if (st === 'partial')  return '<span class="chip bg-amber-50 text-amber-700 border border-amber-200">Partially assigned</span>';
+  return '<span class="chip bg-gray-100 text-gray-600 border border-gray-200">Unassigned</span>';
 }
 
 // ---------------------------------------------------------------------------
-// Per-row assign panel
+// Per-person assign panel
 // ---------------------------------------------------------------------------
 function labelCheckboxes(idPrefix) {
   return (meta.labels || []).map((l, i) => `
@@ -416,16 +554,24 @@ function programSelect(id) {
   </select>`;
 }
 
-function toggleAssignPanel(subId) {
-  const panel = $(`panel-${subId}`);
+function idSafeKey(key) { return key.replace(/[^A-Za-z0-9_-]/g, '_'); }
+
+function toggleAssignPanel(key) {
+  const idSafe = idSafeKey(key);
+  const panel = $(`panel-${idSafe}`);
+  if (!panel) return;
   if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
+  const p = personByKey(key);
+  const willCreate = p && !p.contact && p.email
+    ? '<span class="text-xs text-amber-600">A HubSpot contact will be created first.</span>' : '';
   panel.innerHTML = `
     <div class="flex flex-wrap items-center gap-3">
-      ${programSelect(`prog-${subId}`)}
-      <div class="flex flex-wrap items-center">${labelCheckboxes(`p${subId}`)}</div>
-      <button onclick="assignOne('${subId}')" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">Confirm</button>
+      ${programSelect(`prog-${idSafe}`)}
+      <div class="flex flex-wrap items-center">${labelCheckboxes(`p${idSafe}`)}</div>
+      <button onclick="assignOne('${esc(key)}')" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">Confirm</button>
       <span class="text-xs text-gray-500">No label checked = default association.</span>
-      <span id="status-${subId}" class="text-sm"></span>
+      ${willCreate}
+      <span id="status-${idSafe}" class="text-sm"></span>
     </div>`;
   panel.classList.remove('hidden');
 }
@@ -437,39 +583,41 @@ function collectLabels(idPrefix) {
   }).map(l => ({ category: l.category, typeId: l.typeId }));
 }
 
-async function assignOne(subId) {
-  const s = subs.find(x => x.id === subId);
-  const programId = $(`prog-${subId}`).value;
-  const statusEl = $(`status-${subId}`);
-  if (!s || !s.contact) return;
+async function assignOne(key) {
+  const idSafe = idSafeKey(key);
+  const p = personByKey(key);
+  const programId = $(`prog-${idSafe}`).value;
+  const statusEl = $(`status-${idSafe}`);
+  if (!p) return;
   if (!programId) { statusEl.innerHTML = '<span class="text-red-600">Choose a program first.</span>'; return; }
 
-  const types = collectLabels(`p${subId}`);
+  const types = collectLabels(`p${idSafe}`);
   statusEl.innerHTML = '<span class="spin-inline"></span>';
   try {
+    const contactId = await ensureContact(p);
     await fetchJson(`${API_UE}?action=assign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contactId: s.contact.id, programId, types }),
+      body: JSON.stringify({ contactId, programId, types }),
     });
-    await refreshContact(s.contact.id);
+    await refreshContacts([contactId]);
   } catch (e) {
     statusEl.innerHTML = `<span class="text-red-600">${esc(e.message)}</span>`;
   }
 }
 
-async function unassign(subId, programId) {
-  const s = subs.find(x => x.id === subId);
-  if (!s || !s.contact) return;
+async function unassign(key, programId) {
+  const p = personByKey(key);
+  if (!p || !p.contact) return;
   const pname = programById[programId] || programId;
-  if (!confirm(`Remove association to "${pname}" for ${s.name || s.email}?`)) return;
+  if (!confirm(`Remove association to "${pname}" for ${p.name || p.email}?`)) return;
   try {
     await fetchJson(`${API_UE}?action=unassign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contactId: s.contact.id, programId }),
+      body: JSON.stringify({ contactId: p.contact.id, programId }),
     });
-    await refreshContact(s.contact.id);
+    await refreshContacts([p.contact.id]);
   } catch (e) {
     alert(`Failed to remove association: ${e.message}`);
   }
@@ -484,8 +632,8 @@ function buildBulkControls() {
   $('bulk-labels').innerHTML = labelCheckboxes('bulk');
 }
 
-function toggleSelect(subId, on) {
-  if (on) selected.add(subId); else selected.delete(subId);
+function toggleSelect(key, on) {
+  if (on) selected.add(key); else selected.delete(key);
   updateBulkBar();
 }
 
@@ -506,22 +654,25 @@ async function bulkAssign() {
   if (!programId) { statusEl.textContent = 'Choose a program first.'; return; }
   const types = collectLabels('bulk');
 
-  const targets = subs.filter(s => selected.has(s.id) && s.contact);
+  const targets = [...selected].map(personByKey).filter(p => p && (p.contact || p.email));
   const btn = $('bulk-assign-btn');
   btn.disabled = true;
   let done = 0, failed = 0;
+  const touched = [];
 
-  for (const s of targets) {
+  for (const p of targets) {
     statusEl.textContent = `Assigning ${done + failed + 1} of ${targets.length}…`;
     try {
+      const contactId = await ensureContact(p);
       await fetchJson(`${API_UE}?action=assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId: s.contact.id, programId, types }),
+        body: JSON.stringify({ contactId, programId, types }),
       });
+      touched.push(contactId);
       done++;
     } catch (e) {
-      console.error('Bulk assign failed for', s.email, e);
+      console.error('Bulk assign failed for', p.email || p.name, e);
       failed++;
     }
   }
@@ -529,9 +680,8 @@ async function bulkAssign() {
   statusEl.textContent = `Done — ${done} assigned${failed ? `, ${failed} failed (see console)` : ''}.`;
   btn.disabled = false;
   selected = new Set();
-  try { await loadAssignments(); } catch (_) {}
+  try { await refreshContacts(touched); } catch (_) { render(); }
   updateBulkBar();
-  render();
 }
 
 // ---------------------------------------------------------------------------
