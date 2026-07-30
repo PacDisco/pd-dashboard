@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flight Programs</title>
-<meta name="description" content="Manage the programs students choose in the flight booking portal — destination, arrive-by / earliest-departure, and the optional group gateway flight.">
+<meta name="description" content="Manage the programs students choose in the flight booking portal — arrival airport, departure airport, arrival/departure date-time, and flight budget.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
@@ -13,19 +13,17 @@
   .fld { width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; }
   .fld:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
   .lbl { display:block; font-size:12px; font-weight:600; color:#4b5563; margin-bottom:4px; }
-  details > summary { cursor: pointer; }
   details.prog { background:#fff; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:10px; }
   details.prog[open] { box-shadow:0 4px 14px rgba(20,40,80,.06); }
-  summary.prog-head { list-style:none; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  summary.prog-head { list-style:none; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; }
   summary.prog-head::-webkit-details-marker { display:none; }
   .pill { font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; }
-  .pill-grp { background:#e0f2fe; color:#075985; }
-  .pill-simple { background:#f3f4f6; color:#6b7280; }
+  .pill-route { background:#e0f2fe; color:#075985; }
+  .pill-budget { background:#dcfce7; color:#166534; }
   .pill-off { background:#fee2e2; color:#b91c1c; }
   #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
   #toast.show { opacity: 1; transform: translateY(0); }
   #toast.error { background: #b91c1c; }
-  .grp-box { background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; padding:12px 14px; margin-top:10px; }
 </style>
 </head>
 <body class="text-gray-800">
@@ -34,7 +32,7 @@
   <div class="flex items-center justify-between mb-2">
     <div>
       <h1 class="text-2xl font-bold text-gray-900">🗓️ Flight Programs</h1>
-      <p class="text-sm text-gray-500 mt-1">Programs students pick in the flight portal. Set the destination and dates. Optionally add a <strong>group gateway flight</strong> — students then get one-way searches to reach the gateway.</p>
+      <p class="text-sm text-gray-500 mt-1">Programs students pick in the flight portal. Set the arrival airport, the departure airport (if different), the arrival &amp; departure date/times, and the flight budget. Students pick any home airport worldwide.</p>
     </div>
     <a href="/" class="text-sm text-blue-600 hover:underline">← Dashboards</a>
   </div>
@@ -43,28 +41,16 @@
   <div class="bg-white border border-gray-200 rounded-xl p-5 mt-5 shadow-sm">
     <h2 class="text-sm font-semibold text-gray-700 mb-3">Add a program</h2>
     <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-      <div class="md:col-span-5"><label class="lbl">Program name</label><input id="f-name" class="fld" placeholder="South America Semester — Fall 2026"></div>
-      <div class="md:col-span-3"><label class="lbl">Destination (IATA)</label><input id="f-airport" class="fld uppercase" maxlength="3" placeholder="CUZ"></div>
-      <div class="md:col-span-2"><label class="lbl">Sort order</label><input id="f-sort" type="number" class="fld" value="100"></div>
-      <div class="md:col-span-6"><label class="lbl">Arrive-by date/time <span class="text-gray-400 font-normal">(fallback / no-gateway)</span></label><input id="f-arrival" type="datetime-local" class="fld"></div>
-      <div class="md:col-span-6"><label class="lbl">Earliest departure date/time</label><input id="f-ends" type="datetime-local" class="fld"></div>
+      <div class="md:col-span-6"><label class="lbl">Program name</label><input id="f-name" class="fld" placeholder="South America Semester — Fall 2026"></div>
+      <div class="md:col-span-3"><label class="lbl">Arrival airport (IATA)</label><input id="f-airport" class="fld uppercase" maxlength="3" placeholder="CUZ"></div>
+      <div class="md:col-span-3"><label class="lbl">Departure airport <span class="text-gray-400 font-normal">(if different)</span></label><input id="f-ret" class="fld uppercase" maxlength="3" placeholder="LIM"></div>
+      <div class="md:col-span-4"><label class="lbl">Arrival date/time</label><input id="f-arrival" type="datetime-local" class="fld"></div>
+      <div class="md:col-span-4"><label class="lbl">Departure date/time</label><input id="f-ends" type="datetime-local" class="fld"></div>
+      <div class="md:col-span-2"><label class="lbl">Budget</label><input id="f-budget" type="number" min="0" step="1" class="fld" placeholder="1800"></div>
+      <div class="md:col-span-1"><label class="lbl">Cur.</label>
+        <select id="f-cur" class="fld"><option>USD</option><option>GBP</option><option>EUR</option><option>CAD</option><option>AUD</option></select></div>
+      <div class="md:col-span-1"><label class="lbl">Sort</label><input id="f-sort" type="number" class="fld" value="100"></div>
     </div>
-
-    <details class="mt-3">
-      <summary class="text-sm font-medium text-blue-700">➕ Group gateway flight (optional)</summary>
-      <div class="grp-box">
-        <p class="text-xs text-gray-500 mb-3">If the group flies together on a <strong>one-way</strong> flight from a central gateway, set it here. The portal shows this flight and offers independent one-way searches: home→gateway, the group flight, and the return home (which departs from the return airport below — usually different from the arrival city). The return date is the "Earliest departure" field above.</p>
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div class="md:col-span-3"><label class="lbl">Gateway (IATA)</label><input id="f-gw" class="fld uppercase" maxlength="3" placeholder="LAX"></div>
-          <div class="md:col-span-3"><label class="lbl">Return dep. airport (IATA)</label><input id="f-ret" class="fld uppercase" maxlength="3" placeholder="LIM"></div>
-          <div class="md:col-span-6"></div>
-          <div class="md:col-span-3"><label class="lbl">Group flight airline</label><input id="f-go-air" class="fld" placeholder="United"></div>
-          <div class="md:col-span-3"><label class="lbl">Group flight #</label><input id="f-go-no" class="fld" placeholder="UA123"></div>
-          <div class="md:col-span-6"><label class="lbl">Group flight departs (gateway → destination, one-way)</label><input id="f-go-at" type="datetime-local" class="fld"></div>
-        </div>
-      </div>
-    </details>
-
     <div class="mt-4">
       <button id="add-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">Add program</button>
       <span id="add-err" class="text-sm text-red-600 ml-3"></span>
@@ -90,7 +76,7 @@ var listEl = document.getElementById('list');
 function toast(msg, isErr){ var t=document.getElementById('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); setTimeout(function(){t.className='';},2600); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
 function toLocalInput(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return String(n).padStart(2,'0');}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
-function shortDT(iso){ if(!iso) return '—'; var d=new Date(iso); if(isNaN(d.getTime())) return '—'; return d.toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function money(v,cur){ if(v==null||v==='') return ''; var s={USD:'$',GBP:'£',EUR:'€',CAD:'C$',AUD:'A$'}[cur]||((cur||'')+' '); return s+Number(v).toLocaleString(); }
 
 async function api(method, payload, query){
   var opts={method:method}; if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
@@ -118,38 +104,31 @@ function render(programs){
   listEl.innerHTML='';
   programs.forEach(function(p){
     var active = p.is_active !== false;
-    var hasGroup = !!p.gateway_airport;
+    var dep = p.return_airport || p.airport_code;
     var d=document.createElement('details'); d.className='prog'; d.dataset.id=p.id;
-    var badge = hasGroup ? '<span class="pill pill-grp">Group · '+esc(p.gateway_airport)+'→'+esc(p.airport_code)+'</span>'
-                         : '<span class="pill pill-simple">Direct → '+esc(p.airport_code)+'</span>';
-    var offBadge = active ? '' : ' <span class="pill pill-off">inactive</span>';
+    var route='<span class="pill pill-route">'+esc(p.airport_code)+(p.return_airport&&p.return_airport!==p.airport_code?' / out '+esc(p.return_airport):'')+'</span>';
+    var bud=(p.budget!=null&&p.budget!=='')?'<span class="pill pill-budget">'+money(p.budget,p.budget_currency)+'</span>':'';
+    var off=active?'':' <span class="pill pill-off">inactive</span>';
     d.innerHTML =
       '<summary class="prog-head"><span class="font-medium text-gray-900">'+esc(p.name)+'</span>'+
-        '<span class="flex items-center gap-2">'+badge+offBadge+'<span class="text-gray-400 text-xs">edit ▾</span></span></summary>'+
-      '<div class="px-4 pb-4">'+
-        '<div class="grid grid-cols-1 md:grid-cols-12 gap-3">'+
-          fieldRow('Program name','name',p.name,'text','md:col-span-6')+
-          fieldRow('Destination (IATA)','airport_code',p.airport_code,'iata','md:col-span-3')+
-          fieldRow('Sort order','sort_order',(p.sort_order!=null?p.sort_order:100),'number','md:col-span-3')+
-          fieldRow('Arrive-by (fallback)','arrival_at',toLocalInput(p.arrival_at),'datetime','md:col-span-6')+
-          fieldRow('Earliest departure','ends_at',toLocalInput(p.ends_at),'datetime','md:col-span-6')+
-        '</div>'+
-        '<div class="grp-box"><div class="text-xs font-semibold text-gray-600 mb-2">Group gateway flight — one-way (leave gateway blank for a direct program). Return date = "Earliest departure" above.</div>'+
-          '<div class="grid grid-cols-1 md:grid-cols-12 gap-3">'+
-            fieldRow('Gateway (IATA)','gateway_airport',p.gateway_airport||'','iata','md:col-span-3')+
-            fieldRow('Return dep. airport (IATA)','return_airport',p.return_airport||'','iata','md:col-span-3')+
-            '<div class="md:col-span-6"></div>'+
-            fieldRow('Group flight airline','group_out_airline',p.group_out_airline||'','text','md:col-span-3')+
-            fieldRow('Group flight #','group_out_flight_no',p.group_out_flight_no||'','text','md:col-span-3')+
-            fieldRow('Group flight departs (one-way)','group_out_depart_at',toLocalInput(p.group_out_depart_at),'datetime','md:col-span-6')+
-          '</div>'+
-        '</div>'+
-        '<div class="flex items-center justify-between mt-4">'+
-          '<label class="text-sm flex items-center gap-2"><input type="checkbox" data-f="is_active" '+(active?'checked':'')+'> Active</label>'+
-          '<div><button class="save-btn bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">Save</button>'+
-          '<button class="del-btn text-red-500 hover:underline text-sm font-medium ml-4">Delete</button></div>'+
-        '</div>'+
-      '</div>';
+        '<span class="flex items-center gap-2">'+route+bud+off+'<span class="text-gray-400 text-xs">edit ▾</span></span></summary>'+
+      '<div class="px-4 pb-4"><div class="grid grid-cols-1 md:grid-cols-12 gap-3">'+
+        fieldRow('Program name','name',p.name,'text','md:col-span-6')+
+        fieldRow('Arrival airport (IATA)','airport_code',p.airport_code,'iata','md:col-span-3')+
+        fieldRow('Departure airport (if different)','return_airport',p.return_airport||'','iata','md:col-span-3')+
+        fieldRow('Arrival date/time','arrival_at',toLocalInput(p.arrival_at),'datetime','md:col-span-4')+
+        fieldRow('Departure date/time','ends_at',toLocalInput(p.ends_at),'datetime','md:col-span-4')+
+        fieldRow('Budget','budget',(p.budget!=null?p.budget:''),'number','md:col-span-2')+
+        '<div class="md:col-span-2"><label class="lbl">Currency</label><select data-f="budget_currency" class="fld">'+
+          ['USD','GBP','EUR','CAD','AUD'].map(function(c){return '<option '+((p.budget_currency||'USD')===c?'selected':'')+'>'+c+'</option>';}).join('')+
+        '</select></div>'+
+        fieldRow('Sort order','sort_order',(p.sort_order!=null?p.sort_order:100),'number','md:col-span-2')+
+      '</div>'+
+      '<div class="flex items-center justify-between mt-4">'+
+        '<label class="text-sm flex items-center gap-2"><input type="checkbox" data-f="is_active" '+(active?'checked':'')+'> Active</label>'+
+        '<div><button class="save-btn bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">Save</button>'+
+        '<button class="del-btn text-red-500 hover:underline text-sm font-medium ml-4">Delete</button></div>'+
+      '</div></div>';
     listEl.appendChild(d);
   });
 }
@@ -159,9 +138,7 @@ listEl.addEventListener('click', async function(e){
   if(e.target.classList.contains('save-btn')){
     e.preventDefault();
     var patch={};
-    d.querySelectorAll('[data-f]').forEach(function(el){
-      patch[el.dataset.f] = el.type==='checkbox' ? el.checked : el.value;
-    });
+    d.querySelectorAll('[data-f]').forEach(function(el){ patch[el.dataset.f] = el.type==='checkbox' ? el.checked : el.value; });
     try { await api('POST',{action:'update',id:id,patch:patch}); toast('Saved'); load(); }
     catch(err){ toast('Save failed: '+err.message,true); }
   }
@@ -178,16 +155,14 @@ document.getElementById('add-btn').addEventListener('click', async function(){
   var errEl=document.getElementById('add-err'); errEl.textContent='';
   var g=function(id){return document.getElementById(id).value;};
   var payload={ action:'create',
-    name:g('f-name').trim(), airport_code:g('f-airport').trim().toUpperCase(),
-    arrival_at:g('f-arrival'), ends_at:g('f-ends'), sort_order:g('f-sort'),
-    gateway_airport:g('f-gw').trim().toUpperCase(), return_airport:g('f-ret').trim().toUpperCase(),
-    group_out_airline:g('f-go-air'), group_out_flight_no:g('f-go-no'), group_out_depart_at:g('f-go-at')
+    name:g('f-name').trim(), airport_code:g('f-airport').trim().toUpperCase(), return_airport:g('f-ret').trim().toUpperCase(),
+    arrival_at:g('f-arrival'), ends_at:g('f-ends'), budget:g('f-budget'), budget_currency:g('f-cur'), sort_order:g('f-sort')
   };
-  if(!payload.name||!payload.airport_code||!payload.arrival_at||!payload.ends_at){ errEl.textContent='Fill in name, destination, arrive-by and earliest-departure.'; return; }
+  if(!payload.name||!payload.airport_code||!payload.arrival_at||!payload.ends_at){ errEl.textContent='Fill in name, arrival airport, and both date/times.'; return; }
   try {
     await api('POST',payload);
-    ['f-name','f-airport','f-arrival','f-ends','f-gw','f-ret','f-go-air','f-go-no','f-go-at'].forEach(function(id){document.getElementById(id).value='';});
-    document.getElementById('f-sort').value='100';
+    ['f-name','f-airport','f-ret','f-arrival','f-ends','f-budget'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('f-sort').value='100'; document.getElementById('f-cur').value='USD';
     toast('Program added'); load();
   } catch(err){ errEl.textContent=err.message; }
 });
