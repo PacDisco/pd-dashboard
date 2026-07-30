@@ -48,7 +48,7 @@
       <div class="md:col-span-4"><label class="lbl">Departure date/time</label><input id="f-ends" type="datetime-local" class="fld"></div>
       <div class="md:col-span-2"><label class="lbl">Budget</label><input id="f-budget" type="number" min="0" step="1" class="fld" placeholder="1800"></div>
       <div class="md:col-span-1"><label class="lbl">Cur.</label>
-        <select id="f-cur" class="fld"><option>USD</option><option>GBP</option><option>EUR</option><option>CAD</option><option>AUD</option></select></div>
+        <select id="f-cur" class="fld"><option>USD</option><option>GBP</option><option>EUR</option><option>CAD</option><option>AUD</option><option>NZD</option></select></div>
       <div class="md:col-span-1"><label class="lbl">Sort</label><input id="f-sort" type="number" class="fld" value="100"></div>
     </div>
     <div class="mt-4">
@@ -76,7 +76,7 @@ var listEl = document.getElementById('list');
 function toast(msg, isErr){ var t=document.getElementById('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); setTimeout(function(){t.className='';},2600); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
 function toLocalInput(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return String(n).padStart(2,'0');}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
-function money(v,cur){ if(v==null||v==='') return ''; var s={USD:'$',GBP:'£',EUR:'€',CAD:'C$',AUD:'A$'}[cur]||((cur||'')+' '); return s+Number(v).toLocaleString(); }
+function money(v,cur){ if(v==null||v==='') return ''; var s={USD:'$',GBP:'£',EUR:'€',CAD:'C$',AUD:'A$',NZD:'NZ$'}[cur]||((cur||'')+' '); return s+Number(v).toLocaleString(); }
 
 async function api(method, payload, query){
   var opts={method:method}; if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
@@ -120,7 +120,7 @@ function render(programs){
         fieldRow('Departure date/time','ends_at',toLocalInput(p.ends_at),'datetime','md:col-span-4')+
         fieldRow('Budget','budget',(p.budget!=null?p.budget:''),'number','md:col-span-2')+
         '<div class="md:col-span-2"><label class="lbl">Currency</label><select data-f="budget_currency" class="fld">'+
-          ['USD','GBP','EUR','CAD','AUD'].map(function(c){return '<option '+((p.budget_currency||'USD')===c?'selected':'')+'>'+c+'</option>';}).join('')+
+          ['USD','GBP','EUR','CAD','AUD','NZD'].map(function(c){return '<option '+((p.budget_currency||'USD')===c?'selected':'')+'>'+c+'</option>';}).join('')+
         '</select></div>'+
         fieldRow('Sort order','sort_order',(p.sort_order!=null?p.sort_order:100),'number','md:col-span-2')+
       '</div>'+
