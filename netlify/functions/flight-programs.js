@@ -52,7 +52,7 @@ function normalizeAirport(raw) {
   return code;
 }
 
-// Optional variants for the (nullable) group-gateway fields.
+// Optional variants for nullable fields (return airport, budget).
 function optAirport(label, raw) {
   if (raw === null || raw === undefined || String(raw).trim() === '') return null;
   const code = String(raw).trim().toUpperCase();
@@ -67,20 +67,30 @@ function optText(raw) {
   if (raw === null || raw === undefined || String(raw).trim() === '') return null;
   return String(raw).trim();
 }
+function optNumber(label, raw) {
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${label} must be a non-negative number`);
+  return n;
+}
+function currency(raw) {
+  const c = String(raw || 'USD').trim().toUpperCase().slice(0, 3);
+  return /^[A-Z]{3}$/.test(c) ? c : 'USD';
+}
 
 // --------------------------------------------------------------------------
 async function handleList(qs) {
   const includeInactive = qs.include_inactive === '1' || qs.include_inactive === 'true';
   const rows = includeInactive
     ? await sql()`
-        SELECT id, name, airport_code, arrival_at, ends_at, is_active, sort_order, notes, updated_at,
-               gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no, return_airport
+        SELECT id, name, airport_code, return_airport, arrival_at, ends_at,
+               budget, budget_currency, is_active, sort_order, notes, updated_at
         FROM flight_programs
         ORDER BY sort_order, name
       `
     : await sql()`
-        SELECT id, name, airport_code, arrival_at, ends_at, sort_order,
-               gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no, return_airport
+        SELECT id, name, airport_code, return_airport, arrival_at, ends_at,
+               budget, budget_currency, sort_order
         FROM flight_programs
         WHERE is_active = TRUE
         ORDER BY sort_order, name
@@ -102,23 +112,19 @@ async function handleCreate(body) {
   const sortOrder = Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 100;
   const notes = body.notes ? String(body.notes) : null;
 
-  let gw, gOutAt, gOutAir, gOutNo, retAir;
+  let retAir, budget, cur;
   try {
-    gw      = optAirport('gateway_airport', body.gateway_airport);
-    gOutAt  = optDatetime('group_out_depart_at', body.group_out_depart_at);
-    gOutAir = optText(body.group_out_airline);
-    gOutNo  = optText(body.group_out_flight_no);
-    retAir  = optAirport('return_airport', body.return_airport);
+    retAir = optAirport('return_airport', body.return_airport);
+    budget = optNumber('budget', body.budget);
+    cur    = currency(body.budget_currency);
   } catch (e) { return bad(e.message); }
 
   try {
     const rows = await sql()`
       INSERT INTO flight_programs
-        (name, airport_code, arrival_at, ends_at, sort_order, notes,
-         gateway_airport, group_out_depart_at, group_out_airline, group_out_flight_no, return_airport)
+        (name, airport_code, return_airport, arrival_at, ends_at, sort_order, notes, budget, budget_currency)
       VALUES
-        (${name}, ${airport}, ${arrivalAt}, ${endsAt}, ${sortOrder}, ${notes},
-         ${gw}, ${gOutAt}, ${gOutAir}, ${gOutNo}, ${retAir})
+        (${name}, ${airport}, ${retAir}, ${arrivalAt}, ${endsAt}, ${sortOrder}, ${notes}, ${budget}, ${cur})
       RETURNING *
     `;
     return ok({ program: rows[0] });
@@ -134,22 +140,21 @@ async function handleUpdate(body) {
 
   const sets = [];
   const args = [];
-  const allow = ['name', 'airport_code', 'arrival_at', 'ends_at', 'is_active', 'sort_order', 'notes',
-    'gateway_airport', 'group_out_depart_at', 'group_out_airline', 'group_out_flight_no', 'return_airport'];
+  const allow = ['name', 'airport_code', 'return_airport', 'arrival_at', 'ends_at',
+    'is_active', 'sort_order', 'notes', 'budget', 'budget_currency'];
   try {
     for (const k of Object.keys(patch)) {
       if (!allow.includes(k)) continue;
       let v = patch[k];
-      if (k === 'name')                       v = String(v).trim();
-      else if (k === 'airport_code')          v = normalizeAirport(v);
-      else if (k === 'arrival_at')            v = coerceDatetime('arrival_at', v);
-      else if (k === 'ends_at')               v = coerceDatetime('ends_at', v);
-      else if (k === 'is_active')             v = !!v;
-      else if (k === 'sort_order')            v = Number(v) || 0;
-      else if (k === 'gateway_airport')       v = optAirport('gateway_airport', v);
-      else if (k === 'return_airport')        v = optAirport('return_airport', v);
-      else if (k === 'group_out_depart_at')   v = optDatetime('group_out_depart_at', v);
-      else if (k === 'group_out_airline' || k === 'group_out_flight_no') v = optText(v);
+      if (k === 'name')                    v = String(v).trim();
+      else if (k === 'airport_code')       v = normalizeAirport(v);
+      else if (k === 'return_airport')     v = optAirport('return_airport', v);
+      else if (k === 'arrival_at')         v = coerceDatetime('arrival_at', v);
+      else if (k === 'ends_at')            v = coerceDatetime('ends_at', v);
+      else if (k === 'is_active')          v = !!v;
+      else if (k === 'sort_order')         v = Number(v) || 0;
+      else if (k === 'budget')             v = optNumber('budget', v);
+      else if (k === 'budget_currency')    v = currency(v);
       args.push(v);
       sets.push(`${k} = $${args.length}`);
     }
