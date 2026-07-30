@@ -50,6 +50,7 @@
 
 const { google } = require('googleapis');
 const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai/sdk');
+const { getServiceAccount } = require('./lib/google-creds.cjs');
 
 // --------------------------------------------------------------------------
 // Lazy-initialised clients
@@ -57,8 +58,8 @@ const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai
 let _drive;
 async function drive() {
   if (!_drive) {
-    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-    if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON env var is not set');
+    const raw = await getServiceAccount();
+    if (!raw) throw new Error('Google service account not configured (checked env var and app_config table)');
 
     let creds;
     try { creds = JSON.parse(raw); }
