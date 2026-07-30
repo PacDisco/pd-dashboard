@@ -23,6 +23,7 @@
  */
 
 const { google } = require('googleapis');
+const { getServiceAccount } = require('./lib/google-creds.cjs');
 
 // The "Advisor Pipeline and Commission Reports" spreadsheet.
 const SHEET_ID = process.env.PIPELINE_SHEET_ID
@@ -39,8 +40,8 @@ let _sheets;
 async function sheetsClient() {
   if (_sheets) return _sheets;
 
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON env var is not set');
+  const raw = await getServiceAccount();
+  if (!raw) throw new Error('Google service account not configured (checked env var and app_config table)');
 
   let creds;
   try { creds = JSON.parse(raw); }
