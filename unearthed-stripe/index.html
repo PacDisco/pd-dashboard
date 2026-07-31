@@ -220,6 +220,22 @@
     .modal dl { grid-template-columns: 1fr; gap: 4px 0; }
     .modal dt { margin-top: 8px; }
   }
+  .search-banner {
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 13.5px;
+    color: var(--text);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .search-banner .clear-link { color: var(--accent); cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .field.search { flex: 1 1 260px; }
+  .field.search input { width: 100%; }
 </style>
 </head>
 <body>
@@ -259,6 +275,12 @@
         <option value="pending">Pending</option>
       </select>
     </div>
+    <div class="field search">
+      <label for="searchInput">Search all payments</label>
+      <input type="search" id="searchInput" placeholder="Name, email, amount, card last4, ch_… or cus_…" />
+    </div>
+    <button class="primary" id="searchBtn">Search</button>
+    <button class="ghost" id="clearSearchBtn" style="display:none">Clear</button>
     <button class="primary" id="refreshBtn">Refresh</button>
     <button class="ghost" id="exportBtn">Export CSV</button>
   </div>
@@ -271,6 +293,7 @@
     <div class="kpi"><div class="label">Avg transaction</div><div class="value" id="kpiAvg">—</div><div class="sub">of succeeded</div></div>
   </div>
 
+  <div id="searchBanner" class="search-banner" style="display:none"></div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -333,6 +356,7 @@ const state = {
   currency: "usd",
   hasMore: false,
   statusFilter: "",
+  searchMode: false,
   range: { start: null, end: null },
 };
 
@@ -590,12 +614,71 @@ document.getElementById("range").addEventListener("change", (e) => {
   document.getElementById("endWrap").style.display = custom ? "flex" : "none";
 });
 document.getElementById("refreshBtn").addEventListener("click", () => { refresh(); });
+document.getElementById("searchBtn").addEventListener("click", doSearch);
+document.getElementById("clearSearchBtn").addEventListener("click", clearSearch);
+document.getElementById("searchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); } });
 document.getElementById("statusFilter").addEventListener("change", (e) => {
   state.statusFilter = e.target.value;
   renderTable();
 });
 document.getElementById("loadMoreBtn").addEventListener("click", () => loadCharges(true));
 document.getElementById("exportBtn").addEventListener("click", exportCSV);
+
+// ---------- search (server-side, entire account) ----------
+async function doSearch() {
+  const term = document.getElementById("searchInput").value.trim();
+  if (!term) { clearSearch(); return; }
+  state.searchMode = true;
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = `<tr><td colspan="6" class="loading">Searching all payments…</td></tr>`;
+  document.getElementById("clearSearchBtn").style.display = "inline-block";
+  document.getElementById("loadMoreBtn").style.display = "none";
+  try {
+    const data = await api({ action: "search", q: term });
+    state.charges = data.data || [];
+    state.hasMore = false;
+    if (state.charges[0]?.currency) state.currency = state.charges[0].currency;
+    renderTable();
+    renderKPIs(localSummary(state.charges));
+    showSearchBanner(term, state.charges.length, data.note);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="error">${esc(err.message)}</td></tr>`;
+  }
+}
+
+// Aggregate KPIs client-side from search results (server summary is window-based).
+function localSummary(rows) {
+  let grossCents = 0, refundedCents = 0, netCents = 0;
+  let succeeded = 0, failed = 0, refunded_count = 0, currency = null;
+  for (const c of rows) {
+    if (!currency && c.currency) currency = c.currency;
+    if (c.status === "succeeded") {
+      succeeded++;
+      grossCents += c.amount || 0;
+      refundedCents += c.amount_refunded || 0;
+      netCents += (c.amount || 0) - (c.amount_refunded || 0);
+      if ((c.amount_refunded || 0) > 0) refunded_count++;
+    } else if (c.status === "failed") {
+      failed++;
+    }
+  }
+  return { count: rows.length, succeeded, failed, refunded_count, grossCents, refundedCents, netCents, currency: currency || state.currency || "usd" };
+}
+
+function showSearchBanner(term, n, note) {
+  const b = document.getElementById("searchBanner");
+  b.style.display = "flex";
+  b.innerHTML = `<span>${n.toLocaleString()} result${n === 1 ? "" : "s"} for “${esc(term)}” across the entire account${note ? ` — ${esc(note)}` : ""}</span><span class="clear-link" id="bannerClear">Clear search ✕</span>`;
+  document.getElementById("bannerClear").addEventListener("click", clearSearch);
+}
+
+function clearSearch() {
+  state.searchMode = false;
+  document.getElementById("searchInput").value = "";
+  document.getElementById("clearSearchBtn").style.display = "none";
+  document.getElementById("searchBanner").style.display = "none";
+  refresh();
+}
 
 async function refresh() {
   state.range = computeRange();
