@@ -1,0 +1,9 @@
+{
+  "title": "Instructors",
+  "description": "Instructor roster and applicant pipeline — application answers, uploaded documents, program-leading history, onboarding status, and lifecycle status (current, potential, new applicant, blacklisted). Filter by location, gender, weeks led, programs led, qualifications and more.",
+  "category": "Programs",
+  "icon": "🧑‍🏫",
+  "colors": ["#7c3aed", "#c4b5fd"],
+  "allowedRoles": ["admin", "programs", "operations"],
+  "order": 20
+}

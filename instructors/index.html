@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instructors</title>
+<meta name="description" content="Instructor roster and applicant pipeline — applications, uploaded documents, program-leading history, onboarding, and lifecycle status. Filter by location, gender, weeks led, programs led, qualifications and more.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .spinner { border: 3px solid #e5e7eb; border-top: 3px solid #7c3aed; border-radius: 50%; width: 34px; height: 34px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fld { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; }
+  .fld:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.15); }
+  .lbl { display:block; font-size:11px; font-weight:600; color:#6b7280; margin-bottom:3px; text-transform:uppercase; letter-spacing:.03em; }
+  .badge { font-size:11px; font-weight:600; padding:2px 9px; border-radius:999px; white-space:nowrap; cursor:pointer; }
+  .b-current   { background:#dcfce7; color:#166534; }
+  .b-potential { background:#fef3c7; color:#92400e; }
+  .b-new_applicant { background:#dbeafe; color:#1e40af; }
+  .b-blacklisted   { background:#fee2e2; color:#b91c1c; }
+  .chip { font-size:11px; padding:2px 8px; border-radius:999px; background:#ede9fe; color:#5b21b6; display:inline-block; margin:1px 2px; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover { background:#faf5ff; }
+  .stat { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px 14px; }
+  .stat .n { font-size:22px; font-weight:700; line-height:1; }
+  .stat .l { font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:.03em; }
+  /* Slide-over */
+  #drawer-wrap { position:fixed; inset:0; z-index:50; display:none; }
+  #drawer-wrap.open { display:block; }
+  #drawer-bg { position:absolute; inset:0; background:rgba(17,24,39,.45); }
+  #drawer { position:absolute; top:0; right:0; height:100%; width:100%; max-width:640px; background:#f9fafb; box-shadow:-8px 0 30px rgba(0,0,0,.18); overflow-y:auto; }
+  .sec { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:14px; }
+  .sec h3 { font-size:12px; font-weight:700; color:#374151; text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px; }
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 70; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { background: #b91c1c; }
+  .btn-p { background:#7c3aed; color:#fff; font-weight:600; }
+  .btn-p:hover { background:#6d28d9; }
+</style>
+</head>
+<body class="text-gray-800">
+<div class="max-w-7xl mx-auto px-4 py-7">
+
+  <div class="flex items-center justify-between mb-1 flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">🧑‍🏫 Instructors</h1>
+      <p class="text-sm text-gray-500 mt-1">Roster &amp; applicant pipeline. Applications, uploads and onboarding sync from Jotform by email; status &amp; program history are managed here.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="sync-btn" class="text-sm border border-purple-300 text-purple-700 hover:bg-purple-50 font-semibold px-3 py-2 rounded-lg">⟳ Sync from Jotform</button>
+      <button id="add-btn" class="btn-p text-sm px-3 py-2 rounded-lg">+ Add instructor</button>
+      <a href="/" class="text-sm text-purple-600 hover:underline ml-1">← Dashboards</a>
+    </div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5" id="stats">
+    <div class="stat"><div class="n" id="s-total">—</div><div class="l">Total</div></div>
+    <div class="stat"><div class="n text-green-700" id="s-current">—</div><div class="l">Current</div></div>
+    <div class="stat"><div class="n text-amber-700" id="s-potential">—</div><div class="l">Potential</div></div>
+    <div class="stat"><div class="n text-blue-700" id="s-new">—</div><div class="l">New applicants</div></div>
+    <div class="stat"><div class="n text-red-700" id="s-black">—</div><div class="l">Blacklisted</div></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white border border-gray-200 rounded-xl p-4 mt-5 shadow-sm">
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div class="col-span-2 md:col-span-2"><label class="lbl">Search name / email</label><input id="f-q" class="fld" placeholder="Type a name…"></div>
+      <div><label class="lbl">Status</label><select id="f-status" class="fld">
+        <option value="">All</option><option value="current">Current</option><option value="potential">Potential</option><option value="new_applicant">New applicant</option><option value="blacklisted">Blacklisted</option></select></div>
+      <div><label class="lbl">Gender</label><select id="f-gender" class="fld"><option value="">All</option></select></div>
+      <div><label class="lbl">Location</label><input id="f-location" class="fld" placeholder="e.g. NZ"></div>
+      <div><label class="lbl">Min weeks led</label><input id="f-weeks" type="number" min="0" class="fld" placeholder="0"></div>
+      <div><label class="lbl">Program led</label><select id="f-program" class="fld"><option value="">Any</option></select></div>
+      <div><label class="lbl">Qualification</label><select id="f-qual" class="fld"><option value="">Any</option></select></div>
+      <div><label class="lbl">Language</label><select id="f-lang" class="fld"><option value="">Any</option></select></div>
+      <div><label class="lbl">Region experience</label><select id="f-region" class="fld"><option value="">Any</option></select></div>
+      <div class="flex items-end gap-3 col-span-2 md:col-span-2">
+        <label class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-returning"> Returning</label>
+        <label class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-missing"> Missing paperwork</label>
+        <button id="f-clear" class="text-xs text-purple-600 hover:underline ml-auto">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between px-1 mt-6 mb-2">
+    <h2 class="text-sm font-semibold text-gray-700"><span id="count">0</span> instructors</h2>
+  </div>
+  <div id="loading" class="flex justify-center py-16"><div class="spinner"></div></div>
+  <div id="table-wrap" class="bg-white border border-gray-200 rounded-xl overflow-hidden hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="text-left font-semibold px-4 py-2.5">Name</th>
+            <th class="text-left font-semibold px-3 py-2.5">Status</th>
+            <th class="text-left font-semibold px-3 py-2.5">Location</th>
+            <th class="text-left font-semibold px-3 py-2.5">Gender</th>
+            <th class="text-right font-semibold px-3 py-2.5">Wks led</th>
+            <th class="text-left font-semibold px-3 py-2.5">Programs led</th>
+            <th class="text-left font-semibold px-3 py-2.5">Quals</th>
+            <th class="text-center font-semibold px-3 py-2.5">Docs</th>
+            <th class="text-center font-semibold px-3 py-2.5">Onboard</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="empty" class="hidden text-center text-gray-400 py-12 text-sm bg-white border border-gray-200 rounded-xl">No instructors match. Try clearing filters, adding one, or syncing from Jotform.</div>
+</div>
+
+<!-- Slide-over detail -->
+<div id="drawer-wrap"><div id="drawer-bg"></div><div id="drawer"><div class="p-5" id="drawer-body"></div></div></div>
+
+<!-- Add modal -->
+<div id="add-wrap" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-gray-900/45" id="add-bg"></div>
+  <div class="absolute left-1/2 top-24 -translate-x-1/2 w-full max-w-md bg-white rounded-xl shadow-xl p-5">
+    <h3 class="font-semibold text-gray-900 mb-3">Add an instructor</h3>
+    <div class="space-y-3">
+      <div><label class="lbl">Email *</label><input id="a-email" class="fld" placeholder="name@email.com"></div>
+      <div><label class="lbl">Full name</label><input id="a-name" class="fld" placeholder="Jane Doe"></div>
+      <div><label class="lbl">Status</label><select id="a-status" class="fld">
+        <option value="new_applicant">New applicant</option><option value="potential">Potential</option><option value="current">Current</option><option value="blacklisted">Blacklisted</option></select></div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button id="a-cancel" class="text-sm px-3 py-2 rounded-lg border border-gray-300">Cancel</button>
+      <button id="a-save" class="btn-p text-sm px-4 py-2 rounded-lg">Add</button>
+    </div>
+    <p id="a-err" class="text-sm text-red-600 mt-2"></p>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+var API = '/api/instructors';
+var STATUS_META = {
+  current:{label:'Current',cls:'b-current'}, potential:{label:'Potential',cls:'b-potential'},
+  new_applicant:{label:'New applicant',cls:'b-new_applicant'}, blacklisted:{label:'Blacklisted',cls:'b-blacklisted'}
+};
+var STATUS_ORDER = ['current','potential','new_applicant','blacklisted'];
+var all = [], facets = {}, onboardingItems = [];
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
+function toast(msg,isErr){ var t=$('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); setTimeout(function(){t.className='';},2800); }
+function arr(v){ return Array.isArray(v)?v.filter(Boolean):[]; }
+function fmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d)?'':d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+
+async function api(method,payload,query){
+  var opts={method:method}; if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
+  var r=await fetch(API+(query||''),opts); var d=await r.json().catch(function(){return {};});
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status)); return d;
+}
+
+async function load(){
+  $('loading').classList.remove('hidden'); $('table-wrap').classList.add('hidden');
+  try{
+    var data = await api('GET',null,'?action=list');
+    all = data.instructors||[]; facets = data.facets||{}; onboardingItems = data.onboarding_items||[];
+    buildFacetOptions(); computeStats(); apply();
+  }catch(e){ toast('Load failed: '+e.message,true); }
+  finally{ $('loading').classList.add('hidden'); }
+}
+
+function buildFacetOptions(){
+  var genders = Array.from(new Set(all.map(function(i){return i.gender;}).filter(Boolean))).sort();
+  fillSelect('f-gender', genders, 'All');
+  fillSelect('f-program', facets.programs||[], 'Any');
+  fillSelect('f-qual', facets.qualifications||[], 'Any');
+  fillSelect('f-lang', facets.languages||[], 'Any');
+  fillSelect('f-region', facets.regions||[], 'Any');
+}
+function fillSelect(id, values, allLabel){
+  var el=$(id); var cur=el.value;
+  el.innerHTML='<option value="">'+allLabel+'</option>'+values.map(function(v){return '<option>'+esc(v)+'</option>';}).join('');
+  if(cur) el.value=cur;
+}
+function computeStats(){
+  var c={current:0,potential:0,new_applicant:0,blacklisted:0};
+  all.forEach(function(i){ if(c[i.status]!=null) c[i.status]++; });
+  $('s-total').textContent=all.length; $('s-current').textContent=c.current;
+  $('s-potential').textContent=c.potential; $('s-new').textContent=c.new_applicant; $('s-black').textContent=c.blacklisted;
+}
+
+function apply(){
+  var q=$('f-q').value.trim().toLowerCase();
+  var status=$('f-status').value, gender=$('f-gender').value, loc=$('f-location').value.trim().toLowerCase();
+  var minW=parseInt($('f-weeks').value,10); var program=$('f-program').value, qual=$('f-qual').value, lang=$('f-lang').value, region=$('f-region').value;
+  var returning=$('f-returning').checked, missing=$('f-missing').checked;
+  var totalOnboard=onboardingItems.length;
+
+  var rows = all.filter(function(i){
+    if(q){ var hay=((i.full_name||'')+' '+(i.email||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    if(status && i.status!==status) return false;
+    if(gender && i.gender!==gender) return false;
+    if(loc && (i.location||'').toLowerCase().indexOf(loc)<0) return false;
+    if(!isNaN(minW) && (i.weeks_led||0)<minW) return false;
+    if(program && arr(i.programs_led).indexOf(program)<0) return false;
+    if(qual && arr(i.qualifications).indexOf(qual)<0) return false;
+    if(lang && arr(i.languages).indexOf(lang)<0) return false;
+    if(region && arr(i.regions_experience).indexOf(region)<0 && arr(i.regions_applying).indexOf(region)<0) return false;
+    if(returning && !i.is_returning) return false;
+    if(missing && totalOnboard>0 && (i.onboarding_done||0)>=totalOnboard) return false;
+    return true;
+  });
+  render(rows);
+}
+
+function render(rows){
+  $('count').textContent=rows.length;
+  $('empty').classList.toggle('hidden', rows.length>0);
+  $('table-wrap').classList.toggle('hidden', rows.length===0);
+  var totalOnboard=onboardingItems.length;
+  $('rows').innerHTML = rows.map(function(i){
+    var sm=STATUS_META[i.status]||{label:i.status,cls:''};
+    var progs=arr(i.programs_led).slice(0,3).map(function(p){return '<span class="chip">'+esc(p)+'</span>';}).join('')+(arr(i.programs_led).length>3?' +'+(arr(i.programs_led).length-3):'');
+    var quals=arr(i.qualifications).slice(0,2).map(function(p){return '<span class="chip">'+esc(p)+'</span>';}).join('')+(arr(i.qualifications).length>2?' +'+(arr(i.qualifications).length-2):'');
+    var ob=totalOnboard?((i.onboarding_done||0)+'/'+totalOnboard):'—';
+    var obCls=(totalOnboard&&(i.onboarding_done||0)>=totalOnboard)?'text-green-700':'text-gray-500';
+    return '<tr data-id="'+i.id+'" class="border-t border-gray-100">'+
+      '<td class="px-4 py-2.5"><div class="font-medium text-gray-900">'+esc(i.full_name||'—')+'</div><div class="text-xs text-gray-400">'+esc(i.email)+'</div></td>'+
+      '<td class="px-3 py-2.5"><span class="badge '+sm.cls+'">'+esc(sm.label)+'</span></td>'+
+      '<td class="px-3 py-2.5 text-gray-600">'+esc(i.location||'—')+'</td>'+
+      '<td class="px-3 py-2.5 text-gray-600">'+esc(i.gender||'—')+'</td>'+
+      '<td class="px-3 py-2.5 text-right font-medium text-gray-800">'+(i.weeks_led||0)+'</td>'+
+      '<td class="px-3 py-2.5">'+(progs||'<span class="text-gray-300">—</span>')+'</td>'+
+      '<td class="px-3 py-2.5">'+(quals||'<span class="text-gray-300">—</span>')+'</td>'+
+      '<td class="px-3 py-2.5 text-center text-gray-600">'+(i.document_count||0)+'</td>'+
+      '<td class="px-3 py-2.5 text-center '+obCls+'">'+ob+'</td>'+
+    '</tr>';
+  }).join('');
+}
+
+$('rows').addEventListener('click', function(e){
+  var tr=e.target.closest('tr[data-id]'); if(!tr) return; openDrawer(Number(tr.dataset.id));
+});
+
+// ---- Drawer -------------------------------------------------------------
+function openDrawer(id){
+  $('drawer-wrap').classList.add('open');
+  $('drawer-body').innerHTML='<div class="flex justify-center py-16"><div class="spinner"></div></div>';
+  api('GET',null,'?action=get&id='+id).then(function(d){ renderDrawer(d); }).catch(function(e){ toast(e.message,true); });
+}
+function closeDrawer(){ $('drawer-wrap').classList.remove('open'); }
+$('drawer-bg').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ closeDrawer(); $('add-wrap').classList.add('hidden'); } });
+
+function txtField(label,name,val,type){
+  return '<div><label class="lbl">'+label+'</label><input data-p="'+name+'" class="fld" '+(type==='number'?'type="number"':'')+' value="'+esc(val==null?'':val)+'"></div>';
+}
+function arrField(label,name,val){
+  return '<div class="col-span-2"><label class="lbl">'+label+' <span class="text-gray-400 normal-case">(comma-separated)</span></label><input data-p="'+name+'" data-arr="1" class="fld" value="'+esc(arr(val).join(', '))+'"></div>';
+}
+function boolField(label,name,val){
+  return '<label class="text-xs text-gray-600 flex items-center gap-2 mt-1"><input type="checkbox" data-p="'+name+'" data-bool="1" '+(val?'checked':'')+'> '+label+'</label>';
+}
+
+function renderDrawer(d){
+  var i=d.instructor, sm=STATUS_META[i.status]||{label:i.status,cls:''};
+  var statusSel='<select id="d-status" class="fld" style="max-width:180px">'+STATUS_ORDER.map(function(s){return '<option value="'+s+'" '+(i.status===s?'selected':'')+'>'+STATUS_META[s].label+'</option>';}).join('')+'</select>';
+
+  var answers = arr(i.application_answers);
+  var appHtml = answers.length
+    ? answers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+esc(a.answer)+'</div></div>';}).join('')
+    : '<p class="text-sm text-gray-400">No application on file. Run “Sync from Jotform”.</p>';
+
+  var docs = arr(d.documents);
+  var docHtml = docs.length
+    ? docs.map(function(x){return '<div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0"><div><div class="text-sm text-gray-800">'+esc(x.doc_type||'Document')+'</div><div class="text-xs text-gray-400">'+esc(x.filename||'')+(x.source_form?' · '+esc(x.source_form):'')+'</div></div><a href="'+esc(x.file_url)+'" target="_blank" rel="noopener" class="text-purple-600 text-sm hover:underline whitespace-nowrap">Open ↗</a></div>';}).join('')
+    : '<p class="text-sm text-gray-400">No uploaded documents. Run “Sync from Jotform”.</p>';
+
+  var assigns = arr(d.assignments);
+  var assignHtml = assigns.map(function(a){ return assignRow(a); }).join('');
+
+  var obMap={}; arr(d.onboarding).forEach(function(o){ obMap[o.item]=o; });
+  var obHtml = onboardingItems.length ? onboardingItems.map(function(it){
+    var done = obMap[it.item] && obMap[it.item].completed;
+    return '<label class="flex items-center gap-2 py-1 text-sm"><input type="checkbox" class="ob-chk" data-item="'+it.item+'" '+(done?'checked':'')+'> <span class="'+(done?'text-gray-800':'text-gray-500')+'">'+esc(it.label)+'</span></label>';
+  }).join('') : '<p class="text-sm text-gray-400">—</p>';
+
+  $('drawer-body').innerHTML =
+    '<div class="flex items-start justify-between mb-4">'+
+      '<div><h2 class="text-xl font-bold text-gray-900">'+esc(i.full_name||i.email)+'</h2>'+
+      '<div class="text-sm text-gray-500">'+esc(i.email)+(i.phone?' · '+esc(i.phone):'')+'</div>'+
+      (i.applied_at?'<div class="text-xs text-gray-400 mt-0.5">Applied '+fmtDate(i.applied_at)+'</div>':'')+'</div>'+
+      '<button id="d-close" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>'+
+    '</div>'+
+
+    '<div class="sec"><h3>Status &amp; summary</h3>'+
+      '<div class="flex items-center gap-3 flex-wrap">'+statusSel+
+      '<span class="text-sm text-gray-500">'+(i.weeks_led||0)+' weeks led · '+(arr(i.programs_led).length)+' programs</span></div>'+
+      '<div id="d-blacklist" class="mt-3 '+(i.status==='blacklisted'?'':'hidden')+'"><label class="lbl">Blacklist reason</label><input data-p="blacklist_reason" class="fld" value="'+esc(i.blacklist_reason||'')+'"></div>'+
+    '</div>'+
+
+    '<div class="sec"><h3>Profile</h3>'+
+      '<div class="grid grid-cols-2 gap-3">'+
+        txtField('Full name','full_name',i.full_name)+
+        txtField('Phone','phone',i.phone)+
+        txtField('Location / home base','location',i.location)+
+        txtField('Gender','gender',i.gender)+
+        txtField('Country of birth','country_of_birth',i.country_of_birth)+
+        txtField('Nationality (passport)','nationality',i.nationality)+
+        txtField('Rating','rating',i.rating,'number')+
+        '<div><label class="lbl">&nbsp;</label><div class="flex flex-col">'+boolField('WFR / equivalent','wfr',i.wfr)+boolField("Driver's licence",'drivers_licence',i.drivers_licence)+'</div></div>'+
+        arrField('Languages','languages',i.languages)+
+        arrField('Qualifications','qualifications',i.qualifications)+
+        arrField('Regions — experience','regions_experience',i.regions_experience)+
+        arrField('Regions — applying to lead','regions_applying',i.regions_applying)+
+        arrField('Availability','availability',i.availability)+
+        arrField('Tags','tags',i.tags)+
+        '<div class="col-span-2 flex gap-4 mt-1">'+boolField('Returning instructor','is_returning',i.is_returning)+boolField('Was a PD/PE participant','prior_participant',i.prior_participant)+'</div>'+
+        '<div class="col-span-2"><label class="lbl">Notes</label><textarea data-p="notes" class="fld" rows="2">'+esc(i.notes||'')+'</textarea></div>'+
+      '</div>'+
+      '<div class="mt-3 flex items-center gap-3"><button id="d-save" class="btn-p text-sm px-4 py-2 rounded-lg">Save profile</button>'+
+      '<button id="d-delete" class="text-red-500 hover:underline text-sm ml-auto">Delete instructor</button></div>'+
+    '</div>'+
+
+    '<div class="sec"><h3>Program-leading history</h3>'+
+      '<div id="assign-list">'+(assignHtml||'<p class="text-sm text-gray-400 mb-2">No programs recorded yet.</p>')+'</div>'+
+      '<div class="grid grid-cols-12 gap-2 mt-2 items-end border-t border-gray-100 pt-3">'+
+        '<div class="col-span-4"><label class="lbl">Program</label><input id="na-program" class="fld" placeholder="Bali"></div>'+
+        '<div class="col-span-3"><label class="lbl">Season</label><input id="na-season" class="fld" placeholder="Spring"></div>'+
+        '<div class="col-span-2"><label class="lbl">Year</label><input id="na-year" type="number" class="fld" placeholder="2026"></div>'+
+        '<div class="col-span-2"><label class="lbl">Weeks</label><input id="na-weeks" type="number" class="fld" placeholder="6"></div>'+
+        '<div class="col-span-1"><button id="na-add" class="btn-p text-sm px-2 py-2 rounded-lg w-full">+</button></div>'+
+        '<div class="col-span-6"><label class="lbl">Role</label><input id="na-role" class="fld" placeholder="Lead / Co-Instructor"></div>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="sec"><h3>Onboarding &amp; policies</h3>'+obHtml+'</div>'+
+
+    '<div class="sec"><h3>Uploaded documents ('+docs.length+')</h3>'+docHtml+'</div>'+
+
+    '<div class="sec"><h3>Application</h3><div>'+appHtml+'</div></div>';
+
+  // wire drawer events
+  $('d-close').addEventListener('click', closeDrawer);
+  $('d-status').addEventListener('change', function(){ $('d-blacklist').classList.toggle('hidden', this.value!=='blacklisted'); });
+  $('d-save').addEventListener('click', function(){ saveProfile(i.id); });
+  $('d-delete').addEventListener('click', function(){ delInstructor(i.id, i.full_name||i.email); });
+  $('na-add').addEventListener('click', function(){ addAssignment(i.id); });
+  $('assign-list').addEventListener('click', function(e){
+    var row=e.target.closest('[data-aid]'); if(!row) return; var aid=Number(row.dataset.aid);
+    if(e.target.classList.contains('a-save')) saveAssignment(aid,row);
+    if(e.target.classList.contains('a-del')) delAssignment(aid,i.id);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.ob-chk'), function(chk){
+    chk.addEventListener('change', function(){ setOnboarding(i.id, chk.dataset.item, chk.checked); });
+  });
+}
+
+function assignRow(a){
+  return '<div class="grid grid-cols-12 gap-2 items-end mb-2" data-aid="'+a.id+'">'+
+    '<div class="col-span-4"><input data-af="program" class="fld" value="'+esc(a.program||'')+'"></div>'+
+    '<div class="col-span-2"><input data-af="season" class="fld" value="'+esc(a.season||'')+'" placeholder="Season"></div>'+
+    '<div class="col-span-2"><input data-af="year" type="number" class="fld" value="'+esc(a.year||'')+'" placeholder="Year"></div>'+
+    '<div class="col-span-1"><input data-af="weeks" type="number" class="fld" value="'+esc(a.weeks||0)+'"></div>'+
+    '<div class="col-span-2"><input data-af="role" class="fld" value="'+esc(a.role||'')+'" placeholder="Role"></div>'+
+    '<div class="col-span-1 flex gap-1"><button class="a-save text-xs btn-p rounded px-2 py-2">✓</button><button class="a-del text-xs text-red-500 px-1">✕</button></div>'+
+  '</div>';
+}
+
+function collectPatch(){
+  var patch={};
+  document.querySelectorAll('#drawer-body [data-p]').forEach(function(el){
+    var k=el.dataset.p, v;
+    if(el.dataset.bool) v=el.checked;
+    else if(el.dataset.arr) v=el.value;
+    else v=el.value;
+    patch[k]=v;
+  });
+  patch.status=$('d-status').value;
+  return patch;
+}
+async function saveProfile(id){
+  try{ await api('POST',{action:'update',id:id,patch:collectPatch()}); toast('Saved'); await load(); openDrawer(id); }
+  catch(e){ toast('Save failed: '+e.message,true); }
+}
+async function changeStatus(id,status){
+  try{ await api('POST',{action:'update',id:id,patch:{status:status}}); toast('Status updated'); await load(); }
+  catch(e){ toast(e.message,true); }
+}
+async function delInstructor(id,name){
+  if(!confirm('Delete "'+name+'" and all their history? This cannot be undone.')) return;
+  try{ await api('POST',{action:'delete',id:id}); closeDrawer(); toast('Deleted'); load(); }
+  catch(e){ toast(e.message,true); }
+}
+async function addAssignment(instructorId){
+  var program=$('na-program').value.trim(); if(!program){ toast('Enter a program name',true); return; }
+  try{
+    await api('POST',{action:'add-assignment',instructor_id:instructorId,program:program,
+      season:$('na-season').value.trim(),year:$('na-year').value,weeks:$('na-weeks').value,role:$('na-role').value.trim()});
+    toast('Program added'); await load(); openDrawer(instructorId);
+  }catch(e){ toast(e.message,true); }
+}
+async function saveAssignment(aid,row){
+  var patch={}; row.querySelectorAll('[data-af]').forEach(function(el){ patch[el.dataset.af]=el.value; });
+  try{ await api('POST',{action:'update-assignment',id:aid,patch:patch}); toast('Saved'); load(); }
+  catch(e){ toast(e.message,true); }
+}
+async function delAssignment(aid,instructorId){
+  try{ await api('POST',{action:'delete-assignment',id:aid}); toast('Removed'); await load(); openDrawer(instructorId); }
+  catch(e){ toast(e.message,true); }
+}
+async function setOnboarding(instructorId,item,completed){
+  try{ await api('POST',{action:'set-onboarding',instructor_id:instructorId,item:item,completed:completed}); load(); }
+  catch(e){ toast(e.message,true); }
+}
+
+// ---- Add modal ----------------------------------------------------------
+$('add-btn').addEventListener('click', function(){ $('add-wrap').classList.remove('hidden'); $('a-err').textContent=''; $('a-email').focus(); });
+$('add-bg').addEventListener('click', function(){ $('add-wrap').classList.add('hidden'); });
+$('a-cancel').addEventListener('click', function(){ $('add-wrap').classList.add('hidden'); });
+$('a-save').addEventListener('click', async function(){
+  var email=$('a-email').value.trim(); if(!email){ $('a-err').textContent='Email is required.'; return; }
+  try{
+    await api('POST',{action:'create',email:email,full_name:$('a-name').value.trim(),status:$('a-status').value});
+    $('add-wrap').classList.add('hidden'); $('a-email').value=''; $('a-name').value='';
+    toast('Instructor added'); load();
+  }catch(e){ $('a-err').textContent=e.message; }
+});
+
+// ---- Sync ---------------------------------------------------------------
+$('sync-btn').addEventListener('click', async function(){
+  var btn=this; btn.disabled=true; var old=btn.textContent; btn.textContent='Syncing…';
+  try{
+    var r=await api('POST',{action:'sync'});
+    toast('Synced: '+r.created+' new, '+r.updated+' updated, '+r.documents+' docs');
+    await load();
+  }catch(e){ toast('Sync failed: '+e.message,true); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+});
+
+// ---- Filter wiring ------------------------------------------------------
+['f-q','f-location','f-weeks'].forEach(function(id){ $(id).addEventListener('input', apply); });
+['f-status','f-gender','f-program','f-qual','f-lang','f-region'].forEach(function(id){ $(id).addEventListener('change', apply); });
+['f-returning','f-missing'].forEach(function(id){ $(id).addEventListener('change', apply); });
+$('f-clear').addEventListener('click', function(){
+  ['f-q','f-location','f-weeks'].forEach(function(id){$(id).value='';});
+  ['f-status','f-gender','f-program','f-qual','f-lang','f-region'].forEach(function(id){$(id).value='';});
+  $('f-returning').checked=false; $('f-missing').checked=false; apply();
+});
+
+load();
+</script>
+</body>
+</html>
