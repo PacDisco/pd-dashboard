@@ -257,7 +257,8 @@ async function handleUpdate(body) {
   if (!id || !patch || typeof patch !== 'object') return bad('id and patch required');
   const allow = ['full_name', 'status', 'gender', 'phone', 'location', 'country_of_birth', 'nationality',
     'languages', 'regions_experience', 'regions_applying', 'qualifications', 'wfr', 'drivers_licence',
-    'availability', 'is_returning', 'prior_participant', 'rating', 'tags', 'blacklist_reason', 'notes'];
+    'availability', 'is_returning', 'prior_participant', 'rating', 'flight_budget', 'flight_budget_currency',
+    'tags', 'blacklist_reason', 'notes'];
   const sets = [], args = [];
   for (const k of Object.keys(patch)) {
     if (!allow.includes(k)) continue;
@@ -266,6 +267,8 @@ async function handleUpdate(body) {
     else if (ARRAY_FIELDS.includes(k)) v = toArray(v);
     else if (BOOL_FIELDS.includes(k))  v = (v == null || v === '') ? null : !!v;
     else if (k === 'rating')       v = (v == null || v === '') ? null : Number(v);
+    else if (k === 'flight_budget') { const n = Number(v); v = (v === '' || v == null || !Number.isFinite(n) || n < 0) ? null : n; }
+    else if (k === 'flight_budget_currency') v = (String(v || 'USD').trim().toUpperCase().slice(0, 3)) || 'USD';
     else if (typeof v === 'string') v = v.trim() === '' ? null : v.trim();
     args.push(v);
     sets.push(`${k} = $${args.length}`);
