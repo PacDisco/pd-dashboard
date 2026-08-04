@@ -313,6 +313,13 @@ function renderDrawer(d){
     '<div class="sec"><h3>Status &amp; summary</h3>'+
       '<div class="flex items-center gap-3 flex-wrap">'+statusSel+
       '<span class="text-sm text-gray-500">'+(i.weeks_led||0)+' weeks led · '+(arr(i.programs_led).length)+' programs</span></div>'+
+      '<div class="mt-3 grid grid-cols-12 gap-2 items-end">'+
+        '<div class="col-span-4"><label class="lbl">Flight budget</label><input data-p="flight_budget" type="number" min="0" step="1" class="fld" value="'+esc(i.flight_budget==null?'':i.flight_budget)+'" placeholder="1800"></div>'+
+        '<div class="col-span-3"><label class="lbl">Currency</label><select data-p="flight_budget_currency" class="fld">'+
+          ['USD','GBP','EUR','CAD','AUD','NZD'].map(function(c){return '<option '+(String(i.flight_budget_currency||'USD')===c?'selected':'')+'>'+c+'</option>';}).join('')+
+        '</select></div>'+
+        '<div class="col-span-5"><button id="d-save-top" class="btn-p text-sm px-4 py-2 rounded-lg w-full md:w-auto">Save</button></div>'+
+      '</div>'+
       '<div id="d-blacklist" class="mt-3 '+(i.status==='blacklisted'?'':'hidden')+'"><label class="lbl">Blacklist reason</label><input data-p="blacklist_reason" class="fld" value="'+esc(i.blacklist_reason||'')+'"></div>'+
     '</div>'+
 
@@ -361,6 +368,7 @@ function renderDrawer(d){
   $('d-close').addEventListener('click', closeDrawer);
   $('d-status').addEventListener('change', function(){ $('d-blacklist').classList.toggle('hidden', this.value!=='blacklisted'); });
   $('d-save').addEventListener('click', function(){ saveProfile(i.id); });
+  $('d-save-top').addEventListener('click', function(){ saveProfile(i.id); });
   $('d-delete').addEventListener('click', function(){ delInstructor(i.id, i.full_name||i.email); });
   $('na-add').addEventListener('click', function(){ addAssignment(i.id); });
   $('assign-list').addEventListener('click', function(e){
