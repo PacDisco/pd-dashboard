@@ -148,6 +148,27 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){retur
 function toast(msg,isErr){ var t=$('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); setTimeout(function(){t.className='';},2800); }
 function arr(v){ return Array.isArray(v)?v.filter(Boolean):[]; }
 function fmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d)?'':d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+function fileNameUrl(u){ try{ return decodeURIComponent(String(u).split('/').pop().split('?')[0]); }catch(e){ return String(u).split('/').pop(); } }
+// Some Jotform answers (file uploads, signatures) arrive as raw HTML anchor
+// markup or bare upload URLs. Render those as safe clickable links; strip any
+// stray tags from everything else so nothing shows as literal HTML.
+function renderAnswer(a){
+  var v = (a && a.answer==null) ? '' : String(a.answer);
+  if(/<a\s/i.test(v) || (a && a.type==='control_fileupload')){
+    var links=[], re=/href\s*=\s*"([^"]+)"([^>]*)>/gi, m;
+    while((m=re.exec(v))){
+      var url=m[1], titleM=/title\s*=\s*"([^"]+)"/i.exec(m[2]||'');
+      var name=titleM?titleM[1]:fileNameUrl(url);
+      links.push('<a href="'+esc(url)+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(name)+'</a>');
+    }
+    if(links.length) return links.join('<br>');
+  }
+  if(/^https?:\/\/\S+$/i.test(v.trim())){
+    var u=v.trim();
+    return '<a href="'+esc(u)+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(fileNameUrl(u))+'</a>';
+  }
+  return esc(v.replace(/<[^>]+>/g,'')).replace(/\n/g,'<br>');
+}
 
 async function api(method,payload,query){
   var opts={method:method}; if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
@@ -264,7 +285,7 @@ function renderDrawer(d){
 
   var answers = arr(i.application_answers);
   var appHtml = answers.length
-    ? answers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+esc(a.answer)+'</div></div>';}).join('')
+    ? answers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+renderAnswer(a)+'</div></div>';}).join('')
     : '<p class="text-sm text-gray-400">No application on file. Run “Sync from Jotform”.</p>';
 
   var docs = arr(d.documents);
