@@ -286,7 +286,12 @@ function renderDrawer(d){
   var answers = arr(i.application_answers);
   var appHtml = answers.length
     ? answers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+renderAnswer(a)+'</div></div>';}).join('')
-    : '<p class="text-sm text-gray-400">No application on file. Run “Sync from Jotform”.</p>';
+    : '<p class="text-sm text-gray-400">No application on file. If they onboarded without applying, their details show under Personal Information below.</p>';
+
+  var piAnswers = arr(i.personal_info_answers);
+  var piHtml = piAnswers.length
+    ? piAnswers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+renderAnswer(a)+'</div></div>';}).join('')
+    : '';
 
   var docs = arr(d.documents);
   var docHtml = docs.length
@@ -325,6 +330,7 @@ function renderDrawer(d){
 
     '<div class="sec"><h3>Profile</h3>'+
       '<div class="grid grid-cols-2 gap-3">'+
+        '<div class="col-span-2"><label class="lbl">Additional emails <span class="text-gray-400 normal-case">(comma-separated — sync matches Jotform on any of these; primary is '+esc(i.email)+')</span></label><input data-p="alt_emails" data-arr="1" class="fld" value="'+esc(arr(i.alt_emails).join(', '))+'" placeholder="another@email.com"></div>'+
         txtField('Full name','full_name',i.full_name)+
         txtField('Phone','phone',i.phone)+
         txtField('Location / home base','location',i.location)+
@@ -361,6 +367,8 @@ function renderDrawer(d){
     '<div class="sec"><h3>Onboarding &amp; policies</h3>'+obHtml+'</div>'+
 
     '<div class="sec"><h3>Uploaded documents ('+docs.length+')</h3>'+docHtml+'</div>'+
+
+    (piHtml ? '<div class="sec"><h3>Personal Information</h3><div>'+piHtml+'</div></div>' : '')+
 
     '<div class="sec"><h3>Application</h3><div>'+appHtml+'</div></div>';
 
