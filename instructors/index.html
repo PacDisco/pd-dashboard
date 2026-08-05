@@ -167,7 +167,10 @@ function renderAnswer(a){
     var u=v.trim();
     return '<a href="'+esc(u)+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(fileNameUrl(u))+'</a>';
   }
-  return esc(v.replace(/<[^>]+>/g,'')).replace(/\n/g,'<br>');
+  // Convert Jotform's <br> / block tags to line breaks (readable), strip the
+  // rest, then re-emit as safe <br> so nothing shows as literal HTML.
+  var clean = v.replace(/<\s*br\s*\/?>/gi,'\n').replace(/<\/(p|div|li)\s*>/gi,'\n').replace(/<[^>]+>/g,'');
+  return esc(clean).replace(/\n{2,}/g,'\n').replace(/\n/g,'<br>');
 }
 
 async function api(method,payload,query){
