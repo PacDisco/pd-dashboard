@@ -143,6 +143,30 @@ CREATE TABLE IF NOT EXISTS instructor_onboarding (
 
 CREATE INDEX IF NOT EXISTS instructor_onboarding_instructor_idx ON instructor_onboarding (instructor_id);
 
+-- --------------------------------------------------------------------------
+-- Flight budget (per-instructor). Additive + idempotent, so this is safe to
+-- run on an existing instructors table.
+-- --------------------------------------------------------------------------
+ALTER TABLE instructors
+  ADD COLUMN IF NOT EXISTS flight_budget          NUMERIC(12, 2),
+  ADD COLUMN IF NOT EXISTS flight_budget_currency TEXT NOT NULL DEFAULT 'USD';
+
+-- Cached Q&A from the Instructor Personal Information form (second profile
+-- source), shown in the detail panel for instructors who onboarded without
+-- filing an application. Additive + idempotent.
+ALTER TABLE instructors
+  ADD COLUMN IF NOT EXISTS personal_info_answers JSONB;
+
+-- Additional email addresses per instructor (aliases). The sync matches a
+-- Jotform submission to an instructor if its email equals the primary `email`
+-- OR any address in `alt_emails` (all stored lower-cased). Lets one profile
+-- cover someone who used, say, a personal address on some forms and a work
+-- address on others. Additive + idempotent.
+ALTER TABLE instructors
+  ADD COLUMN IF NOT EXISTS alt_emails TEXT[] NOT NULL DEFAULT '{}';
+
+CREATE INDEX IF NOT EXISTS instructors_alt_emails_idx ON instructors USING GIN (alt_emails);
+
 -- ==========================================================================
 -- Done. The roster view derives weeks_led / programs_led like so:
 --
