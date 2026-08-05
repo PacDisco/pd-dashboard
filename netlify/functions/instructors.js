@@ -54,7 +54,7 @@ const STATUSES = ['current', 'potential', 'new_applicant', 'blacklisted'];
 const FORMS = [
   { id: '241888714639876', title: 'PD Program Instructor Application', role: 'application' },
   { id: '261607538438868', title: 'Instructor Document Upload Form',   role: 'upload' },
-  { id: '261748248196873', title: 'Instructor Personal Information',   role: 'onboarding', item: 'personal_info',       label: 'Personal Information' },
+  { id: '261748248196873', title: 'Instructor Personal Information',   role: 'onboarding', item: 'personal_info',       label: 'Personal Information', seedsProfile: true },
   { id: '261722834653056', title: 'Instructor Device Policy',          role: 'onboarding', item: 'policy_device',       label: 'Device Policy' },
   { id: '261727420881863', title: 'Instructor Drug & Alcohol Policy',  role: 'onboarding', item: 'policy_drug_alcohol', label: 'Drug & Alcohol Policy' },
   { id: '261727594157871', title: 'Instructor Flight Policy',          role: 'onboarding', item: 'policy_flight',       label: 'Flight Policy' },
@@ -224,16 +224,20 @@ function normStatus(v) {
   const s = String(v || '').trim().toLowerCase();
   return STATUSES.includes(s) ? s : 'new_applicant';
 }
+function lowerEmails(v) {
+  return Array.from(new Set(toArray(v).map((e) => String(e).trim().toLowerCase()).filter((e) => /.+@.+\..+/.test(e))));
+}
 
 async function handleCreate(body) {
   const email = String(body.email || '').trim().toLowerCase();
   if (!email || !/.+@.+\..+/.test(email)) return bad('a valid email is required');
   try {
     const rows = await sql()`
-      INSERT INTO instructors (email, full_name, status, gender, phone, location, country_of_birth,
+      INSERT INTO instructors (email, alt_emails, full_name, status, gender, phone, location, country_of_birth,
                                nationality, languages, regions_experience, regions_applying, qualifications,
                                wfr, drivers_licence, availability, is_returning, prior_participant, rating, tags, notes)
-      VALUES (${email}, ${body.full_name || null}, ${normStatus(body.status)}, ${body.gender || null},
+      VALUES (${email}, ${lowerEmails(body.alt_emails).filter((e) => e !== email)}, ${body.full_name || null},
+              ${normStatus(body.status)}, ${body.gender || null},
               ${body.phone || null}, ${body.location || null}, ${body.country_of_birth || null},
               ${body.nationality || null}, ${toArray(body.languages)}, ${toArray(body.regions_experience)},
               ${toArray(body.regions_applying)}, ${toArray(body.qualifications)},
@@ -258,12 +262,13 @@ async function handleUpdate(body) {
   const allow = ['full_name', 'status', 'gender', 'phone', 'location', 'country_of_birth', 'nationality',
     'languages', 'regions_experience', 'regions_applying', 'qualifications', 'wfr', 'drivers_licence',
     'availability', 'is_returning', 'prior_participant', 'rating', 'flight_budget', 'flight_budget_currency',
-    'tags', 'blacklist_reason', 'notes'];
+    'alt_emails', 'tags', 'blacklist_reason', 'notes'];
   const sets = [], args = [];
   for (const k of Object.keys(patch)) {
     if (!allow.includes(k)) continue;
     let v = patch[k];
     if (k === 'status')            v = normStatus(v);
+    else if (k === 'alt_emails')   v = lowerEmails(v);
     else if (ARRAY_FIELDS.includes(k)) v = toArray(v);
     else if (BOOL_FIELDS.includes(k))  v = (v == null || v === '') ? null : !!v;
     else if (k === 'rating')       v = (v == null || v === '') ? null : Number(v);
@@ -365,6 +370,15 @@ async function handleSync() {
   let created = 0, updated = 0, docCount = 0, onboardingCount = 0;
   const seenEmails = new Set();
 
+  // Alias resolution: map any known alt email -> that instructor's PRIMARY
+  // email, so a submission filed under an alias folds into the same profile.
+  const aliasRows = await sql()`SELECT email, alt_emails FROM instructors`;
+  const aliasToPrimary = new Map();
+  for (const r of aliasRows) {
+    (r.alt_emails || []).forEach((a) => { if (a) aliasToPrimary.set(String(a).toLowerCase(), String(r.email).toLowerCase()); });
+  }
+  const canon = (raw) => { const e = String(raw || '').toLowerCase(); return e ? (aliasToPrimary.get(e) || e) : ''; };
+
   // 1) Applications — seed / refresh profiles ------------------------------
   const appForm = FORMS.find((f) => f.role === 'application');
   const appSubs = await fetchSubmissions(appForm.id);
@@ -372,7 +386,7 @@ async function handleSync() {
   appSubs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const appByEmail = new Map();
   for (const sub of appSubs) {
-    const email = emailOf(sub);
+    const email = canon(emailOf(sub));
     if (!email || appByEmail.has(email)) continue; // keep newest per email
     appByEmail.set(email, sub);
   }
@@ -435,6 +449,35 @@ async function handleSync() {
     docCount += await cacheFiles(sub, instructorId, email, appForm.title);
   }
 
+  // 1b) Profile-seeding secondary sources (e.g. Personal Information) ------
+  //     Fills blank profile fields and CREATES onboard-only instructors who
+  //     never filed an application. Never overwrites admin-edited fields.
+  let seededCreated = 0, seededUpdated = 0;
+  for (const form of FORMS.filter((f) => f.seedsProfile)) {
+    const subs = await fetchSubmissions(form.id);
+    subs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const byEmail = new Map();
+    for (const sub of subs) { const e = canon(emailOf(sub)); if (e && !byEmail.has(e)) byEmail.set(e, sub); }
+    for (const [email, sub] of byEmail) {
+      seenEmails.add(email);
+      const name = nameOf(sub);
+      const phone = valFor(sub, (q) => q.type === 'control_phone' || labelHas(q, 'phone number'));
+      const location = valFor(sub, (q) => q.type === 'control_address' || (labelHas(q, 'address') && !labelHas(q, 'e-mail')));
+      const answers = JSON.stringify(answersArray(sub));
+      const res = await sql()`
+        INSERT INTO instructors (email, full_name, status, phone, location, personal_info_answers)
+        VALUES (${email}, ${name}, 'current', ${phone}, ${location}, ${answers}::jsonb)
+        ON CONFLICT (email) DO UPDATE SET
+          personal_info_answers = EXCLUDED.personal_info_answers,
+          full_name = COALESCE(instructors.full_name, EXCLUDED.full_name),
+          phone     = COALESCE(instructors.phone, EXCLUDED.phone),
+          location  = COALESCE(instructors.location, EXCLUDED.location)
+        RETURNING (xmax = 0) AS inserted`;
+      if (res[0] && res[0].inserted) seededCreated++; else seededUpdated++;
+    }
+  }
+  created += seededCreated; updated += seededUpdated;
+
   // Build an email -> instructor id map for the remaining forms
   const idRows = await sql()`SELECT id, email FROM instructors`;
   const idByEmail = new Map(idRows.map((r) => [r.email, r.id]));
@@ -443,7 +486,7 @@ async function handleSync() {
   for (const form of FORMS.filter((f) => f.role === 'upload')) {
     const subs = await fetchSubmissions(form.id);
     for (const sub of subs) {
-      const email = emailOf(sub);
+      const email = canon(emailOf(sub));
       if (!email) continue;
       const instructorId = idByEmail.get(email) || null;
       docCount += await cacheFiles(sub, instructorId, email, form.title);
@@ -454,7 +497,7 @@ async function handleSync() {
   for (const form of FORMS.filter((f) => f.role === 'onboarding')) {
     const subs = await fetchSubmissions(form.id);
     const emails = new Set();
-    for (const sub of subs) { const e = emailOf(sub); if (e) emails.add(e); }
+    for (const sub of subs) { const e = canon(emailOf(sub)); if (e) emails.add(e); }
     for (const email of emails) {
       const instructorId = idByEmail.get(email);
       if (!instructorId) continue; // only track for known instructors
@@ -468,7 +511,8 @@ async function handleSync() {
     }
   }
 
-  return ok({ created, updated, documents: docCount, onboarding: onboardingCount, applicants: appByEmail.size });
+  return ok({ created, updated, documents: docCount, onboarding: onboardingCount,
+              applicants: appByEmail.size, profile_seeded: seededCreated + seededUpdated });
 }
 
 // value for the first answer matching a predicate
