@@ -149,6 +149,34 @@ function fileNameFromUrl(u) {
   try { return decodeURIComponent(String(u).split('/').pop().split('?')[0]); }
   catch { return String(u).split('/').pop(); }
 }
+// Strip HTML that Jotform embeds in some answers (addresses use <br>, etc.)
+// and normalize whitespace so structured fields store clean text.
+function cleanText(s) {
+  if (s == null) return null;
+  const t = String(s)
+    .replace(/<\s*br\s*\/?>/gi, ', ')
+    .replace(/<\/(p|div|li|tr)\s*>/gi, ', ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s*,(\s*,)+/g, ', ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+    .trim();
+  return t || null;
+}
+// Build a clean, single-line location from an address answer object when we
+// have one (city, state, country); fall back to cleaned pretty text.
+function addressLine(sub) {
+  const q = findAnswer(sub, (x) => x.type === 'control_address') ||
+            findAnswer(sub, (x) => labelHas(x, 'address') && !labelHas(x, 'e-mail'));
+  if (!q) return null;
+  const a = q.answer;
+  if (a && typeof a === 'object' && !Array.isArray(a)) {
+    const parts = [a.city, a.state, a.country].map((x) => x && String(x).trim()).filter(Boolean);
+    if (parts.length) return parts.join(', ');
+  }
+  return cleanText(prettyAnswer(q));
+}
 
 // --------------------------------------------------------------------------
 // LIST
@@ -393,19 +421,22 @@ async function handleSync() {
 
   for (const [email, sub] of appByEmail) {
     seenEmails.add(email);
-    const name = nameOf(sub);
-    const gender = valFor(sub, (q) => labelHas(q, 'gender'));
-    const phone = valFor(sub, (q) => q.type === 'control_phone' || labelHas(q, 'phone number')) ;
-    const location = valFor(sub, (q) => q.type === 'control_address' || (labelHas(q, 'address') && !labelHas(q, 'e-mail')));
-    const countryBirth = valFor(sub, (q) => labelHas(q, 'country of birth'));
-    const nationality = valFor(sub, (q) => labelHas(q, 'nationality'));
-    const languages = toArray(valFor(sub, (q) => labelHas(q, 'languages spoken')));
-    const regionsApply = toArray(valFor(sub, (q) => labelHas(q, 'which region') && labelHas(q, 'applying')));
-    const regionsExp = toArray(valFor(sub, (q) => labelHas(q, 'meaningful travel experience')));
+    const name = cleanText(nameOf(sub));
+    const gender = cleanText(valFor(sub, (q) => labelHas(q, 'gender')));
+    const phone = cleanText(valFor(sub, (q) => q.type === 'control_phone' || labelHas(q, 'phone number')));
+    const location = addressLine(sub);
+    const countryBirth = cleanText(valFor(sub, (q) => labelHas(q, 'country of birth')));
+    const nationality = cleanText(valFor(sub, (q) => labelHas(q, 'nationality')));
+    const languages = toArray(cleanText(valFor(sub, (q) => labelHas(q, 'languages spoken'))));
+    const regionsApply = toArray(cleanText(valFor(sub, (q) => labelHas(q, 'which region') && labelHas(q, 'applying'))));
+    const regionsExp = toArray(cleanText(valFor(sub, (q) => labelHas(q, 'meaningful travel experience'))));
     const wfrRaw = valFor(sub, (q) => labelHas(q, 'wilderness first responder'));
-    const wfr = wfrRaw ? /yes|valid|current/i.test(wfrRaw) : null;
+    const wfr = wfrRaw ? /\byes\b|valid|current/i.test(wfrRaw) : null;
     const driverRaw = valFor(sub, (q) => labelHas(q, 'driver licences', 'driver licence', "driver's licence", 'driver licences/qualifications'));
-    const driver = driverRaw ? !/^\s*(no|none|n\/a)\s*$/i.test(driverRaw) : null;
+    // Only count a driving licence if the answer actually indicates one — the
+    // question is worded "licences/qualifications" so people ramble about
+    // unrelated certs. Don't infer a licence from "not no".
+    const driver = driverRaw ? /licen[cs]e|full (car|nz|uk|us|class)|class\s*\d|learner|restricted|manual|automatic/i.test(driverRaw) : null;
     const priorRaw = valFor(sub, (q) => labelHas(q, 'been a participant on a pacific discovery'));
     const prior = priorRaw ? /yes/i.test(priorRaw) : null;
     const quals = collectQualifications(sub, wfr, driver);
@@ -431,7 +462,7 @@ async function handleSync() {
         full_name          = COALESCE(instructors.full_name, EXCLUDED.full_name),
         gender             = COALESCE(instructors.gender, EXCLUDED.gender),
         phone              = COALESCE(instructors.phone, EXCLUDED.phone),
-        location           = COALESCE(instructors.location, EXCLUDED.location),
+        location           = CASE WHEN instructors.location IS NULL OR instructors.location LIKE '%<%' THEN EXCLUDED.location ELSE instructors.location END,
         country_of_birth   = COALESCE(instructors.country_of_birth, EXCLUDED.country_of_birth),
         nationality        = COALESCE(instructors.nationality, EXCLUDED.nationality),
         languages          = CASE WHEN instructors.languages = '{}' THEN EXCLUDED.languages ELSE instructors.languages END,
@@ -460,9 +491,9 @@ async function handleSync() {
     for (const sub of subs) { const e = canon(emailOf(sub)); if (e && !byEmail.has(e)) byEmail.set(e, sub); }
     for (const [email, sub] of byEmail) {
       seenEmails.add(email);
-      const name = nameOf(sub);
-      const phone = valFor(sub, (q) => q.type === 'control_phone' || labelHas(q, 'phone number'));
-      const location = valFor(sub, (q) => q.type === 'control_address' || (labelHas(q, 'address') && !labelHas(q, 'e-mail')));
+      const name = cleanText(nameOf(sub));
+      const phone = cleanText(valFor(sub, (q) => q.type === 'control_phone' || labelHas(q, 'phone number')));
+      const location = addressLine(sub);
       const answers = JSON.stringify(answersArray(sub));
       const res = await sql()`
         INSERT INTO instructors (email, full_name, status, phone, location, personal_info_answers)
@@ -471,7 +502,7 @@ async function handleSync() {
           personal_info_answers = EXCLUDED.personal_info_answers,
           full_name = COALESCE(instructors.full_name, EXCLUDED.full_name),
           phone     = COALESCE(instructors.phone, EXCLUDED.phone),
-          location  = COALESCE(instructors.location, EXCLUDED.location)
+          location  = CASE WHEN instructors.location IS NULL OR instructors.location LIKE '%<%' THEN EXCLUDED.location ELSE instructors.location END
         RETURNING (xmax = 0) AS inserted`;
       if (res[0] && res[0].inserted) seededCreated++; else seededUpdated++;
     }
@@ -524,8 +555,12 @@ function collectQualifications(sub, wfr, driver) {
   const out = [];
   if (wfr) out.push('WFR');
   if (driver) out.push("Driver's licence");
-  const certs = valFor(sub, (q) => labelHas(q, 'risk management qualifications', 'outdoor, educational or risk'));
-  if (certs) splitList(certs).slice(0, 6).forEach((c) => out.push(c));
+  const certs = cleanText(valFor(sub, (q) => labelHas(q, 'risk management qualifications', 'outdoor, educational or risk')));
+  // Only treat this as a tag list when it looks like a short delimited list,
+  // not a paragraph — otherwise a rambling sentence becomes junk chips.
+  if (certs && certs.length <= 100 && /[,;/\n]/.test(certs)) {
+    splitList(certs).forEach((c) => { if (c && c.length <= 40 && c.split(/\s+/).length <= 6) out.push(c); });
+  }
   return Array.from(new Set(out));
 }
 async function cacheFiles(sub, instructorId, email, formTitle) {
