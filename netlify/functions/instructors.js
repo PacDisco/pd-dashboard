@@ -196,8 +196,12 @@ async function handleList() {
       CASE i.status WHEN 'current' THEN 0 WHEN 'potential' THEN 1 WHEN 'new_applicant' THEN 2 ELSE 3 END,
       lower(i.full_name) NULLS LAST, i.email
   `;
-  // Facet lists for filter dropdowns
-  const programs = new Set(), languages = new Set(), regions = new Set(), quals = new Set(), locations = new Set();
+  // Facet lists for filter dropdowns — built ONLY from real values present in
+  // the synced data, so a filter only offers options that actually exist and
+  // the UI can hide any filter that has no data behind it.
+  const programs = new Set(), languages = new Set(), regions = new Set(), quals = new Set(),
+        locations = new Set(), genders = new Set(), nationalities = new Set();
+  let anyReturning = false;
   rows.forEach((r) => {
     (r.programs_led || []).forEach((p) => p && programs.add(p));
     (r.languages || []).forEach((x) => x && languages.add(x));
@@ -205,17 +209,23 @@ async function handleList() {
     (r.regions_applying || []).forEach((x) => x && regions.add(x));
     (r.qualifications || []).forEach((x) => x && quals.add(x));
     if (r.location) locations.add(r.location);
+    if (r.gender) genders.add(r.gender);
+    if (r.nationality) nationalities.add(r.nationality);
+    if (r.is_returning) anyReturning = true;
   });
   const sortAlpha = (s) => Array.from(s).sort((a, b) => a.localeCompare(b));
   return ok({
     instructors: rows,
     onboarding_items: ONBOARDING_ITEMS,
+    any_returning: anyReturning,
     facets: {
       programs: sortAlpha(programs),
       languages: sortAlpha(languages),
       regions: sortAlpha(regions),
       qualifications: sortAlpha(quals),
       locations: sortAlpha(locations),
+      genders: sortAlpha(genders),
+      nationalities: sortAlpha(nationalities),
     },
   });
 }
