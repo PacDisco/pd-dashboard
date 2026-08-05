@@ -68,16 +68,17 @@
       <div class="col-span-2 md:col-span-2"><label class="lbl">Search name / email</label><input id="f-q" class="fld" placeholder="Type a name…"></div>
       <div><label class="lbl">Status</label><select id="f-status" class="fld">
         <option value="">All</option><option value="current">Current</option><option value="potential">Potential</option><option value="new_applicant">New applicant</option><option value="blacklisted">Blacklisted</option></select></div>
-      <div><label class="lbl">Gender</label><select id="f-gender" class="fld"><option value="">All</option></select></div>
-      <div><label class="lbl">Location</label><input id="f-location" class="fld" placeholder="e.g. NZ"></div>
-      <div><label class="lbl">Min weeks led</label><input id="f-weeks" type="number" min="0" class="fld" placeholder="0"></div>
-      <div><label class="lbl">Program led</label><select id="f-program" class="fld"><option value="">Any</option></select></div>
-      <div><label class="lbl">Qualification</label><select id="f-qual" class="fld"><option value="">Any</option></select></div>
-      <div><label class="lbl">Language</label><select id="f-lang" class="fld"><option value="">Any</option></select></div>
-      <div><label class="lbl">Region experience</label><select id="f-region" class="fld"><option value="">Any</option></select></div>
-      <div class="flex items-end gap-3 col-span-2 md:col-span-2">
-        <label class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-returning"> Returning</label>
-        <label class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-missing"> Missing paperwork</label>
+      <div id="fw-gender"><label class="lbl">Gender</label><select id="f-gender" class="fld"><option value="">All</option></select></div>
+      <div id="fw-nat"><label class="lbl">Nationality</label><select id="f-nat" class="fld"><option value="">All</option></select></div>
+      <div id="fw-location"><label class="lbl">Location</label><input id="f-location" class="fld" placeholder="e.g. NZ"></div>
+      <div id="fw-weeks"><label class="lbl">Min weeks led</label><input id="f-weeks" type="number" min="0" class="fld" placeholder="0"></div>
+      <div id="fw-program"><label class="lbl">Program led</label><select id="f-program" class="fld"><option value="">Any</option></select></div>
+      <div id="fw-qual"><label class="lbl">Qualification</label><select id="f-qual" class="fld"><option value="">Any</option></select></div>
+      <div id="fw-lang"><label class="lbl">Language</label><select id="f-lang" class="fld"><option value="">Any</option></select></div>
+      <div id="fw-region"><label class="lbl">Region</label><select id="f-region" class="fld"><option value="">Any</option></select></div>
+      <div class="flex items-end gap-3 col-span-2 md:col-span-6">
+        <label id="fw-returning" class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-returning"> Returning</label>
+        <label id="fw-missing" class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-missing"> Missing paperwork</label>
         <button id="f-clear" class="text-xs text-purple-600 hover:underline ml-auto">Clear</button>
       </div>
     </div>
@@ -141,7 +142,7 @@ var STATUS_META = {
   new_applicant:{label:'New applicant',cls:'b-new_applicant'}, blacklisted:{label:'Blacklisted',cls:'b-blacklisted'}
 };
 var STATUS_ORDER = ['current','potential','new_applicant','blacklisted'];
-var all = [], facets = {}, onboardingItems = [];
+var all = [], facets = {}, onboardingItems = [], anyReturning = false;
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
@@ -184,22 +185,35 @@ async function load(){
   try{
     var data = await api('GET',null,'?action=list');
     all = data.instructors||[]; facets = data.facets||{}; onboardingItems = data.onboarding_items||[];
+    anyReturning = !!data.any_returning;
     buildFacetOptions(); computeStats(); apply();
   }catch(e){ toast('Load failed: '+e.message,true); }
   finally{ $('loading').classList.add('hidden'); }
 }
 
+// Each filter is data-driven: its options are the real synced values, and the
+// whole control is hidden when the forms produced no data for it.
 function buildFacetOptions(){
-  var genders = Array.from(new Set(all.map(function(i){return i.gender;}).filter(Boolean))).sort();
-  fillSelect('f-gender', genders, 'All');
-  fillSelect('f-program', facets.programs||[], 'Any');
-  fillSelect('f-qual', facets.qualifications||[], 'Any');
-  fillSelect('f-lang', facets.languages||[], 'Any');
-  fillSelect('f-region', facets.regions||[], 'Any');
+  setFacet('fw-gender','f-gender', facets.genders, 'All');
+  setFacet('fw-nat','f-nat', facets.nationalities, 'All');
+  setFacet('fw-program','f-program', facets.programs, 'Any');
+  setFacet('fw-qual','f-qual', facets.qualifications, 'Any');
+  setFacet('fw-lang','f-lang', facets.languages, 'Any');
+  setFacet('fw-region','f-region', facets.regions, 'Any');
+  show('fw-location', (facets.locations||[]).length>0);
+  show('fw-weeks', (facets.programs||[]).length>0);
+  show('fw-returning', !!anyReturning);
+  show('fw-missing', onboardingItems.length>0);
 }
+function setFacet(wrapId, selId, values, allLabel){
+  values = values||[];
+  show(wrapId, values.length>0);
+  fillSelect(selId, values, allLabel);
+}
+function show(id, on){ var el=$(id); if(el) el.style.display = on ? '' : 'none'; }
 function fillSelect(id, values, allLabel){
-  var el=$(id); var cur=el.value;
-  el.innerHTML='<option value="">'+allLabel+'</option>'+values.map(function(v){return '<option>'+esc(v)+'</option>';}).join('');
+  var el=$(id); if(!el) return; var cur=el.value;
+  el.innerHTML='<option value="">'+allLabel+'</option>'+(values||[]).map(function(v){return '<option>'+esc(v)+'</option>';}).join('');
   if(cur) el.value=cur;
 }
 function computeStats(){
@@ -211,7 +225,7 @@ function computeStats(){
 
 function apply(){
   var q=$('f-q').value.trim().toLowerCase();
-  var status=$('f-status').value, gender=$('f-gender').value, loc=$('f-location').value.trim().toLowerCase();
+  var status=$('f-status').value, gender=$('f-gender').value, nat=$('f-nat').value, loc=$('f-location').value.trim().toLowerCase();
   var minW=parseInt($('f-weeks').value,10); var program=$('f-program').value, qual=$('f-qual').value, lang=$('f-lang').value, region=$('f-region').value;
   var returning=$('f-returning').checked, missing=$('f-missing').checked;
   var totalOnboard=onboardingItems.length;
@@ -220,6 +234,7 @@ function apply(){
     if(q){ var hay=((i.full_name||'')+' '+(i.email||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
     if(status && i.status!==status) return false;
     if(gender && i.gender!==gender) return false;
+    if(nat && i.nationality!==nat) return false;
     if(loc && (i.location||'').toLowerCase().indexOf(loc)<0) return false;
     if(!isNaN(minW) && (i.weeks_led||0)<minW) return false;
     if(program && arr(i.programs_led).indexOf(program)<0) return false;
@@ -476,11 +491,11 @@ $('sync-btn').addEventListener('click', async function(){
 
 // ---- Filter wiring ------------------------------------------------------
 ['f-q','f-location','f-weeks'].forEach(function(id){ $(id).addEventListener('input', apply); });
-['f-status','f-gender','f-program','f-qual','f-lang','f-region'].forEach(function(id){ $(id).addEventListener('change', apply); });
+['f-status','f-gender','f-nat','f-program','f-qual','f-lang','f-region'].forEach(function(id){ $(id).addEventListener('change', apply); });
 ['f-returning','f-missing'].forEach(function(id){ $(id).addEventListener('change', apply); });
 $('f-clear').addEventListener('click', function(){
   ['f-q','f-location','f-weeks'].forEach(function(id){$(id).value='';});
-  ['f-status','f-gender','f-program','f-qual','f-lang','f-region'].forEach(function(id){$(id).value='';});
+  ['f-status','f-gender','f-nat','f-program','f-qual','f-lang','f-region'].forEach(function(id){$(id).value='';});
   $('f-returning').checked=false; $('f-missing').checked=false; apply();
 });
 
