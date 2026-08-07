@@ -249,6 +249,24 @@ async function handleList() {
 // --------------------------------------------------------------------------
 // GET one (with children)
 // --------------------------------------------------------------------------
+// Public (CORS) lookup used by the flight booking portal: given an instructor's
+// email, return just their flight budget + currency. Returns { found:false }
+// when the email isn't a known instructor (so the portal can hide the notice).
+async function handleFlightBudget(qs) {
+  const email = String(qs.email || '').trim().toLowerCase();
+  if (!email) return bad('email required');
+  const rows = await sql()`
+    SELECT flight_budget, flight_budget_currency
+    FROM instructors WHERE email = ${email} LIMIT 1
+  `;
+  if (!rows.length || rows[0].flight_budget == null) return ok({ found: false });
+  return ok({
+    found: true,
+    flight_budget: rows[0].flight_budget,
+    flight_budget_currency: rows[0].flight_budget_currency || 'USD',
+  });
+}
+
 async function handleGet(qs) {
   const id = Number(qs.id);
   if (!id) return bad('id required');
@@ -787,6 +805,7 @@ exports.handler = async (event) => {
 
     if (method === 'GET'  && action === 'list')              return await handleList();
     if (method === 'GET'  && action === 'get')               return await handleGet(qs);
+    if (method === 'GET'  && action === 'flight-budget')     return await handleFlightBudget(qs);
     if (method === 'POST' && action === 'create')            return await handleCreate(body);
     if (method === 'POST' && action === 'update')            return await handleUpdate(body);
     if (method === 'POST' && action === 'delete')            return await handleDelete(body);
