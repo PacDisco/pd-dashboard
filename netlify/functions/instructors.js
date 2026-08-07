@@ -451,6 +451,7 @@ async function handleSync() {
     appByEmail.set(email, sub);
   }
 
+  const appDocRows = [];
   for (const [email, sub] of appByEmail) {
     seenEmails.add(email);
     const name = cleanText(nameOf(sub));
@@ -508,9 +509,11 @@ async function handleSync() {
     if (res[0] && res[0].inserted) created++; else updated++;
     const instructorId = res[0].id;
 
-    // application file uploads (CV, photos)
-    docCount += await cacheFiles(sub, instructorId, email, appForm.title);
+    // application file uploads (CV, photos) — collected, written in one batch
+    // below rather than a query per file.
+    appDocRows.push(...applicationDocRows(sub, instructorId, email, appForm.title));
   }
+  docCount += await saveDocuments(appDocRows);
 
   // 1b) Profile-seeding secondary sources (e.g. Personal Information) ------
   //     Fills blank profile fields and CREATES onboard-only instructors who
@@ -554,18 +557,20 @@ async function handleSync() {
   const docItemsByInstructor = new Map(); // instructorId -> Set(item)
   for (const form of FORMS.filter((f) => f.role === 'upload')) {
     const subs = await fetchSubmissions(form.id);
+    const pending = [];
     for (const sub of subs) {
       const email = canon(CHECKLIST.submitterEmail(sub) || emailOf(sub));
       if (!email) continue;
       const instructorId = idByEmail.get(email) || null;
       const { items, files } = CHECKLIST.classifyUploadSubmission(sub);
-      docCount += await cacheClassifiedFiles(files, sub, instructorId, email, form.title);
+      pending.push(...uploadDocRows(files, sub, instructorId, email, form.title));
       if (instructorId && items.length) {
         if (!docItemsByInstructor.has(instructorId)) docItemsByInstructor.set(instructorId, new Set());
         const set = docItemsByInstructor.get(instructorId);
         items.forEach((i) => set.add(i));
       }
     }
+    docCount += await saveDocuments(pending);
   }
   for (const [instructorId, items] of docItemsByInstructor) {
     for (const item of items) {
@@ -574,17 +579,29 @@ async function handleSync() {
   }
 
   // 3) Onboarding forms (contract, personal info, policies) ----------------
+  //    As well as ticking the checklist item, record a PDF render of each
+  //    submission as a document, so an instructor's profile shows the signed
+  //    contract and every policy they acknowledged — not just their uploads.
   for (const form of FORMS.filter((f) => f.role === 'onboarding')) {
     const subs = await fetchSubmissions(form.id);
-    const emails = new Set();
-    // submitterEmail ignores next-of-kin / emergency-contact email fields, so
-    // a form that merely NAMES another instructor can't tick their checklist.
-    for (const sub of subs) { const e = canon(CHECKLIST.submitterEmail(sub)); if (e) emails.add(e); }
-    for (const email of emails) {
+    const seen = new Set();
+    const pending = [];
+    for (const sub of subs) {
+      // submitterEmail ignores next-of-kin / emergency-contact email fields, so
+      // a form that merely NAMES another instructor can't tick their checklist.
+      const email = canon(CHECKLIST.submitterEmail(sub));
+      if (!email) continue;
       const instructorId = idByEmail.get(email);
       if (!instructorId) continue; // only track for known instructors
-      if (await markOnboarding(instructorId, form.item, form.label)) onboardingCount++;
+
+      if (!seen.has(email)) {
+        seen.add(email);
+        if (await markOnboarding(instructorId, form.item, form.label)) onboardingCount++;
+      }
+      const row = submissionPdfRow(sub, form, instructorId, email);
+      if (row) pending.push(row);
     }
+    docCount += await saveDocuments(pending);
   }
 
   return ok({ created, updated, documents: docCount, onboarding: onboardingCount,
@@ -642,51 +659,119 @@ async function markOnboarding(instructorId, item, label) {
 }
 
 /**
- * Store already-classified upload-form files. Unlike cacheFiles (used for the
- * application form's CV/photo fields) this records the real document type —
- * "Passport", "WFR Certificate" — rather than the upload widget's label.
+ * Unlike applicationDocRows (the application form's individually-named CV and
+ * photo fields) the upload form's rows carry a CLASSIFIED document type —
+ * "Passport", "WFR Certificate" — rather than the widget's generic label.
  */
-async function cacheClassifiedFiles(files, sub, instructorId, email, formTitle) {
+/**
+ * Insert/refresh many instructor_documents rows in ONE round trip.
+ *
+ * The sync used to issue a query per file, and adding submission PDFs pushed a
+ * 25-instructor sync to ~500 sequential Neon round trips — well past Netlify's
+ * 10s synchronous budget. Batching keeps the whole document pass at roughly one
+ * query per form.
+ *
+ * rows: [{ instructorId, email, docType, filename, url, sourceForm, submissionId, uploadedAt, kind }]
+ */
+async function saveDocuments(rows) {
+  if (!rows.length) return 0;
+  const COLS = 9;
+  const CHUNK = 200; // keep well under Postgres' 65535-parameter ceiling
   let n = 0;
-  const uploadedAt = sub.created_at ? new Date(sub.created_at).toISOString() : null;
-  for (const f of files) {
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const slice = rows.slice(i, i + CHUNK);
+    const params = [];
+    const tuples = slice.map((r, k) => {
+      const b = k * COLS;
+      params.push(
+        r.instructorId ?? null, r.email ?? null,
+        String(r.docType || 'Document').slice(0, 120), r.filename || 'Document',
+        r.url, r.sourceForm || null, r.submissionId || null,
+        r.uploadedAt || null, r.kind || 'upload'
+      );
+      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9})`;
+    }).join(',');
     try {
-      const r = await sql()`
-        INSERT INTO instructor_documents (instructor_id, email, doc_type, filename, file_url, source_form, submission_id, uploaded_at)
-        VALUES (${instructorId}, ${email}, ${String(f.docType || 'Document').slice(0, 120)}, ${f.filename},
-                ${f.url}, ${formTitle}, ${sub.id}, ${uploadedAt})
-        ON CONFLICT (submission_id, file_url) DO UPDATE
-          SET instructor_id = COALESCE(instructor_documents.instructor_id, EXCLUDED.instructor_id),
-              doc_type      = EXCLUDED.doc_type
-        RETURNING id`;
-      if (r.length) n++;
-    } catch (e) { /* skip a bad row, keep syncing */ }
+      const out = await sql().query(
+        `INSERT INTO instructor_documents
+           (instructor_id, email, doc_type, filename, file_url, source_form, submission_id, uploaded_at, kind)
+         VALUES ${tuples}
+         ON CONFLICT (submission_id, file_url) DO UPDATE
+           SET instructor_id = COALESCE(instructor_documents.instructor_id, EXCLUDED.instructor_id),
+               doc_type      = EXCLUDED.doc_type,
+               kind          = EXCLUDED.kind
+         RETURNING id`, params);
+      n += out.length;
+    } catch (e) {
+      // Loud on purpose. The most likely cause is MIGRATION-instructor-checklist.sql
+      // not having been run, in which case EVERY document insert fails on the
+      // unknown `kind` column and the sync would otherwise report a cheerful
+      // "0 documents" with nothing in the logs.
+      console.error('[instructors] document batch insert failed:', e.message || e);
+    }
   }
   return n;
 }
 
-async function cacheFiles(sub, instructorId, email, formTitle) {
-  const a = sub.answers || {};
-  let n = 0;
+// Build (don't write) the rows for one classified upload submission.
+function uploadDocRows(files, sub, instructorId, email, formTitle) {
   const uploadedAt = sub.created_at ? new Date(sub.created_at).toISOString() : null;
+  return files.map((f) => ({
+    instructorId, email, docType: f.docType, filename: f.filename, url: f.url,
+    sourceForm: formTitle, submissionId: sub.id, uploadedAt, kind: 'upload',
+  }));
+}
+
+/**
+ * Record a PDF render of a completed form submission (signed contract,
+ * personal information, a policy acknowledgment) as a document on the profile.
+ *
+ * These aren't file uploads — the submission itself IS the document — so the
+ * stored `file_url` is Jotform's generatePDF API endpoint. It is stored WITHOUT
+ * the API key; jotform-file.mjs injects that server-side when streaming, and
+ * also handles retrying via getSubmissionPDF for Sign-enabled forms like the
+ * contract.
+ */
+function submissionPdfRow(sub, form, instructorId, email) {
+  const sid = String(sub.id || '').trim();
+  if (!sid) return null;
+  const base = (process.env.JOTFORM_BASE_URL || 'https://api.jotform.com').replace(/\/+$/, '');
+  return {
+    instructorId, email,
+    docType: form.label,
+    filename: `${String(form.label).replace(/[^\w.\- &]+/g, '')}.pdf`,
+    // No apiKey here — jotform-file.mjs injects it server-side when streaming,
+    // and retries via getSubmissionPDF for Sign-enabled forms like the contract.
+    url: `${base}/generatePDF?formID=${encodeURIComponent(form.id)}` +
+         `&submissionID=${encodeURIComponent(sid)}&download=1`,
+    sourceForm: form.title,
+    submissionId: sid,
+    uploadedAt: sub.created_at ? new Date(sub.created_at).toISOString() : null,
+    kind: 'submission_pdf',
+  };
+}
+
+// Rows for the application form's own upload fields (CV, photos). These fields
+// ARE individually named on that form, so the field label is a good doc_type —
+// unlike the document-upload form, whose fields are all "Additional file
+// upload" and need classifying.
+function applicationDocRows(sub, instructorId, email, formTitle) {
+  const a = sub.answers || {};
+  const uploadedAt = sub.created_at ? new Date(sub.created_at).toISOString() : null;
+  const rows = [];
   for (const qid of Object.keys(a)) {
     const q = a[qid];
     if (!q || q.type !== 'control_fileupload') continue;
-    const urls = fileUrls(q);
-    for (const url of urls) {
-      const docType = String(q.text || 'Document').replace(/<[^>]+>/g, '').trim().slice(0, 120) || 'Document';
-      try {
-        const r = await sql()`
-          INSERT INTO instructor_documents (instructor_id, email, doc_type, filename, file_url, source_form, submission_id, uploaded_at)
-          VALUES (${instructorId}, ${email}, ${docType}, ${fileNameFromUrl(url)}, ${url}, ${formTitle}, ${sub.id}, ${uploadedAt})
-          ON CONFLICT (submission_id, file_url) DO UPDATE
-            SET instructor_id = COALESCE(instructor_documents.instructor_id, EXCLUDED.instructor_id)
-          RETURNING id`;
-        if (r.length) n++;
-      } catch (e) { /* skip a bad row, keep syncing */ }
+    for (const url of fileUrls(q)) {
+      rows.push({
+        instructorId, email,
+        docType: String(q.text || 'Document').replace(/<[^>]+>/g, '').trim().slice(0, 120) || 'Document',
+        filename: fileNameFromUrl(url),
+        url, sourceForm: formTitle, submissionId: sub.id, uploadedAt, kind: 'upload',
+      });
     }
   }
-  return n;
+  return rows;
 }
 
 // --------------------------------------------------------------------------

@@ -83,7 +83,29 @@
      RETURNING *`;
    return ok({ onboarding: rows[0] });
  }
-@@ -524,13 +546,30 @@
+@@ -429,6 +451,7 @@
+     appByEmail.set(email, sub);
+   }
+ 
++  const appDocRows = [];
+   for (const [email, sub] of appByEmail) {
+     seenEmails.add(email);
+     const name = cleanText(nameOf(sub));
+@@ -486,9 +509,11 @@
+     if (res[0] && res[0].inserted) created++; else updated++;
+     const instructorId = res[0].id;
+ 
+-    // application file uploads (CV, photos)
+-    docCount += await cacheFiles(sub, instructorId, email, appForm.title);
++    // application file uploads (CV, photos) — collected, written in one batch
++    // below rather than a query per file.
++    appDocRows.push(...applicationDocRows(sub, instructorId, email, appForm.title));
+   }
++  docCount += await saveDocuments(appDocRows);
+ 
+   // 1b) Profile-seeding secondary sources (e.g. Personal Information) ------
+   //     Fills blank profile fields and CREATES onboard-only instructors who
+@@ -524,32 +549,59 @@
    const idByEmail = new Map(idRows.map((r) => [r.email, r.id]));
  
    // 2) Document upload form ------------------------------------------------
@@ -95,6 +117,7 @@
 +  const docItemsByInstructor = new Map(); // instructorId -> Set(item)
    for (const form of FORMS.filter((f) => f.role === 'upload')) {
      const subs = await fetchSubmissions(form.id);
++    const pending = [];
      for (const sub of subs) {
 -      const email = canon(emailOf(sub));
 +      const email = canon(CHECKLIST.submitterEmail(sub) || emailOf(sub));
@@ -102,13 +125,14 @@
        const instructorId = idByEmail.get(email) || null;
 -      docCount += await cacheFiles(sub, instructorId, email, form.title);
 +      const { items, files } = CHECKLIST.classifyUploadSubmission(sub);
-+      docCount += await cacheClassifiedFiles(files, sub, instructorId, email, form.title);
++      pending.push(...uploadDocRows(files, sub, instructorId, email, form.title));
 +      if (instructorId && items.length) {
 +        if (!docItemsByInstructor.has(instructorId)) docItemsByInstructor.set(instructorId, new Set());
 +        const set = docItemsByInstructor.get(instructorId);
 +        items.forEach((i) => set.add(i));
 +      }
 +    }
++    docCount += await saveDocuments(pending);
 +  }
 +  for (const [instructorId, items] of docItemsByInstructor) {
 +    for (const item of items) {
@@ -116,15 +140,22 @@
      }
    }
  
-@@ -538,17 +577,13 @@
+   // 3) Onboarding forms (contract, personal info, policies) ----------------
++  //    As well as ticking the checklist item, record a PDF render of each
++  //    submission as a document, so an instructor's profile shows the signed
++  //    contract and every policy they acknowledged — not just their uploads.
    for (const form of FORMS.filter((f) => f.role === 'onboarding')) {
      const subs = await fetchSubmissions(form.id);
-     const emails = new Set();
+-    const emails = new Set();
 -    for (const sub of subs) { const e = canon(emailOf(sub)); if (e) emails.add(e); }
-+    // submitterEmail ignores next-of-kin / emergency-contact email fields, so
-+    // a form that merely NAMES another instructor can't tick their checklist.
-+    for (const sub of subs) { const e = canon(CHECKLIST.submitterEmail(sub)); if (e) emails.add(e); }
-     for (const email of emails) {
+-    for (const email of emails) {
++    const seen = new Set();
++    const pending = [];
++    for (const sub of subs) {
++      // submitterEmail ignores next-of-kin / emergency-contact email fields, so
++      // a form that merely NAMES another instructor can't tick their checklist.
++      const email = canon(CHECKLIST.submitterEmail(sub));
++      if (!email) continue;
        const instructorId = idByEmail.get(email);
        if (!instructorId) continue; // only track for known instructors
 -      const r = await sql()`
@@ -134,14 +165,24 @@
 -          SET completed = TRUE, completed_at = COALESCE(instructor_onboarding.completed_at, NOW()), label = EXCLUDED.label
 -        RETURNING id`;
 -      if (r.length) onboardingCount++;
-+      if (await markOnboarding(instructorId, form.item, form.label)) onboardingCount++;
++
++      if (!seen.has(email)) {
++        seen.add(email);
++        if (await markOnboarding(instructorId, form.item, form.label)) onboardingCount++;
++      }
++      const row = submissionPdfRow(sub, form, instructorId, email);
++      if (row) pending.push(row);
      }
++    docCount += await saveDocuments(pending);
    }
  
-@@ -573,6 +608,63 @@
+   return ok({ created, updated, documents: docCount, onboarding: onboardingCount,
+@@ -573,28 +625,153 @@
    }
    return Array.from(new Set(out));
  }
+-async function cacheFiles(sub, instructorId, email, formTitle) {
+-  const a = sub.answers || {};
 +/**
 + * Tick an onboarding item from evidence found in Jotform.
 + *
@@ -176,35 +217,409 @@
 +}
 +
 +/**
-+ * Store already-classified upload-form files. Unlike cacheFiles (used for the
-+ * application form's CV/photo fields) this records the real document type —
-+ * "Passport", "WFR Certificate" — rather than the upload widget's label.
++ * Unlike applicationDocRows (the application form's individually-named CV and
++ * photo fields) the upload form's rows carry a CLASSIFIED document type —
++ * "Passport", "WFR Certificate" — rather than the widget's generic label.
 + */
-+async function cacheClassifiedFiles(files, sub, instructorId, email, formTitle) {
-+  let n = 0;
-+  const uploadedAt = sub.created_at ? new Date(sub.created_at).toISOString() : null;
-+  for (const f of files) {
++/**
++ * Insert/refresh many instructor_documents rows in ONE round trip.
++ *
++ * The sync used to issue a query per file, and adding submission PDFs pushed a
++ * 25-instructor sync to ~500 sequential Neon round trips — well past Netlify's
++ * 10s synchronous budget. Batching keeps the whole document pass at roughly one
++ * query per form.
++ *
++ * rows: [{ instructorId, email, docType, filename, url, sourceForm, submissionId, uploadedAt, kind }]
++ */
++async function saveDocuments(rows) {
++  if (!rows.length) return 0;
++  const COLS = 9;
++  const CHUNK = 200; // keep well under Postgres' 65535-parameter ceiling
+   let n = 0;
++  for (let i = 0; i < rows.length; i += CHUNK) {
++    const slice = rows.slice(i, i + CHUNK);
++    const params = [];
++    const tuples = slice.map((r, k) => {
++      const b = k * COLS;
++      params.push(
++        r.instructorId ?? null, r.email ?? null,
++        String(r.docType || 'Document').slice(0, 120), r.filename || 'Document',
++        r.url, r.sourceForm || null, r.submissionId || null,
++        r.uploadedAt || null, r.kind || 'upload'
++      );
++      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9})`;
++    }).join(',');
 +    try {
-+      const r = await sql()`
-+        INSERT INTO instructor_documents (instructor_id, email, doc_type, filename, file_url, source_form, submission_id, uploaded_at)
-+        VALUES (${instructorId}, ${email}, ${String(f.docType || 'Document').slice(0, 120)}, ${f.filename},
-+                ${f.url}, ${formTitle}, ${sub.id}, ${uploadedAt})
-+        ON CONFLICT (submission_id, file_url) DO UPDATE
-+          SET instructor_id = COALESCE(instructor_documents.instructor_id, EXCLUDED.instructor_id),
-+              doc_type      = EXCLUDED.doc_type
-+        RETURNING id`;
-+      if (r.length) n++;
-+    } catch (e) { /* skip a bad row, keep syncing */ }
++      const out = await sql().query(
++        `INSERT INTO instructor_documents
++           (instructor_id, email, doc_type, filename, file_url, source_form, submission_id, uploaded_at, kind)
++         VALUES ${tuples}
++         ON CONFLICT (submission_id, file_url) DO UPDATE
++           SET instructor_id = COALESCE(instructor_documents.instructor_id, EXCLUDED.instructor_id),
++               doc_type      = EXCLUDED.doc_type,
++               kind          = EXCLUDED.kind
++         RETURNING id`, params);
++      n += out.length;
++    } catch (e) {
++      // Loud on purpose. The most likely cause is MIGRATION-instructor-checklist.sql
++      // not having been run, in which case EVERY document insert fails on the
++      // unknown `kind` column and the sync would otherwise report a cheerful
++      // "0 documents" with nothing in the logs.
++      console.error('[instructors] document batch insert failed:', e.message || e);
++    }
 +  }
 +  return n;
 +}
 +
- async function cacheFiles(sub, instructorId, email, formTitle) {
-   const a = sub.answers || {};
-   let n = 0;
++// Build (don't write) the rows for one classified upload submission.
++function uploadDocRows(files, sub, instructorId, email, formTitle) {
+   const uploadedAt = sub.created_at ? new Date(sub.created_at).toISOString() : null;
++  return files.map((f) => ({
++    instructorId, email, docType: f.docType, filename: f.filename, url: f.url,
++    sourceForm: formTitle, submissionId: sub.id, uploadedAt, kind: 'upload',
++  }));
++}
++
++/**
++ * Record a PDF render of a completed form submission (signed contract,
++ * personal information, a policy acknowledgment) as a document on the profile.
++ *
++ * These aren't file uploads — the submission itself IS the document — so the
++ * stored `file_url` is Jotform's generatePDF API endpoint. It is stored WITHOUT
++ * the API key; jotform-file.mjs injects that server-side when streaming, and
++ * also handles retrying via getSubmissionPDF for Sign-enabled forms like the
++ * contract.
++ */
++function submissionPdfRow(sub, form, instructorId, email) {
++  const sid = String(sub.id || '').trim();
++  if (!sid) return null;
++  const base = (process.env.JOTFORM_BASE_URL || 'https://api.jotform.com').replace(/\/+$/, '');
++  return {
++    instructorId, email,
++    docType: form.label,
++    filename: `${String(form.label).replace(/[^\w.\- &]+/g, '')}.pdf`,
++    // No apiKey here — jotform-file.mjs injects it server-side when streaming,
++    // and retries via getSubmissionPDF for Sign-enabled forms like the contract.
++    url: `${base}/generatePDF?formID=${encodeURIComponent(form.id)}` +
++         `&submissionID=${encodeURIComponent(sid)}&download=1`,
++    sourceForm: form.title,
++    submissionId: sid,
++    uploadedAt: sub.created_at ? new Date(sub.created_at).toISOString() : null,
++    kind: 'submission_pdf',
++  };
++}
++
++// Rows for the application form's own upload fields (CV, photos). These fields
++// ARE individually named on that form, so the field label is a good doc_type —
++// unlike the document-upload form, whose fields are all "Additional file
++// upload" and need classifying.
++function applicationDocRows(sub, instructorId, email, formTitle) {
++  const a = sub.answers || {};
++  const uploadedAt = sub.created_at ? new Date(sub.created_at).toISOString() : null;
++  const rows = [];
+   for (const qid of Object.keys(a)) {
+     const q = a[qid];
+     if (!q || q.type !== 'control_fileupload') continue;
+-    const urls = fileUrls(q);
+-    for (const url of urls) {
+-      const docType = String(q.text || 'Document').replace(/<[^>]+>/g, '').trim().slice(0, 120) || 'Document';
+-      try {
+-        const r = await sql()`
+-          INSERT INTO instructor_documents (instructor_id, email, doc_type, filename, file_url, source_form, submission_id, uploaded_at)
+-          VALUES (${instructorId}, ${email}, ${docType}, ${fileNameFromUrl(url)}, ${url}, ${formTitle}, ${sub.id}, ${uploadedAt})
+-          ON CONFLICT (submission_id, file_url) DO UPDATE
+-            SET instructor_id = COALESCE(instructor_documents.instructor_id, EXCLUDED.instructor_id)
+-          RETURNING id`;
+-        if (r.length) n++;
+-      } catch (e) { /* skip a bad row, keep syncing */ }
++    for (const url of fileUrls(q)) {
++      rows.push({
++        instructorId, email,
++        docType: String(q.text || 'Document').replace(/<[^>]+>/g, '').trim().slice(0, 120) || 'Document',
++        filename: fileNameFromUrl(url),
++        url, sourceForm: formTitle, submissionId: sub.id, uploadedAt, kind: 'upload',
++      });
+     }
+   }
+-  return n;
++  return rows;
+ }
+ 
+ // --------------------------------------------------------------------------
+--- a/netlify/functions/jotform-file.mjs
++++ b/netlify/functions/jotform-file.mjs
+@@ -1,32 +1,140 @@
+ /**
+  * netlify/functions/jotform-file.mjs
+  *
+- * Streams a Jotform-hosted upload through this Netlify function so the team
+- * can open files without being logged into Jotform. Uses the JOTFORM_API_KEY
+- * env var to authenticate the upstream request.
++ * Streams a Jotform-hosted file through this Netlify function so the team can
++ * open it without being logged into Jotform. Uses JOTFORM_API_KEY to
++ * authenticate the upstream request.
+  *
+  * Usage:
+  *   /.netlify/functions/jotform-file?url=https://www.jotform.com/uploads/...
++ *   /.netlify/functions/jotform-file?url=<generatePDF endpoint>&download=1&name=Signed%20Contract.pdf
+  *
+- * Only allows URLs whose host ends in `jotform.com` (defence in depth — we
+- * don't want this becoming an open proxy).
++ * Query params:
++ *   url       required; must be a jotform.com host (defence in depth — this
++ *             must not become an open proxy)
++ *   download  "1" to force Content-Disposition: attachment
++ *   name      filename to use for the download; falls back to the URL's last
++ *             path segment. Needed for API endpoints, whose path segment is
++ *             "generatePDF" or "server.php" rather than anything meaningful.
+  *
+- * The optional `?download=1` query param adds a Content-Disposition: attachment
+- * header so the browser downloads instead of inlining (handy for files like
+- * .docx that browsers don't render).
++ * ---------------------------------------------------------------------------
++ * ACCESS CONTROL — read this before changing it
++ * ---------------------------------------------------------------------------
++ * This endpoint streams instructor passports, driver's licences and police
++ * checks. It lives under /.netlify/functions/* and /api/*, neither of which is
++ * covered by the site's Role= redirects, and auth-gate.js explicitly excludes
++ * /api/*. So the check here is the ONLY thing standing in front of those files.
++ *
++ * It therefore VERIFIES the Netlify Identity token rather than just decoding
++ * it. Decoding alone — which is what auth-gate.js does — is safe at the edge
++ * only because Netlify's CDN has already signature-checked nf_jwt against the
++ * Role= rules before auth-gate runs. There is no such rule in front of this
++ * function, so an unverified decode would let anyone forge
++ * `Cookie: nf_jwt=<header>.<base64 {"app_metadata":{"roles":["admin"]}}>.<junk>`
++ * and read every file in the Jotform account.
++ *
++ * Verification asks GoTrue itself (`/.netlify/identity/user`), so no JWT secret
++ * has to be configured here. Results are cached briefly per token to keep the
++ * cost to one round trip per session rather than one per file.
++ *
++ * NOTE: `context.clientContext` is NOT available to v2 (default-export)
++ * functions — it only exists on the v1 `exports.handler` signature. Don't
++ * reintroduce it here; it is silently undefined and would reopen the hole.
+  */
+ 
+ const ALLOWED_HOST_SUFFIX = ".jotform.com";
++const AUTH_CACHE_MS = 5 * 60 * 1000;
+ 
+ const errJSON = (status, msg) => new Response(JSON.stringify({ error: msg }), {
+   status,
+-  headers: { "content-type": "application/json" },
++  headers: { "content-type": "application/json", "cache-control": "no-store" },
+ });
+ 
++// token -> { ts, roles }  (warm-container scoped)
++const _authCache = new Map();
++
++function bearerFrom(req) {
++  const auth = req.headers.get("authorization") || "";
++  const m = /^Bearer\s+(.+)$/i.exec(auth.trim());
++  if (m) return m[1].trim();
++  const cookie = req.headers.get("cookie") || "";
++  const c = cookie.match(/(?:^|;\s*)nf_jwt=([^;]+)/);
++  return c ? decodeURIComponent(c[1]) : null;
++}
++
++/**
++ * Verify the caller's Identity token with GoTrue and return their roles.
++ * Returns null when there is no usable session.
++ */
++async function verifiedRoles(req) {
++  const token = bearerFrom(req);
++  if (!token) return null;
++
++  const hit = _authCache.get(token);
++  if (hit && Date.now() - hit.ts < AUTH_CACHE_MS) return hit.roles;
++
++  const siteUrl = (process.env.URL || process.env.DEPLOY_PRIME_URL || "").replace(/\/+$/, "");
++  if (!siteUrl) {
++    console.error("[jotform-file] URL env var missing — cannot verify Identity token");
++    return null;
++  }
++
++  let res;
++  try {
++    res = await fetch(`${siteUrl}/.netlify/identity/user`, {
++      headers: { Authorization: `Bearer ${token}` },
++    });
++  } catch (e) {
++    console.error("[jotform-file] Identity verification request failed:", e.message);
++    return null;
++  }
++  if (!res.ok) return null;                 // expired, revoked or forged
++
++  let user;
++  try { user = await res.json(); } catch { return null; }
++  const roles = user?.app_metadata?.roles || [];
++
++  if (_authCache.size > 500) {
++    const now = Date.now();
++    for (const [k, v] of _authCache) if (now - v.ts >= AUTH_CACHE_MS) _authCache.delete(k);
++  }
++  _authCache.set(token, { ts: Date.now(), roles });
++  return roles;
++}
++
++// Jotform's generatePDF 400s on Sign-enabled submissions (the Instructor
++// Contract Form is one). The legacy getSubmissionPDF endpoint on the www host
++// renders those correctly, so derive it and retry rather than making every
++// caller know about the quirk.
++function pdfFallbackFor(upstream) {
++  if (!/\/generatePDF$/i.test(upstream.pathname)) return null;
++  const formID = upstream.searchParams.get("formID");
++  const sid = upstream.searchParams.get("submissionID");
++  if (!formID || !sid) return null;
++  const www = upstream.hostname
++    .replace(/^api\./, "www.")
++    .replace(/^eu-api\./, "eu.")
++    .replace(/^hipaa-api\./, "hipaa.");
++  return new URL(
++    `https://${www}/server.php?action=getSubmissionPDF` +
++    `&sid=${encodeURIComponent(sid)}&formID=${encodeURIComponent(formID)}`
++  );
++}
++
++// A stored file under /uploads/ is immutable, so it caches well. A rendered
++// submission is not — edit or re-sign the form and the PDF changes.
++function isDynamic(u) {
++  return /\/generatePDF$/i.test(u.pathname) || /server\.php$/i.test(u.pathname);
++}
++
+ export default async (req) => {
+   const apiKey = process.env.JOTFORM_API_KEY;
+   if (!apiKey) return errJSON(500, "JOTFORM_API_KEY env var is not set");
+ 
++  const roles = await verifiedRoles(req);
++  if (roles === null) return errJSON(401, "Sign in required, or your session expired — reload the dashboard.");
++  if (!roles.length) return errJSON(403, "Your account has no dashboard role.");
++
+   const reqUrl = new URL(req.url);
+   const target = reqUrl.searchParams.get("url");
+   if (!target) return errJSON(400, "Missing ?url= parameter");
+@@ -41,41 +149,47 @@
+     return errJSON(400, `Only jotform.com URLs are proxied (got host: ${host})`);
+   }
+ 
+-  // Jotform supports the API key both as ?apiKey=… and as a header. Some
+-  // routes only honour one — we set both to be safe.
+-  upstream.searchParams.set("apiKey", apiKey);
+-
+-  let resp;
+-  try {
+-    resp = await fetch(upstream.toString(), {
+-      headers: { "APIKEY": apiKey },
+-    });
+-  } catch (e) {
+-    return errJSON(502, `Upstream fetch failed: ${e.message}`);
+-  }
+-
+-  if (!resp.ok) {
+-    const txt = await resp.text();
+-    return errJSON(resp.status, `Jotform ${resp.status}: ${txt.slice(0, 300)}`);
++  const attempts = [upstream];
++  const fb = pdfFallbackFor(upstream);
++  if (fb) attempts.push(fb);
++
++  let resp = null, lastErr = "";
++  for (const attempt of attempts) {
++    // Jotform honours the key as ?apiKey= on some routes and as a header on
++    // others, so send both.
++    attempt.searchParams.set("apiKey", apiKey);
++    try {
++      const r = await fetch(attempt.toString(), { headers: { APIKEY: apiKey } });
++      if (r.ok) { resp = r; upstream = attempt; break; }
++      lastErr = `Jotform ${r.status}: ${(await r.text()).slice(0, 300)}`;
++    } catch (e) {
++      lastErr = `Upstream fetch failed: ${e.message}`;
++    }
+   }
++  if (!resp) return errJSON(502, lastErr || "Upstream fetch failed");
+ 
+-  // Pass through the binary body + relevant headers.
+-  const ct = resp.headers.get("content-type") || "application/octet-stream";
+-  const cl = resp.headers.get("content-length");
+   const headers = {
+-    "content-type": ct,
+-    // Cache aggressively at the browser level — file URLs are immutable
+-    // (each upload has a unique path); 1 day is a sensible default and
+-    // the team's permission gate is what really controls access.
+-    "cache-control": "private, max-age=86400",
++    "content-type": resp.headers.get("content-type") || "application/octet-stream",
++    // Private either way — these are personal documents and must never land in
++    // a shared cache. Rendered submissions additionally must revalidate, or an
++    // edited contract would serve stale for a day.
++    "cache-control": isDynamic(upstream)
++      ? "private, max-age=0, must-revalidate"
++      : "private, max-age=86400",
+   };
+-  if (cl) headers["content-length"] = cl;
++  // Deliberately NOT forwarding content-length: undici transparently
++  // decompresses a gzip'd upstream body but leaves the COMPRESSED length on
++  // the headers, so copying it truncates the response
++  // (ERR_CONTENT_LENGTH_MISMATCH). Let the platform frame the body.
+ 
+   const dl = reqUrl.searchParams.get("download");
+   if (dl === "1" || dl === "true") {
+-    const filename = decodeURIComponent(upstream.pathname.split("/").pop() || "download");
+-    // Sanitize for header use — strip CR/LF and quotes
+-    const safe = filename.replace(/["\r\n]/g, "");
++    // Prefer the caller-supplied name. The URL's last path segment is useless
++    // for API endpoints — it would save a signed contract as "generatePDF" or
++    // "server.php", with no extension.
++    const raw = reqUrl.searchParams.get("name")
++      || decodeURIComponent(upstream.pathname.split("/").pop() || "download");
++    const safe = raw.replace(/[/\\"\r\n]/g, "").trim() || "download";
+     headers["content-disposition"] = `attachment; filename="${safe}"`;
+   }
+ 
 --- a/instructors/index.html
 +++ b/instructors/index.html
-@@ -319,11 +319,35 @@
+@@ -311,19 +311,76 @@
+     ? piAnswers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+renderAnswer(a)+'</div></div>';}).join('')
+     : '';
+ 
++  // Documents. Every link streams through /jotform-file, which injects the
++  // Jotform API key server-side — so the team opens a passport scan or a signed
++  // contract without needing a Jotform login. Linking file_url directly (as
++  // this used to) sends them to a Jotform sign-in wall.
++  var FILE_PROXY = '/.netlify/functions/jotform-file';
++  function docLink(x, download){
++    var u = FILE_PROXY+'?url='+encodeURIComponent(x.file_url||'');
++    // Pass the real filename: a generatePDF URL's last path segment is
++    // "generatePDF", so without this a signed contract saves as an
++    // extensionless blob the OS can't open.
++    if(download) u += '&download=1&name='+encodeURIComponent(x.filename||'document.pdf');
++    return u;
++  }
++  function docRow(x){
++    // Submission PDFs are generated on demand and some browsers won't inline
++    // them, so those download; uploads open in a tab for a quick look.
++    var isPdf = x.kind === 'submission_pdf';
++    return '<div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">'+
++      '<div class="min-w-0"><div class="text-sm text-gray-800 truncate">'+esc(x.doc_type||'Document')+'</div>'+
++      '<div class="text-xs text-gray-400 truncate">'+esc(x.filename||'')+
++        (x.uploaded_at?' · '+fmtDate(x.uploaded_at):'')+
++        (x.source_form?' · '+esc(x.source_form):'')+'</div></div>'+
++      '<a href="'+esc(docLink(x, isPdf))+'" target="_blank" rel="noopener" '+
++      'class="text-purple-600 text-sm hover:underline whitespace-nowrap ml-3">'+
++      (isPdf?'Open PDF ↗':'Open ↗')+'</a></div>';
++  }
++  function docGroup(title, list){
++    if(!list.length) return '';
++    return '<div class="mb-3"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">'+
++           esc(title)+' ('+list.length+')</div>'+list.map(docRow).join('')+'</div>';
++  }
+   var docs = arr(d.documents);
++  var docForms   = docs.filter(function(x){ return x.kind === 'submission_pdf'; });
++  var docUploads = docs.filter(function(x){ return x.kind !== 'submission_pdf'; });
+   var docHtml = docs.length
+-    ? docs.map(function(x){return '<div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0"><div><div class="text-sm text-gray-800">'+esc(x.doc_type||'Document')+'</div><div class="text-xs text-gray-400">'+esc(x.filename||'')+(x.source_form?' · '+esc(x.source_form):'')+'</div></div><a href="'+esc(x.file_url)+'" target="_blank" rel="noopener" class="text-purple-600 text-sm hover:underline whitespace-nowrap">Open ↗</a></div>';}).join('')
+-    : '<p class="text-sm text-gray-400">No uploaded documents. Run “Sync from Jotform”.</p>';
++    ? docGroup('Signed forms & policies', docForms)+docGroup('Uploaded files', docUploads)
++    : '<p class="text-sm text-gray-400">No documents yet. Run “Sync from Jotform”.</p>';
+ 
    var assigns = arr(d.assignments);
    var assignHtml = assigns.map(function(a){ return assignRow(a); }).join('');
  
@@ -244,6 +659,15 @@
  
    $('drawer-body').innerHTML =
      '<div class="flex items-start justify-between mb-4">'+
+@@ -384,7 +441,7 @@
+ 
+     '<div class="sec"><h3>Onboarding &amp; policies</h3>'+obHtml+'</div>'+
+ 
+-    '<div class="sec"><h3>Uploaded documents ('+docs.length+')</h3>'+docHtml+'</div>'+
++    '<div class="sec"><h3>Documents ('+docs.length+')</h3>'+docHtml+'</div>'+
+ 
+     (piHtml ? '<div class="sec"><h3>Personal Information</h3><div>'+piHtml+'</div></div>' : '')+
+ 
 --- a/scripts/build-manifest.js
 +++ b/scripts/build-manifest.js
 @@ -193,6 +193,21 @@

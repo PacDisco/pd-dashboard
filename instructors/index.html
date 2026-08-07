@@ -311,10 +311,43 @@ function renderDrawer(d){
     ? piAnswers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+renderAnswer(a)+'</div></div>';}).join('')
     : '';
 
+  // Documents. Every link streams through /jotform-file, which injects the
+  // Jotform API key server-side — so the team opens a passport scan or a signed
+  // contract without needing a Jotform login. Linking file_url directly (as
+  // this used to) sends them to a Jotform sign-in wall.
+  var FILE_PROXY = '/.netlify/functions/jotform-file';
+  function docLink(x, download){
+    var u = FILE_PROXY+'?url='+encodeURIComponent(x.file_url||'');
+    // Pass the real filename: a generatePDF URL's last path segment is
+    // "generatePDF", so without this a signed contract saves as an
+    // extensionless blob the OS can't open.
+    if(download) u += '&download=1&name='+encodeURIComponent(x.filename||'document.pdf');
+    return u;
+  }
+  function docRow(x){
+    // Submission PDFs are generated on demand and some browsers won't inline
+    // them, so those download; uploads open in a tab for a quick look.
+    var isPdf = x.kind === 'submission_pdf';
+    return '<div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">'+
+      '<div class="min-w-0"><div class="text-sm text-gray-800 truncate">'+esc(x.doc_type||'Document')+'</div>'+
+      '<div class="text-xs text-gray-400 truncate">'+esc(x.filename||'')+
+        (x.uploaded_at?' · '+fmtDate(x.uploaded_at):'')+
+        (x.source_form?' · '+esc(x.source_form):'')+'</div></div>'+
+      '<a href="'+esc(docLink(x, isPdf))+'" target="_blank" rel="noopener" '+
+      'class="text-purple-600 text-sm hover:underline whitespace-nowrap ml-3">'+
+      (isPdf?'Open PDF ↗':'Open ↗')+'</a></div>';
+  }
+  function docGroup(title, list){
+    if(!list.length) return '';
+    return '<div class="mb-3"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">'+
+           esc(title)+' ('+list.length+')</div>'+list.map(docRow).join('')+'</div>';
+  }
   var docs = arr(d.documents);
+  var docForms   = docs.filter(function(x){ return x.kind === 'submission_pdf'; });
+  var docUploads = docs.filter(function(x){ return x.kind !== 'submission_pdf'; });
   var docHtml = docs.length
-    ? docs.map(function(x){return '<div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0"><div><div class="text-sm text-gray-800">'+esc(x.doc_type||'Document')+'</div><div class="text-xs text-gray-400">'+esc(x.filename||'')+(x.source_form?' · '+esc(x.source_form):'')+'</div></div><a href="'+esc(x.file_url)+'" target="_blank" rel="noopener" class="text-purple-600 text-sm hover:underline whitespace-nowrap">Open ↗</a></div>';}).join('')
-    : '<p class="text-sm text-gray-400">No uploaded documents. Run “Sync from Jotform”.</p>';
+    ? docGroup('Signed forms & policies', docForms)+docGroup('Uploaded files', docUploads)
+    : '<p class="text-sm text-gray-400">No documents yet. Run “Sync from Jotform”.</p>';
 
   var assigns = arr(d.assignments);
   var assignHtml = assigns.map(function(a){ return assignRow(a); }).join('');
@@ -408,7 +441,7 @@ function renderDrawer(d){
 
     '<div class="sec"><h3>Onboarding &amp; policies</h3>'+obHtml+'</div>'+
 
-    '<div class="sec"><h3>Uploaded documents ('+docs.length+')</h3>'+docHtml+'</div>'+
+    '<div class="sec"><h3>Documents ('+docs.length+')</h3>'+docHtml+'</div>'+
 
     (piHtml ? '<div class="sec"><h3>Personal Information</h3><div>'+piHtml+'</div></div>' : '')+
 

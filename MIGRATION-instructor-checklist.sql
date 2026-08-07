@@ -79,6 +79,33 @@ UPDATE instructor_onboarding SET label = 'Van Use Policy'             WHERE item
 CREATE INDEX IF NOT EXISTS instructor_onboarding_item_idx
   ON instructor_onboarding (item);
 
+-- --------------------------------------------------------------------------
+-- 4. What kind of document each row is.
+--
+--   'upload'         a file the instructor attached (passport scan, licence,
+--                    photos, CV).
+--   'submission_pdf' a PDF render of a completed form — the signed contract,
+--                    the personal information form, a policy acknowledgment.
+--                    The submission IS the document, so file_url points at
+--                    Jotform's generatePDF endpoint rather than a stored file.
+--
+-- Everything recorded before now was an attached file, so 'upload' is the
+-- correct backfill. The next sync adds the submission PDFs.
+-- --------------------------------------------------------------------------
+ALTER TABLE instructor_documents
+  ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'upload';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'instructor_documents_kind_chk'
+  ) THEN
+    ALTER TABLE instructor_documents
+      ADD CONSTRAINT instructor_documents_kind_chk
+      CHECK (kind IN ('upload', 'submission_pdf'));
+  END IF;
+END $$;
+
 -- ==========================================================================
 -- Done.
 --
