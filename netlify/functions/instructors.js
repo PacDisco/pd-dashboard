@@ -28,6 +28,9 @@
 
 const { neon } = require('@neondatabase/serverless');
 const https = require('https');
+// Canonical checklist definition, shared with instructor-checklist.js (the API
+// the instructor portal reads). Add or rename an onboarding item THERE, not here.
+const CHECKLIST = require('./_shared/instructor-checklist.js');
 
 let _sql;
 function sql() {
@@ -54,6 +57,7 @@ const STATUSES = ['current', 'potential', 'new_applicant', 'blacklisted'];
 const FORMS = [
   { id: '241888714639876', title: 'PD Program Instructor Application', role: 'application' },
   { id: '261607538438868', title: 'Instructor Document Upload Form',   role: 'upload' },
+  { id: '261608232937056', title: 'Instructor Contract Form',          role: 'onboarding', item: 'contract',            label: 'Signed Contract' },
   { id: '261748248196873', title: 'Instructor Personal Information',   role: 'onboarding', item: 'personal_info',       label: 'Personal Information', seedsProfile: true },
   { id: '261722834653056', title: 'Instructor Device Policy',          role: 'onboarding', item: 'policy_device',       label: 'Device Policy' },
   { id: '261727420881863', title: 'Instructor Drug & Alcohol Policy',  role: 'onboarding', item: 'policy_drug_alcohol', label: 'Drug & Alcohol Policy' },
@@ -62,7 +66,13 @@ const FORMS = [
   { id: '261727467730867', title: 'Instructor First Aid Kit Policy',   role: 'onboarding', item: 'policy_first_aid',    label: 'First Aid Kit Policy' },
   { id: '261756536759069', title: 'Van Use Policy & Agreement',        role: 'onboarding', item: 'policy_van',          label: 'Van Use Policy' },
 ];
-const ONBOARDING_ITEMS = FORMS.filter(f => f.role === 'onboarding').map(f => ({ item: f.item, label: f.label }));
+
+// The full 14-item checklist: the 8 form items above PLUS the 6 documents that
+// arrive through the upload form (Passport, Drivers License, WFR Certificate,
+// Police/Background Check, 2 Photos, Visa). Defined in _shared so the portal's
+// read API and this dashboard can never drift apart.
+const ONBOARDING_ITEMS = CHECKLIST.CHECKLIST_ITEMS;
+const ONBOARDING_ITEM_KEYS = ONBOARDING_ITEMS.map((o) => o.item);
 
 // --------------------------------------------------------------------------
 // Jotform API helper
@@ -188,7 +198,13 @@ async function handleList() {
            COUNT(DISTINCT a.program)::int                     AS programs_led_count,
            COALESCE(ARRAY_REMOVE(ARRAY_AGG(DISTINCT a.program), NULL), '{}') AS programs_led,
            COALESCE((SELECT COUNT(*) FROM instructor_documents d WHERE d.instructor_id = i.id), 0)::int AS document_count,
-           COALESCE((SELECT COUNT(*) FROM instructor_onboarding o WHERE o.instructor_id = i.id AND o.completed), 0)::int AS onboarding_done
+           -- Restricted to the canonical items so the roster's "x / 14" can
+           -- never disagree with the detail drawer, which renders exactly
+           -- those. A legacy or hand-inserted row with a retired item key
+           -- would otherwise inflate the roster count only.
+           COALESCE((SELECT COUNT(*) FROM instructor_onboarding o
+                      WHERE o.instructor_id = i.id AND o.completed
+                        AND o.item = ANY (${ONBOARDING_ITEM_KEYS})), 0)::int AS onboarding_done
     FROM instructors i
     LEFT JOIN instructor_assignments a ON a.instructor_id = i.id
     GROUP BY i.id
@@ -379,19 +395,25 @@ async function handleDeleteAssignment(body) {
 // --------------------------------------------------------------------------
 // ONBOARDING toggle
 // --------------------------------------------------------------------------
+// A hand-toggle is recorded with source = 'manual', which pins it: the Jotform
+// sync will not tick it back on. `source: 'jotform'` in the body releases the
+// pin, handing the item back to automatic detection.
 async function handleSetOnboarding(body) {
   const instructorId = Number(body.instructor_id);
   const item = String(body.item || '').trim();
   if (!instructorId || !item) return bad('instructor_id and item required');
   const meta = ONBOARDING_ITEMS.find((o) => o.item === item);
   const completed = !!body.completed;
+  const source = String(body.source || 'manual').toLowerCase() === 'jotform' ? 'jotform' : 'manual';
   const rows = await sql()`
-    INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at)
-    VALUES (${instructorId}, ${item}, ${meta ? meta.label : item}, ${completed}, ${completed ? new Date().toISOString() : null})
+    INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at, source)
+    VALUES (${instructorId}, ${item}, ${meta ? meta.label : item}, ${completed},
+            ${completed ? new Date().toISOString() : null}, ${source})
     ON CONFLICT (instructor_id, item) DO UPDATE
       SET completed = EXCLUDED.completed,
           completed_at = CASE WHEN EXCLUDED.completed THEN COALESCE(instructor_onboarding.completed_at, NOW()) ELSE NULL END,
-          label = EXCLUDED.label
+          label = EXCLUDED.label,
+          source = EXCLUDED.source
     RETURNING *`;
   return ok({ onboarding: rows[0] });
 }
@@ -524,13 +546,30 @@ async function handleSync() {
   const idByEmail = new Map(idRows.map((r) => [r.email, r.id]));
 
   // 2) Document upload form ------------------------------------------------
+  //    Each file is classified (dropdown value + filename) into one of the six
+  //    document checklist items, so uploads land with a real doc_type instead
+  //    of the form's generic "Additional file upload" label, and the matching
+  //    checklist item ticks. A document type picked with NO file attached is
+  //    deliberately not credited — see _shared/instructor-checklist.js.
+  const docItemsByInstructor = new Map(); // instructorId -> Set(item)
   for (const form of FORMS.filter((f) => f.role === 'upload')) {
     const subs = await fetchSubmissions(form.id);
     for (const sub of subs) {
-      const email = canon(emailOf(sub));
+      const email = canon(CHECKLIST.submitterEmail(sub) || emailOf(sub));
       if (!email) continue;
       const instructorId = idByEmail.get(email) || null;
-      docCount += await cacheFiles(sub, instructorId, email, form.title);
+      const { items, files } = CHECKLIST.classifyUploadSubmission(sub);
+      docCount += await cacheClassifiedFiles(files, sub, instructorId, email, form.title);
+      if (instructorId && items.length) {
+        if (!docItemsByInstructor.has(instructorId)) docItemsByInstructor.set(instructorId, new Set());
+        const set = docItemsByInstructor.get(instructorId);
+        items.forEach((i) => set.add(i));
+      }
+    }
+  }
+  for (const [instructorId, items] of docItemsByInstructor) {
+    for (const item of items) {
+      if (await markOnboarding(instructorId, item)) onboardingCount++;
     }
   }
 
@@ -538,17 +577,13 @@ async function handleSync() {
   for (const form of FORMS.filter((f) => f.role === 'onboarding')) {
     const subs = await fetchSubmissions(form.id);
     const emails = new Set();
-    for (const sub of subs) { const e = canon(emailOf(sub)); if (e) emails.add(e); }
+    // submitterEmail ignores next-of-kin / emergency-contact email fields, so
+    // a form that merely NAMES another instructor can't tick their checklist.
+    for (const sub of subs) { const e = canon(CHECKLIST.submitterEmail(sub)); if (e) emails.add(e); }
     for (const email of emails) {
       const instructorId = idByEmail.get(email);
       if (!instructorId) continue; // only track for known instructors
-      const r = await sql()`
-        INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at)
-        VALUES (${instructorId}, ${form.item}, ${form.label}, TRUE, NOW())
-        ON CONFLICT (instructor_id, item) DO UPDATE
-          SET completed = TRUE, completed_at = COALESCE(instructor_onboarding.completed_at, NOW()), label = EXCLUDED.label
-        RETURNING id`;
-      if (r.length) onboardingCount++;
+      if (await markOnboarding(instructorId, form.item, form.label)) onboardingCount++;
     }
   }
 
@@ -573,6 +608,63 @@ function collectQualifications(sub, wfr, driver) {
   }
   return Array.from(new Set(out));
 }
+/**
+ * Tick an onboarding item from evidence found in Jotform.
+ *
+ * Never overrides a row an admin set by hand (source = 'manual'): if someone
+ * deliberately un-ticks an item — a rejected police check, an expired WFR —
+ * the next sync must not silently tick it back on.
+ *
+ * Returns true when a row was inserted or newly completed.
+ */
+async function markOnboarding(instructorId, item, label) {
+  const meta = CHECKLIST.BY_ITEM.get(item);
+  const text = label || (meta ? meta.label : item);
+  // The WHERE on DO UPDATE does two jobs at once:
+  //   - source='manual' rows are skipped, so a pin holds;
+  //   - a row that is already complete and correctly labelled is NOT rewritten,
+  //     so a re-sync (or a portal page refresh) is a genuine no-op instead of
+  //     churning a new heap tuple for every item on every call.
+  // It also makes the return value honest: a row comes back only when this
+  // call actually inserted or changed something.
+  const rows = await sql()`
+    INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at, source)
+    VALUES (${instructorId}, ${item}, ${text}, TRUE, NOW(), 'jotform')
+    ON CONFLICT (instructor_id, item) DO UPDATE
+      SET completed    = TRUE,
+          completed_at = COALESCE(instructor_onboarding.completed_at, NOW()),
+          label        = EXCLUDED.label
+      WHERE instructor_onboarding.source <> 'manual'
+        AND (instructor_onboarding.completed IS DISTINCT FROM TRUE
+             OR instructor_onboarding.label  IS DISTINCT FROM EXCLUDED.label)
+    RETURNING completed`;
+  return rows.length > 0 && rows[0].completed === true;
+}
+
+/**
+ * Store already-classified upload-form files. Unlike cacheFiles (used for the
+ * application form's CV/photo fields) this records the real document type —
+ * "Passport", "WFR Certificate" — rather than the upload widget's label.
+ */
+async function cacheClassifiedFiles(files, sub, instructorId, email, formTitle) {
+  let n = 0;
+  const uploadedAt = sub.created_at ? new Date(sub.created_at).toISOString() : null;
+  for (const f of files) {
+    try {
+      const r = await sql()`
+        INSERT INTO instructor_documents (instructor_id, email, doc_type, filename, file_url, source_form, submission_id, uploaded_at)
+        VALUES (${instructorId}, ${email}, ${String(f.docType || 'Document').slice(0, 120)}, ${f.filename},
+                ${f.url}, ${formTitle}, ${sub.id}, ${uploadedAt})
+        ON CONFLICT (submission_id, file_url) DO UPDATE
+          SET instructor_id = COALESCE(instructor_documents.instructor_id, EXCLUDED.instructor_id),
+              doc_type      = EXCLUDED.doc_type
+        RETURNING id`;
+      if (r.length) n++;
+    } catch (e) { /* skip a bad row, keep syncing */ }
+  }
+  return n;
+}
+
 async function cacheFiles(sub, instructorId, email, formTitle) {
   const a = sub.answers || {};
   let n = 0;

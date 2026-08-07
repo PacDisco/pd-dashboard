@@ -193,6 +193,21 @@ function writeRedirects(dashboards) {
     `/api/config        200!    Role=${ALL_ROLES.join(",")}`,
     `/api/users         200!    Role=admin`,
     `/api/users/*       200!    Role=admin`,
+    "",
+    "# Service-to-service: the instructor PORTAL is a different Netlify site and",
+    "# has no Netlify Identity session, so this one CANNOT carry a Role= gate.",
+    "# It authenticates with the INSTRUCTOR_PORTAL_KEY shared secret instead",
+    "# (constant-time compare in netlify/functions/instructor-checklist.js).",
+    "# An explicit rewrite (not a bare pass-through) so it always resolves.",
+    "/api/instructor-checklist  /.netlify/functions/instructor-checklist  200!",
+    "",
+    "# ⚠ DO NOT add a `/api/*  200!  Role=...` baseline here. _redirects is",
+    "# processed BEFORE netlify.toml and the first match wins, so a wildcard",
+    "# /api/* rule with no destination expands to a forced self-rewrite",
+    "# (/api/:splat) and shadows netlify.toml's /api/* → /.netlify/functions/",
+    "# mapping — every dashboard data call 404s. The remaining /api/* endpoints",
+    "# ARE currently unauthenticated (auth-gate.js excludes /api/*); the fix",
+    "# belongs in auth-gate.js, not here. See INSTRUCTOR-CHECKLIST.md.",
   ];
   for (const d of dashboards) {
     const target = d.url || `/${d.folderName || d.slug}/`;

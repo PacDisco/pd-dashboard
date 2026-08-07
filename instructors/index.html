@@ -319,11 +319,35 @@ function renderDrawer(d){
   var assigns = arr(d.assignments);
   var assignHtml = assigns.map(function(a){ return assignRow(a); }).join('');
 
+  // Onboarding — the same 14-item list the instructor sees in their portal.
+  // Split into forms vs documents so the two kinds read distinctly. A row
+  // ticked by hand shows "pinned": the Jotform sync leaves it alone from then
+  // on, which is what makes un-ticking (a rejected police check, an expired
+  // WFR cert) actually stick.
   var obMap={}; arr(d.onboarding).forEach(function(o){ obMap[o.item]=o; });
-  var obHtml = onboardingItems.length ? onboardingItems.map(function(it){
-    var done = obMap[it.item] && obMap[it.item].completed;
-    return '<label class="flex items-center gap-2 py-1 text-sm"><input type="checkbox" class="ob-chk" data-item="'+it.item+'" '+(done?'checked':'')+'> <span class="'+(done?'text-gray-800':'text-gray-500')+'">'+esc(it.label)+'</span></label>';
-  }).join('') : '<p class="text-sm text-gray-400">—</p>';
+  function obRow(it){
+    var row = obMap[it.item];
+    var done = row && row.completed;
+    var pinned = row && row.source === 'manual';
+    return '<label class="flex items-center gap-2 py-1 text-sm">'+
+      '<input type="checkbox" class="ob-chk" data-item="'+esc(it.item)+'" '+(done?'checked':'')+'> '+
+      '<span class="'+(done?'text-gray-800':'text-gray-500')+'">'+esc(it.label)+'</span>'+
+      (pinned?'<span class="text-[10px] uppercase tracking-wide text-amber-600 border border-amber-200 bg-amber-50 rounded px-1" title="Set by hand — the Jotform sync won’t change it">pinned</span>':'')+
+      '</label>';
+  }
+  function obGroup(title, list){
+    if(!list.length) return '';
+    return '<div class="mb-2"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">'+esc(title)+'</div>'+
+           list.map(obRow).join('')+'</div>';
+  }
+  var obForms = onboardingItems.filter(function(x){ return x.kind !== 'document'; });
+  var obDocs  = onboardingItems.filter(function(x){ return x.kind === 'document'; });
+  var obDone  = onboardingItems.filter(function(x){ return obMap[x.item] && obMap[x.item].completed; }).length;
+  var obHtml = onboardingItems.length
+    ? '<div class="text-sm '+(obDone>=onboardingItems.length?'text-green-700':'text-gray-500')+' mb-2">'+
+        obDone+' of '+onboardingItems.length+' complete</div>'+
+      obGroup('Forms & policies', obForms)+obGroup('Documents', obDocs)
+    : '<p class="text-sm text-gray-400">—</p>';
 
   $('drawer-body').innerHTML =
     '<div class="flex items-start justify-between mb-4">'+

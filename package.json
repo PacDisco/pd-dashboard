@@ -7,7 +7,8 @@
     "node": "20"
   },
   "scripts": {
-    "build": "node scripts/build-manifest.js"
+    "build": "node scripts/build-manifest.js",
+    "test": "node test/instructor-checklist.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

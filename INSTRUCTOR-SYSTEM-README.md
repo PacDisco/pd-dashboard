@@ -44,9 +44,13 @@ package.
 - **Program-leading history** (the source of *weeks led* and *previous programs led*) —
   entered manually in each instructor's detail drawer. *Weeks led* and *programs led*
   on the roster are summed from these rows automatically.
-- **Onboarding** — the 6 policy forms + personal-info form show as a checklist;
-  a tick appears automatically when a matching submission (by email) is found on sync,
-  and you can also toggle items by hand.
+- **Onboarding** — a 14-item checklist: the Signed Contract, Personal Information and
+  6 policy forms, plus the 6 documents that arrive through the upload form (Passport,
+  Drivers License, WFR Certificate, Police/Background Check, 2 Photos, Visa). A tick
+  appears automatically when matching evidence is found on sync, and you can toggle
+  items by hand — a hand-toggled item shows **pinned** and the sync leaves it alone
+  from then on. **This same list is what instructors see in their portal.**
+  See `INSTRUCTOR-CHECKLIST.md` for the rules and the one-time setup.
 
 ## Filters on the roster
 
