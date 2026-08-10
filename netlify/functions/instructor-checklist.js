@@ -128,25 +128,33 @@ async function activeSubmissions(formId) {
 }
 
 /**
- * Which checklist items do this person's Jotform submissions satisfy?
+ * Which checklist items do this person's Jotform submissions satisfy, and WHEN
+ * was the newest crediting submission for each?
+ *
+ * Returns `credits`: a Map(item -> newest crediting submission time in ms). The
+ * date is what lets the caller apply a per-item SEASONAL RESET cutoff — an item
+ * counts only if its newest evidence post-dates the reset, so last season's
+ * upload stops ticking a box the new season is meant to clear.
+ *
  * Fault-tolerant: one form failing is recorded and the rest still count, so a
  * partial Jotform outage can only ever under-report.
  */
 async function deriveFromJotform(emails) {
   const want = new Set(emails.map((e) => String(e || '').toLowerCase().trim()).filter(Boolean));
-  const items = new Set();
+  const credits = new Map();  // item -> newest crediting submission ms
   const errors = [];
-  if (!want.size) return { items: [], errors: ['no email'] };
+  if (!want.size) return { credits, errors: ['no email'] };
 
   const mine = (sub) => {
     const e = CHECKLIST.submitterEmail(sub);
     return !!e && want.has(e);
   };
+  const bump = (item, ms) => { if (!credits.has(item) || ms > credits.get(item)) credits.set(item, ms); };
 
   const formTasks = Array.from(CHECKLIST.FORM_ITEM.entries()).map(async ([formId, item]) => {
     try {
       const subs = await activeSubmissions(formId);
-      if (subs.some(mine)) items.add(item);
+      for (const s of subs) if (mine(s)) bump(item, CHECKLIST.submissionCreatedAtMs(s));
     } catch (e) { errors.push(`form ${formId}: ${e.message || e}`); }
   });
 
@@ -155,13 +163,14 @@ async function deriveFromJotform(emails) {
       const subs = await activeSubmissions(formId);
       for (const sub of subs) {
         if (!mine(sub)) continue;
-        CHECKLIST.classifyUploadSubmission(sub).items.forEach((i) => items.add(i));
+        const ms = CHECKLIST.submissionCreatedAtMs(sub);
+        CHECKLIST.classifyUploadSubmission(sub).items.forEach((i) => bump(i, ms));
       }
     } catch (e) { errors.push(`upload form ${formId}: ${e.message || e}`); }
   });
 
   await Promise.all([...formTasks, ...uploadTasks]);
-  return { items: Array.from(items), errors };
+  return { credits, errors };
 }
 
 async function cachedDerive(emails) {
@@ -224,48 +233,55 @@ exports.handler = async (event) => {
     let stored = [];
     if (instructor) {
       stored = await sql()`
-        SELECT item, label, completed, completed_at, source
+        SELECT item, label, completed, completed_at, source, reset_at
         FROM instructor_onboarding WHERE instructor_id = ${instructor.id}`;
     }
     const storedByItem = new Map(stored.map((r) => [r.item, r]));
+    const resetAtOf = (item) => {
+      const row = storedByItem.get(item);
+      return row ? row.reset_at : null;   // no row -> never reset -> count all evidence
+    };
 
     // 3. Top up from Jotform so a form submitted a minute ago already shows.
-    let derived = { items: [], errors: [] };
+    let derived = { credits: new Map(), errors: [] };
     let refreshed = false;
     if (wantFresh) {
       try {
         derived = await cachedDerive(emails);
         refreshed = true;
       } catch (e) {
-        derived = { items: [], errors: [e.message || String(e)] };
+        derived = { credits: new Map(), errors: [e.message || String(e)] };
       }
       if (derived.errors.length) {
         console.warn('[instructor-checklist] derive degraded:', derived.errors.join('; '));
       }
       // Persist only genuinely NEW evidence, so the admin dashboard reflects
-      // what the portal just learned. A manual pin is never overridden, and an
-      // item already stored as complete is skipped entirely.
+      // what the portal just learned. Evidence older than a reset cutoff is
+      // ignored (that's what keeps a reset box red until a fresh upload), a
+      // manual pin is never overridden, and an item already complete is skipped.
       if (instructor) {
-        const toWrite = derived.items.filter((item) => {
-          if (!CHECKLIST.BY_ITEM.has(item)) return false;
+        for (const [item, ms] of derived.credits) {
+          if (!CHECKLIST.BY_ITEM.has(item)) continue;
           const row = storedByItem.get(item);
-          if (!row) return true;                        // never recorded
-          if (row.source === 'manual') return false;    // pinned
-          return !row.completed;                        // already done -> skip
-        });
-        for (const item of toWrite) {
+          if (!CHECKLIST.creditsAfterReset(row ? row.reset_at : null, ms)) continue; // stale — reset holds
+          if (row && row.source === 'manual') continue;   // pinned
+          if (row && row.completed) continue;             // already done
           const meta = CHECKLIST.BY_ITEM.get(item);
+          const creditedIso = new Date(ms).toISOString();
           try {
-            // The WHERE mirrors instructors.js markOnboarding: pins hold, and
-            // an unchanged row is not rewritten even under a race.
+            // The WHERE mirrors instructors.js markOnboarding: pins hold, a row
+            // reset after this evidence is not re-ticked, and an unchanged row
+            // is not rewritten even under a race.
             await sql()`
-              INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at, source)
-              VALUES (${instructor.id}, ${item}, ${meta.label}, TRUE, NOW(), 'jotform')
+              INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at, source, reset_at)
+              VALUES (${instructor.id}, ${item}, ${meta.label}, TRUE, NOW(), 'jotform', NULL)
               ON CONFLICT (instructor_id, item) DO UPDATE
                 SET completed    = TRUE,
                     completed_at = COALESCE(instructor_onboarding.completed_at, NOW()),
                     label        = EXCLUDED.label
                 WHERE instructor_onboarding.source <> 'manual'
+                  AND (instructor_onboarding.reset_at IS NULL
+                       OR ${creditedIso}::timestamptz > instructor_onboarding.reset_at)
                   AND (instructor_onboarding.completed IS DISTINCT FROM TRUE
                        OR instructor_onboarding.label  IS DISTINCT FROM EXCLUDED.label)`;
           } catch (e) {
@@ -275,24 +291,28 @@ exports.handler = async (event) => {
       }
     }
 
-    // 4. Merge stored state with this call's fresh evidence.
-    const derivedSet = new Set(derived.items);
+    // 4. Merge stored state with this call's fresh evidence. Only evidence
+    //    newer than the item's reset cutoff counts as current.
+    const derivedCurrent = new Set();
+    for (const [item, ms] of derived.credits) {
+      if (CHECKLIST.creditsAfterReset(resetAtOf(item), ms)) derivedCurrent.add(item);
+    }
 
     const items = CHECKLIST.CHECKLIST_ITEMS.map((c) => {
       const row = storedByItem.get(c.item);
       // A manual pin wins outright — that's the point of pinning. Otherwise the
-      // stored value and this call's fresh evidence are OR-ed, so a Jotform
-      // hiccup can never un-tick something already earned.
+      // stored value and this call's fresh (post-cutoff) evidence are OR-ed, so
+      // a Jotform hiccup can never un-tick something already earned.
       const completed = row && row.source === 'manual'
         ? !!row.completed
-        : (!!(row && row.completed) || derivedSet.has(c.item));
+        : (!!(row && row.completed) || derivedCurrent.has(c.item));
       return {
         item: c.item,
         label: c.label,
         kind: c.kind,
         completed,
         completed_at: row ? row.completed_at : null,
-        source: row ? row.source : (derivedSet.has(c.item) ? 'jotform' : null),
+        source: row ? row.source : (derivedCurrent.has(c.item) ? 'jotform' : null),
       };
     });
 

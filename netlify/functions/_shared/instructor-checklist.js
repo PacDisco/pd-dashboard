@@ -181,6 +181,48 @@ function fileNameFromUrl(u) {
   catch { return String(u).split('/').pop() || ''; }
 }
 
+// --------------------------------------------------------------------------
+// Submission timestamp — the anchor for the SEASONAL RESET cutoff.
+//
+// A reset stamps reset_at on the onboarding row; from then on a submission
+// only credits that item if it was made AFTER the cutoff, so last season's
+// evidence stops counting while a fresh submission this season still ticks.
+//
+// Jotform returns created_at like "2024-09-30 05:23:57" in the account's
+// timezone with no offset. We normalise it to an explicit UTC instant so it
+// compares consistently with reset_at (stored by Postgres as UTC NOW()). The
+// only place the small account-vs-UTC skew could matter is a submission made
+// within a few hours of a reset boundary; real "last season vs this season"
+// gaps are weeks or months, so the skew never changes an outcome.
+//
+// Returns milliseconds since the epoch, or 0 when the timestamp is missing or
+// unparseable. 0 is a deliberate "older than any real cutoff" sentinel: a
+// dateless submission is ignored once a cutoff exists (the reset holds), and
+// still counts when there is no cutoff (reset_at IS NULL — presence alone is
+// what the caller checks there).
+function submissionCreatedAtMs(sub) {
+  const raw = sub && (sub.created_at || sub.createdAt || sub.updated_at);
+  if (!raw) return 0;
+  let s = String(raw).trim();
+  // "YYYY-MM-DD HH:MM:SS" -> "YYYY-MM-DDTHH:MM:SS"; add Z if no offset present.
+  s = s.replace(' ', 'T');
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : 0;
+}
+
+// Reset-cutoff gate shared by every consumer, so the dashboard sync and the
+// portal derive can never disagree on whether evidence is "current".
+//   resetAt      the row's reset_at (ISO string, Date, ms, or null/undefined)
+//   createdAtMs  submissionCreatedAtMs(sub) for the crediting submission
+// A NULL/absent cutoff counts all evidence (unchanged first-onboarding path).
+function creditsAfterReset(resetAt, createdAtMs) {
+  if (resetAt == null) return true;
+  const cut = typeof resetAt === 'number' ? resetAt : Date.parse(String(resetAt));
+  if (!Number.isFinite(cut)) return true;   // unreadable cutoff -> fail open, never trap a real tick
+  return createdAtMs > cut;
+}
+
 // ==========================================================================
 // Submission helpers
 // ==========================================================================
@@ -311,4 +353,6 @@ module.exports = {
   itemsForFilename,
   fileNameFromUrl,
   classifyUploadSubmission,
+  submissionCreatedAtMs,
+  creditsAfterReset,
 };

@@ -31,6 +31,9 @@ const https = require('https');
 // Canonical checklist definition, shared with instructor-checklist.js (the API
 // the instructor portal reads). Add or rename an onboarding item THERE, not here.
 const CHECKLIST = require('./_shared/instructor-checklist.js');
+// Shared seasonal-reset write path, also used by the scheduled seasonal-reset
+// function. Keep the reset SQL in one place so the two can't drift.
+const RESET = require('./_shared/onboarding-reset.js');
 
 let _sql;
 function sql() {
@@ -437,6 +440,57 @@ async function handleSetOnboarding(body) {
 }
 
 // --------------------------------------------------------------------------
+// RESET onboarding items — the seasonal / on-demand "start fresh" action.
+// --------------------------------------------------------------------------
+// Clears one or more checklist items so they read as not-provided again, in
+// BOTH the dashboard and the instructor portal (one shared table). Two scopes:
+//   scope 'all'         every instructor — e.g. a policy document changed and
+//                       everyone must re-acknowledge it.
+//   scope 'instructor'  one person — e.g. review/re-request their passport,
+//                       driver's licence, WFR or background check.
+//
+// The reset stamps a cutoff (reset_at) so it holds against last season's
+// Jotform evidence, yet a fresh submission this season still auto-ticks it.
+// Per the product decision, a reset clears items regardless of a manual pin and
+// hands them back to automatic detection.
+async function handleResetOnboarding(body) {
+  const rawItems = Array.isArray(body.items) ? body.items
+                 : (body.item != null ? [body.item] : []);
+  const items = rawItems.map((s) => String(s || '').trim()).filter(Boolean);
+  if (!items.length) return bad('items (array of checklist keys) or item required');
+
+  const unknown = items.filter((i) => !ONBOARDING_ITEM_KEYS.includes(i));
+  if (unknown.length) return bad('unknown checklist item(s): ' + unknown.join(', '));
+
+  const scope = String(body.scope || (body.instructor_id ? 'instructor' : 'all')).toLowerCase();
+  let instructorId = null;
+  if (scope === 'instructor') {
+    instructorId = Number(body.instructor_id);
+    if (!instructorId) return bad('instructor_id is required when scope is "instructor"');
+  } else if (scope !== 'all') {
+    return bad('scope must be "all" or "instructor"');
+  }
+
+  const { affected, items: applied } =
+    await RESET.resetOnboardingItems(sql(), { items, instructorId });
+
+  // Best-effort audit. Manual resets get a unique key so they always record and
+  // never collide with each other or with a scheduled run.
+  const runKey = String(body.run_key ||
+    ('manual-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)));
+  try {
+    await RESET.logReset(sql(), {
+      runKey, items: applied, scope, instructorId, affected,
+      actor: String(body.actor || 'dashboard'),
+    });
+  } catch (e) {
+    console.warn('[instructors] reset log failed:', e.message || e);
+  }
+
+  return ok({ reset: applied, scope, instructor_id: instructorId, affected });
+}
+
+// --------------------------------------------------------------------------
 // SYNC — pull from Jotform, keyed by email
 // --------------------------------------------------------------------------
 async function fetchSubmissions(formId) {
@@ -572,7 +626,9 @@ async function handleSync() {
   //    of the form's generic "Additional file upload" label, and the matching
   //    checklist item ticks. A document type picked with NO file attached is
   //    deliberately not credited — see _shared/instructor-checklist.js.
-  const docItemsByInstructor = new Map(); // instructorId -> Set(item)
+  // instructorId -> Map(item -> newest crediting submission time in ms). The
+  // date is what lets a reset cutoff decide whether this evidence is current.
+  const docItemsByInstructor = new Map();
   for (const form of FORMS.filter((f) => f.role === 'upload')) {
     const subs = await fetchSubmissions(form.id);
     const pending = [];
@@ -583,16 +639,17 @@ async function handleSync() {
       const { items, files } = CHECKLIST.classifyUploadSubmission(sub);
       pending.push(...uploadDocRows(files, sub, instructorId, email, form.title));
       if (instructorId && items.length) {
-        if (!docItemsByInstructor.has(instructorId)) docItemsByInstructor.set(instructorId, new Set());
-        const set = docItemsByInstructor.get(instructorId);
-        items.forEach((i) => set.add(i));
+        const ms = CHECKLIST.submissionCreatedAtMs(sub);
+        if (!docItemsByInstructor.has(instructorId)) docItemsByInstructor.set(instructorId, new Map());
+        const m = docItemsByInstructor.get(instructorId);
+        items.forEach((i) => { if (!m.has(i) || ms > m.get(i)) m.set(i, ms); });
       }
     }
     docCount += await saveDocuments(pending);
   }
-  for (const [instructorId, items] of docItemsByInstructor) {
-    for (const item of items) {
-      if (await markOnboarding(instructorId, item)) onboardingCount++;
+  for (const [instructorId, itemMs] of docItemsByInstructor) {
+    for (const [item, ms] of itemMs) {
+      if (await markOnboarding(instructorId, item, undefined, new Date(ms).toISOString())) onboardingCount++;
     }
   }
 
@@ -602,7 +659,9 @@ async function handleSync() {
   //    contract and every policy they acknowledged — not just their uploads.
   for (const form of FORMS.filter((f) => f.role === 'onboarding')) {
     const subs = await fetchSubmissions(form.id);
-    const seen = new Set();
+    // instructorId -> newest crediting submission time (ms), so the reset
+    // cutoff can tell a re-signed form this season from last season's.
+    const newestByInstructor = new Map();
     const pending = [];
     for (const sub of subs) {
       // submitterEmail ignores next-of-kin / emergency-contact email fields, so
@@ -612,12 +671,15 @@ async function handleSync() {
       const instructorId = idByEmail.get(email);
       if (!instructorId) continue; // only track for known instructors
 
-      if (!seen.has(email)) {
-        seen.add(email);
-        if (await markOnboarding(instructorId, form.item, form.label)) onboardingCount++;
+      const ms = CHECKLIST.submissionCreatedAtMs(sub);
+      if (!newestByInstructor.has(instructorId) || ms > newestByInstructor.get(instructorId)) {
+        newestByInstructor.set(instructorId, ms);
       }
       const row = submissionPdfRow(sub, form, instructorId, email);
       if (row) pending.push(row);
+    }
+    for (const [instructorId, ms] of newestByInstructor) {
+      if (await markOnboarding(instructorId, form.item, form.label, new Date(ms).toISOString())) onboardingCount++;
     }
     docCount += await saveDocuments(pending);
   }
@@ -652,24 +714,33 @@ function collectQualifications(sub, wfr, driver) {
  *
  * Returns true when a row was inserted or newly completed.
  */
-async function markOnboarding(instructorId, item, label) {
+async function markOnboarding(instructorId, item, label, creditedAtIso) {
   const meta = CHECKLIST.BY_ITEM.get(item);
   const text = label || (meta ? meta.label : item);
-  // The WHERE on DO UPDATE does two jobs at once:
+  // The date of the newest crediting submission. Defaults to now so a caller
+  // that doesn't track dates keeps the old "presence ticks it" behaviour on a
+  // never-reset row.
+  const credited = creditedAtIso || new Date().toISOString();
+  // The WHERE on DO UPDATE does three jobs at once:
   //   - source='manual' rows are skipped, so a pin holds;
+  //   - a row that was RESET this season is skipped unless this evidence is
+  //     newer than the cutoff — so a reset holds against last season's upload,
+  //     but a genuinely new submission re-ticks it automatically;
   //   - a row that is already complete and correctly labelled is NOT rewritten,
   //     so a re-sync (or a portal page refresh) is a genuine no-op instead of
   //     churning a new heap tuple for every item on every call.
   // It also makes the return value honest: a row comes back only when this
   // call actually inserted or changed something.
   const rows = await sql()`
-    INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at, source)
-    VALUES (${instructorId}, ${item}, ${text}, TRUE, NOW(), 'jotform')
+    INSERT INTO instructor_onboarding (instructor_id, item, label, completed, completed_at, source, reset_at)
+    VALUES (${instructorId}, ${item}, ${text}, TRUE, NOW(), 'jotform', NULL)
     ON CONFLICT (instructor_id, item) DO UPDATE
       SET completed    = TRUE,
           completed_at = COALESCE(instructor_onboarding.completed_at, NOW()),
           label        = EXCLUDED.label
       WHERE instructor_onboarding.source <> 'manual'
+        AND (instructor_onboarding.reset_at IS NULL
+             OR ${credited}::timestamptz > instructor_onboarding.reset_at)
         AND (instructor_onboarding.completed IS DISTINCT FROM TRUE
              OR instructor_onboarding.label  IS DISTINCT FROM EXCLUDED.label)
     RETURNING completed`;
@@ -813,6 +884,7 @@ exports.handler = async (event) => {
     if (method === 'POST' && action === 'update-assignment') return await handleUpdateAssignment(body);
     if (method === 'POST' && action === 'delete-assignment') return await handleDeleteAssignment(body);
     if (method === 'POST' && action === 'set-onboarding')    return await handleSetOnboarding(body);
+    if (method === 'POST' && action === 'reset-onboarding')  return await handleResetOnboarding(body);
     if (method === 'POST' && action === 'sync')              return await handleSync();
 
     return bad(`unknown action '${action}' for method ${method}`);

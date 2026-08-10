@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "node scripts/build-manifest.js",
-    "test": "node test/instructor-checklist.test.mjs"
+    "test": "node test/instructor-checklist.test.mjs",
+    "test:seasonal": "node test/seasonal-reset.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

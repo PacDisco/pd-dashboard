@@ -48,6 +48,7 @@
     </div>
     <div class="flex items-center gap-2">
       <button id="sync-btn" class="text-sm border border-purple-300 text-purple-700 hover:bg-purple-50 font-semibold px-3 py-2 rounded-lg">⟳ Sync from Jotform</button>
+      <button id="resetall-btn" class="text-sm border border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-3 py-2 rounded-lg" title="Clear a checklist item for every instructor — e.g. a policy document that changed and everyone must re-do">↺ Reset for all</button>
       <button id="add-btn" class="btn-p text-sm px-3 py-2 rounded-lg">+ Add instructor</button>
       <a href="/" class="text-sm text-purple-600 hover:underline ml-1">← Dashboards</a>
     </div>
@@ -130,6 +131,21 @@
       <button id="a-save" class="btn-p text-sm px-4 py-2 rounded-lg">Add</button>
     </div>
     <p id="a-err" class="text-sm text-red-600 mt-2"></p>
+  </div>
+</div>
+
+<!-- Reset-for-all modal -->
+<div id="resetall-wrap" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-gray-900/45" id="resetall-bg"></div>
+  <div class="absolute left-1/2 top-16 -translate-x-1/2 w-full max-w-md bg-white rounded-xl shadow-xl p-5 max-h-[85vh] overflow-y-auto">
+    <h3 class="font-semibold text-gray-900 mb-1">Reset checklist items for all instructors</h3>
+    <p class="text-xs text-gray-500 mb-3">Use this when a document or policy has changed and everyone must provide it again. Ticked items are cleared for <strong>every</strong> instructor — here and in their portal — and stay cleared until each person submits the item again this season. This does not delete any files already on record.</p>
+    <div id="resetall-items" class="space-y-1 border border-gray-100 rounded-lg p-3 bg-gray-50"></div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button id="resetall-cancel" class="text-sm px-3 py-2 rounded-lg border border-gray-300">Cancel</button>
+      <button id="resetall-go" class="text-sm px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">Reset selected</button>
+    </div>
+    <p id="resetall-err" class="text-sm text-red-600 mt-2"></p>
   </div>
 </div>
 
@@ -285,7 +301,7 @@ function openDrawer(id){
 }
 function closeDrawer(){ $('drawer-wrap').classList.remove('open'); }
 $('drawer-bg').addEventListener('click', closeDrawer);
-document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ closeDrawer(); $('add-wrap').classList.add('hidden'); } });
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ closeDrawer(); $('add-wrap').classList.add('hidden'); $('resetall-wrap').classList.add('hidden'); } });
 
 function txtField(label,name,val,type){
   return '<div><label class="lbl">'+label+'</label><input data-p="'+name+'" class="fld" '+(type==='number'?'type="number"':'')+' value="'+esc(val==null?'':val)+'"></div>';
@@ -362,11 +378,18 @@ function renderDrawer(d){
     var row = obMap[it.item];
     var done = row && row.completed;
     var pinned = row && row.source === 'manual';
-    return '<label class="flex items-center gap-2 py-1 text-sm">'+
-      '<input type="checkbox" class="ob-chk" data-item="'+esc(it.item)+'" '+(done?'checked':'')+'> '+
-      '<span class="'+(done?'text-gray-800':'text-gray-500')+'">'+esc(it.label)+'</span>'+
-      (pinned?'<span class="text-[10px] uppercase tracking-wide text-amber-600 border border-amber-200 bg-amber-50 rounded px-1" title="Set by hand — the Jotform sync won’t change it">pinned</span>':'')+
-      '</label>';
+    // Reset but not yet re-provided this season — the box is red awaiting a
+    // fresh submission. (Once re-provided, done is true and this clears.)
+    var wasReset = row && row.reset_at && !done;
+    return '<div class="flex items-center gap-2 py-1 text-sm group">'+
+      '<label class="flex items-center gap-2 flex-1 cursor-pointer">'+
+        '<input type="checkbox" class="ob-chk" data-item="'+esc(it.item)+'" '+(done?'checked':'')+'> '+
+        '<span class="'+(done?'text-gray-800':'text-gray-500')+'">'+esc(it.label)+'</span>'+
+        (pinned?'<span class="text-[10px] uppercase tracking-wide text-amber-600 border border-amber-200 bg-amber-50 rounded px-1" title="Set by hand — the Jotform sync won’t change it">pinned</span>':'')+
+        (wasReset?'<span class="text-[10px] uppercase tracking-wide text-blue-600 border border-blue-200 bg-blue-50 rounded px-1" title="Reset for the new season — awaiting a fresh submission">reset '+esc(fmtDate(row.reset_at))+'</span>':'')+
+      '</label>'+
+      '<button type="button" class="ob-reset text-[11px] text-gray-400 hover:text-blue-600 px-1" data-item="'+esc(it.item)+'" title="Reset this item for this instructor — clears it here and in their portal until they submit it again">↺ reset</button>'+
+      '</div>';
   }
   function obGroup(title, list){
     if(!list.length) return '';
@@ -462,6 +485,9 @@ function renderDrawer(d){
   Array.prototype.forEach.call(document.querySelectorAll('.ob-chk'), function(chk){
     chk.addEventListener('change', function(){ setOnboarding(i.id, chk.dataset.item, chk.checked); });
   });
+  Array.prototype.forEach.call(document.querySelectorAll('.ob-reset'), function(btn){
+    btn.addEventListener('click', function(){ resetOnboardingItem(i.id, i.full_name||i.email, btn.dataset.item); });
+  });
 }
 
 function assignRow(a){
@@ -521,6 +547,15 @@ async function setOnboarding(instructorId,item,completed){
   try{ await api('POST',{action:'set-onboarding',instructor_id:instructorId,item:item,completed:completed}); load(); }
   catch(e){ toast(e.message,true); }
 }
+function itemLabel(item){ var m=onboardingItems.filter(function(x){return x.item===item;})[0]; return m?m.label:item; }
+async function resetOnboardingItem(instructorId,who,item){
+  var label=itemLabel(item);
+  if(!confirm('Reset "'+label+'" for '+who+'?\n\nIt will show as not provided — here and in their instructor portal — until they submit it again this season. No files already on record are deleted.')) return;
+  try{
+    await api('POST',{action:'reset-onboarding',scope:'instructor',instructor_id:instructorId,item:item});
+    toast('Reset "'+label+'"'); await load(); openDrawer(instructorId);
+  }catch(e){ toast('Reset failed: '+e.message,true); }
+}
 
 // ---- Add modal ----------------------------------------------------------
 $('add-btn').addEventListener('click', function(){ $('add-wrap').classList.remove('hidden'); $('a-err').textContent=''; $('a-email').focus(); });
@@ -543,6 +578,41 @@ $('sync-btn').addEventListener('click', async function(){
     toast('Synced: '+r.created+' new, '+r.updated+' updated, '+r.documents+' docs');
     await load();
   }catch(e){ toast('Sync failed: '+e.message,true); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+});
+
+// ---- Reset for all ------------------------------------------------------
+function openResetAll(){
+  var forms = onboardingItems.filter(function(x){ return x.kind!=='document'; });
+  var docs  = onboardingItems.filter(function(x){ return x.kind==='document'; });
+  function grp(title,list){
+    if(!list.length) return '';
+    return '<div class="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mt-1 mb-1">'+esc(title)+'</div>'+
+      list.map(function(x){
+        return '<label class="flex items-center gap-2 py-0.5 text-sm cursor-pointer">'+
+          '<input type="checkbox" class="ra-chk" value="'+esc(x.item)+'"> '+
+          '<span class="text-gray-700">'+esc(x.label)+'</span></label>';
+      }).join('');
+  }
+  $('resetall-items').innerHTML = grp('Forms & policies',forms)+grp('Documents',docs);
+  $('resetall-err').textContent='';
+  $('resetall-wrap').classList.remove('hidden');
+}
+$('resetall-btn').addEventListener('click', openResetAll);
+$('resetall-bg').addEventListener('click', function(){ $('resetall-wrap').classList.add('hidden'); });
+$('resetall-cancel').addEventListener('click', function(){ $('resetall-wrap').classList.add('hidden'); });
+$('resetall-go').addEventListener('click', async function(){
+  var items = Array.prototype.map.call(document.querySelectorAll('.ra-chk:checked'), function(c){ return c.value; });
+  if(!items.length){ $('resetall-err').textContent='Pick at least one item to reset.'; return; }
+  var labels = items.map(itemLabel).join(', ');
+  if(!confirm('Reset '+labels+' for ALL instructors?\n\nEvery instructor will see these as not provided — in the dashboard and in their portal — until they submit them again this season. This cannot be undone in bulk. No files already on record are deleted.')) return;
+  var btn=this; btn.disabled=true; var old=btn.textContent; btn.textContent='Resetting…';
+  try{
+    var r=await api('POST',{action:'reset-onboarding',scope:'all',items:items});
+    $('resetall-wrap').classList.add('hidden');
+    toast('Reset '+labels+' across '+(r.affected||0)+' record(s)');
+    await load();
+  }catch(e){ $('resetall-err').textContent=e.message; }
   finally{ btn.disabled=false; btn.textContent=old; }
 });
 
