@@ -1,0 +1,10 @@
+{
+  "title": "Upcoming Programs",
+  "description": "At-a-glance schedule of upcoming programs across all brands — program, brand, dates, location, headcount and notes. Filter by brand.",
+  "category": "Programs",
+  "icon": "📅",
+  "pinned": true,
+  "colors": ["#2563eb", "#22d3ee"],
+  "allowedRoles": ["admin", "programs", "operations"],
+  "order": 20
+}

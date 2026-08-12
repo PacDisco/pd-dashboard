@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upcoming Programs</title>
+<meta name="description" content="At-a-glance schedule of upcoming programs across all brands — program, brand, dates, location, headcount and notes. Filter by brand.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fld { width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; }
+  .fld:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+  .lbl { display:block; font-size:12px; font-weight:600; color:#4b5563; margin-bottom:4px; }
+  details.prog { background:#fff; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:10px; }
+  details.prog[open] { box-shadow:0 4px 14px rgba(20,40,80,.06); }
+  summary.prog-head { list-style:none; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; }
+  summary.prog-head::-webkit-details-marker { display:none; }
+  .pill { font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .pill-off { background:#fee2e2; color:#b91c1c; }
+  .pill-meta { background:#f1f5f9; color:#475569; }
+  .st-upcoming { background:#dbeafe; color:#1d4ed8; }
+  .st-active   { background:#dcfce7; color:#166534; }
+  .st-finished { background:#e5e7eb; color:#6b7280; }
+  .chip { font-size:12px; font-weight:600; padding:5px 12px; border-radius:999px; border:1px solid #d1d5db; background:#fff; color:#374151; cursor:pointer; user-select:none; }
+  .chip.active { background:#111827; color:#fff; border-color:#111827; }
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { background: #b91c1c; }
+  .grp-label { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#94a3b8; margin:18px 2px 8px; }
+</style>
+</head>
+<body class="text-gray-800">
+<div class="max-w-5xl mx-auto px-4 py-8">
+
+  <div class="flex items-center justify-between mb-2">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">📅 Upcoming Programs</h1>
+      <p class="text-sm text-gray-500 mt-1">A shared, at-a-glance schedule of programs across all brands. Add a program, tag its brand, set the dates, and jot notes. Filter by brand with the chips below.</p>
+    </div>
+    <a href="/" class="text-sm text-blue-600 hover:underline">← Dashboards</a>
+  </div>
+
+  <!-- Add form -->
+  <div class="bg-white border border-gray-200 rounded-xl p-5 mt-5 shadow-sm">
+    <h2 class="text-sm font-semibold text-gray-700 mb-3">Add a program</h2>
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+      <div class="md:col-span-5"><label class="lbl">Program name</label><input id="f-name" class="fld" placeholder="South America Semester — Fall 2026"></div>
+      <div class="md:col-span-3"><label class="lbl">Brand</label><select id="f-brand" class="fld"></select></div>
+      <div class="md:col-span-4"><label class="lbl">Location <span class="text-gray-400 font-normal">(optional)</span></label><input id="f-location" class="fld" placeholder="Peru & Ecuador"></div>
+      <div class="md:col-span-3"><label class="lbl">Start date</label><input id="f-start" type="date" class="fld"></div>
+      <div class="md:col-span-3"><label class="lbl">End date <span class="text-gray-400 font-normal">(optional)</span></label><input id="f-end" type="date" class="fld"></div>
+      <div class="md:col-span-2"><label class="lbl">Participants</label><input id="f-participants" type="number" min="0" step="1" class="fld" placeholder="16"></div>
+      <div class="md:col-span-2"><label class="lbl">Sort</label><input id="f-sort" type="number" class="fld" value="100"></div>
+      <div class="md:col-span-12"><label class="lbl">Notes <span class="text-gray-400 font-normal">(optional)</span></label><textarea id="f-notes" rows="2" class="fld" placeholder="Anything the team should know…"></textarea></div>
+    </div>
+    <div class="mt-4">
+      <button id="add-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">Add program</button>
+      <span id="add-err" class="text-sm text-red-600 ml-3"></span>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="mt-8 mb-1">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div id="brand-filters" class="flex items-center gap-2 flex-wrap"></div>
+      <div class="flex items-center gap-3">
+        <input id="search" class="fld" style="width:200px" placeholder="Search…">
+        <label class="text-xs text-gray-500 flex items-center gap-2 whitespace-nowrap"><input id="show-finished" type="checkbox" class="rounded" checked> finished</label>
+        <label class="text-xs text-gray-500 flex items-center gap-2 whitespace-nowrap"><input id="show-inactive" type="checkbox" class="rounded"> archived</label>
+      </div>
+    </div>
+    <div id="count" class="text-xs text-gray-400 mt-2 px-1"></div>
+  </div>
+
+  <div id="loading" class="flex justify-center py-16"><div class="loading-spinner"></div></div>
+  <div id="list"></div>
+  <div id="empty" class="hidden text-center text-gray-400 py-12 text-sm bg-white border border-gray-200 rounded-xl">No programs match — add one above or clear the filters.</div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+var API = '/api/program-schedule';
+var BRANDS = ['EDA Group','Unearthed Education','Pacific Discovery','Pure Exploration','Conference'];
+// Brand → pill colours. A stable palette so each brand reads consistently.
+var BRAND_COLORS = {
+  'EDA Group':           { bg:'#e0e7ff', fg:'#3730a3' },
+  'Unearthed Education': { bg:'#ffedd5', fg:'#c2410c' },
+  'Pacific Discovery':   { bg:'#e0f2fe', fg:'#075985' },
+  'Pure Exploration':    { bg:'#ede9fe', fg:'#6d28d9' },
+  'Conference':          { bg:'#fef3c7', fg:'#92400e' }
+};
+var FALLBACK_COLOR = { bg:'#f1f5f9', fg:'#475569' };
+
+var listEl = document.getElementById('list');
+var ALL = [];            // all programs from the server
+var activeBrand = 'all'; // current brand filter
+
+function toast(msg, isErr){ var t=document.getElementById('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); setTimeout(function(){t.className='';},2600); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
+
+// --- dates are plain YYYY-MM-DD; never build a Date from them for display ---
+function ymd(v){ if(!v) return ''; var m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[1]+'-'+m[2]+'-'+m[3]:''; }
+function todayStr(){ var d=new Date(); var p=function(n){return String(n).padStart(2,'0');}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(v){ var s=ymd(v); if(!s) return ''; var p=s.split('-'); return Number(p[2])+' '+MONTHS[Number(p[1])-1]+' '+p[0]; }
+function fmtRange(a,b){ var s=ymd(a), e=ymd(b); if(!s) return ''; if(!e||e===s) return fmtDate(s); return fmtDate(s)+' → '+fmtDate(e); }
+
+function statusOf(p){
+  var t=todayStr(); var s=ymd(p.start_date); var e=ymd(p.end_date)||s;
+  if(t < s) return 'upcoming';
+  if(t > e) return 'finished';
+  return 'active';
+}
+function statusPill(st){
+  var map={ upcoming:['st-upcoming','Upcoming'], active:['st-active','In progress'], finished:['st-finished','Finished'] };
+  var m=map[st]; return '<span class="pill '+m[0]+'">'+m[1]+'</span>';
+}
+function brandPill(b){
+  var c=BRAND_COLORS[b]||FALLBACK_COLOR;
+  return '<span class="pill" style="background:'+c.bg+';color:'+c.fg+'">'+esc(b)+'</span>';
+}
+
+async function api(method, payload, query){
+  var opts={method:method}; if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
+  var r=await fetch(API+(query||''),opts); var d=await r.json().catch(function(){return {};});
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status)); return d;
+}
+
+function brandOptions(selected){
+  return BRANDS.map(function(b){ return '<option'+(selected===b?' selected':'')+'>'+esc(b)+'</option>'; }).join('');
+}
+
+function renderBrandFilters(){
+  var wrap=document.getElementById('brand-filters');
+  var counts={}; ALL.forEach(function(p){ counts[p.brand]=(counts[p.brand]||0)+1; });
+  var chips=[['all','All brands',ALL.length]];
+  BRANDS.forEach(function(b){ chips.push([b,b,counts[b]||0]); });
+  // include any brand present in data but not in the known list
+  Object.keys(counts).forEach(function(b){ if(BRANDS.indexOf(b)===-1) chips.push([b,b,counts[b]]); });
+  wrap.innerHTML=chips.map(function(c){
+    return '<span class="chip'+(activeBrand===c[0]?' active':'')+'" data-brand="'+esc(c[0])+'">'+esc(c[1])+' <span style="opacity:.6">'+c[2]+'</span></span>';
+  }).join('');
+}
+
+function fieldRow(label, name, value, type, extra, ph){
+  return '<div class="'+(extra||'md:col-span-3')+'"><label class="lbl">'+label+'</label>'+
+    '<input data-f="'+name+'" class="fld" '+
+    (type==='number'?'type="number" min="0" step="1"':type==='date'?'type="date"':'type="text"')+
+    ' value="'+esc(value)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+'></div>';
+}
+
+function cardInner(p){
+  return '<div class="px-4 pb-4"><div class="grid grid-cols-1 md:grid-cols-12 gap-3">'+
+      fieldRow('Program name','name',p.name,'text','md:col-span-5')+
+      '<div class="md:col-span-3"><label class="lbl">Brand</label><select data-f="brand" class="fld">'+brandOptions(p.brand)+'</select></div>'+
+      fieldRow('Location','location',p.location||'','text','md:col-span-4','Peru & Ecuador')+
+      fieldRow('Start date','start_date',ymd(p.start_date),'date','md:col-span-3')+
+      fieldRow('End date','end_date',ymd(p.end_date),'date','md:col-span-3')+
+      fieldRow('Participants','participants',(p.participants!=null?p.participants:''),'number','md:col-span-2')+
+      fieldRow('Sort order','sort_order',(p.sort_order!=null?p.sort_order:100),'number','md:col-span-2')+
+      '<div class="md:col-span-12"><label class="lbl">Notes</label><textarea data-f="notes" rows="2" class="fld">'+esc(p.notes||'')+'</textarea></div>'+
+    '</div>'+
+    '<div class="flex items-center justify-between mt-4">'+
+      '<label class="text-sm flex items-center gap-2"><input type="checkbox" data-f="is_active" '+((p.is_active!==false)?'checked':'')+'> Active</label>'+
+      '<div><button class="save-btn bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">Save</button>'+
+      '<button class="del-btn text-red-500 hover:underline text-sm font-medium ml-4">Delete</button></div>'+
+    '</div></div>';
+}
+
+function matches(p){
+  if(activeBrand!=='all' && p.brand!==activeBrand) return false;
+  if(!document.getElementById('show-finished').checked && statusOf(p)==='finished') return false;
+  var q=document.getElementById('search').value.trim().toLowerCase();
+  if(q){
+    var hay=(p.name+' '+p.brand+' '+(p.location||'')+' '+(p.notes||'')).toLowerCase();
+    if(hay.indexOf(q)===-1) return false;
+  }
+  return true;
+}
+
+function render(){
+  renderBrandFilters();
+  var rows=ALL.filter(matches);
+  document.getElementById('empty').classList.toggle('hidden', rows.length>0);
+  document.getElementById('count').textContent = rows.length+' program'+(rows.length===1?'':'s')+(activeBrand!=='all'?' · '+activeBrand:'');
+  listEl.innerHTML='';
+
+  // Group by status so upcoming/active sit above finished.
+  var order={upcoming:0,active:1,finished:2};
+  var labels={upcoming:'Upcoming',active:'In progress',finished:'Finished'};
+  rows.sort(function(a,b){
+    var sa=statusOf(a), sb=statusOf(b);
+    if(order[sa]!==order[sb]) return order[sa]-order[sb];
+    var da=ymd(a.start_date), db=ymd(b.start_date);
+    // upcoming/active: soonest first; finished: most recent first
+    if(sa==='finished') return db<da?-1:db>da?1:0;
+    return da<db?-1:da>db?1:0;
+  });
+
+  var lastGroup=null;
+  rows.forEach(function(p){
+    var st=statusOf(p);
+    if(st!==lastGroup){
+      var h=document.createElement('div'); h.className='grp-label'; h.textContent=labels[st]; listEl.appendChild(h); lastGroup=st;
+    }
+    var active = p.is_active !== false;
+    var d=document.createElement('details'); d.className='prog'; d.dataset.id=p.id;
+    var meta=[];
+    if(p.location) meta.push('<span class="pill pill-meta">📍 '+esc(p.location)+'</span>');
+    if(p.participants!=null && p.participants!=='') meta.push('<span class="pill pill-meta">👥 '+esc(p.participants)+'</span>');
+    var off=active?'':' <span class="pill pill-off">archived</span>';
+    d.innerHTML =
+      '<summary class="prog-head">'+
+        '<span class="min-w-0">'+
+          '<span class="font-medium text-gray-900">'+esc(p.name)+'</span>'+
+          '<span class="block text-xs text-gray-500 mt-0.5">'+esc(fmtRange(p.start_date,p.end_date))+'</span>'+
+        '</span>'+
+        '<span class="flex items-center gap-2 flex-wrap justify-end">'+brandPill(p.brand)+meta.join('')+statusPill(st)+off+
+          '<span class="text-gray-400 text-xs">edit ▾</span></span>'+
+      '</summary>'+ cardInner(p);
+    listEl.appendChild(d);
+  });
+}
+
+async function load(){
+  document.getElementById('loading').classList.remove('hidden'); listEl.innerHTML='';
+  var q = document.getElementById('show-inactive').checked ? '?action=list&include_inactive=1' : '?action=list';
+  try {
+    var data=await api('GET',null,q);
+    if(Array.isArray(data.brands) && data.brands.length){ BRANDS=data.brands; }
+    ALL=data.programs||[];
+    render();
+  }
+  catch(e){ toast('Load failed: '+e.message,true); }
+  finally { document.getElementById('loading').classList.add('hidden'); }
+}
+
+// --- list interactions (save / delete) ---
+listEl.addEventListener('click', async function(e){
+  var d=e.target.closest('details.prog'); if(!d) return; var id=Number(d.dataset.id);
+  if(e.target.classList.contains('save-btn')){
+    e.preventDefault();
+    var patch={};
+    d.querySelectorAll('[data-f]').forEach(function(el){ patch[el.dataset.f] = el.type==='checkbox' ? el.checked : el.value; });
+    try { await api('POST',{action:'update',id:id,patch:patch}); toast('Saved'); load(); }
+    catch(err){ toast('Save failed: '+err.message,true); }
+  }
+  if(e.target.classList.contains('del-btn')){
+    e.preventDefault();
+    var name=d.querySelector('[data-f="name"]').value;
+    if(!confirm('Delete program "'+name+'"? This cannot be undone.')) return;
+    try { await api('POST',{action:'delete',id:id}); d.remove(); toast('Deleted'); }
+    catch(err){ toast('Delete failed: '+err.message,true); }
+  }
+});
+
+// --- brand filter chips ---
+document.getElementById('brand-filters').addEventListener('click', function(e){
+  var c=e.target.closest('.chip'); if(!c) return; activeBrand=c.dataset.brand; render();
+});
+
+// --- add form ---
+document.getElementById('add-btn').addEventListener('click', async function(){
+  var errEl=document.getElementById('add-err'); errEl.textContent='';
+  var g=function(id){return document.getElementById(id).value;};
+  var payload={ action:'create',
+    name:g('f-name').trim(), brand:g('f-brand'), location:g('f-location').trim(),
+    start_date:g('f-start'), end_date:g('f-end'), participants:g('f-participants'),
+    notes:g('f-notes').trim(), sort_order:g('f-sort')
+  };
+  if(!payload.name || !payload.start_date){ errEl.textContent='Program name and a start date are required.'; return; }
+  try {
+    await api('POST',payload);
+    ['f-name','f-location','f-start','f-end','f-participants','f-notes'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('f-sort').value='100';
+    toast('Program added'); load();
+  } catch(err){ errEl.textContent=err.message; }
+});
+
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('show-finished').addEventListener('change', render);
+document.getElementById('show-inactive').addEventListener('change', load);
+
+// init brand <select> + first load
+document.getElementById('f-brand').innerHTML = brandOptions('Pacific Discovery');
+load();
+</script>
+</body>
+</html>
