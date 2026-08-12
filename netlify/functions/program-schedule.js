@@ -5,8 +5,8 @@
  * notes). Separate from flight-programs (which drives the student flight portal).
  *
  * Routes (query ?action=... or JSON body { action }):
- *   - list    GET   -> programs (add ?include_inactive=1 for the archive view)
- *   - create  POST  -> { name, brand, location?, start_date, end_date?, participants?, notes?, sort_order? }
+ *   - list    GET   -> programs, always ordered by date (add ?include_inactive=1 for the archive view)
+ *   - create  POST  -> { name, brand, location?, start_date, end_date?, participants?, notes? }
  *   - update  POST  -> { id, patch: { ...any of the above + is_active } }
  *   - delete  POST  -> { id }
  *
@@ -83,16 +83,16 @@ async function handleList(qs) {
   const rows = includeInactive
     ? await sql()`
         SELECT id, name, brand, location, start_date, end_date,
-               participants, notes, is_active, sort_order, updated_at
+               participants, notes, is_active, updated_at
         FROM program_schedule
-        ORDER BY start_date, sort_order, name
+        ORDER BY start_date, name
       `
     : await sql()`
         SELECT id, name, brand, location, start_date, end_date,
-               participants, notes, is_active, sort_order, updated_at
+               participants, notes, is_active, updated_at
         FROM program_schedule
         WHERE is_active = TRUE
-        ORDER BY start_date, sort_order, name
+        ORDER BY start_date, name
       `;
   return ok({ programs: rows, brands: BRANDS });
 }
@@ -110,14 +110,13 @@ async function handleCreate(body) {
   } catch (e) { return bad(e.message); }
   if (endDate && endDate < startDate) return bad('end date cannot be before start date');
 
-  const sortOrder = Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 100;
   const notes = optText(body.notes);
 
   const rows = await sql()`
     INSERT INTO program_schedule
-      (name, brand, location, start_date, end_date, participants, notes, sort_order)
+      (name, brand, location, start_date, end_date, participants, notes)
     VALUES
-      (${name}, ${br}, ${loc}, ${startDate}, ${endDate}, ${ppl}, ${notes}, ${sortOrder})
+      (${name}, ${br}, ${loc}, ${startDate}, ${endDate}, ${ppl}, ${notes})
     RETURNING *
   `;
   return ok({ program: rows[0] });
@@ -130,7 +129,7 @@ async function handleUpdate(body) {
   const sets = [];
   const args = [];
   const allow = ['name', 'brand', 'location', 'start_date', 'end_date',
-    'participants', 'notes', 'is_active', 'sort_order'];
+    'participants', 'notes', 'is_active'];
   let nextStart, nextEnd;
   try {
     for (const k of Object.keys(patch)) {
@@ -144,7 +143,6 @@ async function handleUpdate(body) {
       else if (k === 'participants') v = optInt('participants', v);
       else if (k === 'notes')        v = optText(v);
       else if (k === 'is_active')    v = !!v;
-      else if (k === 'sort_order')   v = Number(v) || 0;
       args.push(v);
       sets.push(`${k} = $${args.length}`);
     }

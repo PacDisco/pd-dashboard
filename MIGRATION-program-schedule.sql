@@ -1,7 +1,7 @@
 -- ==========================================================================
 -- Program Schedule — "Upcoming Programs" tracker for the group.
--- A lightweight, at-a-glance list of programs across all brands: program name,
--- brand, location, start/end dates, participant count, and notes.
+-- A lightweight, at-a-glance itinerary of programs across all brands: program
+-- name, brand, location, start/end dates, participant count, and notes.
 -- Run once against your Netlify DB (Neon Postgres). Idempotent — safe to re-run.
 --   From repo root:  netlify db exec < MIGRATION-program-schedule.sql
 --   or paste into the Neon SQL editor.
@@ -9,7 +9,7 @@
 -- NOTE: This is intentionally SEPARATE from `flight_programs` (which drives the
 -- student flight-booking portal and needs airports/times). This table is a
 -- simple internal planning view, so dates are stored as plain DATE values —
--- no timezone handling required.
+-- no timezone handling required. Programs are always ordered by date.
 -- ==========================================================================
 
 CREATE TABLE IF NOT EXISTS program_schedule (
@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS program_schedule (
   participants  INTEGER,                        -- optional headcount
   notes         TEXT,
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,  -- uncheck to archive without deleting
-  sort_order    INTEGER NOT NULL DEFAULT 100,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -31,11 +30,11 @@ CREATE TABLE IF NOT EXISTS program_schedule (
 ALTER TABLE program_schedule ADD COLUMN IF NOT EXISTS location     TEXT;
 ALTER TABLE program_schedule ADD COLUMN IF NOT EXISTS participants INTEGER;
 ALTER TABLE program_schedule ADD COLUMN IF NOT EXISTS is_active    BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE program_schedule ADD COLUMN IF NOT EXISTS sort_order   INTEGER NOT NULL DEFAULT 100;
 
--- Fast ordering for the upcoming-first list view.
-CREATE INDEX IF NOT EXISTS program_schedule_order_idx
-  ON program_schedule (is_active, start_date, sort_order, name);
+-- Programs are ordered purely by date (earliest → latest), so index for that.
+DROP INDEX IF EXISTS program_schedule_order_idx;
+CREATE INDEX IF NOT EXISTS program_schedule_date_idx
+  ON program_schedule (is_active, start_date, name);
 
 -- Guard against nonsensical ranges (end before start). Re-runnable.
 DO $$
