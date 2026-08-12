@@ -39,9 +39,19 @@ function coerceDatetime(label, raw) {
   if (raw === null || raw === undefined || raw === '') {
     throw new Error(`${label} is required`);
   }
-  const d = (typeof raw === 'number' || /^\d+$/.test(String(raw)))
-    ? new Date(Number(raw))
-    : new Date(String(raw)); // "2026-05-15T12:00" or full ISO
+  const s = String(raw);
+  let d;
+  if (typeof raw === 'number' || /^\d+$/.test(s)) {
+    d = new Date(Number(raw)); // epoch millis
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) {
+    // Naive datetime-local value ("2026-05-15T12:00") with no timezone.
+    // Treat it as a FLOATING wall-clock and pin it to UTC, so the stored time
+    // does not depend on the server's timezone (Lambda TZ) and round-trips
+    // back to the admin form unchanged. The client reads UTC components too.
+    d = new Date(s + 'Z');
+  } else {
+    d = new Date(s); // full ISO with Z or ±offset — respect it as an instant
+  }
   if (isNaN(d.getTime())) throw new Error(`Invalid datetime for ${label}: ${raw}`);
   return d.toISOString();
 }

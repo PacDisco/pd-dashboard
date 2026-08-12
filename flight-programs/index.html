@@ -75,7 +75,10 @@ var listEl = document.getElementById('list');
 
 function toast(msg, isErr){ var t=document.getElementById('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); setTimeout(function(){t.className='';},2600); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
-function toLocalInput(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return String(n).padStart(2,'0');}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
+// Program date/times are stored as a "floating" wall-clock (kept at UTC), so we
+// read the UTC components here — the displayed value must NOT shift with the
+// viewer's timezone, otherwise a saved time drifts by the browser's UTC offset.
+function toLocalInput(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return String(n).padStart(2,'0');}; return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+'T'+p(d.getUTCHours())+':'+p(d.getUTCMinutes()); }
 function money(v,cur){ if(v==null||v==='') return ''; var s={USD:'$',GBP:'£',EUR:'€',CAD:'C$',AUD:'A$',NZD:'NZ$'}[cur]||((cur||'')+' '); return s+Number(v).toLocaleString(); }
 
 async function api(method, payload, query){
