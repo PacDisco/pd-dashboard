@@ -1,0 +1,9 @@
+{
+  "title": "Time Tracker",
+  "description": "Tick timer for contractors — start/stop a live timer against a project, add or fix entries by hand, and see the week's hours. Operations approves a period and pushes the total straight into Invoices & Payments.",
+  "category": "Finance",
+  "icon": "⏱️",
+  "colors": ["#0f766e", "#2dd4bf"],
+  "order": 26,
+  "allowedRoles": ["admin", "operations", "programs", "admissions", "outreach", "flights", "unearthed", "contractor"]
+}
