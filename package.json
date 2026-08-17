@@ -9,7 +9,9 @@
   "scripts": {
     "build": "node scripts/build-manifest.js",
     "test": "node test/instructor-checklist.test.mjs",
-    "test:seasonal": "node test/seasonal-reset.test.mjs"
+    "test:seasonal": "node test/seasonal-reset.test.mjs",
+    "test:time": "node test/time-tracking.test.mjs",
+    "test:time-ui": "node test/timer-ui.smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
