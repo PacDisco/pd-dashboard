@@ -3,8 +3,9 @@
  *
  * One Netlify Function with action routing (same shape as program-schedule.js).
  * Every request is authenticated with the caller's Netlify Identity JWT, so a
- * contractor can only ever see and edit their OWN entries; admin / operations
- * get the manager view across everyone.
+ * contractor can only ever see and edit their OWN entries; ADMIN gets the manager
+ * view across everyone. See MANAGER_ROLES below — that one list is the whole
+ * boundary.
  *
  * The frontend must send `Authorization: Bearer <identity jwt>` — Netlify then
  * populates context.clientContext.user. No header ⇒ 401.
@@ -21,7 +22,7 @@
  *     update-entry  POST  -> { id, patch: {…} }
  *     delete-entry  POST  -> { id }
  *
- *   Manager only (admin | operations)
+ *   Manager only (admin)
  *     contractors      GET   -> roster with period totals
  *     save-contractor  POST  -> { id | email, patch: { hourly_rate, currency, vendor_name, is_active, full_name, notes } }
  *     save-project     POST  -> { id?, name, code?, brand?, sort_order?, is_active?, notes? }
@@ -48,7 +49,10 @@ function sql() {
   return _sql;
 }
 
-const MANAGER_ROLES = ['admin', 'operations'];
+// Who can see and act on OTHER people's time. Everyone else — including
+// operations — only ever sees their own entries. Rates and payout totals live
+// behind this too, so widening it exposes what every contractor is paid.
+const MANAGER_ROLES = ['admin'];
 const MAX_MINUTES = 1440;          // matches the DB constraint (24h)
 // NZD first: it's the default across the rest of the payments pipeline.
 const CURRENCIES = ['NZD', 'USD', 'AUD', 'EUR', 'GBP', 'CAD'];
@@ -166,7 +170,7 @@ async function ensureContractor(caller) {
  */
 function assertActive(self) {
   if (self.is_active === false) {
-    throw Object.assign(new Error('Your time tracking has been deactivated — talk to operations.'), { status: 403 });
+    throw Object.assign(new Error('Your time tracking has been deactivated — talk to an admin.'), { status: 403 });
   }
 }
 
@@ -483,7 +487,7 @@ async function handleDeleteEntry(caller, body) {
 
 // ------------------------------------------------------- manager: roster
 async function handleContractors(caller, qs) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   let from, to;
   try { ({ from, to } = range({ from: qs.from, to: qs.to })); } catch (e) { return bad(e.message); }
   const rows = await sql().query(
@@ -502,7 +506,7 @@ async function handleContractors(caller, qs) {
 }
 
 async function handleSaveContractor(caller, body) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   const patch = body.patch || {};
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
@@ -538,7 +542,7 @@ async function handleSaveContractor(caller, body) {
 
 // ------------------------------------------------------ manager: projects
 async function handleSaveProject(caller, body) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   let id, name, code, brand, order, notes;
   try {
     id    = optId('id', body.id);
@@ -587,7 +591,7 @@ async function handleSaveProject(caller, body) {
 }
 
 async function handleDeleteProject(caller, body) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
   if (!id) return bad('id required');
@@ -606,7 +610,7 @@ async function handleDeleteProject(caller, body) {
 
 // ----------------------------------------------------- manager: approvals
 async function handleApprovals(caller, qs) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   let cid;
   try { cid = optId('contractor_id', qs.contractor_id); } catch (e) { return bad(e.message); }
   const limit = Math.min(Number(qs.limit) || 50, 200);
@@ -639,7 +643,7 @@ async function handleApprovals(caller, qs) {
  * timesheet without being counted — hours that were then unpayable forever.
  */
 async function handleApprove(caller, body) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   let cid, start, end, notes;
   try {
     cid   = reqId('contractor_id', body.contractor_id);
@@ -704,7 +708,7 @@ async function handleApprove(caller, body) {
 }
 
 async function handleUnapprove(caller, body) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
   if (!id) return bad('id required');
@@ -733,7 +737,7 @@ async function handleUnapprove(caller, body) {
  * schedule, approve/paid checkboxes and reporting as every other invoice.
  */
 async function handlePushPayment(caller, body) {
-  if (!caller.isManager) return bad('admin or operations role required', 403);
+  if (!caller.isManager) return bad('admin role required', 403);
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
   if (!id) return bad('id required');
