@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Time Tracker</title>
+<meta name="description" content="Tick timer for contractors — start/stop a live timer against a project, fix entries by hand, review the week's hours, and push approved timesheets into Invoices &amp; Payments.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  /* Show/hide is load-bearing here (sign-in gate, running-vs-stopped buttons,
+     which manual-entry fields are live), so don't rely on the Tailwind CDN
+     having arrived — define it locally too. */
+  .hidden { display: none !important; }
+  /* The gate must never win over its own .hidden class, so its layout lives in
+     a rule instead of an inline style. */
+  #gate { min-height: 100vh; place-items: center; }
+  #gate:not(.hidden) { display: grid; }
+  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #0f766e; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fld { width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; }
+  .fld:focus { outline: none; border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15,118,110,.15); }
+  .lbl { display:block; font-size:12px; font-weight:600; color:#4b5563; margin-bottom:4px; }
+  /* The Tailwind build this page loads ships no `teal` palette, so text-teal-*
+     and bg-teal-* are silently no-ops (white-on-white buttons). Every brand
+     colour below is therefore defined here, not borrowed from Tailwind. */
+  .timer-card .lbl,
+  .on-teal { color:#99f6e4; }
+  .lnk { color:#0f766e; }
+  .lnk:hover { text-decoration: underline; }
+  .btn-tick { background:#fff; color:#115e59; font-weight:700; font-size:16px; padding:12px 24px; border-radius:12px; border:none; cursor:pointer; }
+  .btn-tick:hover { background:#f0fdfa; }
+  .btn-tick.stop { color:#b91c1c; }
+  .btn-tick:disabled { opacity:.6; cursor:not-allowed; }
+  .pill { font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .pill-lock { background:#e5e7eb; color:#4b5563; }
+  .pill-live { background:#dcfce7; color:#166534; }
+  .pill-manual { background:#fef3c7; color:#92400e; }
+  .pill-timer { background:#e0f2fe; color:#075985; }
+  .pill-paid { background:#dcfce7; color:#166534; }
+  .pill-due { background:#fee2e2; color:#b91c1c; }
+  .segbtn { font-size:13px; font-weight:600; padding:6px 14px; border:1px solid #d1d5db; background:#fff; color:#374151; cursor:pointer; }
+  .segbtn:first-child { border-radius:8px 0 0 8px; }
+  .segbtn:last-child { border-radius:0 8px 8px 0; border-left:none; }
+  .segbtn.active { background:#0f766e; color:#fff; border-color:#0f766e; }
+  .btn { font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px; border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:#0f766e; color:#fff; } .btn-primary:hover { background:#0d5d57; }
+  .btn-danger  { background:#b91c1c; color:#fff; } .btn-danger:hover  { background:#991b1b; }
+  .btn-ghost   { background:#fff; color:#374151; border-color:#d1d5db; } .btn-ghost:hover { background:#f9fafb; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  /* the tick timer */
+  /* Solid colour first so the card is never light-on-light if the gradient
+     doesn't paint; the gradient is the enhancement. */
+  .timer-card { background-color:#0f766e; background-image:linear-gradient(135deg,#0f766e,#115e59); color:#fff; border-radius:16px; }
+  .tick { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; font-weight:700; letter-spacing:-.02em; }
+  .tick-live { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.75 } }
+  .dot { width:8px; height:8px; border-radius:999px; background:#4ade80; display:inline-block; animation: pulse 1.2s ease-in-out infinite; }
+  /* week grid */
+  .day { background:#fff; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:10px; overflow:hidden; }
+  .day-head { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#f9fafb; border-bottom:1px solid #eef2f7; }
+  .day.today .day-head { background:#ecfdf5; }
+  .entry { display:flex; align-items:flex-start; gap:12px; padding:10px 14px; border-bottom:1px solid #f3f4f6; }
+  .entry:last-child { border-bottom:none; }
+  .entry:hover { background:#fafafa; }
+  .mono { font-variant-numeric: tabular-nums; }
+  table.tbl { width:100%; font-size:13px; }
+  table.tbl th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; padding:8px 10px; border-bottom:1px solid #eef2f7; }
+  table.tbl td { padding:9px 10px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; max-width: 340px; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { background: #b91c1c; }
+  .modal-bg { position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .modal { background:#fff; border-radius:14px; width:100%; max-width:520px; max-height:90vh; overflow:auto; }
+</style>
+</head>
+<body class="text-gray-800">
+
+<!-- sign-in gate -->
+<div id="gate" class="hidden">
+  <div class="bg-white border border-gray-200 rounded-xl p-8 text-center max-w-sm">
+    <div class="text-3xl mb-2">⏱️</div>
+    <h1 class="text-lg font-bold text-gray-900">Time Tracker</h1>
+    <p id="gate-msg" class="text-sm text-gray-500 mt-2 mb-5">Sign in with your dashboard account to log time.</p>
+    <button id="gate-btn" class="btn btn-primary">Sign in</button>
+    <div class="mt-4"><a href="/" class="text-sm lnk">← Dashboards</a></div>
+  </div>
+</div>
+
+<div id="app" class="hidden max-w-5xl mx-auto px-4 py-8">
+
+  <div class="flex items-start justify-between mb-5 gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">⏱️ Time Tracker</h1>
+      <p class="text-sm text-gray-500 mt-1">Hit start when you begin, stop when you're done. Forgot to start it? Add the block by hand. Operations approves each period and pushes the total to Invoices &amp; Payments.</p>
+    </div>
+    <div class="text-right whitespace-nowrap">
+      <div id="who" class="text-xs text-gray-500"></div>
+      <a href="/" class="text-sm lnk">← Dashboards</a>
+    </div>
+  </div>
+
+  <!-- ============================ THE TICK TIMER ============================ -->
+  <div class="timer-card p-5 shadow-lg">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <div id="timer-state" class="text-xs uppercase tracking-wider on-teal font-semibold mb-1">Not running</div>
+        <div id="tick" class="tick text-4xl md:text-5xl">0:00:00</div>
+        <div id="tick-meta" class="text-xs on-teal mt-1">&nbsp;</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-start" class="btn-tick">▶ Start</button>
+        <button id="btn-stop" class="hidden btn-tick stop">■ Stop</button>
+        <button id="btn-discard" class="hidden on-teal text-xs underline px-2" style="background:none;border:none;cursor:pointer">discard</button>
+      </div>
+    </div>
+    <div id="timer-inputs" class="grid grid-cols-1 md:grid-cols-12 gap-3 mt-4">
+      <div class="md:col-span-4">
+        <label class="lbl">Project</label>
+        <select id="t-project" class="fld"></select>
+      </div>
+      <div class="md:col-span-8">
+        <label class="lbl">What are you working on? <span class="font-normal opacity-75">(optional)</span></label>
+        <input id="t-desc" class="fld" placeholder="Rebuilding the enrolment funnel report">
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== TABS ============================== -->
+  <div class="mt-8 flex items-center justify-between flex-wrap gap-3">
+    <div class="inline-flex">
+      <button id="tab-week" class="segbtn active">📅 My week</button>
+      <button id="tab-team" class="segbtn hidden">👥 Team</button>
+      <button id="tab-admin" class="segbtn hidden">⚙️ Projects</button>
+    </div>
+    <div id="week-nav" class="flex items-center gap-2">
+      <button id="wk-prev" class="btn btn-ghost">←</button>
+      <button id="wk-today" class="btn btn-ghost">This week</button>
+      <button id="wk-next" class="btn btn-ghost">→</button>
+      <button id="btn-csv" class="btn btn-ghost" title="Download this period as CSV">⭳ CSV</button>
+    </div>
+  </div>
+
+  <!-- ============================ MY WEEK ============================ -->
+  <section id="view-week" class="mt-4">
+    <div class="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <div id="wk-label" class="text-sm font-semibold text-gray-800">—</div>
+        <div id="wk-sub" class="text-xs text-gray-500 mt-0.5">&nbsp;</div>
+      </div>
+      <div class="flex items-center gap-6">
+        <div class="text-right">
+          <div class="text-xs text-gray-500">Week total</div>
+          <div id="wk-total" class="text-2xl font-bold text-gray-900 mono">0.00 h</div>
+        </div>
+        <button id="btn-manual" class="btn btn-primary">+ Add entry by hand</button>
+      </div>
+    </div>
+
+    <div id="wk-projects" class="mt-3"></div>
+    <div id="wk-loading" class="flex justify-center py-12"><div class="loading-spinner"></div></div>
+    <div id="wk-days" class="mt-3"></div>
+    <div id="wk-empty" class="hidden text-center text-gray-400 py-12 text-sm bg-white border border-gray-200 rounded-xl">
+      No time logged this week yet. Hit ▶ Start above, or add an entry by hand.
+    </div>
+  </section>
+
+  <!-- ============================== TEAM ============================== -->
+  <section id="view-team" class="hidden mt-4">
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-700">Contractors</h2>
+          <p id="team-period" class="text-xs text-gray-500 mt-0.5">&nbsp;</p>
+        </div>
+        <p class="text-xs text-gray-400">Set an hourly rate before approving, or the payout amount can't be calculated.</p>
+      </div>
+      <div class="overflow-x-auto"><table class="tbl">
+        <thead><tr>
+          <th>Contractor</th><th>Rate</th><th>Vendor name (on payments)</th>
+          <th class="text-right">Period hours</th><th class="text-right">Unapproved</th><th>Last logged</th><th></th>
+        </tr></thead>
+        <tbody id="team-rows"></tbody>
+      </table></div>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden mt-5">
+      <div class="px-4 py-3 border-b border-gray-100">
+        <h2 class="text-sm font-semibold text-gray-700">Approved timesheets</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Approving locks the entries. “Push to payments” writes a manual payment row into Invoices &amp; Payments.</p>
+      </div>
+      <div class="overflow-x-auto"><table class="tbl">
+        <thead><tr>
+          <th>Contractor</th><th>Period</th><th class="text-right">Hours</th><th class="text-right">Amount</th>
+          <th>Approved by</th><th>Payment</th><th></th>
+        </tr></thead>
+        <tbody id="appr-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ============================= PROJECTS ============================= -->
+  <section id="view-admin" class="hidden mt-4">
+    <div class="bg-white border border-gray-200 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">Add a project</h2>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+        <div class="md:col-span-5"><label class="lbl">Project name</label><input id="p-name" class="fld" placeholder="Website rebuild"></div>
+        <div class="md:col-span-2"><label class="lbl">Code</label><input id="p-code" class="fld" placeholder="WEB"></div>
+        <div class="md:col-span-3"><label class="lbl">Brand</label><select id="p-brand" class="fld"></select></div>
+        <div class="md:col-span-2"><label class="lbl">Sort</label><input id="p-order" type="number" class="fld" placeholder="100"></div>
+      </div>
+      <div class="mt-4"><button id="p-add" class="btn btn-primary">Add project</button></div>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden mt-5">
+      <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-sm font-semibold text-gray-700">Project list</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Contractors only see active projects. A project with logged time is deactivated rather than deleted, so history stays readable.</p></div>
+      <div class="overflow-x-auto"><table class="tbl">
+        <thead><tr><th>Name</th><th>Code</th><th>Brand</th><th>Sort</th><th>Active</th><th></th></tr></thead>
+        <tbody id="proj-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ============================================================================
+   Time Tracker
+   - Every API call carries the Netlify Identity JWT, so the server decides what
+     you can see. A contractor only ever gets their own entries.
+   - The running timer lives in the DATABASE, not the browser: close the laptop,
+     reopen on your phone, the same timer is still ticking.
+   ========================================================================== */
+var API = '/api/time-tracking';
+var BRANDS = ['', 'EDA Group', 'Unearthed Education', 'Pacific Discovery', 'Pure Exploration', 'Conference'];
+
+var ME = null;           // { contractor, isManager, projects, running }
+var PROJECTS = [];
+var RUNNING = null;      // live entry row, or null
+var ENTRIES = [];        // entries for the visible week
+var SKEW = 0;            // serverNow - clientNow, so the tick matches the DB clock
+var weekStart = mondayOf(new Date());
+var tab = 'week';
+var tickHandle = null;
+
+/* ------------------------------------------------------------------ helpers */
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+function toast(msg, isErr) { var t = $('toast'); t.textContent = msg; t.className = 'show' + (isErr ? ' error' : ''); clearTimeout(toast._t); toast._t = setTimeout(function () { t.className = ''; }, 3200); }
+
+// Local calendar day of a Date — never UTC, so "today" means the user's today.
+function ymdLocal(d) {
+  var y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + dd;
+}
+// A DATE from Postgres may arrive as '2026-08-14' or a full ISO string.
+function ymd(v) { return v ? String(v).slice(0, 10) : ''; }
+function todayStr() { return ymdLocal(new Date()); }
+function mondayOf(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); var wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); return x; }
+function addDays(d, n) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+function fmtDayLabel(dstr) {
+  var p = dstr.split('-'); var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function fmtRange(a, b) {
+  var pa = a.split('-'), pb = b.split('-');
+  var da = new Date(+pa[0], +pa[1] - 1, +pa[2]), db = new Date(+pb[0], +pb[1] - 1, +pb[2]);
+  var o = { day: 'numeric', month: 'short' };
+  return da.toLocaleDateString(undefined, o) + ' – ' + db.toLocaleDateString(undefined, o) + ' ' + db.getFullYear();
+}
+function hhmm(iso) { if (!iso) return '—'; var d = new Date(iso); return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+function hours(min) { return (Math.round((min / 60) * 100) / 100).toFixed(2); }
+function hm(min) { var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + String(m).padStart(2, '0') + 'm'; }
+function clock(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+// Local date + HH:MM → ISO instant. The server stores instants; the browser is
+// the only thing that knows the user's timezone, so the conversion happens here.
+function localToIso(dateStr, timeStr) {
+  var dp = dateStr.split('-'), tp = (timeStr || '00:00').split(':');
+  return new Date(+dp[0], +dp[1] - 1, +dp[2], +tp[0], +tp[1], 0, 0).toISOString();
+}
+function isoToTimeInput(iso) { var d = new Date(iso); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+/* ---------------------------------------------------------------- identity */
+var IDENTITY_USER = null;
+function bootIdentity() {
+  if (!window.netlifyIdentity) { showGate("Netlify Identity didn't load — reload the page."); return; }
+  netlifyIdentity.on('init', function (u) { u ? onLogin(u) : showGate(); });
+  netlifyIdentity.on('login', function (u) { netlifyIdentity.close(); onLogin(u); });
+  netlifyIdentity.on('logout', function () { IDENTITY_USER = null; showGate(); });
+  netlifyIdentity.init();
+  $('gate-btn').onclick = function () { netlifyIdentity.open(); };
+}
+function showGate(msg) {
+  $('app').classList.add('hidden');
+  $('gate').classList.remove('hidden');
+  if (msg) $('gate-msg').textContent = msg;
+}
+async function onLogin(user) {
+  IDENTITY_USER = user;
+  try { await user.jwt(true); } catch (e) { /* fall through to the API's own 401 */ }
+  $('gate').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  boot();
+}
+async function api(method, action, body, qs) {
+  var url = API + '?action=' + encodeURIComponent(action) + (qs ? '&' + qs : '');
+  var headers = { 'Content-Type': 'application/json' };
+  if (IDENTITY_USER) { try { headers.Authorization = 'Bearer ' + (await IDENTITY_USER.jwt()); } catch (e) {} }
+  var res = await fetch(url, {
+    method: method, headers: headers, credentials: 'include',
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  var data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    if (res.status === 401) { showGate('Your session expired — sign in again.'); }
+    throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  }
+  return data;
+}
+
+/* -------------------------------------------------------------------- boot */
+async function boot() {
+  try {
+    ME = await api('GET', 'me');
+  } catch (e) { toast(e.message, true); return; }
+
+  SKEW = ME.serverNow ? (Date.parse(ME.serverNow) - Date.now()) : 0;
+  PROJECTS = ME.projects || [];
+  RUNNING = ME.running || null;
+
+  var c = ME.contractor || {};
+  $('who').textContent = (c.full_name || c.email || '') + (ME.isManager ? ' · manager' : '');
+  if (ME.isManager) { $('tab-team').classList.remove('hidden'); $('tab-admin').classList.remove('hidden'); }
+
+  fillProjectSelect($('t-project'), PROJECTS, RUNNING ? RUNNING.project_id : null);
+  fillSelect($('p-brand'), BRANDS);
+  renderTimer();
+  await loadWeek();
+}
+
+function fillProjectSelect(sel, projects, selected) {
+  var opts = ['<option value="">— no project —</option>'];
+  for (var i = 0; i < projects.length; i++) {
+    var p = projects[i];
+    if (!p.is_active && String(p.id) !== String(selected)) continue;
+    opts.push('<option value="' + p.id + '"' + (String(p.id) === String(selected) ? ' selected' : '') + '>' +
+      esc(p.name) + (p.code ? ' (' + esc(p.code) + ')' : '') + (p.is_active ? '' : ' — inactive') + '</option>');
+  }
+  sel.innerHTML = opts.join('');
+}
+function fillSelect(sel, values) {
+  sel.innerHTML = values.map(function (v) { return '<option value="' + esc(v) + '">' + (v ? esc(v) : '— none —') + '</option>'; }).join('');
+}
+
+/* ------------------------------------------------------------- tick timer */
+function renderTimer() {
+  var running = !!RUNNING;
+  $('btn-start').classList.toggle('hidden', running);
+  $('btn-stop').classList.toggle('hidden', !running);
+  $('btn-discard').classList.toggle('hidden', !running);
+  $('t-project').disabled = running;
+  $('t-desc').disabled = running;
+  $('timer-state').innerHTML = running
+    ? '<span class="dot"></span> <span class="align-middle">Running</span>'
+    : 'Not running';
+  $('tick').classList.toggle('tick-live', running);
+
+  if (running) {
+    var pn = RUNNING.project_name ? esc(RUNNING.project_name) : 'No project';
+    var d = RUNNING.description ? ' · ' + esc(RUNNING.description) : '';
+    $('tick-meta').innerHTML = pn + d + ' · started ' + hhmm(RUNNING.started_at);
+    $('t-project').value = RUNNING.project_id || '';
+    $('t-desc').value = RUNNING.description || '';
+    if (!tickHandle) tickHandle = setInterval(paintTick, 1000);
+    paintTick();
+  } else {
+    if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
+    $('tick').textContent = '0:00:00';
+    $('tick-meta').innerHTML = '&nbsp;';
+  }
+}
+function paintTick() {
+  if (!RUNNING) return;
+  var started = Date.parse(RUNNING.started_at);
+  var now = Date.now() + SKEW;                 // follow the DB clock, not the laptop's
+  $('tick').textContent = clock((now - started) / 1000);
+}
+
+async function startTimer() {
+  $('btn-start').disabled = true;
+  try {
+    var out = await api('POST', 'start', {
+      project_id: $('t-project').value || null,
+      description: $('t-desc').value || null,
+      work_date: todayStr()
+    });
+    RUNNING = out.running;
+    if (out.note) toast(out.note);
+    renderTimer();
+    await loadWeek();
+  } catch (e) { toast(e.message, true); }
+  finally { $('btn-start').disabled = false; }
+}
+async function stopTimer() {
+  $('btn-stop').disabled = true;
+  try {
+    var out = await api('POST', 'stop', {});
+    RUNNING = null;
+    $('t-desc').value = '';
+    renderTimer();
+    if (out.capped) toast('That timer had been running over 24 hours — it was capped at 24h. Edit the entry to set the real time.', true);
+    else toast('Logged ' + hm(out.entry.minutes) + (out.entry.project_name ? ' on ' + out.entry.project_name : ''));
+    await loadWeek();
+  } catch (e) { toast(e.message, true); }
+  finally { $('btn-stop').disabled = false; }
+}
+async function discardTimer() {
+  if (!confirm('Throw away the running timer? Nothing will be logged.')) return;
+  try {
+    await api('POST', 'discard', {});
+    RUNNING = null; renderTimer(); toast('Timer discarded'); await loadWeek();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* --------------------------------------------------------------- my week */
+function weekBounds() { return { from: ymdLocal(weekStart), to: ymdLocal(addDays(weekStart, 6)) }; }
+
+async function loadWeek() {
+  var b = weekBounds();
+  $('wk-label').textContent = fmtRange(b.from, b.to);
+  $('wk-loading').classList.remove('hidden');
+  try {
+    var out = await api('GET', 'entries', undefined, 'from=' + b.from + '&to=' + b.to);
+    ENTRIES = out.entries || [];
+    renderWeek();
+  } catch (e) { toast(e.message, true); }
+  finally { $('wk-loading').classList.add('hidden'); }
+}
+
+function renderWeek() {
+  var b = weekBounds();
+  var finished = ENTRIES.filter(function (e) { return e.ended_at; });
+  var total = finished.reduce(function (s, e) { return s + (e.minutes || 0); }, 0);
+  $('wk-total').textContent = hours(total) + ' h';
+  var lockedCount = finished.filter(function (e) { return e.locked; }).length;
+  $('wk-sub').textContent = finished.length + ' entr' + (finished.length === 1 ? 'y' : 'ies')
+    + (lockedCount ? ' · ' + lockedCount + ' approved & locked' : '')
+    + (RUNNING ? ' · 1 running' : '');
+
+  // per-project roll-up
+  var byProj = {};
+  finished.forEach(function (e) {
+    var k = e.project_name || 'No project';
+    byProj[k] = (byProj[k] || 0) + (e.minutes || 0);
+  });
+  var keys = Object.keys(byProj).sort(function (a, c) { return byProj[c] - byProj[a]; });
+  $('wk-projects').innerHTML = keys.length ? '<div class="flex flex-wrap gap-2">' + keys.map(function (k) {
+    var pct = total ? Math.round((byProj[k] / total) * 100) : 0;
+    return '<span class="pill pill-timer">' + esc(k) + ' · ' + hours(byProj[k]) + ' h · ' + pct + '%</span>';
+  }).join('') + '</div>' : '';
+
+  // day-by-day
+  var html = '';
+  var any = false;
+  for (var i = 0; i < 7; i++) {
+    var dstr = ymdLocal(addDays(weekStart, i));
+    var dayEntries = ENTRIES.filter(function (e) { return ymd(e.work_date) === dstr; });
+    var dayMin = dayEntries.reduce(function (s, e) { return s + (e.minutes || 0); }, 0);
+    if (!dayEntries.length) continue;
+    any = true;
+    html += '<div class="day' + (dstr === todayStr() ? ' today' : '') + '">'
+      + '<div class="day-head"><div class="text-sm font-semibold text-gray-700">' + fmtDayLabel(dstr)
+      + (dstr === todayStr() ? ' <span class="pill pill-live ml-1">today</span>' : '') + '</div>'
+      + '<div class="text-sm font-semibold text-gray-900 mono">' + hours(dayMin) + ' h</div></div>'
+      + dayEntries.map(entryRow).join('')
+      + '</div>';
+  }
+  $('wk-days').innerHTML = html;
+  $('wk-empty').classList.toggle('hidden', any || !!RUNNING);
+}
+
+function entryRow(e) {
+  var live = !e.ended_at;
+  var badges = live ? '<span class="pill pill-live">running</span>'
+    : (e.locked ? '<span class="pill pill-lock">🔒 approved</span>' : '')
+      + (e.source === 'manual' ? '<span class="pill pill-manual ml-1">by hand</span>' : '');
+  return '<div class="entry">'
+    + '<div class="text-sm font-semibold text-gray-900 mono" style="width:74px">' + (live ? '—' : hours(e.minutes) + ' h') + '</div>'
+    + '<div class="flex-1 min-w-0">'
+      + '<div class="text-sm text-gray-800">' + (e.project_name ? esc(e.project_name) : '<span class="text-gray-400">No project</span>')
+      + ' <span class="text-xs text-gray-400 ml-1">' + hhmm(e.started_at) + ' → ' + (live ? 'now' : hhmm(e.ended_at)) + '</span></div>'
+      + (e.description ? '<div class="text-xs text-gray-500 mt-0.5 truncate">' + esc(e.description) + '</div>' : '')
+    + '</div>'
+    + '<div class="flex items-center gap-2 whitespace-nowrap">' + badges
+      + (live || e.locked ? '' : '<button class="text-xs lnk" onclick="editEntry(' + e.id + ')">edit</button>'
+        + '<button class="text-xs text-red-600 hover:underline" onclick="removeEntry(' + e.id + ')">delete</button>')
+    + '</div></div>';
+}
+
+/* ----------------------------------------------------- manual entry modal */
+function closeModal() { $('modal-root').innerHTML = ''; }
+
+function manualEntryModal(existing) {
+  var e = existing || null;
+  var dateVal = e ? ymd(e.work_date) : todayStr();
+  var startVal = e ? isoToTimeInput(e.started_at) : '09:00';
+  var endVal = e && e.ended_at ? isoToTimeInput(e.ended_at) : '10:00';
+  $('modal-root').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal p-5">'
+    + '<h3 class="text-base font-bold text-gray-900 mb-1">' + (e ? 'Edit entry' : 'Add an entry by hand') + '</h3>'
+    + '<p class="text-xs text-gray-500 mb-4">For when the timer wasn\'t running. Enter the times you actually worked, or just the hours.</p>'
+    + '<div class="grid grid-cols-1 md:grid-cols-12 gap-3">'
+      + '<div class="md:col-span-6"><label class="lbl">Date</label><input id="m-date" type="date" class="fld" value="' + dateVal + '"></div>'
+      + '<div class="md:col-span-6"><label class="lbl">Project</label><select id="m-project" class="fld"></select></div>'
+      + '<div class="md:col-span-12"><div class="inline-flex mb-1"><button id="m-mode-times" class="segbtn active">Start / finish</button><button id="m-mode-hours" class="segbtn">Just hours</button></div></div>'
+      + '<div class="md:col-span-6 m-times"><label class="lbl">Started</label><input id="m-start" type="time" class="fld" value="' + startVal + '"></div>'
+      + '<div class="md:col-span-6 m-times"><label class="lbl">Finished</label><input id="m-end" type="time" class="fld" value="' + endVal + '"></div>'
+      + '<div class="md:col-span-6 m-hours hidden"><label class="lbl">Hours worked</label><input id="m-hours" type="number" step="0.25" min="0.02" max="24" class="fld" placeholder="1.5"></div>'
+      + '<div class="md:col-span-12"><label class="lbl">Description <span class="text-gray-400 font-normal">(optional)</span></label><input id="m-desc" class="fld" value="' + esc(e && e.description ? e.description : '') + '"></div>'
+    + '</div>'
+    + '<div id="m-err" class="text-sm text-red-600 mt-3"></div>'
+    + '<div class="flex items-center justify-end gap-2 mt-4">'
+      + '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+      + '<button id="m-save" class="btn btn-primary">' + (e ? 'Save changes' : 'Add entry') + '</button>'
+    + '</div></div></div>';
+
+  fillProjectSelect($('m-project'), PROJECTS, e ? e.project_id : ($('t-project').value || null));
+  $('m-mode-times').onclick = function () { setMode('times'); };
+  $('m-mode-hours').onclick = function () { setMode('hours'); };
+  function setMode(mode) {
+    $('m-mode-times').classList.toggle('active', mode === 'times');
+    $('m-mode-hours').classList.toggle('active', mode === 'hours');
+    document.querySelectorAll('.m-times').forEach(function (n) { n.classList.toggle('hidden', mode !== 'times'); });
+    document.querySelectorAll('.m-hours').forEach(function (n) { n.classList.toggle('hidden', mode !== 'hours'); });
+  }
+  $('m-save').onclick = function () { saveManual(e); };
+}
+
+async function saveManual(existing) {
+  var err = $('m-err');
+  err.textContent = '';
+  var date = $('m-date').value;
+  if (!date) { err.textContent = 'Pick a date.'; return; }
+
+  var startIso, endIso;
+  var hoursMode = $('m-mode-hours').classList.contains('active');
+  if (hoursMode) {
+    var h = Number($('m-hours').value);
+    if (!isFinite(h) || h <= 0) { err.textContent = 'Enter how many hours you worked.'; return; }
+    if (h > 24) { err.textContent = 'A single entry can\'t be more than 24 hours.'; return; }
+    // Nominal 09:00 local start so the entry still has real instants behind it.
+    startIso = localToIso(date, '09:00');
+    endIso = new Date(Date.parse(startIso) + Math.round(h * 60) * 60000).toISOString();
+  } else {
+    var s = $('m-start').value, en = $('m-end').value;
+    if (!s || !en) { err.textContent = 'Enter both a start and a finish time.'; return; }
+    startIso = localToIso(date, s);
+    endIso = localToIso(date, en);
+    if (Date.parse(endIso) <= Date.parse(startIso)) {
+      // Treat a finish time earlier than the start as crossing midnight.
+      endIso = new Date(Date.parse(endIso) + 86400000).toISOString();
+    }
+  }
+
+  $('m-save').disabled = true;
+  try {
+    if (existing) {
+      var out = await api('POST', 'update-entry', {
+        id: existing.id,
+        patch: {
+          work_date: date, started_at: startIso, ended_at: endIso,
+          project_id: $('m-project').value || null, description: $('m-desc').value || null
+        }
+      });
+      toast(out && out.approvalRetotalled ? 'Entry updated — approved timesheet re-totalled' : 'Entry updated');
+    } else {
+      await api('POST', 'create-entry', {
+        work_date: date, started_at: startIso, ended_at: endIso,
+        project_id: $('m-project').value || null, description: $('m-desc').value || null
+      });
+      toast('Entry added');
+    }
+    closeModal();
+    await loadWeek();
+    if (tab === 'team') await loadTeam();
+  } catch (e2) { err.textContent = e2.message; }
+  finally { var b = $('m-save'); if (b) b.disabled = false; }
+}
+
+function editEntry(id) {
+  var e = ENTRIES.filter(function (x) { return x.id === id; })[0];
+  if (!e) return;
+  manualEntryModal(e);
+}
+async function removeEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  try { await api('POST', 'delete-entry', { id: id }); toast('Entry deleted'); await loadWeek(); }
+  catch (e) { toast(e.message, true); }
+}
+
+/* ------------------------------------------------------------------- CSV */
+function exportCsv() {
+  var b = weekBounds();
+  var rows = [['Date', 'Contractor', 'Project', 'Code', 'Description', 'Started', 'Finished', 'Hours', 'Status']];
+  var src = (tab === 'team' ? TEAM_ENTRIES : ENTRIES).filter(function (e) { return e.ended_at; });
+  src.slice().sort(function (a, c) { return ymd(a.work_date).localeCompare(ymd(c.work_date)) || Date.parse(a.started_at) - Date.parse(c.started_at); })
+    .forEach(function (e) {
+      rows.push([ymd(e.work_date), e.contractor_name || e.contractor_email || '', e.project_name || '', e.project_code || '',
+        e.description || '', hhmm(e.started_at), hhmm(e.ended_at), hours(e.minutes), e.locked ? 'approved' : 'unapproved']);
+    });
+  if (rows.length === 1) { toast('Nothing to export for this period.', true); return; }
+  var csv = rows.map(function (r) {
+    return r.map(function (v) { var s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',');
+  }).join('\r\n');
+  var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'time-' + (tab === 'team' ? 'team-' : '') + b.from + '_to_' + b.to + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+/* ------------------------------------------------------------------ team */
+var TEAM = [];
+var TEAM_ENTRIES = [];
+
+async function loadTeam() {
+  var b = weekBounds();
+  $('team-period').textContent = 'Hours shown for ' + fmtRange(b.from, b.to);
+  try {
+    var out = await api('GET', 'contractors', undefined, 'from=' + b.from + '&to=' + b.to);
+    TEAM = out.contractors || [];
+    renderTeam();
+    var ent = await api('GET', 'entries', undefined, 'contractor_id=all&from=' + b.from + '&to=' + b.to);
+    TEAM_ENTRIES = ent.entries || [];
+    var appr = await api('GET', 'approvals', undefined, 'limit=50');
+    renderApprovals(appr.approvals || []);
+  } catch (e) { toast(e.message, true); }
+}
+
+function renderTeam() {
+  if (!TEAM.length) {
+    $('team-rows').innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-8">No one has opened the timer yet. A contractor row is created the first time someone loads this page.</td></tr>';
+    return;
+  }
+  $('team-rows').innerHTML = TEAM.map(function (c) {
+    var name = c.full_name || c.email;
+    return '<tr' + (c.is_active ? '' : ' style="opacity:.55"') + '>'
+      + '<td><div class="font-semibold text-gray-800">' + esc(name) + (c.timer_running ? ' <span class="pill pill-live">running</span>' : '') + '</div>'
+        + '<div class="text-xs text-gray-400">' + esc(c.email) + '</div></td>'
+      + '<td><div class="flex items-center gap-1"><input class="fld" style="width:86px" type="number" step="0.01" min="0" value="' + (c.hourly_rate == null ? '' : c.hourly_rate) + '" onchange="saveContractor(' + c.id + ', {hourly_rate: this.value})" placeholder="rate">'
+        + '<select class="fld" style="width:78px" onchange="saveContractor(' + c.id + ', {currency: this.value})">'
+        + (ME.currencies || ['USD']).map(function (cu) { return '<option' + (cu === c.currency ? ' selected' : '') + '>' + cu + '</option>'; }).join('')
+        + '</select></div></td>'
+      + '<td><input class="fld" style="min-width:150px" value="' + esc(c.vendor_name || '') + '" placeholder="' + esc(name) + '" onchange="saveContractor(' + c.id + ', {vendor_name: this.value})"></td>'
+      + '<td class="text-right font-semibold mono">' + hours(c.period_minutes) + ' h</td>'
+      + '<td class="text-right mono">' + (c.unapproved_minutes ? hours(c.unapproved_minutes) + ' h' : '—') + '</td>'
+      + '<td class="text-xs text-gray-500">' + (c.last_logged ? ymd(c.last_logged) : '—') + '</td>'
+      + '<td class="text-right whitespace-nowrap">'
+        + '<button class="btn btn-ghost" onclick="viewContractorWeek(' + c.id + ')">entries</button> '
+        + '<button class="btn btn-primary" onclick="approvePeriod(' + c.id + ')"' + (c.unapproved_minutes ? '' : ' disabled') + '>approve period</button>'
+      + '</td></tr>';
+  }).join('');
+}
+
+async function saveContractor(id, patch) {
+  try { await api('POST', 'save-contractor', { id: id, patch: patch }); toast('Saved'); await loadTeam(); }
+  catch (e) { toast(e.message, true); await loadTeam(); }
+}
+
+function viewContractorWeek(id) {
+  var c = TEAM.filter(function (x) { return x.id === id; })[0];
+  var rows = TEAM_ENTRIES.filter(function (e) { return e.contractor_id === id && e.ended_at; })
+    .sort(function (a, b) { return ymd(a.work_date).localeCompare(ymd(b.work_date)) || Date.parse(a.started_at) - Date.parse(b.started_at); });
+  var total = rows.reduce(function (s, e) { return s + e.minutes; }, 0);
+  $('modal-root').innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal p-5">'
+    + '<h3 class="text-base font-bold text-gray-900">' + esc(c ? (c.full_name || c.email) : 'Entries') + '</h3>'
+    + '<p class="text-xs text-gray-500 mb-3">' + fmtRange(weekBounds().from, weekBounds().to) + ' · ' + hours(total) + ' h</p>'
+    + (rows.length ? '<table class="tbl"><thead><tr><th>Date</th><th>Project</th><th>Times</th><th class="text-right">Hours</th><th></th></tr></thead><tbody>'
+      + rows.map(function (e) {
+        return '<tr><td class="whitespace-nowrap">' + ymd(e.work_date) + '</td><td>' + esc(e.project_name || '—')
+          + (e.description ? '<div class="text-xs text-gray-400">' + esc(e.description) + '</div>' : '') + '</td>'
+          + '<td class="text-xs text-gray-500 whitespace-nowrap">' + hhmm(e.started_at) + '→' + hhmm(e.ended_at) + '</td>'
+          + '<td class="text-right mono">' + hours(e.minutes) + '</td>'
+          + '<td>' + (e.locked ? '<span class="pill pill-lock">🔒</span>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table>'
+      : '<p class="text-sm text-gray-400 py-6 text-center">No entries in this period.</p>')
+    + '<div class="text-right mt-4"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>'
+    + '</div></div>';
+}
+
+async function approvePeriod(contractorId) {
+  var b = weekBounds();
+  var c = TEAM.filter(function (x) { return x.id === contractorId; })[0];
+  var rate = c && c.hourly_rate != null ? Number(c.hourly_rate) : null;
+  var mins = c ? c.unapproved_minutes : 0;
+  var amount = rate == null ? null : Math.round((mins / 60) * rate * 100) / 100;
+  var msg = 'Approve ' + hours(mins) + ' h for ' + (c ? (c.full_name || c.email) : 'this contractor')
+    + '\n' + fmtRange(b.from, b.to)
+    + (amount == null
+      ? '\n\n⚠ No hourly rate set — the timesheet will be approved but you can\'t push it to payments until a rate is set and the period re-approved.'
+      : '\n\nPayout: ' + amount.toFixed(2) + ' ' + c.currency)
+    + '\n\nApproved entries are locked and the contractor can no longer edit them.'
+    + '\nIf someone adds a forgotten block to this week later, approve the week again — the second approval only picks up the new hours.';
+  if (!confirm(msg)) return;
+  try {
+    var out = await api('POST', 'approve', { contractor_id: contractorId, period_start: b.from, period_end: b.to });
+    toast('Approved · ' + out.lockedEntries + ' entries locked');
+    await loadTeam();
+  } catch (e) { toast(e.message, true); }
+}
+
+function renderApprovals(list) {
+  if (!list.length) {
+    $('appr-rows').innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-8">Nothing approved yet.</td></tr>';
+    return;
+  }
+  $('appr-rows').innerHTML = list.map(function (a) {
+    var pushed = !!a.payment_id;
+    return '<tr>'
+      + '<td class="font-semibold text-gray-800">' + esc(a.contractor_name || a.contractor_email) + '</td>'
+      + '<td class="whitespace-nowrap text-xs text-gray-600">' + ymd(a.period_start) + ' → ' + ymd(a.period_end) + '</td>'
+      + '<td class="text-right mono">' + hours(a.total_minutes) + ' h</td>'
+      + '<td class="text-right mono">' + (a.amount == null ? '<span class="text-red-600 text-xs">no rate</span>' : Number(a.amount).toFixed(2) + ' ' + a.currency) + '</td>'
+      + '<td class="text-xs text-gray-500">' + esc(a.approved_by || '') + '</td>'
+      + '<td>' + (pushed
+        ? '<span class="pill ' + (a.paid ? 'pill-paid' : 'pill-due') + '">' + (a.paid ? 'paid' : 'scheduled ' + ymd(a.payment_due_date)) + '</span>'
+        : '<span class="text-xs text-gray-400">not pushed</span>') + '</td>'
+      + '<td class="text-right whitespace-nowrap">'
+        + (pushed
+          ? '<a class="text-xs lnk" href="/invoices/">open in payments →</a>'
+          : '<button class="btn btn-primary" onclick="pushPayment(' + a.id + ')">push to payments</button> '
+            + '<button class="btn btn-ghost" onclick="unapprove(' + a.id + ')">undo</button>')
+      + '</td></tr>';
+  }).join('');
+}
+
+async function pushPayment(id) {
+  var due = prompt('Due date for this payout (YYYY-MM-DD). Leave blank for the Friday of the following week.');
+  if (due === null) return;
+  due = due.trim();
+  if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) { toast('Use the format YYYY-MM-DD.', true); return; }
+  try {
+    var out = await api('POST', 'push-payment', { id: id, due_date: due || undefined });
+    toast('Added to Invoices & Payments — due ' + ymd(out.payment.due_date));
+    await loadTeam();
+  } catch (e) { toast(e.message, true); }
+}
+async function unapprove(id) {
+  if (!confirm('Undo this approval? The entries unlock and the contractor can edit them again.')) return;
+  try { await api('POST', 'unapprove', { id: id }); toast('Approval undone'); await loadTeam(); }
+  catch (e) { toast(e.message, true); }
+}
+
+/* -------------------------------------------------------------- projects */
+async function loadProjects() {
+  try {
+    var out = await api('GET', 'projects');
+    PROJECTS = out.projects || [];
+    fillProjectSelect($('t-project'), PROJECTS, RUNNING ? RUNNING.project_id : $('t-project').value);
+    renderProjects();
+  } catch (e) { toast(e.message, true); }
+}
+function renderProjects() {
+  if (!PROJECTS.length) { $('proj-rows').innerHTML = '<tr><td colspan="6" class="text-center text-gray-400 py-8">No projects yet — add one above.</td></tr>'; return; }
+  $('proj-rows').innerHTML = PROJECTS.map(function (p) {
+    return '<tr' + (p.is_active ? '' : ' style="opacity:.55"') + '>'
+      + '<td><input class="fld" value="' + esc(p.name) + '" onchange="saveProject(' + p.id + ', {name: this.value})"></td>'
+      + '<td><input class="fld" style="width:80px" value="' + esc(p.code || '') + '" onchange="saveProject(' + p.id + ', {code: this.value})"></td>'
+      + '<td><select class="fld" style="width:170px" onchange="saveProject(' + p.id + ', {brand: this.value})">'
+        + BRANDS.map(function (b) { return '<option value="' + esc(b) + '"' + ((p.brand || '') === b ? ' selected' : '') + '>' + (b ? esc(b) : '— none —') + '</option>'; }).join('')
+        + '</select></td>'
+      + '<td><input class="fld" style="width:70px" type="number" value="' + (p.sort_order == null ? '' : p.sort_order) + '" onchange="saveProject(' + p.id + ', {sort_order: this.value})"></td>'
+      + '<td><input type="checkbox"' + (p.is_active ? ' checked' : '') + ' onchange="saveProject(' + p.id + ', {is_active: this.checked})"></td>'
+      + '<td class="text-right"><button class="text-xs text-red-600 hover:underline" onclick="deleteProject(' + p.id + ')">delete</button></td>'
+      + '</tr>';
+  }).join('');
+}
+async function addProject() {
+  var name = $('p-name').value.trim();
+  if (!name) { toast('Give the project a name.', true); return; }
+  try {
+    await api('POST', 'save-project', {
+      name: name, code: $('p-code').value || null, brand: $('p-brand').value || null,
+      sort_order: $('p-order').value || undefined
+    });
+    $('p-name').value = ''; $('p-code').value = ''; $('p-order').value = '';
+    toast('Project added');
+    await loadProjects();
+  } catch (e) { toast(e.message, true); }
+}
+async function saveProject(id, patch) {
+  try { await api('POST', 'save-project', Object.assign({ id: id }, patch)); toast('Saved'); await loadProjects(); }
+  catch (e) { toast(e.message, true); await loadProjects(); }
+}
+async function deleteProject(id) {
+  if (!confirm('Delete this project? If time has been logged against it, it will be deactivated instead so the history still reads correctly.')) return;
+  try {
+    var out = await api('POST', 'delete-project', { id: id });
+    toast(out.deactivated ? 'Has ' + out.entries + ' logged entries — deactivated instead of deleted' : 'Project deleted');
+    await loadProjects();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ------------------------------------------------------------------ tabs */
+function setTab(next) {
+  tab = next;
+  $('tab-week').classList.toggle('active', next === 'week');
+  $('tab-team').classList.toggle('active', next === 'team');
+  $('tab-admin').classList.toggle('active', next === 'admin');
+  $('view-week').classList.toggle('hidden', next !== 'week');
+  $('view-team').classList.toggle('hidden', next !== 'team');
+  $('view-admin').classList.toggle('hidden', next !== 'admin');
+  $('week-nav').classList.toggle('hidden', next === 'admin');
+  if (next === 'team') loadTeam();
+  if (next === 'admin') loadProjects();
+}
+
+/* ------------------------------------------------------------------ wire */
+$('btn-start').onclick = startTimer;
+$('btn-stop').onclick = stopTimer;
+$('btn-discard').onclick = discardTimer;
+$('btn-manual').onclick = function () { manualEntryModal(null); };
+$('btn-csv').onclick = exportCsv;
+$('tab-week').onclick = function () { setTab('week'); };
+$('tab-team').onclick = function () { setTab('team'); };
+$('tab-admin').onclick = function () { setTab('admin'); };
+$('p-add').onclick = addProject;
+$('wk-prev').onclick = function () { weekStart = addDays(weekStart, -7); refreshPeriod(); };
+$('wk-next').onclick = function () { weekStart = addDays(weekStart, 7); refreshPeriod(); };
+$('wk-today').onclick = function () { weekStart = mondayOf(new Date()); refreshPeriod(); };
+function refreshPeriod() { loadWeek(); if (tab === 'team') loadTeam(); }
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+
+// Re-sync when the tab comes back into focus — the timer may have been started
+// or stopped on another device in the meantime.
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible' && IDENTITY_USER) {
+    api('GET', 'me').then(function (out) {
+      SKEW = out.serverNow ? (Date.parse(out.serverNow) - Date.now()) : SKEW;
+      RUNNING = out.running || null;
+      renderTimer();
+      loadWeek();
+    }).catch(function () {});
+  }
+});
+
+bootIdentity();
+</script>
+</body>
+</html>
