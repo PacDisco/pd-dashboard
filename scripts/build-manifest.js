@@ -37,8 +37,14 @@ const MANIFEST = path.join(ROOT, "dashboards.json");
 const REDIRECTS = path.join(ROOT, "_redirects");
 
 // Roles supported by the system (kept in one place for consistency)
-const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed"];
+const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed", "contractor"];
 const ALL_ROLES = ["admin", ...FUNCTIONAL_ROLES];
+// The coarse per-dashboard baseline in _redirects deliberately EXCLUDES
+// `contractor`. Contractors are outside the organisation, and _redirects is the
+// last static backstop under auth-gate.js (which falls through to next() when a
+// slug is unknown or the blob read fails). A dashboard only lets contractors past
+// the baseline if its own dashboard.json names the role — see writeRedirects().
+const BASELINE_ROLES = ALL_ROLES.filter((r) => r !== "contractor");
 
 // Folders that look like dashboards but aren't
 const EXCLUDED_DIRS = new Set([
@@ -190,6 +196,8 @@ function writeRedirects(dashboards) {
     "# Coarse baseline: any authenticated user with a role can reach these paths.",
     "# Fine-grained permissions are enforced by netlify/edge-functions/auth-gate.js.",
     "",
+    // /api/config lists the dashboards for the landing page, so every signed-in
+    // role needs it — contractors included, or their home page comes up empty.
     `/api/config        200!    Role=${ALL_ROLES.join(",")}`,
     `/api/users         200!    Role=admin`,
     `/api/users/*       200!    Role=admin`,
@@ -213,7 +221,11 @@ function writeRedirects(dashboards) {
     const target = d.url || `/${d.folderName || d.slug}/`;
     // _redirects globs work on the URL path, not the slug
     const pathGlob = target.endsWith("/") ? `${target}*` : `${target}/*`;
-    lines.push(`${pathGlob.padEnd(28)} 200!    Role=${ALL_ROLES.join(",")}`);
+    // Contractors reach ONLY the dashboards that list the role explicitly.
+    const roles = (d.allowedRoles || []).includes("contractor")
+      ? [...BASELINE_ROLES, "contractor"]
+      : BASELINE_ROLES;
+    lines.push(`${pathGlob.padEnd(28)} 200!    Role=${roles.join(",")}`);
   }
   lines.push("");
   fs.writeFileSync(REDIRECTS, lines.join("\n"));
