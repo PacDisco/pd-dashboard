@@ -24,6 +24,20 @@
 [functions."flight-tickets"]
   timeout = 26
 
+# The enrollment payload now also carries each student's T-shirt size and home
+# address, which adds one upstream: the Jotform application form. It runs in
+# parallel with the HubSpot calls and the parsed result is cached in the warm
+# container for 10 minutes, so the steady state is unchanged — but a cold start
+# that pages HubSpot AND pulls ~400 Jotform submissions can exceed the default
+# 10s. Same caveat as flight-tickets above.
+[functions."enrollment"]
+  timeout = 26
+
+# Creating the Shopify order and then writing the audit note to HubSpot is
+# several sequential upstream round trips.
+[functions."shirt-orders"]
+  timeout = 26
+
 # Route /api/config → config function, /api/users[/*] → users function.
 [[redirects]]
   from = "/api/config"

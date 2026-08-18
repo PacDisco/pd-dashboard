@@ -11,12 +11,17 @@
     "test": "node test/instructor-checklist.test.mjs",
     "test:seasonal": "node test/seasonal-reset.test.mjs",
     "test:time": "node test/time-tracking.test.mjs",
-    "test:time-ui": "node test/timer-ui.smoke.mjs"
+    "test:time-ui": "node test/timer-ui.smoke.mjs",
+    "test:shirt": "node test/enrollment-shirt.test.mjs",
+    "test:shirt-ui": "node test/shirt-order.smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "@neondatabase/serverless": "^1.1.0",
     "@netlify/blobs": "^8.1.0",
     "googleapis": "^171.4.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }

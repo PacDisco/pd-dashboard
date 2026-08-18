@@ -1,9 +1,207 @@
 // Netlify serverless function — Student Enrollment Dashboard
 // Environment variable required: HUBSPOT_TOKEN (Private App token)
+// Optional: JOTFORM_API_KEY + JOTFORM_APP_FORM_IDS (T-shirt size / home address)
 // Endpoint: /api/enrollment
+
+import shirt from './_shared/shirt.js';
 
 const HUBSPOT_API = 'https://api.hubapi.com';
 const PORTAL_ID = '3855728';
+
+// ═══════════════════════════════════════════
+// JOTFORM APPLICATION — T-SHIRT SIZE & HOME ADDRESS
+// ═══════════════════════════════════════════
+// The Pacific Discovery Program Application Form asks "Please choose your
+// t-shirt size" and "What is your home address". Those two answers are the
+// reason this dashboard can offer a one-click shirt order, and the application
+// is the authoritative source: the HubSpot mirror (`t_shirt_size_` on the
+// contact) is populated by whichever contact the form matched, which is
+// sometimes a parent rather than the student, and the deal property
+// `pd_t_shirt_size` is set on barely any records at all. So we read Jotform
+// first and fall back to HubSpot.
+//
+// Same env var as sales-funnel-data.mjs so both read the same form(s).
+const DEFAULT_APP_FORM_IDS = ['240277257210046'];
+const JOTFORM_API = 'https://api.jotform.com';
+
+// Question-text matchers. The application has 102 questions and QIDs shift
+// between form revisions, so — following the convention in ue-applications and
+// sales-funnel-data — we match on the question label, not the QID.
+const Q_SHIRT_SIZE     = /t-?shirt size/i;
+const Q_HOME_ADDRESS   = /what is your home address/i;
+const Q_PARTICIPANT_EMAIL = /participant'?s? email/i;
+const Q_PARTICIPANT_NAME  = /^name$/i;
+
+// Jotform is slow and the answers change roughly never, so cache the parsed
+// result in module scope. Netlify reuses warm containers, so most requests
+// after the first pay nothing. Failures are cached briefly too, so a Jotform
+// outage doesn't turn every dashboard load into a 20-second wait.
+const APP_CACHE_MS = 10 * 60 * 1000;
+const APP_CACHE_FAIL_MS = 60 * 1000;
+let _appCache = null; // { at, ok, byEmail: Map, byName: Map }
+
+function appFormIds() {
+  const raw = process.env.JOTFORM_APP_FORM_IDS;
+  if (!raw) return DEFAULT_APP_FORM_IDS;
+  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return ids.length ? ids : DEFAULT_APP_FORM_IDS;
+}
+
+/** Normalise a person's name for fuzzy matching: lowercase, single-spaced. */
+function nameKey(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function answerText(q) {
+  if (!q) return '';
+  const a = q.answer;
+  if (a === null || a === undefined) return '';
+  if (typeof a === 'string') return a.trim();
+  if (Array.isArray(a)) return a.filter(Boolean).join(' ').trim();
+  if (typeof a === 'object') {
+    // control_fullname { first, last } and similar composites.
+    return Object.values(a).filter((v) => v !== '' && v !== null && v !== undefined).join(' ').trim();
+  }
+  return String(a).trim();
+}
+
+/**
+ * Pull every application submission and index the shirt size + home address by
+ * participant email and by participant name. Newer submissions win, so a
+ * student who reapplies gets their latest answer.
+ */
+async function fetchApplicationExtras() {
+  const now = Date.now();
+  if (_appCache && now - _appCache.at < (_appCache.ok ? APP_CACHE_MS : APP_CACHE_FAIL_MS)) {
+    return _appCache;
+  }
+
+  const apiKey = process.env.JOTFORM_API_KEY;
+  const result = { at: now, ok: false, byEmail: new Map(), byName: new Map(), ambiguousNames: new Set() };
+  if (!apiKey) {
+    console.warn('enrollment: JOTFORM_API_KEY not set — shirt sizes fall back to HubSpot only');
+    _appCache = result;
+    return result;
+  }
+
+  // `ok` means "we actually read the application data". It must NOT be set
+  // just because the loop finished — a 500 from Jotform used to fall through
+  // the `continue` and still report success, which made the dashboard claim
+  // authoritative sizes while quietly serving HubSpot fallbacks.
+  let anyFormRead = false;
+
+  try {
+    for (const formId of appFormIds()) {
+      // limit=1000 covers the current 391 submissions in a single round trip.
+      const url = `${JOTFORM_API}/form/${encodeURIComponent(formId)}/submissions` +
+        `?apiKey=${encodeURIComponent(apiKey)}&limit=1000&orderby=created_at`;
+      const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!resp.ok) {
+        console.error(`enrollment: Jotform form ${formId} returned ${resp.status}`);
+        continue;
+      }
+      anyFormRead = true;
+      const data = await resp.json();
+      const submissions = Array.isArray(data.content) ? data.content : [];
+
+      // Duplicate submissions are common on this form — ~25 people have applied
+      // two or three times, and several gave a DIFFERENT size each time
+      // (Medium then Large). So "most recent wins" is a real decision, not a
+      // formality, and it must not depend on Jotform's sort order: we compare
+      // timestamps explicitly on every insert.
+      const stamp = (s) => {
+        const t = Date.parse(String(s || '').replace(' ', 'T') + 'Z');
+        return Number.isFinite(t) ? t : 0;
+      };
+      const keepNewer = (map, key, entry) => {
+        const prev = map.get(key);
+        if (prev && stamp(prev.submittedAt) > stamp(entry.submittedAt)) return;
+        map.set(key, entry);
+      };
+
+      for (const sub of submissions) {
+        const answers = sub.answers || {};
+        let sizeRaw = null;
+        let addressRaw = null;
+        let email = '';
+        let name = '';
+
+        for (const qid of Object.keys(answers)) {
+          const q = answers[qid];
+          if (!q) continue;
+          const text = String(q.text || '');
+          if (sizeRaw === null && Q_SHIRT_SIZE.test(text)) {
+            sizeRaw = q.answer;
+            continue;
+          }
+          if (addressRaw === null && Q_HOME_ADDRESS.test(text)) {
+            addressRaw = q.answer;
+            continue;
+          }
+          if (!email && Q_PARTICIPANT_EMAIL.test(text)) {
+            email = answerText(q).toLowerCase();
+            continue;
+          }
+          if (!name && Q_PARTICIPANT_NAME.test(text)) {
+            name = answerText(q);
+          }
+        }
+        // The application has several email fields (participant, both parents).
+        // Only fall back to a bare control_email if the participant-specific
+        // question was blank, so we never key a student off a parent's address.
+        if (!email) {
+          for (const qid of Object.keys(answers)) {
+            const q = answers[qid];
+            if (q && q.type === 'control_email' && !/parent|guardian|reference/i.test(String(q.text || ''))) {
+              email = answerText(q).toLowerCase();
+              break;
+            }
+          }
+        }
+
+        const size = shirt.normalizeShirtSize(sizeRaw);
+        const address = shirt.addressFromJotform(addressRaw);
+        const hasAddress = Boolean(address.address1 || address.city);
+        if (!size && !hasAddress) continue;
+
+        const entry = {
+          shirtSize: size,
+          shirtSizeRaw: typeof sizeRaw === 'string' ? sizeRaw : (sizeRaw ? JSON.stringify(sizeRaw) : ''),
+          address: hasAddress ? address : null,
+          submittedAt: sub.created_at || '',
+          submissionId: sub.id || '',
+        };
+        if (email) keepNewer(result.byEmail, email, entry);
+
+        // The name index is a fallback for the ~7 submissions with no email and
+        // the handful with typo'd ones ("…@gmail.con"). It is only safe while a
+        // name belongs to ONE person: if two different email addresses claim the
+        // same name we cannot tell the namesakes apart, so we poison the key
+        // rather than risk shipping one student the other's size. (Repeat
+        // submissions from the SAME email are fine — that's just a duplicate.)
+        if (name) {
+          const key = nameKey(name);
+          const prev = result.byName.get(key);
+          if (prev && prev.email && email && prev.email !== email) {
+            result.ambiguousNames.add(key);
+          } else {
+            keepNewer(result.byName, key, Object.assign({ email }, entry));
+          }
+        }
+      }
+    }
+    result.ok = anyFormRead;
+    if (!anyFormRead) {
+      console.error('enrollment: no Jotform application form could be read — shirt sizes fall back to HubSpot only');
+    }
+    console.log(`enrollment: Jotform application index — ${result.byEmail.size} by email, ${result.byName.size} by name, ${result.ambiguousNames.size} ambiguous name(s) skipped`);
+  } catch (err) {
+    console.error(`fetchApplicationExtras error: ${err.message}`);
+  }
+
+  _appCache = result;
+  return result;
+}
 
 // ═══════════════════════════════════════════
 // PIPELINE & STAGE MAPPINGS
@@ -66,7 +264,10 @@ async function fetchAllDeals(token) {
     'insurance_policy',
     'arrival_flight_number', 'arrival_flight_time',
     'internal_flight_number', 'internal_flight_departure_time',
-    'departure_flight_number', 'departure_time'
+    'departure_flight_number', 'departure_time',
+    // Merch: last-resort shirt size source. Set on almost no deals today, but
+    // it is the property a human would edit in HubSpot, so honour it.
+    'pd_t_shirt_size'
   ];
 
   // Get current year for filtering
@@ -211,7 +412,16 @@ async function fetchContactDetails(token, contactIds) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        properties: ['email', 'firstname', 'lastname', 'phone', 'mobilephone'],
+        properties: [
+          'email', 'firstname', 'lastname', 'phone', 'mobilephone',
+          // Merch fallbacks: shirt size mirrored from the application form, and
+          // both address sets HubSpot keeps (the `mailing_*` group is what the
+          // application writes; the standard group is what imports write).
+          't_shirt_size_',
+          'mailing_street_address', 'mailing_city', 'mailing_state',
+          'mailing_zip_postal_code', 'mailing_country',
+          'address', 'city', 'state', 'zip', 'country'
+        ],
         inputs: chunk.map(id => ({ id: String(id) }))
       })
     });
@@ -224,13 +434,43 @@ async function fetchContactDetails(token, contactIds) {
     for (const c of (data.results || [])) {
       const p = c.properties || {};
       const name = [p.firstname, p.lastname].filter(Boolean).join(' ').trim();
+      // Two address groups per contact. `mailing_*` is what the application
+      // form writes; the standard `address`/`city`/... group comes from imports
+      // and integrations. Neither is reliably populated, and the standard
+      // `address` field is very often the literal string ", " — junk from a
+      // form that concatenated two empty subfields — so treat that as empty.
+      const junk = (v) => {
+        const s = String(v || '').trim();
+        return (!s || /^[,\s]+$/.test(s)) ? '' : s;
+      };
+      const mailing = {
+        address1: junk(p.mailing_street_address),
+        address2: '',
+        city: junk(p.mailing_city),
+        province: junk(p.mailing_state),
+        zip: junk(p.mailing_zip_postal_code),
+        country: junk(p.mailing_country)
+      };
+      const standard = {
+        address1: junk(p.address),
+        address2: '',
+        city: junk(p.city),
+        province: junk(p.state),
+        zip: junk(p.zip),
+        country: junk(p.country)
+      };
+
       map.set(String(c.id), {
         id: String(c.id),
         name: name || '',
         email: p.email || '',
         // Prefer the primary phone, fall back to mobile.
         phone: p.phone || p.mobilephone || '',
-        hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-1/${c.id}`
+        hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-1/${c.id}`,
+        // Merch fallbacks — see resolveShirt().
+        shirtSizeRaw: junk(p.t_shirt_size_),
+        mailingAddress: (mailing.address1 || mailing.city) ? mailing : null,
+        standardAddress: (standard.address1 || standard.city) ? standard : null
       });
     }
   }
@@ -275,11 +515,135 @@ function parsePayment(val) {
   }
 }
 
-function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels) {
+// ═══════════════════════════════════════════
+// SHIRT SIZE + SHIPPING ADDRESS RESOLUTION
+// ═══════════════════════════════════════════
+/**
+ * Work out the best shirt size and shipping address for one deal, and say
+ * where each came from so the dashboard can show its provenance.
+ *
+ * Precedence, most trustworthy first:
+ *   1. The Jotform application, matched on a participant email that belongs to
+ *      one of the deal's associated contacts. This is what the student typed.
+ *   2. The Jotform application, matched on the student's name. Covers students
+ *      whose HubSpot contact email differs from the one they applied with.
+ *   3. `t_shirt_size_` on an associated contact / that contact's address.
+ *   4. `pd_t_shirt_size` on the deal.
+ *
+ * Address precedence is the same idea: application home address, then the
+ * contact's `mailing_*` group, then its standard address group.
+ */
+function resolveShirt(deal, contacts, studentName, appIndex) {
+  const props = deal.properties || {};
+  const out = {
+    shirtSize: null,          // normalised Shopify variant title, or null
+    shirtSizeRaw: '',         // what the human actually wrote
+    shirtSizeSource: '',      // 'application' | 'application (name match)' | 'hubspot contact' | 'hubspot deal'
+    shippingAddress: null,
+    shippingAddressSource: '',
+    applicationSubmittedAt: ''
+  };
+
+  // 1 & 2 — the application.
+  let app = null;
+  for (const c of contacts) {
+    const email = String(c.email || '').toLowerCase().trim();
+    if (email && appIndex.byEmail.has(email)) {
+      app = appIndex.byEmail.get(email);
+      out.shirtSizeSource = 'application';
+      out.shippingAddressSource = 'application';
+      break;
+    }
+  }
+  if (!app) {
+    const key = nameKey(studentName);
+    const ambiguous = appIndex.ambiguousNames && appIndex.ambiguousNames.has(key);
+    if (key && !ambiguous && appIndex.byName.has(key)) {
+      app = appIndex.byName.get(key);
+      out.shirtSizeSource = 'application (name match)';
+      out.shippingAddressSource = 'application (name match)';
+    }
+  }
+  if (app) {
+    out.applicationSubmittedAt = app.submittedAt || '';
+    if (app.shirtSize) {
+      out.shirtSize = app.shirtSize;
+      out.shirtSizeRaw = app.shirtSizeRaw || app.shirtSize;
+    } else {
+      out.shirtSizeSource = '';
+    }
+    if (app.address) {
+      out.shippingAddress = app.address;
+    } else {
+      out.shippingAddressSource = '';
+    }
+  }
+
+  // 3 — an associated contact. Prefer a contact whose name matches the
+  // student's, so we don't pick up a parent's shirt size or a parent's address
+  // when the student's own record has one.
+  if (!out.shirtSize || !out.shippingAddress) {
+    const key = nameKey(studentName);
+    const ordered = contacts.slice().sort((a, b) => {
+      const aMatch = nameKey(a.name) === key ? 0 : 1;
+      const bMatch = nameKey(b.name) === key ? 0 : 1;
+      return aMatch - bMatch;
+    });
+    for (const c of ordered) {
+      if (!out.shirtSize && c.shirtSizeRaw) {
+        const size = shirt.normalizeShirtSize(c.shirtSizeRaw);
+        if (size) {
+          out.shirtSize = size;
+          out.shirtSizeRaw = c.shirtSizeRaw;
+          out.shirtSizeSource = 'hubspot contact';
+        }
+      }
+      if (!out.shippingAddress && (c.mailingAddress || c.standardAddress)) {
+        out.shippingAddress = c.mailingAddress || c.standardAddress;
+        out.shippingAddressSource = c.mailingAddress ? 'hubspot contact (mailing)' : 'hubspot contact';
+      }
+      if (out.shirtSize && out.shippingAddress) break;
+    }
+  }
+
+  // 4 — the deal property.
+  if (!out.shirtSize && props.pd_t_shirt_size) {
+    const size = shirt.normalizeShirtSize(props.pd_t_shirt_size);
+    if (size) {
+      out.shirtSize = size;
+      out.shirtSizeRaw = props.pd_t_shirt_size;
+      out.shirtSizeSource = 'hubspot deal';
+    }
+  }
+
+  // Attach a phone number to the address — Shopify uses it for delivery SMS and
+  // some carriers require it for international shipments.
+  if (out.shippingAddress) {
+    const phone = (contacts.find((c) => c.phone) || {}).phone || '';
+    out.shippingAddress = Object.assign({}, out.shippingAddress, {
+      phone: out.shippingAddress.phone || phone,
+      // Pre-resolve the codes Shopify needs so the dashboard can show whether
+      // the address is usable without duplicating the mapping tables in JS.
+      countryCode: shirt.countryCodeFor(out.shippingAddress.country),
+      provinceCode: shirt.provinceCodeFor(
+        shirt.countryCodeFor(out.shippingAddress.country),
+        out.shippingAddress.province
+      )
+    });
+    out.shippingAddressComplete = shirt.addressIsShippable(out.shippingAddress);
+  } else {
+    out.shippingAddressComplete = false;
+  }
+
+  return out;
+}
+
+function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex) {
   const processed = [];
   dealToContacts = dealToContacts || new Map();
   excludedStageIds = excludedStageIds || new Set();
   liveStageLabels = liveStageLabels || new Map();
+  appIndex = appIndex || { byEmail: new Map(), byName: new Map(), ambiguousNames: new Set() };
 
   for (const deal of rawDeals) {
     const props = deal.properties || {};
@@ -341,6 +705,9 @@ function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabel
     // Flag deals with empty or College Credit PD Program (still shown in table, excluded from counts)
     const excludeFromCount = !pdProgram || pdProgram.toLowerCase().includes('college credit');
 
+    const dealContacts = dealToContacts.get(deal.id) || [];
+    const merch = resolveShirt(deal, dealContacts, studentName, appIndex);
+
     processed.push({
       id: deal.id,
       studentName,
@@ -362,10 +729,19 @@ function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabel
       internalFlightDepartureTime: props.internal_flight_departure_time || '',
       departureFlightNumber: props.departure_flight_number || '',
       departureTime: props.departure_time || '',
+      // Merch: T-shirt size from the application (see resolveShirt) plus the
+      // shipping address the Order T-Shirt popup pre-fills from.
+      shirtSize: merch.shirtSize,
+      shirtSizeRaw: merch.shirtSizeRaw,
+      shirtSizeSource: merch.shirtSizeSource,
+      shippingAddress: merch.shippingAddress,
+      shippingAddressSource: merch.shippingAddressSource,
+      shippingAddressComplete: merch.shippingAddressComplete,
+      applicationSubmittedAt: merch.applicationSubmittedAt,
       // Full associated-contact records (name, email, phone) for the popup.
-      contacts: dealToContacts.get(deal.id) || [],
+      contacts: dealContacts,
       // Kept for backward compatibility with anything reading just emails.
-      contactEmails: (dealToContacts.get(deal.id) || []).map(c => c.email).filter(Boolean)
+      contactEmails: dealContacts.map(c => c.email).filter(Boolean)
     });
   }
 
@@ -425,11 +801,15 @@ export default async (req) => {
   }
 
   try {
-    // Pull pipeline metadata and the deal list in parallel — independent calls.
-    const [rawDeals, { excluded: excludedStageIds, labels: liveStageLabels }] =
+    // Pull pipeline metadata, the deal list, and the Jotform application index
+    // in parallel — three independent upstreams. The Jotform call is wrapped so
+    // that a Jotform outage degrades shirt sizes to the HubSpot fallback rather
+    // than failing the whole dashboard.
+    const [rawDeals, { excluded: excludedStageIds, labels: liveStageLabels }, appIndex] =
       await Promise.all([
         fetchAllDeals(token),
-        fetchExcludedStageIds(token)
+        fetchExcludedStageIds(token),
+        fetchApplicationExtras()
       ]);
 
     // Fetch deal→contact associations via the v4 batch endpoint.
@@ -455,8 +835,10 @@ export default async (req) => {
     // dashboard can render the same picklist HubSpot has.
     const insurancePolicyOptions = await fetchPropertyOptions(token, 'insurance_policy');
 
-    const processed = processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels);
+    const processed = processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex);
     const { current, past } = groupBySeason(processed);
+    const withSize = processed.filter(d => d.shirtSize).length;
+    console.log(`enrollment: shirt size resolved for ${withSize}/${processed.length} deals (Jotform index ok: ${appIndex.ok})`);
 
     // Summary stats (exclude College Credit / empty PD Program from counts)
     const counted = processed.filter(d => !d.excludeFromCount);
@@ -474,7 +856,12 @@ export default async (req) => {
       // Picklist options for the Flights dashboard.
       propertyOptions: {
         insurance_policy: insurancePolicyOptions
-      }
+      },
+      // Merch: the size list the Order T-Shirt popup renders, and whether the
+      // application lookup succeeded (so the UI can explain a column of dashes).
+      shirtSizeOptions: shirt.SHIRT_SIZES.map(s => ({ code: s.code, label: s.label })),
+      shirtCountryOptions: shirt.COUNTRIES,
+      applicationLookupOk: appIndex.ok
     }), {
       headers: {
         'Content-Type': 'application/json',

@@ -93,6 +93,89 @@
   </div>
 </div>
 
+<!-- Order T-Shirt Modal -->
+<div id="shirt-modal" class="hidden" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;">
+  <div id="shirt-modal-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.5);"></div>
+  <div style="position:relative; background:white; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); width:94%; max-width:620px; max-height:90vh; overflow:hidden; display:flex; flex-direction:column;">
+    <div class="flex items-start justify-between px-5 py-4 border-b border-gray-200">
+      <div>
+        <h3 class="text-lg font-bold text-gray-900">&#128085; Order T-Shirt</h3>
+        <p id="shirt-modal-sub" class="text-sm text-gray-500"></p>
+      </div>
+      <button onclick="closeShirtModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none px-2" aria-label="Close">&times;</button>
+    </div>
+
+    <div id="shirt-modal-body" class="px-5 py-4 overflow-y-auto">
+      <!-- Existing orders warning -->
+      <div id="shirt-existing" class="hidden mb-4 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 text-sm text-yellow-900"></div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Size</label>
+          <select id="shirt-size" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+          <p id="shirt-size-note" class="text-xs text-gray-500 mt-1"></p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">Quantity</label>
+          <input id="shirt-qty" type="number" min="1" max="20" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mb-2 pt-2 border-t border-gray-200">
+        <h4 class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Shipping Address</h4>
+        <span id="shirt-addr-source" class="text-xs text-gray-400"></span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="sm:col-span-2">
+          <label class="block text-xs text-gray-500 mb-1">Street address</label>
+          <input id="shirt-addr1" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs text-gray-500 mb-1">Apartment, unit, etc. <span class="text-gray-400">(optional)</span></label>
+          <input id="shirt-addr2" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">City</label>
+          <input id="shirt-city" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Postal / ZIP code</label>
+          <input id="shirt-zip" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Country</label>
+          <select id="shirt-country" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">State / Province <span id="shirt-prov-hint" class="text-gray-400"></span></label>
+          <input id="shirt-prov" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs text-gray-500 mb-1">Customer email <span class="text-gray-400">(attached to the Shopify order)</span></label>
+          <input id="shirt-email" type="email" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+      </div>
+
+      <label class="flex items-start gap-2 mt-4 text-sm text-gray-600">
+        <input id="shirt-receipt" type="checkbox" class="mt-0.5">
+        <span>Email an order confirmation to the student <span class="text-gray-400">— off by default, since they didn't buy this</span></span>
+      </label>
+
+      <div id="shirt-error" class="hidden mt-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800"></div>
+      <div id="shirt-success" class="hidden mt-4 px-3 py-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-900"></div>
+    </div>
+
+    <div class="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50">
+      <div id="shirt-total" class="text-sm text-gray-600"></div>
+      <div class="flex items-center gap-2">
+        <button onclick="closeShirtModal()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+        <button id="shirt-submit" onclick="submitShirtOrder()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">Place order in Shopify</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════
 // UTILITIES
@@ -130,6 +213,58 @@ function renderSummaryCards(summary) {
   '</div>';
 }
 
+// The shirt size cell. Shows the size on file plus where it came from, because
+// "M" sourced from the student's own application and "M" inherited from a parent
+// contact record deserve different levels of trust before you post $20 of stock.
+function shirtSizeCell(d) {
+  if (!d.shirtSize) {
+    return '<span class="text-gray-300" title="No t-shirt size found on the application or in HubSpot">&mdash;</span>';
+  }
+  var fromApp = /^application/.test(d.shirtSizeSource || '');
+  var cls = fromApp
+    ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+    : 'bg-yellow-50 text-yellow-800 border-yellow-200';
+  var tip = 'Source: ' + (d.shirtSizeSource || 'unknown') +
+    (d.shirtSizeRaw && d.shirtSizeRaw !== d.shirtSize ? ' · answered "' + d.shirtSizeRaw + '"' : '') +
+    (fromApp ? '' : ' — not from the application form, worth confirming');
+  return '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-semibold ' + cls + '" title="' + escapeHtml(tip) + '">' +
+    escapeHtml(d.shirtSize) + (fromApp ? '' : ' <span class="opacity-60">?</span>') +
+    '</span>';
+}
+
+// The order cell is re-rendered in place once GET /api/shirt-orders answers, so
+// it is built by id rather than inlined into the row string.
+function shirtOrderCellHtml(d) {
+  var orders = (window.__shirtOrders || {})[d.id];
+  if (orders && orders.length) {
+    var qty = 0;
+    var sizes = [];
+    for (var i = 0; i < orders.length; i++) {
+      for (var j = 0; j < (orders[i].items || []).length; j++) {
+        qty += orders[i].items[j].quantity || 0;
+        if (orders[i].items[j].size) sizes.push(orders[i].items[j].size);
+      }
+    }
+    var latest = orders[0];
+    var label = 'Ordered' + (qty > 1 ? ' ×' + qty : '');
+    var tip = orders.map(function(o) {
+      return o.orderName + ' · ' + new Date(o.createdAt).toLocaleDateString() +
+        ' · ' + (o.items || []).map(function(it) { return it.size + ' ×' + it.quantity; }).join(', ') +
+        (o.fulfillmentStatus ? ' · ' + o.fulfillmentStatus : '');
+    }).join('\n');
+    return '<div class="inline-flex items-center gap-1">' +
+      '<a href="' + escapeHtml(latest.adminUrl) + '" target="_blank" ' +
+        'class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-green-50 text-green-800 rounded-lg text-xs font-semibold hover:bg-green-100 border border-green-200" ' +
+        'title="' + escapeHtml(tip) + '">&#10003; ' + escapeHtml(label) + '</a>' +
+      '<button type="button" data-shirt-deal="' + d.id + '" title="Order another shirt for this student" ' +
+        'class="px-2 py-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-xs border border-gray-200">+</button>' +
+      '</div>';
+  }
+  return '<button type="button" data-shirt-deal="' + d.id + '" ' +
+    'class="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-100 border border-indigo-200 whitespace-nowrap">' +
+    '&#128085; Order T-Shirt</button>';
+}
+
 function renderTable(deals, tableId) {
   var sorted = deals.slice().sort(function(a, b) { return a.studentName.localeCompare(b.studentName); });
   var rows = '';
@@ -140,6 +275,7 @@ function renderTable(deals, tableId) {
       '<td class="px-4 py-3 text-sm text-gray-700">' + (d.pdProgram || '-') + '</td>' +
       '<td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">' + d.pipeline + '</td>' +
       '<td class="px-4 py-3 text-sm text-gray-700 text-center">' + d.travelYear + '</td>' +
+      '<td class="px-4 py-3 text-center text-sm whitespace-nowrap">' + shirtSizeCell(d) + '</td>' +
       '<td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-medium ' + stageBadge(d.stage) + '">' + d.stage + '</span></td>' +
       '<td class="px-4 py-3 text-right text-sm font-medium">' + fmt(d.amount) + '</td>' +
       '<td class="px-4 py-3 text-right text-sm font-medium text-green-700">' + fmt(d.totalPaid) + '</td>' +
@@ -148,6 +284,7 @@ function renderTable(deals, tableId) {
           '&#128100; Contacts' + ((d.contacts && d.contacts.length) ? ' <span class="ml-0.5 text-xs bg-blue-200 text-blue-800 px-1.5 rounded-full">' + d.contacts.length + '</span>' : '') +
         '</button>' +
       '</td>' +
+      '<td class="px-4 py-3 text-center text-sm whitespace-nowrap shirt-cell" data-shirt-cell="' + d.id + '">' + shirtOrderCellHtml(d) + '</td>' +
     '</tr>';
   }
 
@@ -158,10 +295,12 @@ function renderTable(deals, tableId) {
       '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="1">PD Program &#x25B4;&#x25BE;</th>' +
       '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="2">Pipeline &#x25B4;&#x25BE;</th>' +
       '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="3">Travel Year &#x25B4;&#x25BE;</th>' +
-      '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="4">Stage &#x25B4;&#x25BE;</th>' +
-      '<th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="5">Total Amount &#x25B4;&#x25BE;</th>' +
-      '<th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="6">Total Paid &#x25B4;&#x25BE;</th>' +
+      '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="4" data-sort="shirt">Shirt Size &#x25B4;&#x25BE;</th>' +
+      '<th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="5">Stage &#x25B4;&#x25BE;</th>' +
+      '<th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="6" data-sort="money">Total Amount &#x25B4;&#x25BE;</th>' +
+      '<th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="7" data-sort="money">Total Paid &#x25B4;&#x25BE;</th>' +
       '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Contacts</th>' +
+      '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">T-Shirt</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
@@ -197,18 +336,32 @@ function renderSubTabs(deals, parentId) {
 function renderDashboard(data) {
   var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
 
-  // Build a registry of contacts keyed by deal id so the Contacts button can
-  // look them up without re-embedding JSON in the DOM.
+  // Build a registry keyed by deal id so the Contacts and Order T-Shirt buttons
+  // can look up what they need without re-embedding JSON in the DOM.
   window.__dealRegistry = {};
   for (var t = 0; t < allTabs.length; t++) {
     var tDeals = allTabs[t].deals || [];
     for (var k = 0; k < tDeals.length; k++) {
       window.__dealRegistry[tDeals[k].id] = {
         studentName: tDeals[k].studentName,
-        contacts: tDeals[k].contacts || []
+        contacts: tDeals[k].contacts || [],
+        pdProgram: tDeals[k].pdProgram || '',
+        travelYear: tDeals[k].travelYear || '',
+        shirtSize: tDeals[k].shirtSize || null,
+        shirtSizeRaw: tDeals[k].shirtSizeRaw || '',
+        shirtSizeSource: tDeals[k].shirtSizeSource || '',
+        shippingAddress: tDeals[k].shippingAddress || null,
+        shippingAddressSource: tDeals[k].shippingAddressSource || '',
+        shippingAddressComplete: Boolean(tDeals[k].shippingAddressComplete)
       };
     }
   }
+
+  // Picklists the Order T-Shirt popup renders from, plus whether the Jotform
+  // application lookup worked (so a column of dashes can be explained).
+  window.__shirtSizeOptions = data.shirtSizeOptions || [];
+  window.__shirtCountryOptions = data.shirtCountryOptions || [];
+  window.__applicationLookupOk = data.applicationLookupOk !== false;
 
   document.getElementById('stat-students').textContent = data.totalStudents;
   document.getElementById('stat-amount').textContent = fmt(data.totalAmount);
@@ -216,7 +369,14 @@ function renderDashboard(data) {
   document.getElementById('stat-outstanding').textContent = fmt(data.outstanding);
 
   var updatedDate = new Date(data.updatedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  document.getElementById('subtitle').textContent = data.totalStudents + ' enrolled students \u00b7 Live from HubSpot \u00b7 Updated ' + updatedDate;
+  var subtitle = data.totalStudents + ' enrolled students \u00b7 Live from HubSpot \u00b7 Updated ' + updatedDate;
+  // If the application lookup failed, shirt sizes fall back to HubSpot only and
+  // the column will look emptier than it should. Say so rather than let someone
+  // conclude the students never answered.
+  if (data.applicationLookupOk === false) {
+    subtitle += ' \u00b7 \u26a0 Jotform application lookup unavailable \u2014 shirt sizes shown from HubSpot only';
+  }
+  document.getElementById('subtitle').textContent = subtitle;
 
   // Season tab buttons
   var tabBar = document.getElementById('season-tabs');
@@ -286,6 +446,8 @@ function attachListeners() {
     });
   });
 
+  attachShirtListeners();
+
   document.querySelectorAll('th[data-col]').forEach(function(th) {
     th.addEventListener('click', function() {
       var colIndex = parseInt(this.dataset.col);
@@ -296,13 +458,24 @@ function attachListeners() {
       this.dataset.sortDir = asc ? 'asc' : 'desc';
       var self = this;
       this.closest('tr').querySelectorAll('th').forEach(function(h) { if (h !== self) delete h.dataset.sortDir; });
+      // Sort mode comes from the header's data-sort attribute rather than the
+      // column index, so inserting a column can't silently turn the money
+      // columns back into string sorts.
+      var mode = this.dataset.sort || 'text';
       rows.sort(function(a, b) {
         var aVal = a.cells[colIndex].textContent.trim();
         var bVal = b.cells[colIndex].textContent.trim();
-        if (colIndex >= 5) {
+        if (mode === 'money') {
           aVal = parseFloat(aVal.replace(/[$,\-]/g, '')) || 0;
           bVal = parseFloat(bVal.replace(/[$,\-]/g, '')) || 0;
           return asc ? aVal - bVal : bVal - aVal;
+        }
+        if (mode === 'shirt') {
+          // Smallest to largest, with "no size on file" always last so the gaps
+          // are easy to work through.
+          var aRank = shirtRank(aVal);
+          var bRank = shirtRank(bVal);
+          return asc ? aRank - bRank : bRank - aRank;
         }
         return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       });
@@ -370,6 +543,362 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ═══════════════════════════════════════════
+// ORDER T-SHIRT
+// ═══════════════════════════════════════════
+// Shopify variants and existing orders, filled in by loadShirtOrders().
+window.__shirtOrders = {};
+window.__shirtProduct = null;
+
+var SHIRT_RANK = { 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, '2XL': 6, '3XL': 7 };
+
+/** Sort key for the Shirt Size column. Unknown / blank always sorts last. */
+function shirtRank(cellText) {
+  var t = String(cellText || '').replace(/[?\s]/g, '').toUpperCase();
+  return SHIRT_RANK[t] || 99;
+}
+
+/**
+ * Fetch the live variant list and every shirt order placed so far, then repaint
+ * the T-Shirt column. Deliberately fired after the table renders and never
+ * awaited: if Shopify is slow or its credentials aren't set yet, the dashboard
+ * still works and every row simply offers to order.
+ */
+async function loadShirtOrders() {
+  try {
+    var resp = await fetch('/api/shirt-orders');
+    if (!resp.ok) {
+      var body = await resp.json().catch(function() { return {}; });
+      console.warn('shirt-orders unavailable:', resp.status, body.error || '');
+      window.__shirtUnavailable = body.error || ('HTTP ' + resp.status);
+      return;
+    }
+    var data = await resp.json();
+    window.__shirtProduct = data.product || null;
+    window.__shirtOrders = data.ordersByDeal || {};
+    repaintShirtCells();
+  } catch (err) {
+    console.warn('shirt-orders fetch failed:', err.message);
+    window.__shirtUnavailable = err.message;
+  }
+}
+
+function repaintShirtCells() {
+  document.querySelectorAll('[data-shirt-cell]').forEach(function(cell) {
+    var dealId = cell.dataset.shirtCell;
+    var entry = (window.__dealRegistry || {})[dealId];
+    if (!entry) return;
+    cell.innerHTML = shirtOrderCellHtml({ id: dealId });
+  });
+  attachShirtListeners();
+}
+
+function attachShirtListeners() {
+  document.querySelectorAll('[data-shirt-deal]').forEach(function(btn) {
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function() { openShirtModal(this.dataset.shirtDeal); });
+  });
+}
+
+/** Populate the size dropdown, annotating each option with live stock. */
+function fillSizeOptions(selected) {
+  var sel = document.getElementById('shirt-size');
+  var options = window.__shirtSizeOptions || [];
+  var product = window.__shirtProduct;
+  var html = '';
+  var matched = false;
+
+  for (var i = 0; i < options.length; i++) {
+    var code = options[i].code;
+    var label = options[i].label;
+    var variant = null;
+    if (product) {
+      for (var v = 0; v < product.variants.length; v++) {
+        if (product.variants[v].size === code) { variant = product.variants[v]; break; }
+      }
+      // A size with no Shopify variant can't be ordered — don't offer it.
+      if (!variant) continue;
+      if (variant.inventoryQuantity !== null) {
+        label += variant.inventoryQuantity > 0
+          ? ' — ' + variant.inventoryQuantity + ' in stock'
+          : ' — out of stock';
+      }
+    }
+    var isSel = code === selected;
+    if (isSel) matched = true;
+    var disabled = variant && variant.inventoryQuantity === 0 ? ' disabled' : '';
+    html += '<option value="' + escapeHtml(code) + '"' + (isSel ? ' selected' : '') + disabled + '>' + escapeHtml(label) + '</option>';
+  }
+  if (!matched) html = '<option value="" selected>— choose a size —</option>' + html;
+  sel.innerHTML = html;
+}
+
+function fillCountryOptions(selectedCode) {
+  var sel = document.getElementById('shirt-country');
+  var list = window.__shirtCountryOptions || [];
+  var html = '<option value="">— choose a country —</option>';
+  for (var i = 0; i < list.length; i++) {
+    html += '<option value="' + escapeHtml(list[i].code) + '"' +
+      (list[i].code === selectedCode ? ' selected' : '') + '>' +
+      escapeHtml(list[i].name) + '</option>';
+  }
+  sel.innerHTML = html;
+}
+
+// Countries where Shopify insists on a province code. Mirrors the PROVINCES
+// table in netlify/functions/_shared/shirt.js — keep the two in step.
+var PROVINCE_REQUIRED = ['US', 'CA', 'AU', 'NZ'];
+
+function updateProvinceHint() {
+  var country = document.getElementById('shirt-country').value;
+  var hint = document.getElementById('shirt-prov-hint');
+  if (PROVINCE_REQUIRED.indexOf(country) !== -1) {
+    hint.textContent = '(required — use the code, e.g. ' +
+      (country === 'US' ? 'NY' : country === 'CA' ? 'ON' : country === 'AU' ? 'VIC' : 'WGN') + ')';
+    hint.className = 'text-yellow-700';
+  } else {
+    hint.textContent = '(optional)';
+    hint.className = 'text-gray-400';
+  }
+}
+
+function updateShirtTotal() {
+  var el = document.getElementById('shirt-total');
+  var qty = parseInt(document.getElementById('shirt-qty').value, 10) || 0;
+  var size = document.getElementById('shirt-size').value;
+  var product = window.__shirtProduct;
+  if (!product || !size || qty < 1) { el.textContent = ''; return; }
+  var variant = null;
+  for (var v = 0; v < product.variants.length; v++) {
+    if (product.variants[v].size === size) { variant = product.variants[v]; break; }
+  }
+  if (!variant || !variant.price) { el.textContent = ''; return; }
+  var total = (parseFloat(variant.price) * qty).toFixed(2);
+  el.innerHTML = '<span class="text-gray-500">' + escapeHtml(product.title) + ' · ' +
+    qty + ' × $' + escapeHtml(variant.price) + '</span> ' +
+    '<span class="font-semibold text-gray-900">= $' + total + '</span> ' +
+    '<span class="text-gray-400">(marked paid)</span>';
+}
+
+var _shirtDealId = null;
+
+function openShirtModal(dealId) {
+  var entry = (window.__dealRegistry || {})[dealId];
+  if (!entry) return;
+  _shirtDealId = dealId;
+
+  document.getElementById('shirt-error').classList.add('hidden');
+  document.getElementById('shirt-success').classList.add('hidden');
+  document.getElementById('shirt-modal-body').classList.remove('hidden');
+  var submit = document.getElementById('shirt-submit');
+  submit.disabled = false;
+  submit.textContent = 'Place order in Shopify';
+  submit.style.display = '';
+
+  document.getElementById('shirt-modal-sub').textContent =
+    entry.studentName + (entry.pdProgram ? ' · ' + entry.pdProgram : '') +
+    (entry.travelYear ? ' · ' + entry.travelYear : '');
+
+  // Warn if this student already has a shirt on the way.
+  var existing = (window.__shirtOrders || {})[dealId] || [];
+  var warn = document.getElementById('shirt-existing');
+  if (existing.length) {
+    var lines = existing.map(function(o) {
+      return '<a href="' + escapeHtml(o.adminUrl) + '" target="_blank" class="underline font-medium">' + escapeHtml(o.orderName) + '</a> on ' +
+        new Date(o.createdAt).toLocaleDateString() + ' — ' +
+        (o.items || []).map(function(it) { return escapeHtml(it.size) + ' ×' + it.quantity; }).join(', ');
+    });
+    warn.innerHTML = '<strong>Already ordered.</strong> ' + lines.join('<br>') +
+      '<br><span class="text-yellow-700">Placing another order will ship a second shirt.</span>';
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+
+  // Size, prefilled from the application.
+  fillSizeOptions(entry.shirtSize || '');
+  var note = document.getElementById('shirt-size-note');
+  if (entry.shirtSize) {
+    var fromApp = /^application/.test(entry.shirtSizeSource || '');
+    note.innerHTML = 'Pre-filled from <strong>' + escapeHtml(entry.shirtSizeSource) + '</strong>' +
+      (entry.shirtSizeRaw && entry.shirtSizeRaw !== entry.shirtSize ? ' (answered &ldquo;' + escapeHtml(entry.shirtSizeRaw) + '&rdquo;)' : '') +
+      (fromApp ? '.' : ' — not the application form, so worth a check.');
+    note.className = fromApp ? 'text-xs text-gray-500 mt-1' : 'text-xs text-yellow-700 mt-1';
+  } else {
+    note.textContent = 'No size on file — the student did not answer the t-shirt question, so pick one.';
+    note.className = 'text-xs text-yellow-700 mt-1';
+  }
+
+  // Address, prefilled from the application's home address.
+  var addr = entry.shippingAddress || {};
+  document.getElementById('shirt-addr1').value = addr.address1 || '';
+  document.getElementById('shirt-addr2').value = addr.address2 || '';
+  document.getElementById('shirt-city').value = addr.city || '';
+  document.getElementById('shirt-zip').value = addr.zip || '';
+  fillCountryOptions(addr.countryCode || '');
+  document.getElementById('shirt-prov').value = addr.provinceCode || addr.province || '';
+  updateProvinceHint();
+
+  var src = document.getElementById('shirt-addr-source');
+  if (!entry.shippingAddress) {
+    src.textContent = 'nothing on file — enter it below';
+    src.className = 'text-xs text-yellow-700';
+  } else if (!entry.shippingAddressComplete) {
+    src.textContent = 'from ' + entry.shippingAddressSource + ' — incomplete, please finish it';
+    src.className = 'text-xs text-yellow-700';
+  } else {
+    src.textContent = 'from ' + entry.shippingAddressSource;
+    src.className = 'text-xs text-gray-400';
+  }
+
+  // Prefer the contact whose name matches the student, so we don't attach a
+  // parent's email to the student's order.
+  var email = '';
+  var contacts = entry.contacts || [];
+  var key = String(entry.studentName || '').toLowerCase().trim();
+  for (var i = 0; i < contacts.length; i++) {
+    if (String(contacts[i].name || '').toLowerCase().trim() === key && contacts[i].email) { email = contacts[i].email; break; }
+  }
+  if (!email) {
+    for (var j = 0; j < contacts.length; j++) { if (contacts[j].email) { email = contacts[j].email; break; } }
+  }
+  document.getElementById('shirt-email').value = email;
+
+  document.getElementById('shirt-qty').value = '1';
+  document.getElementById('shirt-receipt').checked = false;
+  updateShirtTotal();
+
+  var modal = document.getElementById('shirt-modal');
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+
+  // If Shopify wasn't reachable, say so rather than letting the user click into
+  // a failure.
+  if (window.__shirtUnavailable) {
+    showShirtError('Shopify is not reachable from the dashboard: ' + window.__shirtUnavailable +
+      ' — check SHOPIFY_ADMIN_TOKEN in Netlify before ordering.');
+  }
+}
+
+function closeShirtModal() {
+  var modal = document.getElementById('shirt-modal');
+  modal.classList.add('hidden');
+  modal.style.display = 'none';
+  _shirtDealId = null;
+}
+
+function showShirtError(msg) {
+  var el = document.getElementById('shirt-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function submitShirtOrder() {
+  if (!_shirtDealId) return;
+  var entry = (window.__dealRegistry || {})[_shirtDealId] || {};
+  var errEl = document.getElementById('shirt-error');
+  errEl.classList.add('hidden');
+
+  var size = document.getElementById('shirt-size').value;
+  var qty = parseInt(document.getElementById('shirt-qty').value, 10);
+  var country = document.getElementById('shirt-country').value;
+  var prov = document.getElementById('shirt-prov').value.trim();
+  var addr1 = document.getElementById('shirt-addr1').value.trim();
+  var city = document.getElementById('shirt-city').value.trim();
+
+  if (!size) return showShirtError('Choose a shirt size.');
+  if (!qty || qty < 1) return showShirtError('Quantity must be at least 1.');
+  if (!addr1) return showShirtError('A street address is required.');
+  if (!city) return showShirtError('A city is required.');
+  if (!country) return showShirtError('Choose a country.');
+  if (PROVINCE_REQUIRED.indexOf(country) !== -1 && !prov) {
+    return showShirtError('A state/province code is required for ' + country + '.');
+  }
+
+  var submit = document.getElementById('shirt-submit');
+  submit.disabled = true;
+  submit.textContent = 'Placing order…';
+
+  var payload = {
+    dealId: _shirtDealId,
+    studentName: entry.studentName || '',
+    email: document.getElementById('shirt-email').value.trim(),
+    size: size,
+    quantity: qty,
+    sendReceipt: document.getElementById('shirt-receipt').checked,
+    address: {
+      address1: addr1,
+      address2: document.getElementById('shirt-addr2').value.trim(),
+      city: city,
+      province: prov,
+      provinceCode: prov,
+      zip: document.getElementById('shirt-zip').value.trim(),
+      countryCode: country
+    }
+  };
+
+  try {
+    var resp = await fetch('/api/shirt-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var data = await resp.json().catch(function() { return {}; });
+
+    if (!resp.ok || !data.ok) {
+      submit.disabled = false;
+      submit.textContent = 'Place order in Shopify';
+      return showShirtError(data.error || ('Order failed (HTTP ' + resp.status + ')'));
+    }
+
+    // Success. Record it locally so the badge flips without a full reload, and
+    // hide the form so nobody double-submits by clicking again.
+    if (!window.__shirtOrders[_shirtDealId]) window.__shirtOrders[_shirtDealId] = [];
+    window.__shirtOrders[_shirtDealId].unshift({
+      orderId: data.order.orderId,
+      orderName: data.order.orderName,
+      createdAt: data.order.createdAt,
+      adminUrl: data.order.adminUrl,
+      fulfillmentStatus: data.order.fulfillmentStatus,
+      financialStatus: data.order.financialStatus,
+      items: [{ quantity: qty, size: size, title: '' }]
+    });
+
+    var ok = document.getElementById('shirt-success');
+    ok.innerHTML = '<strong>Order ' +
+      '<a href="' + escapeHtml(data.order.adminUrl) + '" target="_blank" class="underline">' + escapeHtml(data.order.orderName) + '</a>' +
+      ' created.</strong><br>' + escapeHtml(size) + ' ×' + qty +
+      (data.order.total ? ' · ' + escapeHtml(data.order.total) : '') +
+      '<br>Shipping to: ' + escapeHtml(data.shippedTo || '—') +
+      (data.warning ? '<br><span class="text-yellow-700">' + escapeHtml(data.warning) + '</span>' : '');
+    ok.classList.remove('hidden');
+    errEl.classList.add('hidden');
+    submit.style.display = 'none';
+
+    repaintShirtCells();
+  } catch (err) {
+    submit.disabled = false;
+    submit.textContent = 'Place order in Shopify';
+    showShirtError('Network error: ' + err.message);
+  }
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'shirt-modal-overlay') closeShirtModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeShirtModal();
+});
+document.addEventListener('change', function(e) {
+  if (!e.target || !e.target.id) return;
+  if (e.target.id === 'shirt-country') updateProvinceHint();
+  if (e.target.id === 'shirt-size' || e.target.id === 'shirt-qty') updateShirtTotal();
+});
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'shirt-qty') updateShirtTotal();
+});
+
+// ═══════════════════════════════════════════
 // DATA FETCH — runs on every page load
 // ═══════════════════════════════════════════
 async function loadData() {
@@ -383,6 +912,9 @@ async function loadData() {
     var data = await resp.json();
     if (data.error) throw new Error(data.error);
     renderDashboard(data);
+    // Shopify state loads separately and is never awaited — the enrollment
+    // table must not wait on a merch store to become usable.
+    loadShirtOrders();
   } catch (err) {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('error').classList.remove('hidden');
