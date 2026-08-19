@@ -46,9 +46,17 @@ SHOPIFY_ADMIN_TOKEN = shpat_xxxxxxxxxxxxxxxxxxxxx
 
 **Both styles require, in addition:**
 
-- The app must be **installed on the store**. The client credentials grant is
-  restricted to apps your own organisation developed, installed in a store you
-  own — which is exactly this case, but it will 401 until the install happens.
+- The app must have a **released version**, then be **installed on the store**.
+  This is the step that is easy to miss — creating the app hands you credentials
+  but does not install anything, and the credentials are rejected until it is.
+  In the Dev Dashboard:
+    1. **Versions** tab → fill in the app URL (the default is fine for an
+       API-only app), pick a Webhooks API version, enter the scopes below →
+       **Release**. An app cannot be installed without at least one version.
+    2. **Home** → scroll to the bottom → **Install app** → select
+       `pure-exploration` → **Install**.
+  Changing scopes later needs a new released version, and the new scopes must
+  then be approved in the store admin — they are not applied automatically.
 - The app must be configured with these Admin API scopes. Scopes come from the
   app's configuration, not the token request, so changing them means releasing a
   new app version.
@@ -251,7 +259,7 @@ Reading (`GET`) needs any dashboard role. Ordering (`POST`) needs one of
 | `enrollment/index.html` | Shirt Size column, T-Shirt column, order popup, Ordered badge. Column sorting now keyed off `data-sort` instead of column index, so the money columns can't silently break again. |
 | `netlify.toml` | `timeout = 26` for `enrollment` and `shirt-orders`. |
 | `test/enrollment-shirt.test.mjs` | **New.** 24 assertions on the server-side resolution rules, with both upstreams stubbed. |
-| `test/shirt-order.smoke.mjs` | **New.** 33 assertions driving the real page in headless Chromium. |
+| `test/shirt-order.smoke.mjs` | **New.** 35 assertions driving the real page in headless Chromium. |
 | `test/shirt-orders-auth.test.mjs` | **New.** 26 assertions on Shopify credential handling and the order guardrails, all upstreams stubbed. |
 
 ## Tests
@@ -262,5 +270,5 @@ npm run test:shirt-auth  # Shopify credentials + order guardrails (no network)
 npm run test:shirt-ui    # full page in headless Chromium (needs playwright)
 ```
 
-All 83 assertions pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
+All 85 assertions pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
 installed.

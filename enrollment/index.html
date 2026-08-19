@@ -786,11 +786,16 @@ function openShirtModal(dealId) {
   modal.classList.remove('hidden');
   modal.style.display = 'flex';
 
-  // If Shopify wasn't reachable, say so rather than letting the user click into
-  // a failure.
+  // If Shopify wasn't reachable, relay the reason as-is — the server message is
+  // already specific about what to fix, and appending a guess here just
+  // contradicts it. Disable the button too: with no Shopify connection the
+  // order cannot succeed, so leaving it clickable only invites a dead end.
   if (window.__shirtUnavailable) {
-    showShirtError('Shopify is not reachable from the dashboard: ' + window.__shirtUnavailable +
-      ' — check SHOPIFY_ADMIN_TOKEN in Netlify before ordering.');
+    showShirtError('Shopify is not reachable from the dashboard. ' + window.__shirtUnavailable);
+    submit.disabled = true;
+    submit.title = 'Disabled until the dashboard can reach Shopify';
+  } else {
+    submit.title = '';
   }
 }
 

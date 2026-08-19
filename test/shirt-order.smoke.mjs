@@ -464,6 +464,28 @@ check('an inferred country is disclosed rather than passed off as the applicatio
 });
 await page.evaluate(() => closeShirtModal());
 
+// ── 8c. Shopify unreachable ────────────────────────────────────────────
+// Relay the server's reason verbatim and refuse to arm the button. Guards
+// against the message drifting back to naming a variable that isn't the cause.
+await page.evaluate(() => {
+  window.__shirtUnavailable = 'Shopify rejected the client credentials for pure-exploration.myshopify.com.';
+  openShirtModal('101');
+});
+await page.waitForSelector('#shirt-modal:not(.hidden)');
+const unavailable = await page.evaluate(() => ({
+  err: document.getElementById('shirt-error').textContent,
+  disabled: document.getElementById('shirt-submit').disabled
+}));
+check('an unreachable Shopify relays the server reason without contradicting it', () => {
+  assert.match(unavailable.err, /rejected the client credentials/);
+  assert.ok(!/SHOPIFY_ADMIN_TOKEN/.test(unavailable.err),
+    'must not blame a variable the server did not name');
+});
+check('the order button is disabled while Shopify is unreachable', () => {
+  assert.equal(unavailable.disabled, true);
+});
+await page.evaluate(() => { delete window.__shirtUnavailable; closeShirtModal(); });
+
 // ── 9. Duplicate warning ───────────────────────────────────────────────
 await (await rowFor('Nia Tomalin')).$eval('td:last-child button[data-shirt-deal]', (b) => b.click());
 await page.waitForSelector('#shirt-modal:not(.hidden)');

@@ -10,7 +10,7 @@ Nothing else in the project was touched.
 | `netlify/functions/_shared/shirt.js` | Size vocabulary mapping (X-small/Small/…/XX-large → XS/S/…/2XL), ISO country + province code resolution, address shaping. Shared by the two functions below. |
 | `netlify/functions/shirt-orders.mjs` | `GET /api/shirt-orders` returns live variants + existing orders for the Ordered badge. `POST` creates the paid Shopify order and logs the HubSpot deal note. Verifies the Netlify Identity token — read the header comment before editing. |
 | `test/enrollment-shirt.test.mjs` | 24 assertions on the server-side size/address resolution rules, both upstreams stubbed. No network. `npm run test:shirt` |
-| `test/shirt-order.smoke.mjs` | 33 assertions driving the real page in headless Chromium against mocked APIs. `npm run test:shirt-ui` |
+| `test/shirt-order.smoke.mjs` | 35 assertions driving the real page in headless Chromium against mocked APIs. `npm run test:shirt-ui` |
 | `test/shirt-orders-auth.test.mjs` | 26 assertions on Shopify credential handling (client credentials grant, token caching/refresh) and the order guardrails. `npm run test:shirt-auth` |
 | `TSHIRT-ORDERING.md` | Setup steps, resolution rules, failure behaviour, auth notes. |
 
@@ -42,7 +42,8 @@ The function exchanges them for a 24-hour token automatically. Do NOT set
 `SHOPIFY_ADMIN_TOKEN` — that's for store-admin custom apps and takes precedence
 if present, so leaving a stale value there would keep failing.
 
-The app must also be **installed on the store** and configured with
+The app must also have a **released version** and be **installed on the store**
+(Dev Dashboard → Versions → Release, then Home → Install app), with scopes
 `write_orders`, `read_orders`, `read_products`, `write_customers`. Full detail in
 `TSHIRT-ORDERING.md`. `HUBSPOT_TOKEN`, `JOTFORM_API_KEY` and `URL` are already
 set and reused as-is.
