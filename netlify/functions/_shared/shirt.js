@@ -538,6 +538,50 @@ function addressFromJotform(answer) {
 }
 
 /**
+ * Guess the country from a state/province name alone.
+ *
+ * Plenty of applicants leave the country subfield of the address question blank
+ * — it is optional on the form, and US students in particular treat it as
+ * obvious. But Shopify REQUIRES a countryCode, so a blank there means whoever
+ * is ordering has to hunt through a 245-entry dropdown for every such student.
+ *
+ * A full state name is almost always decisive: "Colorado" appears in exactly
+ * one of our province tables. We only return a country when the name matches
+ * ONE table — never when it is ambiguous, and never from a bare code like "CO"
+ * or "WA" (Washington and Western Australia share WA), because guessing the
+ * country wrong silently posts an international shipping label.
+ */
+function inferCountryFromProvince(raw) {
+  const s = String(raw || '').trim().toLowerCase()
+    .replace(/\s+/g, ' ').replace(/[\d-]+\s*$/, '').trim();
+  if (!s) return '';
+
+  // Full names first: "Colorado" is in exactly one table.
+  const byName = [];
+  for (const country of Object.keys(PROVINCES)) {
+    if (PROVINCES[country][s]) byName.push(country);
+  }
+  if (byName.length === 1) return byName[0];
+  if (byName.length > 1) return '';
+
+  // Then codes. Most are unambiguous across the four tables we keep — "PA" and
+  // "NY" are only ever US, "ON" only ever Canada — and US students routinely
+  // write the code rather than the name, so refusing all codes would leave the
+  // country blank for a large share of them. The genuinely ambiguous ones fall
+  // out of this naturally and stay unresolved: WA (US Washington / AU Western
+  // Australia), NT (AU Northern Territory / CA Northwest Territories), and
+  // TAS (AU Tasmania / NZ Tasman).
+  const upper = s.toUpperCase();
+  if (!/^[A-Z]{2,3}$/.test(upper)) return '';
+  const byCode = [];
+  for (const country of Object.keys(PROVINCES)) {
+    const codes = new Set(Object.values(PROVINCES[country]));
+    if (codes.has(upper)) byCode.push(country);
+  }
+  return byCode.length === 1 ? byCode[0] : '';
+}
+
+/**
  * Turn a loose address into exactly what MailingAddressInput accepts, dropping
  * empty keys (Shopify rejects `provinceCode: ""`). `firstName`/`lastName` are
  * split off the student's display name.
@@ -590,6 +634,7 @@ function addressIsShippable(addr) {
 
 module.exports = {
   SHIRT_SIZES,
+  inferCountryFromProvince,
   normalizeShirtSize,
   COUNTRIES,
   countryCodeFor,

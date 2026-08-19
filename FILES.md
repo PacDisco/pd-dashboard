@@ -9,8 +9,9 @@ Nothing else in the project was touched.
 |---|---|
 | `netlify/functions/_shared/shirt.js` | Size vocabulary mapping (X-small/Small/…/XX-large → XS/S/…/2XL), ISO country + province code resolution, address shaping. Shared by the two functions below. |
 | `netlify/functions/shirt-orders.mjs` | `GET /api/shirt-orders` returns live variants + existing orders for the Ordered badge. `POST` creates the paid Shopify order and logs the HubSpot deal note. Verifies the Netlify Identity token — read the header comment before editing. |
-| `test/enrollment-shirt.test.mjs` | 17 assertions on the server-side size/address resolution rules, both upstreams stubbed. No network. `npm run test:shirt` |
-| `test/shirt-order.smoke.mjs` | 31 assertions driving the real page in headless Chromium against mocked APIs. `npm run test:shirt-ui` |
+| `test/enrollment-shirt.test.mjs` | 24 assertions on the server-side size/address resolution rules, both upstreams stubbed. No network. `npm run test:shirt` |
+| `test/shirt-order.smoke.mjs` | 33 assertions driving the real page in headless Chromium against mocked APIs. `npm run test:shirt-ui` |
+| `test/shirt-orders-auth.test.mjs` | 26 assertions on Shopify credential handling (client credentials grant, token caching/refresh) and the order guardrails. `npm run test:shirt-auth` |
 | `TSHIRT-ORDERING.md` | Setup steps, resolution rules, failure behaviour, auth notes. |
 
 ## Changed files (4)
@@ -20,7 +21,7 @@ Nothing else in the project was touched.
 | `netlify/functions/enrollment.js` | Added the Jotform application read (form `240277257210046`) and the shirt/address resolver. New per-deal fields: `shirtSize`, `shirtSizeRaw`, `shirtSizeSource`, `shippingAddress`, `shippingAddressSource`, `shippingAddressComplete`, `applicationSubmittedAt`. New payload fields: `shirtSizeOptions`, `shirtCountryOptions`, `applicationLookupOk`. Also added `pd_t_shirt_size` to the deal property list and `t_shirt_size_` + both address groups to the contact property list. **Purely additive** — `flights/index.html` consumes this same endpoint and is unaffected. |
 | `enrollment/index.html` | Shirt Size column (col 5) and T-Shirt column (last), the Order T-Shirt popup, the Ordered badge, and `loadShirtOrders()`. Column sorting now keys off a `data-sort` attribute instead of a hardcoded column index, so inserting a column can no longer silently turn the money columns into string sorts. |
 | `netlify.toml` | `timeout = 26` blocks for `enrollment` and `shirt-orders`, matching the existing `flight-tickets` entry. |
-| `package.json` | Added `test:shirt` and `test:shirt-ui` scripts, and `playwright` as a devDependency (only needed for the UI test — it skips cleanly without it). |
+| `package.json` | Added `test:shirt`, `test:shirt-auth` and `test:shirt-ui` scripts, and `playwright` as a devDependency (only needed for the UI test — it skips cleanly without it). |
 
 ## Not changed, deliberately
 
@@ -29,7 +30,19 @@ Nothing else in the project was touched.
 
 ## One setup step before it works
 
-Add a Shopify custom-app Admin API token to Netlify as `SHOPIFY_ADMIN_TOKEN`
-(scopes: `write_orders`, `read_orders`, `read_products`, `write_customers`).
-Full steps in `TSHIRT-ORDERING.md`. `HUBSPOT_TOKEN`, `JOTFORM_API_KEY` and `URL`
-are already set on the site and are reused as-is.
+Your Shopify app is a Dev Dashboard app, so set **both** of these in Netlify from
+its Settings → Credentials page:
+
+```
+SHOPIFY_CLIENT_ID     = 41f6d6f6c663f3fac3d29a4e8d8526be
+SHOPIFY_CLIENT_SECRET = <the Secret — reveal or rotate to copy it>
+```
+
+The function exchanges them for a 24-hour token automatically. Do NOT set
+`SHOPIFY_ADMIN_TOKEN` — that's for store-admin custom apps and takes precedence
+if present, so leaving a stale value there would keep failing.
+
+The app must also be **installed on the store** and configured with
+`write_orders`, `read_orders`, `read_products`, `write_customers`. Full detail in
+`TSHIRT-ORDERING.md`. `HUBSPOT_TOKEN`, `JOTFORM_API_KEY` and `URL` are already
+set and reused as-is.

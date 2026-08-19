@@ -678,16 +678,46 @@ function resolveShirt(deal, contacts, studentName, appIndex) {
   // Attach a phone number to the address — Shopify uses it for delivery SMS and
   // some carriers require it for international shipments.
   if (out.shippingAddress) {
+    const addr = out.shippingAddress;
     const phone = (contacts.find((c) => c.phone) || {}).phone || '';
-    out.shippingAddress = Object.assign({}, out.shippingAddress, {
-      phone: out.shippingAddress.phone || phone,
+
+    // Resolve the country. The application's country subfield is optional and
+    // frequently left blank (US students especially), but Shopify requires a
+    // countryCode — so rather than making a human pick from 245 options for
+    // every such student, fall back through the evidence we already have:
+    //   1. what the application said
+    //   2. the country on an associated HubSpot contact
+    //   3. inference from a full state name ("Colorado" is unambiguously US)
+    // Anything still unresolved stays blank and the popup insists on a choice.
+    let countryCode = shirt.countryCodeFor(addr.country);
+    let countrySource = countryCode ? 'application' : '';
+    if (!countryCode) {
+      for (const c of contacts) {
+        const fromContact =
+          shirt.countryCodeFor((c.mailingAddress && c.mailingAddress.country) || '') ||
+          shirt.countryCodeFor((c.standardAddress && c.standardAddress.country) || '');
+        if (fromContact) {
+          countryCode = fromContact;
+          countrySource = 'hubspot contact';
+          break;
+        }
+      }
+    }
+    if (!countryCode) {
+      const inferred = shirt.inferCountryFromProvince(addr.province);
+      if (inferred) {
+        countryCode = inferred;
+        countrySource = 'inferred from state';
+      }
+    }
+
+    out.shippingAddress = Object.assign({}, addr, {
+      phone: addr.phone || phone,
       // Pre-resolve the codes Shopify needs so the dashboard can show whether
       // the address is usable without duplicating the mapping tables in JS.
-      countryCode: shirt.countryCodeFor(out.shippingAddress.country),
-      provinceCode: shirt.provinceCodeFor(
-        shirt.countryCodeFor(out.shippingAddress.country),
-        out.shippingAddress.province
-      )
+      countryCode,
+      countrySource,
+      provinceCode: shirt.provinceCodeFor(countryCode, addr.province)
     });
     out.shippingAddressComplete = shirt.addressIsShippable(out.shippingAddress);
   } else {

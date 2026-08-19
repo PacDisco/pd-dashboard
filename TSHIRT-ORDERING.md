@@ -13,10 +13,45 @@ student's HubSpot deal.
 Everything else is already wired. These two are external and can only be done
 by a human with the right logins.
 
-### 1. Create a Shopify custom app and add its token to Netlify
+### 1. Connect Shopify
 
-In Shopify admin (`pure-exploration.myshopify.com`) → **Settings → Apps and
-sales channels → Develop apps → Create an app**. Give it the Admin API scopes:
+There are two credential styles, and which you have depends on where the app
+was created. The code supports both.
+
+**A. App created in the Shopify Dev Dashboard** (its Settings → Credentials page
+shows a **Client ID** and a **Secret**, with no permanent token). This is the
+path Shopify now steers own-store apps toward. In Netlify → **Site
+configuration → Environment variables** add:
+
+```
+SHOPIFY_CLIENT_ID     = <Client ID>
+SHOPIFY_CLIENT_SECRET = <Secret>
+```
+
+The function exchanges these for a 24-hour access token via the client
+credentials grant (`POST https://{shop}/admin/oauth/access_token`), caches it in
+the warm container, and refreshes it automatically — including a single retry if
+a cached token is invalidated early by a secret rotation or reinstall. The Secret
+is only shown in full once; if you're unsure it was copied correctly, rotate it
+and re-copy.
+
+**B. Custom app created inside the store admin** (Settings → Apps and sales
+channels → Develop apps). This yields a permanent token:
+
+```
+SHOPIFY_ADMIN_TOKEN = shpat_xxxxxxxxxxxxxxxxxxxxx
+```
+
+`SHOPIFY_ADMIN_TOKEN` takes precedence if both are set.
+
+**Both styles require, in addition:**
+
+- The app must be **installed on the store**. The client credentials grant is
+  restricted to apps your own organisation developed, installed in a store you
+  own — which is exactly this case, but it will 401 until the install happens.
+- The app must be configured with these Admin API scopes. Scopes come from the
+  app's configuration, not the token request, so changing them means releasing a
+  new app version.
 
 | Scope | Why |
 |---|---|
@@ -25,25 +60,17 @@ sales channels → Develop apps → Create an app**. Give it the Admin API scope
 | `read_products` | read the shirt's variants and live stock |
 | `write_customers` | attach the student as the order's customer |
 
-Install the app, reveal the **Admin API access token** (`shpat_…`), then in
-Netlify → **Site configuration → Environment variables** add:
-
-```
-SHOPIFY_ADMIN_TOKEN = shpat_xxxxxxxxxxxxxxxxxxxxx
-```
-
-That single variable is the only required one. These are optional and only
-needed if something changes:
+Optional variables, only needed if something changes:
 
 | Variable | Default | When to set it |
 |---|---|---|
-| `SHOPIFY_STORE_DOMAIN` | `pure-exploration.myshopify.com` | You move stores |
+| `SHOPIFY_STORE_DOMAIN` | `pure-exploration.myshopify.com` | You move stores. Must be the myshopify domain, not `pureexploration.com` |
 | `SHOPIFY_API_VERSION` | `2026-04` | Shopify deprecates that version |
 | `SHOPIFY_TSHIRT_PRODUCT_ID` | `gid://shopify/Product/9345666973947` | You replace the Pacific Discovery T-Shirt product |
 | `SHIRT_ORDER_ROLES` | `admin,operations,programs,admissions` | You want to narrow who can order |
 
 `HUBSPOT_TOKEN`, `JOTFORM_API_KEY` and `URL` are already set on this site and
-are reused as-is.
+are reused as-is. Re-deploy after changing any variable.
 
 ### 2. Confirm extended function timeouts
 
@@ -121,6 +148,17 @@ postcode glued on (`CT 06412` → `CT`). Anything it cannot resolve — HubSpot 
 a country literally spelled `United Chated` — comes back empty and the popup
 makes you pick from a dropdown before it will submit.
 
+The application's **country** subfield is optional and often left blank (US
+students especially). Since Shopify requires a country, it is resolved by
+falling back: what the application said → the country on an associated HubSpot
+contact → inference from a full state name ("Colorado" appears in exactly one
+province table, so it means US). State **codes** resolve too, since US students
+routinely write `PA` rather than `Pennsylvania` — but only codes that appear in
+exactly one table. The genuinely ambiguous ones are left blank for a human:
+`WA` (US Washington / AU Western Australia), `NT` (AU Northern Territory / CA
+Northwest Territories) and `TAS` (AU Tasmania / NZ Tasman). The popup labels an
+inferred country as such, so a value the student never typed stays visible.
+
 **Every field stays editable in the popup.** Nothing is submitted to Shopify
 without a human seeing it.
 
@@ -170,6 +208,13 @@ only`, and the badges show as unverified. The parsed application index is cached
 for 10 minutes in the warm container, so the steady-state cost of this feature
 on `/api/enrollment` is nil.
 
+## If the Shopify credentials are wrong
+
+The error in the popup names the specific cause rather than relaying a status
+code: rejected client credentials, an app that isn't installed, a missing scope,
+a store domain that isn't the myshopify one, or a `SHOPIFY_ADMIN_TOKEN` set on a
+site whose app only has Client ID/Secret.
+
 ## If Shopify is down
 
 The Shirt Size column still works — it's HubSpot + Jotform only. The T-Shirt
@@ -205,15 +250,17 @@ Reading (`GET`) needs any dashboard role. Ordering (`POST`) needs one of
 | `netlify/functions/enrollment.js` | Reads the Jotform application, adds `shirtSize`, `shirtSizeSource`, `shippingAddress` and the picklists to the payload. Additive only — the Flights dashboard consumes this same endpoint and is unaffected. |
 | `enrollment/index.html` | Shirt Size column, T-Shirt column, order popup, Ordered badge. Column sorting now keyed off `data-sort` instead of column index, so the money columns can't silently break again. |
 | `netlify.toml` | `timeout = 26` for `enrollment` and `shirt-orders`. |
-| `test/enrollment-shirt.test.mjs` | **New.** 17 assertions on the server-side resolution rules, with both upstreams stubbed. |
-| `test/shirt-order.smoke.mjs` | **New.** 31 assertions driving the real page in headless Chromium. |
+| `test/enrollment-shirt.test.mjs` | **New.** 24 assertions on the server-side resolution rules, with both upstreams stubbed. |
+| `test/shirt-order.smoke.mjs` | **New.** 33 assertions driving the real page in headless Chromium. |
+| `test/shirt-orders-auth.test.mjs` | **New.** 26 assertions on Shopify credential handling and the order guardrails, all upstreams stubbed. |
 
 ## Tests
 
 ```bash
-npm run test:shirt      # server-side resolution rules (no network)
-npm run test:shirt-ui   # full page in headless Chromium (needs playwright)
+npm run test:shirt       # size/address resolution rules (no network)
+npm run test:shirt-auth  # Shopify credentials + order guardrails (no network)
+npm run test:shirt-ui    # full page in headless Chromium (needs playwright)
 ```
 
-Both pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
+All 83 assertions pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
 installed.

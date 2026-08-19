@@ -31,9 +31,16 @@
  * ------------------------------------------------------------------------
  * ENVIRONMENT
  * ------------------------------------------------------------------------
- *   SHOPIFY_ADMIN_TOKEN       required. Admin API access token (shpat_…) for a
- *                             custom app with write_orders, read_orders,
- *                             read_products and write_customers.
+ *   Shopify credentials — set ONE of these two styles:
+ *     SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET
+ *                             from a Dev Dashboard app (Settings → Credentials).
+ *                             Exchanged for a 24h token via the client
+ *                             credentials grant; refreshed automatically.
+ *     SHOPIFY_ADMIN_TOKEN     a permanent shpat_… token from a custom app
+ *                             created inside the store admin. Takes precedence.
+ *   Either way the app must be installed on the store and configured with
+ *   write_orders, read_orders, read_products and write_customers.
+ *
  *   SHOPIFY_STORE_DOMAIN      optional. Default pure-exploration.myshopify.com
  *   SHOPIFY_API_VERSION       optional. Default 2026-04
  *   SHOPIFY_TSHIRT_PRODUCT_ID optional. Default is the Pacific Discovery T-Shirt
@@ -142,16 +149,142 @@ function orderRoles() {
 }
 
 // ═══════════════════════════════════════════
-// SHOPIFY ADMIN GRAPHQL
+// SHOPIFY AUTHENTICATION
 // ═══════════════════════════════════════════
-async function shopify(query, variables) {
-  const token = process.env.SHOPIFY_ADMIN_TOKEN;
-  if (!token) {
-    const err = new Error('SHOPIFY_ADMIN_TOKEN is not set in Netlify');
+// Two supported credential styles, because Shopify offers two and which one you
+// have depends on where the app was created:
+//
+//   1. CLIENT CREDENTIALS GRANT (SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET).
+//      What you get from an app created in the Shopify Dev Dashboard — its
+//      Settings → Credentials page shows a Client ID and a Secret and no
+//      permanent token. We exchange them for a 24-hour access token at
+//      POST https://{shop}/admin/oauth/access_token and cache it in the warm
+//      container. Shopify restricts this grant to apps developed by your own
+//      organisation and installed in stores you own, which is exactly this case.
+//
+//   2. A PERMANENT ADMIN API TOKEN (SHOPIFY_ADMIN_TOKEN, starts with shpat_).
+//      What you get from a custom app created inside the store admin. Simpler,
+//      never expires, so if it is set we use it and skip the exchange.
+//
+// Either way the app must be INSTALLED on the store, and the scopes come from
+// the app's configuration — not from the token request.
+const SHOPIFY_OAUTH_TOKEN_URL = `https://${SHOPIFY_DOMAIN}/admin/oauth/access_token`;
+
+// Minted tokens live 24h. Refresh 5 minutes early so a request never sets off
+// with a token that expires mid-flight.
+const TOKEN_SKEW_MS = 5 * 60 * 1000;
+let _tokenCache = null;   // { token, expiresAt }
+// GET fires two Shopify queries concurrently, and on a cold container both
+// would race to mint their own token — two OAuth round trips for one request,
+// and needless load on an endpoint Shopify rate-limits. Concurrent callers
+// share the in-flight exchange instead.
+let _tokenInFlight = null; // Promise<string> | null
+
+const envTrimmed = (name) => String(process.env[name] || '').trim();
+
+async function accessToken(forceRefresh) {
+  if (!forceRefresh && _tokenInFlight) return _tokenInFlight;
+  if (forceRefresh) _tokenInFlight = null;
+  const p = mintAccessToken(forceRefresh);
+  // Only share a pending exchange, never a settled/rejected one.
+  _tokenInFlight = p;
+  try {
+    return await p;
+  } finally {
+    if (_tokenInFlight === p) _tokenInFlight = null;
+  }
+}
+
+async function mintAccessToken(forceRefresh) {
+  // Style 2 — a permanent token wins if present.
+  const direct = envTrimmed('SHOPIFY_ADMIN_TOKEN');
+  if (direct) return direct;
+
+  // Style 1 — client credentials grant.
+  const clientId = envTrimmed('SHOPIFY_CLIENT_ID');
+  const clientSecret = envTrimmed('SHOPIFY_CLIENT_SECRET');
+  if (!clientId || !clientSecret) {
+    const err = new Error(
+      'No Shopify credentials are set in Netlify. Set either SHOPIFY_CLIENT_ID + ' +
+      'SHOPIFY_CLIENT_SECRET (from your Dev Dashboard app: Settings → Credentials), ' +
+      'or SHOPIFY_ADMIN_TOKEN (a store-admin custom app token starting with shpat_).'
+    );
     err.status = 500;
     throw err;
   }
 
+  if (!forceRefresh && _tokenCache && Date.now() < _tokenCache.expiresAt) {
+    return _tokenCache.token;
+  }
+
+  const resp = await fetch(SHOPIFY_OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret
+    }).toString()
+  });
+
+  const body = await resp.text();
+  if (!resp.ok) {
+    console.error(`[shirt-orders] token exchange failed ${resp.status} on ${SHOPIFY_DOMAIN}: ${body.slice(0, 300)}`);
+    const err = new Error(
+      resp.status === 401 || resp.status === 400
+        ? `Shopify rejected the client credentials for ${SHOPIFY_DOMAIN}. Check that ` +
+          'SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET match the Dev Dashboard app exactly ' +
+          '(the Secret is only shown in full once — rotate it and re-copy if unsure), and ' +
+          'that the app is INSTALLED on this store. The client credentials grant only works ' +
+          'for apps your own organisation developed, installed in a store you own.'
+        : `Shopify returned HTTP ${resp.status} when exchanging client credentials for an access token.`
+    );
+    err.status = 502;
+    err.detail = body.slice(0, 300);
+    throw err;
+  }
+
+  let parsed;
+  try { parsed = JSON.parse(body); }
+  catch {
+    const err = new Error('Shopify returned a non-JSON response to the token request');
+    err.status = 502;
+    throw err;
+  }
+
+  if (!parsed.access_token) {
+    const err = new Error('Shopify\'s token response contained no access_token');
+    err.status = 502;
+    err.detail = body.slice(0, 300);
+    throw err;
+  }
+
+  const ttlMs = (Number(parsed.expires_in) || 86399) * 1000;
+  _tokenCache = { token: parsed.access_token, expiresAt: Date.now() + Math.max(ttlMs - TOKEN_SKEW_MS, 30_000) };
+  console.log(`[shirt-orders] minted a Shopify access token (scopes: ${parsed.scope || 'unknown'}, ttl ${Math.round(ttlMs / 1000)}s)`);
+  return _tokenCache.token;
+}
+
+/** True when tokens are minted rather than fixed, so a 401 is worth one retry. */
+const usingClientCredentials = () => !envTrimmed('SHOPIFY_ADMIN_TOKEN');
+
+// ═══════════════════════════════════════════
+// SHOPIFY ADMIN GRAPHQL
+// ═══════════════════════════════════════════
+async function shopify(query, variables) {
+  let resp = await shopifyOnce(query, variables, false);
+  // A cached token can be invalidated early by a secret rotation or an app
+  // reinstall. That reads as a 401, so mint a fresh one and try once more
+  // before surfacing an error to the user.
+  if (resp.status === 401 && usingClientCredentials()) {
+    console.warn('[shirt-orders] 401 with a minted token — refreshing and retrying once');
+    resp = await shopifyOnce(query, variables, true);
+  }
+  return handleShopifyResponse(resp);
+}
+
+async function shopifyOnce(query, variables, forceRefresh) {
+  const token = await accessToken(forceRefresh);
   const resp = await fetch(`https://${SHOPIFY_DOMAIN}/admin/api/${SHOPIFY_VERSION}/graphql.json`, {
     method: 'POST',
     headers: {
@@ -161,8 +294,11 @@ async function shopify(query, variables) {
     },
     body: JSON.stringify({ query, variables: variables || {} })
   });
+  return { status: resp.status, ok: resp.ok, text: await resp.text() };
+}
 
-  const text = await resp.text();
+function handleShopifyResponse(resp) {
+  const text = resp.text;
   if (!resp.ok) {
     console.error(`[shirt-orders] Shopify HTTP ${resp.status} on ${SHOPIFY_DOMAIN} (api ${SHOPIFY_VERSION}): ${text.slice(0, 500)}`);
 
@@ -170,14 +306,19 @@ async function shopify(query, variables) {
     // access token"), and the fix differs per status, so say which one it is.
     let msg;
     if (resp.status === 401) {
-      msg = `Shopify rejected the access token for ${SHOPIFY_DOMAIN}. ` +
-        'Check SHOPIFY_ADMIN_TOKEN in Netlify: it must be the custom app\'s ' +
-        '"Admin API access token" (starts with shpat_), not the API key or ' +
-        'secret key, and it must belong to this store. Re-deploy after changing it.';
+      msg = usingClientCredentials()
+        ? `Shopify rejected the minted access token for ${SHOPIFY_DOMAIN}, even after a refresh. ` +
+          'Confirm the Dev Dashboard app is installed on this store and that its ' +
+          'SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET are current.'
+        : `Shopify rejected SHOPIFY_ADMIN_TOKEN for ${SHOPIFY_DOMAIN}. It must be a ` +
+          'store-admin custom app\'s "Admin API access token" (starts with shpat_), not ' +
+          'an API key or secret. If your app came from the Dev Dashboard there is no such ' +
+          'token — unset SHOPIFY_ADMIN_TOKEN and set SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET instead.';
     } else if (resp.status === 403) {
-      msg = 'Shopify accepted the token but refused the request — the custom app ' +
-        'is missing a scope. It needs write_orders, read_orders, read_products ' +
-        'and write_customers.';
+      msg = 'Shopify accepted the credentials but refused the request — the app is ' +
+        'missing a scope. It needs write_orders, read_orders, read_products and ' +
+        'write_customers. Scopes come from the app\'s configuration, so update them ' +
+        'there and release a new app version, then retry.';
     } else if (resp.status === 404) {
       msg = `No Shopify Admin API at ${SHOPIFY_DOMAIN} (api version ${SHOPIFY_VERSION}). ` +
         'SHOPIFY_STORE_DOMAIN must be the myshopify.com domain, not the ' +

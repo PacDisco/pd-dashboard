@@ -754,7 +754,15 @@ function openShirtModal(dealId) {
     src.className = 'text-xs text-yellow-700';
   } else {
     src.textContent = 'from ' + entry.shippingAddressSource;
-    src.className = 'text-xs text-gray-400';
+    // The application's country subfield is optional, so the country is often
+    // worked out from the state instead. Say so — a filled-in country the
+    // student never actually typed should be visible, not silent.
+    if (addr.countrySource && addr.countrySource !== 'application') {
+      src.textContent += ' · country ' + addr.countrySource;
+      src.className = 'text-xs text-gray-500';
+    } else {
+      src.className = 'text-xs text-gray-400';
+    }
   }
 
   // Prefer the contact whose name matches the student, so we don't attach a

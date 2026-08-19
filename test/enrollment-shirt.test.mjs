@@ -39,6 +39,18 @@ const DEALS = [
   // Namesake collision: two different people called "Sam Smith" applied, and
   // this student's contact email matches neither. Must NOT be guessed.
   { id: '105', properties: { dealname: 'Sam Smith - Bali Summer Program', pipeline: SUMMER_PIPELINE, dealstage: CLOSED_WON, pd_program: 'Bali Summer Program', travel_year: '2026', amount: '5000', total_amount_paid: '0' } },
+  // Reproduces Abigail Dailey: her application left the country subfield blank
+  // but gave "Colorado", so the country must be inferred rather than left for a
+  // human to pick out of 245 options.
+  { id: '107', properties: { dealname: 'Abigail Dailey - NZ Summer Program', pipeline: SUMMER_PIPELINE, dealstage: CLOSED_WON, pd_program: 'New Zealand & Fiji Summer Program', travel_year: '2026', amount: '7000', total_amount_paid: '7000' } },
+  // Adele Grady: blank country and a bare state CODE ("PA"), which is
+  // unambiguous and must resolve.
+  { id: '109', properties: { dealname: 'Adele Grady - South America Semester', pipeline: SUMMER_PIPELINE, dealstage: CLOSED_WON, pd_program: 'South America Semester', travel_year: '2026', amount: '9000', total_amount_paid: '9000' } },
+  // Blank country and an AMBIGUOUS code — WA is both US Washington and AU
+  // Western Australia, so it must stay unresolved.
+  { id: '110', properties: { dealname: 'Ambiguous Code - Bali Summer Program', pipeline: SUMMER_PIPELINE, dealstage: CLOSED_WON, pd_program: 'Bali Summer Program', travel_year: '2026', amount: '5000', total_amount_paid: '0' } },
+  // Blank country AND an unrecognisable region — must stay unresolved, never guessed.
+  { id: '108', properties: { dealname: 'Unknown Region - Bali Summer Program', pipeline: SUMMER_PIPELINE, dealstage: CLOSED_WON, pd_program: 'Bali Summer Program', travel_year: '2026', amount: '5000', total_amount_paid: '0' } },
   // Only the deal property is set.
   { id: '106', properties: { dealname: 'Deal Prop Only - Bali Summer Program', pipeline: SUMMER_PIPELINE, dealstage: CLOSED_WON, pd_program: 'Bali Summer Program', travel_year: '2026', amount: '5000', total_amount_paid: '0', pd_t_shirt_size: 'XL' } }
 ];
@@ -49,7 +61,11 @@ const ASSOCIATIONS = {
   '103': ['c-ellis'],
   '104': ['c-legacy'],
   '105': ['c-sam'],
-  '106': ['c-dealprop']
+  '106': ['c-dealprop'],
+  '107': ['c-abigail'],
+  '108': ['c-unknown'],
+  '109': ['c-adele'],
+  '110': ['c-ambig']
 };
 
 const CONTACTS = {
@@ -68,7 +84,11 @@ const CONTACTS = {
     mailing_state: 'Colorado', mailing_zip_postal_code: '80301', mailing_country: 'United States'
   },
   'c-sam': { firstname: 'Sam', lastname: 'Smith', email: 'sam-neither@example.invalid' },
-  'c-dealprop': { firstname: 'Deal', lastname: 'Prop Only', email: 'dealprop@example.invalid' }
+  'c-dealprop': { firstname: 'Deal', lastname: 'Prop Only', email: 'dealprop@example.invalid' },
+  'c-abigail': { firstname: 'Abigail', lastname: 'Dailey', email: 'abbydailey8@example.invalid' },
+  'c-unknown': { firstname: 'Unknown', lastname: 'Region', email: 'unknown@example.invalid' },
+  'c-adele': { firstname: 'Adele', lastname: 'Grady', email: 'adelergrady@example.invalid' },
+  'c-ambig': { firstname: 'Ambiguous', lastname: 'Code', email: 'ambig@example.invalid' }
 };
 
 const addressAnswer = (line1, city, state, postal, country) => ({
@@ -110,6 +130,30 @@ const SUBMISSIONS = [
     2: { text: "Participant's email ", type: 'control_email', answer: 'sam-one@example.invalid' },
     3: { text: 'Please choose your t-shirt size', type: 'control_dropdown', answer: 'Small' },
     4: { text: 'What is your home address', type: 'control_address', answer: addressAnswer('1 A St', 'Austin', 'Texas', '78701', 'United States') }
+  } },
+  { id: 's7', created_at: '2026-06-22 14:10:44', answers: {
+    1: { text: 'Name', type: 'control_fullname', answer: { first: 'Abigail', last: 'Dailey' } },
+    2: { text: "Participant's email ", type: 'control_email', answer: 'abbydailey8@example.invalid' },
+    3: { text: 'Please choose your t-shirt size', type: 'control_dropdown', answer: 'Large' },
+    4: { text: 'What is your home address', type: 'control_address', answer: addressAnswer('4145 Captain Jack ln', 'Colorado Springs', 'Colorado', '80924', '') }
+  } },
+  { id: 's9', created_at: '2026-07-01 09:00:00', answers: {
+    1: { text: 'Name', type: 'control_fullname', answer: { first: 'Adele', last: 'Grady' } },
+    2: { text: "Participant's email ", type: 'control_email', answer: 'adelergrady@example.invalid' },
+    3: { text: 'Please choose your t-shirt size', type: 'control_dropdown', answer: 'Medium' },
+    4: { text: 'What is your home address', type: 'control_address', answer: addressAnswer('219 Ridgehaven Lane', 'Pittsburgh', 'PA', '15238', '') }
+  } },
+  { id: 's10', created_at: '2026-07-02 09:00:00', answers: {
+    1: { text: 'Name', type: 'control_fullname', answer: { first: 'Ambiguous', last: 'Code' } },
+    2: { text: "Participant's email ", type: 'control_email', answer: 'ambig@example.invalid' },
+    3: { text: 'Please choose your t-shirt size', type: 'control_dropdown', answer: 'Medium' },
+    4: { text: 'What is your home address', type: 'control_address', answer: addressAnswer('9 Somewhere St', 'Sometown', 'WA', '99999', '') }
+  } },
+  { id: 's8', created_at: '2026-06-23 09:00:00', answers: {
+    1: { text: 'Name', type: 'control_fullname', answer: { first: 'Unknown', last: 'Region' } },
+    2: { text: "Participant's email ", type: 'control_email', answer: 'unknown@example.invalid' },
+    3: { text: 'Please choose your t-shirt size', type: 'control_dropdown', answer: 'Medium' },
+    4: { text: 'What is your home address', type: 'control_address', answer: addressAnswer('1 Somewhere Rd', 'Sometown', 'Nowhereshire', 'XX1 2YY', '') }
   } },
   { id: 's6', created_at: '2026-04-02 08:00:00', answers: {
     1: { text: 'Name', type: 'control_fullname', answer: { first: 'Sam', last: 'Smith' } },
@@ -220,7 +264,7 @@ const byName = {};
 for (const d of all) byName[d.studentName] = d;
 
 check('every fixture deal survives the pipeline filters', () => {
-  assert.equal(all.length, 6, `got ${all.length}: ${all.map((d) => d.studentName).join(', ')}`);
+  assert.equal(all.length, 10, `got ${all.length}: ${all.map((d) => d.studentName).join(', ')}`);
 });
 
 check("the application beats a parent's HubSpot value", () => {
@@ -281,6 +325,40 @@ check('two people sharing a name are never matched by name', () => {
   assert.equal(s.shippingAddress, null);
 });
 
+check('a blank application country is inferred from a full state name', () => {
+  const a = byName['Abigail Dailey'];
+  assert.equal(a.shirtSize, 'L');
+  assert.equal(a.shirtSizeSource, 'application');
+  assert.equal(a.shippingAddress.address1, '4145 Captain Jack ln');
+  assert.equal(a.shippingAddress.city, 'Colorado Springs');
+  assert.equal(a.shippingAddress.countryCode, 'US', 'Colorado is unambiguously a US state');
+  assert.equal(a.shippingAddress.countrySource, 'inferred from state');
+  assert.equal(a.shippingAddress.provinceCode, 'CO', 'the province must become the code Shopify wants');
+  assert.equal(a.shippingAddressComplete, true, 'it should be orderable without any typing');
+});
+
+check('an unambiguous state CODE resolves the country', () => {
+  const a = byName['Adele Grady'];
+  assert.equal(a.shirtSize, 'M');
+  assert.equal(a.shippingAddress.countryCode, 'US', 'PA is only ever a US state');
+  assert.equal(a.shippingAddress.provinceCode, 'PA');
+  assert.equal(a.shippingAddress.countrySource, 'inferred from state');
+  assert.equal(a.shippingAddressComplete, true);
+});
+
+check('an AMBIGUOUS state code is left for a human', () => {
+  const a = byName['Ambiguous Code'];
+  assert.equal(a.shippingAddress.countryCode, '', 'WA is US Washington or AU Western Australia — unknowable');
+  assert.equal(a.shippingAddressComplete, false);
+});
+
+check('an unrecognisable region is never guessed at', () => {
+  const u = byName['Unknown Region'];
+  assert.equal(u.shippingAddress.countryCode, '', 'guessing a country would ship to the wrong hemisphere');
+  assert.equal(u.shippingAddress.countrySource, '');
+  assert.equal(u.shippingAddressComplete, false, 'the popup must insist a human picks the country');
+});
+
 check('the deal property is honoured as a last resort', () => {
   const d = byName['Deal Prop Only'];
   assert.equal(d.shirtSize, 'XL');
@@ -321,7 +399,7 @@ for (const d of all2) byName2[d.studentName] = d;
 
 check('a Jotform outage still returns 200 with the full student list', () => {
   assert.equal(resp2.status, 200);
-  assert.equal(all2.length, 6);
+  assert.equal(all2.length, 10);
 });
 
 check('a Jotform outage degrades to the HubSpot size rather than blanking it', () => {

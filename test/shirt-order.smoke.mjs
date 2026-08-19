@@ -105,6 +105,19 @@ const DEALS = [
     amount: 7000, totalPaid: 7000,
     contacts: [{ id: 'c5', name: 'Ryan Little', email: 'ryan@example.invalid', phone: '', hubspotUrl: '#' }]
   }),
+  // Abigail's case: application address with the country inferred from the state.
+  deal({
+    id: '106', studentName: 'Abigail Dailey', shirtSize: 'L', shirtSizeRaw: 'Large',
+    shirtSizeSource: 'application',
+    shippingAddress: {
+      address1: '4145 Captain Jack ln', address2: '', city: 'Colorado Springs',
+      province: 'Colorado', zip: '80924', country: '',
+      countryCode: 'US', countrySource: 'inferred from state', provinceCode: 'CO', phone: ''
+    },
+    shippingAddressSource: 'application', shippingAddressComplete: true,
+    amount: 7000, totalPaid: 7000,
+    contacts: [{ id: 'c7', name: 'Abigail Dailey', email: 'abbydailey8@example.invalid', phone: '', hubspotUrl: '#' }]
+  }),
   // No size and an unusable address — the hardest case for the popup.
   deal({
     id: '105', studentName: 'Nobody Home', shirtSize: null, shirtSizeSource: '',
@@ -311,13 +324,13 @@ const colText = (n) => table.locator(`tbody tr.data-row td:nth-child(${n})`).all
 await table.locator('th[data-sort="shirt"]').click();
 let order = await colText(5);
 check('shirt sort runs small→large with blanks last', () => {
-  assert.deepEqual(order, ['XS', 'M', 'L ?', '2XL', '—']);
+  assert.deepEqual(order, ['XS', 'M', 'L', 'L ?', '2XL', '—']);
 });
 
 await table.locator('th[data-col="6"]').click(); // Total Amount, ascending
 let amounts = await colText(7);
 check('money columns still sort numerically after the column insert', () => {
-  assert.deepEqual(amounts, ['$1,000.00', '$3,275.00', '$5,000.00', '$6,550.00', '$7,000.00']);
+  assert.deepEqual(amounts, ['$1,000.00', '$3,275.00', '$5,000.00', '$6,550.00', '$7,000.00', '$7,000.00']);
 });
 
 // ── 5. Popup pre-fill ──────────────────────────────────────────────────
@@ -431,6 +444,25 @@ check('POST body carries everything the function needs', () => {
 await page.evaluate(() => closeShirtModal());
 const emmaCellAfter = await (await rowFor('Emma Lyons')).$eval('td:last-child', (td) => td.textContent.trim());
 check('row flips to Ordered without a page reload', () => assert.match(emmaCellAfter, /Ordered ×2/));
+
+// ── 8b. Inferred country ───────────────────────────────────────────────
+await (await rowFor('Abigail Dailey')).$eval('td:last-child button', (b) => b.click());
+await page.waitForSelector('#shirt-modal:not(.hidden)');
+const inferred = await page.evaluate(() => ({
+  country: document.getElementById('shirt-country').value,
+  prov: document.getElementById('shirt-prov').value,
+  src: document.getElementById('shirt-addr-source').textContent,
+  size: document.getElementById('shirt-size').value
+}));
+check('a country inferred from the state is pre-selected, not left blank', () => {
+  assert.equal(inferred.country, 'US');
+  assert.equal(inferred.prov, 'CO', 'the province must be the code Shopify wants, not "Colorado"');
+  assert.equal(inferred.size, 'L');
+});
+check('an inferred country is disclosed rather than passed off as the application', () => {
+  assert.match(inferred.src, /country inferred from state/);
+});
+await page.evaluate(() => closeShirtModal());
 
 // ── 9. Duplicate warning ───────────────────────────────────────────────
 await (await rowFor('Nia Tomalin')).$eval('td:last-child button[data-shirt-deal]', (b) => b.click());
