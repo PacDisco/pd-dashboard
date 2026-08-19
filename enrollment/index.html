@@ -374,7 +374,13 @@ function renderDashboard(data) {
   // the column will look emptier than it should. Say so rather than let someone
   // conclude the students never answered.
   if (data.applicationLookupOk === false) {
-    subtitle += ' \u00b7 \u26a0 Jotform application lookup unavailable \u2014 shirt sizes shown from HubSpot only';
+    subtitle += ' \u00b7 \u26a0 Shirt sizes from HubSpot only \u2014 application lookup failed';
+    // Name the actual cause. "No size on file" everywhere looks identical
+    // whether the API key is missing, Jotform rejected it, or the response was
+    // too big, and the difference decides what you go and fix.
+    if (data.applicationLookupError) subtitle += ': ' + data.applicationLookupError;
+  } else if (typeof data.applicationsIndexed === 'number') {
+    subtitle += ' \u00b7 ' + data.applicationsIndexed + ' applications matched for shirt sizes';
   }
   document.getElementById('subtitle').textContent = subtitle;
 

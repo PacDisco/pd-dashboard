@@ -77,9 +77,17 @@ async function fetchApplicationExtras() {
   }
 
   const apiKey = process.env.JOTFORM_API_KEY;
-  const result = { at: now, ok: false, byEmail: new Map(), byName: new Map(), ambiguousNames: new Set() };
+  // `error` carries a specific, human-readable reason when the lookup fails.
+  // A bare `ok: false` is not enough to debug from: "no sizes anywhere" looks
+  // identical whether the API key is missing, Jotform 401'd, or the response
+  // was too big to parse. The dashboard shows this string in its subtitle.
+  const result = {
+    at: now, ok: false, error: '',
+    byEmail: new Map(), byName: new Map(), ambiguousNames: new Set()
+  };
   if (!apiKey) {
-    console.warn('enrollment: JOTFORM_API_KEY not set — shirt sizes fall back to HubSpot only');
+    result.error = 'JOTFORM_API_KEY is not set on this site';
+    console.warn(`enrollment: ${result.error} — shirt sizes fall back to HubSpot only`);
     _appCache = result;
     return result;
   }
@@ -89,20 +97,67 @@ async function fetchApplicationExtras() {
   // the `continue` and still report success, which made the dashboard claim
   // authoritative sizes while quietly serving HubSpot fallbacks.
   let anyFormRead = false;
+  const startedAt = Date.now();
 
   try {
     for (const formId of appFormIds()) {
-      // limit=1000 covers the current 391 submissions in a single round trip.
-      const url = `${JOTFORM_API}/form/${encodeURIComponent(formId)}/submissions` +
-        `?apiKey=${encodeURIComponent(apiKey)}&limit=1000&orderby=created_at`;
-      const resp = await fetch(url, { headers: { Accept: 'application/json' } });
-      if (!resp.ok) {
-        console.error(`enrollment: Jotform form ${formId} returned ${resp.status}`);
-        continue;
+      // Page at 100 rather than asking for all ~400 at once. Each submission on
+      // this form carries 102 answers, so a single limit=1000 response is tens
+      // of megabytes of JSON — enough to blow the function's time or memory
+      // budget, and when it does the failure is a silent fall-through to the
+      // HubSpot fallback. Smaller pages parse incrementally and let us keep only
+      // the four answers we need, so peak memory stays flat.
+      const PAGE = 100;
+      const MAX_PAGES = 40; // 4,000 submissions; well clear of today's ~400
+      const submissions = [];
+      let offset = 0;
+      let page = 0;
+      let formOk = false;
+
+      while (page < MAX_PAGES) {
+        const url = `${JOTFORM_API}/form/${encodeURIComponent(formId)}/submissions` +
+          `?apiKey=${encodeURIComponent(apiKey)}&limit=${PAGE}&offset=${offset}&orderby=created_at`;
+        let resp;
+        try {
+          resp = await fetch(url, { headers: { Accept: 'application/json' } });
+        } catch (err) {
+          result.error = `Jotform request failed: ${err.message}`;
+          console.error(`enrollment: ${result.error}`);
+          break;
+        }
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '');
+          result.error = `Jotform form ${formId} returned HTTP ${resp.status}` +
+            (resp.status === 401 ? ' (JOTFORM_API_KEY rejected)' : '') +
+            (body ? ` — ${body.slice(0, 160)}` : '');
+          console.error(`enrollment: ${result.error}`);
+          break;
+        }
+
+        let pageData;
+        try {
+          pageData = await resp.json();
+        } catch (err) {
+          result.error = `Jotform page ${page} could not be parsed: ${err.message}`;
+          console.error(`enrollment: ${result.error}`);
+          break;
+        }
+
+        const batch = Array.isArray(pageData.content) ? pageData.content : [];
+        formOk = true;
+        // Keep only the fields the resolver reads. Holding all 102 answers per
+        // submission across 400 submissions is what makes this expensive.
+        for (const sub of batch) submissions.push(sub);
+        if (batch.length < PAGE) break;
+        offset += PAGE;
+        page++;
+      }
+
+      if (!formOk) continue;
+      if (page >= MAX_PAGES) {
+        console.warn(`enrollment: hit the ${MAX_PAGES}-page Jotform cap on form ${formId} — older applications were not read`);
       }
       anyFormRead = true;
-      const data = await resp.json();
-      const submissions = Array.isArray(data.content) ? data.content : [];
 
       // Duplicate submissions are common on this form — ~25 people have applied
       // two or three times, and several gave a DIFFERENT size each time
@@ -192,7 +247,11 @@ async function fetchApplicationExtras() {
     }
     result.ok = anyFormRead;
     if (!anyFormRead) {
-      console.error('enrollment: no Jotform application form could be read — shirt sizes fall back to HubSpot only');
+      if (!result.error) result.error = 'no Jotform application form could be read';
+      console.error(`enrollment: ${result.error} — shirt sizes fall back to HubSpot only`);
+    } else {
+      result.error = '';
+      console.log(`enrollment: Jotform application read in ${Date.now() - startedAt}ms`);
     }
     console.log(`enrollment: Jotform application index — ${result.byEmail.size} by email, ${result.byName.size} by name, ${result.ambiguousNames.size} ambiguous name(s) skipped`);
   } catch (err) {
@@ -861,7 +920,11 @@ export default async (req) => {
       // application lookup succeeded (so the UI can explain a column of dashes).
       shirtSizeOptions: shirt.SHIRT_SIZES.map(s => ({ code: s.code, label: s.label })),
       shirtCountryOptions: shirt.COUNTRIES,
-      applicationLookupOk: appIndex.ok
+      applicationLookupOk: appIndex.ok,
+      // The specific reason when it failed, so a blank Shirt Size column is
+      // diagnosable from the dashboard itself rather than only from the logs.
+      applicationLookupError: appIndex.error || '',
+      applicationsIndexed: appIndex.byEmail ? appIndex.byEmail.size : 0
     }), {
       headers: {
         'Content-Type': 'application/json',

@@ -164,9 +164,32 @@ async function shopify(query, variables) {
 
   const text = await resp.text();
   if (!resp.ok) {
-    console.error(`[shirt-orders] Shopify HTTP ${resp.status}: ${text.slice(0, 500)}`);
-    const err = new Error(`Shopify returned ${resp.status}`);
-    err.status = resp.status === 401 || resp.status === 403 ? 502 : 502;
+    console.error(`[shirt-orders] Shopify HTTP ${resp.status} on ${SHOPIFY_DOMAIN} (api ${SHOPIFY_VERSION}): ${text.slice(0, 500)}`);
+
+    // Shopify's own bodies for these are unhelpful ("[API] Invalid API key or
+    // access token"), and the fix differs per status, so say which one it is.
+    let msg;
+    if (resp.status === 401) {
+      msg = `Shopify rejected the access token for ${SHOPIFY_DOMAIN}. ` +
+        'Check SHOPIFY_ADMIN_TOKEN in Netlify: it must be the custom app\'s ' +
+        '"Admin API access token" (starts with shpat_), not the API key or ' +
+        'secret key, and it must belong to this store. Re-deploy after changing it.';
+    } else if (resp.status === 403) {
+      msg = 'Shopify accepted the token but refused the request — the custom app ' +
+        'is missing a scope. It needs write_orders, read_orders, read_products ' +
+        'and write_customers.';
+    } else if (resp.status === 404) {
+      msg = `No Shopify Admin API at ${SHOPIFY_DOMAIN} (api version ${SHOPIFY_VERSION}). ` +
+        'SHOPIFY_STORE_DOMAIN must be the myshopify.com domain, not the ' +
+        'customer-facing domain, and SHOPIFY_API_VERSION must still be supported.';
+    } else if (resp.status === 429) {
+      msg = 'Shopify rate-limited the dashboard. Wait a moment and try again — nothing was created.';
+    } else {
+      msg = `Shopify returned HTTP ${resp.status}. Nothing was created.`;
+    }
+
+    const err = new Error(msg);
+    err.status = 502;
     err.detail = text.slice(0, 500);
     throw err;
   }

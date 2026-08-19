@@ -123,6 +123,8 @@ const SUBMISSIONS = [
 // FETCH STUB
 // ═══════════════════════════════════════════
 let jotformShouldFail = false;
+let paginate = false;
+const jotformCalls = [];
 const jsonResponse = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { 'Content-Type': 'application/json' }
 });
@@ -133,6 +135,25 @@ function installStub() {
 
     if (u.includes('api.jotform.com')) {
       if (jotformShouldFail) return jsonResponse({ message: 'boom' }, 500);
+      jotformCalls.push(u);
+      if (paginate) {
+        // Page 0 returns a full page of 100 filler rows so the resolver is
+        // forced to request offset=100, where the real fixtures live. This is
+        // the regression guard for the limit=1000 → paged rewrite.
+        const offset = Number(new URL(u).searchParams.get('offset') || 0);
+        if (offset === 0) {
+          const filler = Array.from({ length: 100 }, (_, i) => ({
+            id: `filler-${i}`, created_at: '2025-01-01 00:00:00',
+            answers: {
+              1: { text: 'Name', type: 'control_fullname', answer: { first: 'Filler', last: `Person${i}` } },
+              2: { text: "Participant's email ", type: 'control_email', answer: `filler${i}@example.invalid` },
+              3: { text: 'Please choose your t-shirt size', type: 'control_dropdown', answer: 'Small' }
+            }
+          }));
+          return jsonResponse({ content: filler });
+        }
+        return jsonResponse({ content: SUBMISSIONS });
+      }
       return jsonResponse({ content: SUBMISSIONS });
     }
 
@@ -313,6 +334,36 @@ check('a Jotform outage degrades to the HubSpot size rather than blanking it', (
 
 check('a Jotform outage is advertised so the UI can explain the gaps', () => {
   assert.equal(data2.applicationLookupOk, false);
+  assert.match(data2.applicationLookupError, /HTTP 500/, 'the reason must be specific enough to act on');
+});
+
+// ── Pagination ────────────────────────────────────────────────────────
+jotformShouldFail = false;
+paginate = true;
+jotformCalls.length = 0;
+const mod3 = await import('../netlify/functions/enrollment.js?run=3');
+const resp3 = await mod3.default(new Request('https://example.invalid/api/enrollment'));
+const data3 = await resp3.json();
+const all3 = [].concat(...(data3.currentTabs || []).map((t) => t.deals));
+const byName3 = {};
+for (const d of all3) byName3[d.studentName] = d;
+
+check('a full first page forces a second request at offset=100', () => {
+  assert.ok(jotformCalls.length >= 2, `expected >=2 Jotform calls, got ${jotformCalls.length}`);
+  assert.ok(jotformCalls.some((u) => u.includes('offset=100')), 'never asked for offset=100');
+  assert.ok(jotformCalls.every((u) => u.includes('limit=100')), 'should page at 100, not 1000');
+});
+
+check('applications on page 2 are still matched', () => {
+  assert.equal(byName3['Emma Lyons'].shirtSize, 'M');
+  assert.equal(byName3['Emma Lyons'].shirtSizeSource, 'application');
+  assert.equal(byName3['Rachel Stern'].shirtSize, '2XL');
+});
+
+check('the payload reports how many applications were indexed', () => {
+  assert.equal(data3.applicationLookupOk, true);
+  assert.equal(data3.applicationLookupError, '');
+  assert.ok(data3.applicationsIndexed >= 100, `got ${data3.applicationsIndexed}`);
 });
 
 // ═══════════════════════════════════════════
