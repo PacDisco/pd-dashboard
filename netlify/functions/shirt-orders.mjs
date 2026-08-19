@@ -268,18 +268,69 @@ async function mintAccessToken(forceRefresh) {
 /** True when tokens are minted rather than fixed, so a 401 is worth one retry. */
 const usingClientCredentials = () => !envTrimmed('SHOPIFY_ADMIN_TOKEN');
 
+// Which access scope each field we query depends on. Used to turn Shopify's
+// "Access denied for orders field" into something you can act on.
+const SCOPE_FOR_FIELD = {
+  orders: 'read_orders',
+  order: 'read_orders',
+  ordercreate: 'write_orders',
+  product: 'read_products',
+  products: 'read_products',
+  customer: 'write_customers',
+  customers: 'write_customers'
+};
+
+function scopeAdviceFor(field, rawMessage) {
+  const scope = SCOPE_FOR_FIELD[String(field).toLowerCase()];
+  if (!scope) return rawMessage;
+  return `Shopify denied access to "${field}" — the app is missing the ${scope} scope. ` +
+    'Add it in the Dev Dashboard (Versions → scopes → Release), then approve the ' +
+    'updated scopes in the store admin: new scopes are not applied to an already ' +
+    'installed app automatically.';
+}
+
 // ═══════════════════════════════════════════
 // SHOPIFY ADMIN GRAPHQL
 // ═══════════════════════════════════════════
+/** Does this 200 response carry a missing-scope error? */
+function isAccessDenied(resp) {
+  if (resp.status !== 200) return false;
+  if (!/access denied/i.test(resp.text)) return false;
+  try {
+    const body = JSON.parse(resp.text);
+    return Boolean(body.errors && body.errors.some((e) => /access denied/i.test(e.message || '')));
+  } catch {
+    return false;
+  }
+}
+
 async function shopify(query, variables) {
   let resp = await shopifyOnce(query, variables, false);
+
   // A cached token can be invalidated early by a secret rotation or an app
   // reinstall. That reads as a 401, so mint a fresh one and try once more
   // before surfacing an error to the user.
   if (resp.status === 401 && usingClientCredentials()) {
     console.warn('[shirt-orders] 401 with a minted token — refreshing and retrying once');
     resp = await shopifyOnce(query, variables, true);
+    return handleShopifyResponse(resp);
   }
+
+  // Scopes are baked into the token at the moment it is minted, and a token
+  // lives 24 hours. So after you add a scope in the Dev Dashboard and approve
+  // it on the store, a token cached from BEFORE that change still lacks the new
+  // scope — and Shopify reports that as an access-denied error inside a 200, not
+  // a 401, so the refresh-on-401 path above never fires. The result would be a
+  // "missing scope" message persisting for up to a day after the scope was
+  // actually granted, with nothing the user could do but wait or redeploy.
+  // Treat access-denied as a signal that the token may be stale: mint once more
+  // and retry. If it is genuinely missing, the second answer says so too.
+  if (usingClientCredentials() && isAccessDenied(resp)) {
+    console.warn('[shirt-orders] access denied on a cached token — the app scopes may have changed since it was minted; refreshing and retrying once');
+    _tokenCache = null;
+    resp = await shopifyOnce(query, variables, true);
+  }
+
   return handleShopifyResponse(resp);
 }
 
@@ -348,8 +399,14 @@ function handleShopifyResponse(resp) {
   if (body.errors && body.errors.length) {
     const msg = body.errors.map((e) => e.message).join('; ');
     console.error(`[shirt-orders] Shopify GraphQL errors: ${msg}`);
-    const err = new Error(msg);
+
+    // Shopify reports a missing scope as "Access denied for <field> field",
+    // which names the field but not the scope you have to add. Translate it,
+    // because the fix is a specific checkbox in a specific place.
+    const denied = /access denied for (\w+) field/i.exec(msg);
+    const err = new Error(denied ? scopeAdviceFor(denied[1], msg) : msg);
     err.status = 502;
+    err.missingScope = denied ? SCOPE_FOR_FIELD[denied[1].toLowerCase()] || null : null;
     throw err;
   }
 
@@ -593,17 +650,39 @@ export default async (req) => {
 };
 
 async function handleGet() {
-  try {
-    // Both calls hit Shopify; run them together.
-    const [product, ordersByDeal] = await Promise.all([
-      fetchShirtProduct(false),
-      fetchOrdersByDeal()
-    ]);
-    return json(200, { ok: true, product, ordersByDeal });
-  } catch (err) {
-    console.error(`[shirt-orders] GET failed: ${err.message}`);
+  // The two queries are independent and only one of them is load-bearing.
+  // Reading the product is what makes ordering possible at all; reading past
+  // orders only powers the "Ordered" badge. They also need different scopes, so
+  // treat them separately — a store that has granted write_orders/read_products
+  // but not read_orders should still be able to order shirts, just without
+  // duplicate detection. Failing the whole endpoint over the optional half is
+  // what turned a missing scope into "the feature is broken".
+  const [productResult, ordersResult] = await Promise.allSettled([
+    fetchShirtProduct(false),
+    fetchOrdersByDeal()
+  ]);
+
+  if (productResult.status === 'rejected') {
+    const err = productResult.reason || {};
+    console.error(`[shirt-orders] GET failed — cannot read the product: ${err.message}`);
     return json(err.status || 500, { error: err.message, detail: err.detail || null });
   }
+
+  let ordersByDeal = {};
+  let ordersWarning = null;
+  if (ordersResult.status === 'fulfilled') {
+    ordersByDeal = ordersResult.value;
+  } else {
+    const err = ordersResult.reason || {};
+    console.error(`[shirt-orders] existing orders unavailable: ${err.message}`);
+    ordersWarning = err.missingScope
+      ? `Can't check which students already have a shirt — the app is missing the ${err.missingScope} scope. ` +
+        'Ordering still works, but the "Ordered" badge is hidden and duplicates are not detected.'
+      : `Can't check which students already have a shirt: ${err.message} ` +
+        'Ordering still works, but duplicates are not detected.';
+  }
+
+  return json(200, { ok: true, product: productResult.value, ordersByDeal, ordersWarning });
 }
 
 async function handlePost(req, user) {

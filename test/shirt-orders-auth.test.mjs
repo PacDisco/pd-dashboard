@@ -34,6 +34,8 @@ let graphqlStatusQueue = [];      // shift()ed per call; undefined → 200
 let orderCreateUserErrors = [];
 let hubspotShouldFail = false;
 let inventoryQuantity = 34;
+let denyField = null;   // e.g. 'orders' → simulate a missing read_orders scope
+let denyUntilRefresh = false;  // deny only while the FIRST minted token is in use
 
 const jsonResponse = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { 'Content-Type': 'application/json' }
@@ -109,6 +111,16 @@ globalThis.fetch = async (url, init) => {
     const status = graphqlStatusQueue.length ? graphqlStatusQueue.shift() : 200;
     if (status !== 200) return new Response('[API] Invalid API key or access token', { status });
     const q = JSON.parse(init.body).query;
+    // A token minted before the scope was granted is denied; the second one works.
+    if (denyUntilRefresh && q.includes('ShirtOrders') && calls.oauth < 2) {
+      return jsonResponse({ errors: [{ message: 'Access denied for orders field.' }] });
+    }
+    if (denyField && q.includes('ShirtOrders') && denyField === 'orders') {
+      return jsonResponse({ errors: [{ message: 'Access denied for orders field.' }] });
+    }
+    if (denyField && q.includes('ShirtProduct') && denyField === 'product') {
+      return jsonResponse({ errors: [{ message: 'Access denied for product field.' }] });
+    }
     if (q.includes('ShirtProduct')) return jsonResponse(PRODUCT_RESPONSE());
     if (q.includes('ShirtOrders')) return jsonResponse(ORDERS_RESPONSE);
     if (q.includes('CreateShirtOrder')) return jsonResponse(ORDER_CREATE_RESPONSE());
@@ -168,7 +180,7 @@ const reset = () => {
   identityRoles = ['admin']; identityOk = true;
   oauthStatus = 200; oauthToken = 'minted-token-1';
   graphqlStatusQueue = []; orderCreateUserErrors = [];
-  hubspotShouldFail = false; inventoryQuantity = 34;
+  hubspotShouldFail = false; inventoryQuantity = 34; denyField = null; denyUntilRefresh = false;
   delete process.env.SHOPIFY_ADMIN_TOKEN;
   process.env.SHOPIFY_CLIENT_ID = 'client-id';
   process.env.SHOPIFY_CLIENT_SECRET = 'client-secret';
@@ -409,6 +421,61 @@ check('a HubSpot note failure is a warning, never a failed order', () => {
   assert.equal(data.ok, true);
   assert.equal(data.order.orderName, '#1043');
   assert.match(data.warning, /logging it to HubSpot failed/);
+});
+
+// ═══════════════════════════════════════════
+// 8b. Missing scopes degrade, they don't break
+// ═══════════════════════════════════════════
+reset();
+denyField = 'orders';
+mod = await freshModule();
+resp = await mod.default(req('GET'));
+data = await resp.json();
+check('a missing read_orders still returns the product so ordering works', () => {
+  assert.equal(resp.status, 200, 'the optional half must not fail the endpoint');
+  assert.equal(data.ok, true);
+  assert.equal(data.product.title, 'Pacific Discovery T-Shirt');
+  assert.deepEqual(data.ordersByDeal, {}, 'no badge data, but no crash');
+});
+check('the missing scope is named, not just the denied field', () => {
+  assert.match(data.ordersWarning, /read_orders/);
+  assert.match(data.ordersWarning, /Ordering still works/);
+});
+
+// Ordering itself must still succeed with read_orders absent.
+reset();
+denyField = 'orders';
+mod = await freshModule();
+resp = await mod.default(req('POST', GOOD_ORDER));
+data = await resp.json();
+check('an order can still be placed without read_orders', () => {
+  assert.equal(resp.status, 200);
+  assert.equal(data.order.orderName, '#1043');
+});
+
+// A denied product read IS fatal — nothing can be ordered without variants.
+reset();
+denyField = 'product';
+mod = await freshModule();
+resp = await mod.default(req('GET'));
+data = await resp.json();
+check('a denied product read fails loudly and names read_products', () => {
+  assert.equal(resp.status, 502);
+  assert.match(data.error, /read_products/);
+  assert.match(data.error, /Dev Dashboard/);
+});
+
+// A newly granted scope must not require waiting out the 24h token cache.
+reset();
+denyUntilRefresh = true;
+mod = await freshModule();
+resp = await mod.default(req('GET'));
+data = await resp.json();
+check('access-denied on a cached token triggers a re-mint, not a day of waiting', () => {
+  assert.equal(resp.status, 200);
+  assert.ok(calls.oauth >= 2, `expected a refresh mint, saw ${calls.oauth} exchange(s)`);
+  assert.equal(data.ordersWarning, null, 'the retry should have succeeded, leaving no warning');
+  assert.ok(data.ordersByDeal['101'], 'orders should be readable after the re-mint');
 });
 
 // ═══════════════════════════════════════════

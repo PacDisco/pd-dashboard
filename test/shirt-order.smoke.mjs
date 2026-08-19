@@ -260,9 +260,13 @@ const consoleErrors = [];
 page.on('pageerror', (e) => consoleErrors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 
-// Tailwind comes from a CDN that isn't reachable here; stub it so layout code
-// doesn't hang the load. The test asserts behaviour, not pixels.
-await page.route('**/tailwind*.css', (r) => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
+// Tailwind comes from a CDN that isn't reachable here. Serve a real copy when
+// one is cached at TAILWIND_CSS, otherwise fall back to an empty stylesheet.
+// It matters: this page pins Tailwind 2.2.19, which emits no `disabled:`
+// variants, and stubbing the CSS away would hide any dead-class bug.
+let tailwindCss = '';
+try { tailwindCss = readFileSync(process.env.TAILWIND_CSS || '/tmp/tailwind.min.css', 'utf8'); } catch {}
+await page.route('**/tailwind*.css', (r) => r.fulfill({ status: 200, contentType: 'text/css', body: tailwindCss }));
 
 await page.goto(`${base}/enrollment/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#dashboard:not(.hidden)', { timeout: 15000 });
@@ -472,10 +476,19 @@ await page.evaluate(() => {
   openShirtModal('101');
 });
 await page.waitForSelector('#shirt-modal:not(.hidden)');
-const unavailable = await page.evaluate(() => ({
-  err: document.getElementById('shirt-error').textContent,
-  disabled: document.getElementById('shirt-submit').disabled
-}));
+const unavailable = await page.evaluate(() => {
+  const b = document.getElementById('shirt-submit');
+  return {
+    err: document.getElementById('shirt-error').textContent,
+    disabled: b.disabled,
+    // A disabled button must also LOOK disabled. Tailwind 2.2.19 ships no
+    // `disabled:` variants, so `disabled:opacity-50` is dead CSS and the button
+    // would render identically to a live one — clicking it would do nothing with
+    // no explanation. Assert the computed style, not the class list.
+    opacity: parseFloat(getComputedStyle(b).opacity),
+    cursor: getComputedStyle(b).cursor
+  };
+});
 check('an unreachable Shopify relays the server reason without contradicting it', () => {
   assert.match(unavailable.err, /rejected the client credentials/);
   assert.ok(!/SHOPIFY_ADMIN_TOKEN/.test(unavailable.err),
@@ -484,7 +497,33 @@ check('an unreachable Shopify relays the server reason without contradicting it'
 check('the order button is disabled while Shopify is unreachable', () => {
   assert.equal(unavailable.disabled, true);
 });
+check('the disabled button is visibly disabled, not just inert', () => {
+  assert.ok(unavailable.opacity < 1, `computed opacity was ${unavailable.opacity} — looks clickable`);
+  assert.equal(unavailable.cursor, 'not-allowed');
+});
 await page.evaluate(() => { delete window.__shirtUnavailable; closeShirtModal(); });
+
+// ── 8d. read_orders missing → warn, but stay usable ────────────────────
+await page.evaluate(() => {
+  window.__shirtOrdersWarning = 'Can\u2019t check which students already have a shirt — the app is missing the read_orders scope. Ordering still works, but the "Ordered" badge is hidden and duplicates are not detected.';
+  openShirtModal('105');   // a student with no existing order
+});
+await page.waitForSelector('#shirt-modal:not(.hidden)');
+const degraded = await page.evaluate(() => ({
+  warn: document.getElementById('shirt-existing').textContent,
+  warnHidden: document.getElementById('shirt-existing').classList.contains('hidden'),
+  disabled: document.getElementById('shirt-submit').disabled,
+  err: document.getElementById('shirt-error').classList.contains('hidden')
+}));
+check('a missing read_orders warns in the duplicate slot rather than erroring', () => {
+  assert.equal(degraded.warnHidden, false);
+  assert.match(degraded.warn, /read_orders/);
+  assert.equal(degraded.err, true, 'this is not a hard error');
+});
+check('ordering stays enabled when only the orders lookup failed', () => {
+  assert.equal(degraded.disabled, false, 'a hidden badge must not block ordering');
+});
+await page.evaluate(() => { delete window.__shirtOrdersWarning; closeShirtModal(); });
 
 // ── 9. Duplicate warning ───────────────────────────────────────────────
 await (await rowFor('Nia Tomalin')).$eval('td:last-child button[data-shirt-deal]', (b) => b.click());

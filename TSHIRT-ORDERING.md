@@ -64,9 +64,19 @@ SHOPIFY_ADMIN_TOKEN = shpat_xxxxxxxxxxxxxxxxxxxxx
 | Scope | Why |
 |---|---|
 | `write_orders` | create the order |
-| `read_orders` | find existing orders for the "Ordered" badge |
+| `read_orders` | find existing orders for the "Ordered" badge — **optional**, see below |
 | `read_products` | read the shirt's variants and live stock |
 | `write_customers` | attach the student as the order's customer |
+
+Only `read_products` and `write_orders` are strictly required. Without
+`read_orders` the feature still works — you just lose the "Ordered" badge and
+duplicate detection, and the popup says so. Without `read_products` nothing can
+be ordered, and that failure is loud.
+
+Note that `read_orders` only exposes the **last 60 days** of orders. A shirt
+ordered longer ago than that stops showing an "Ordered" badge, so a student could
+be double-ordered a season later. Widening that needs the `read_all_orders`
+scope, which requires a permission request to Shopify.
 
 Optional variables, only needed if something changes:
 
@@ -216,6 +226,29 @@ only`, and the badges show as unverified. The parsed application index is cached
 for 10 minutes in the warm container, so the steady-state cost of this feature
 on `/api/enrollment` is nil.
 
+## Adding a scope after the app is installed
+
+Three things have to happen, and the third is easy to miss:
+
+1. Add the scope to a new app version in the Dev Dashboard and **Release** it.
+2. **Approve the new scopes on the store.** Shopify does not apply them to an
+   already-installed app automatically.
+3. Nothing — the dashboard handles the rest. Scopes are baked into the access
+   token when it is minted, and a token lives 24 hours, so a token cached from
+   before the change still lacks the new scope. Shopify reports that as an
+   access-denied error inside an HTTP 200, not a 401, so the ordinary
+   refresh-on-401 path would miss it. The function treats access-denied as a
+   possible stale token, re-mints once, and retries — so a newly granted scope
+   works immediately instead of after a redeploy or a day's wait.
+
+## If a scope is missing
+
+Shopify reports this as `Access denied for <field> field`, which names the field
+but not the scope. The dashboard translates it: the message tells you which
+scope to add, that it goes in Dev Dashboard → Versions → Release, and that new
+scopes must then be approved in the store admin — they are **not** applied to an
+already-installed app automatically.
+
 ## If the Shopify credentials are wrong
 
 The error in the popup names the specific cause rather than relaying a status
@@ -228,6 +261,25 @@ site whose app only has Client ID/Secret.
 The Shirt Size column still works — it's HubSpot + Jotform only. The T-Shirt
 column falls back to plain "Order T-Shirt" buttons, and clicking one explains
 that Shopify isn't reachable instead of failing on submit.
+
+---
+
+## A note on Tailwind
+
+This page pins **Tailwind 2.2.19** from a CDN, and that build is narrower than
+current Tailwind in two ways that have already bitten this feature:
+
+- **No `teal` or `amber`** in the palette. Those classes emit nothing, so a
+  button styled with them renders white-on-white. The T-shirt UI uses
+  indigo/yellow/green, which do exist.
+- **No `disabled:` variants at all.** `disabled:opacity-50` is dead CSS, so a
+  disabled button looks identical to a live one. There is an explicit
+  `button:disabled` rule in the page's `<style>` block for this reason — don't
+  remove it in favour of a `disabled:` utility.
+
+`npm run test:shirt-ui` serves a real copy of the pinned stylesheet (from
+`/tmp/tailwind.min.css`, or `TAILWIND_CSS`) rather than stubbing it out, and
+asserts computed styles, so a dead class fails the test instead of shipping.
 
 ---
 
@@ -259,8 +311,8 @@ Reading (`GET`) needs any dashboard role. Ordering (`POST`) needs one of
 | `enrollment/index.html` | Shirt Size column, T-Shirt column, order popup, Ordered badge. Column sorting now keyed off `data-sort` instead of column index, so the money columns can't silently break again. |
 | `netlify.toml` | `timeout = 26` for `enrollment` and `shirt-orders`. |
 | `test/enrollment-shirt.test.mjs` | **New.** 24 assertions on the server-side resolution rules, with both upstreams stubbed. |
-| `test/shirt-order.smoke.mjs` | **New.** 35 assertions driving the real page in headless Chromium. |
-| `test/shirt-orders-auth.test.mjs` | **New.** 26 assertions on Shopify credential handling and the order guardrails, all upstreams stubbed. |
+| `test/shirt-order.smoke.mjs` | **New.** 38 assertions driving the real page in headless Chromium. |
+| `test/shirt-orders-auth.test.mjs` | **New.** 31 assertions on Shopify credential handling and the order guardrails, all upstreams stubbed. |
 
 ## Tests
 
@@ -270,5 +322,5 @@ npm run test:shirt-auth  # Shopify credentials + order guardrails (no network)
 npm run test:shirt-ui    # full page in headless Chromium (needs playwright)
 ```
 
-All 85 assertions pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
+All 93 assertions pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
 installed.

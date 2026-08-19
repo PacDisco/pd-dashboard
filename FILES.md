@@ -10,8 +10,8 @@ Nothing else in the project was touched.
 | `netlify/functions/_shared/shirt.js` | Size vocabulary mapping (X-small/Small/…/XX-large → XS/S/…/2XL), ISO country + province code resolution, address shaping. Shared by the two functions below. |
 | `netlify/functions/shirt-orders.mjs` | `GET /api/shirt-orders` returns live variants + existing orders for the Ordered badge. `POST` creates the paid Shopify order and logs the HubSpot deal note. Verifies the Netlify Identity token — read the header comment before editing. |
 | `test/enrollment-shirt.test.mjs` | 24 assertions on the server-side size/address resolution rules, both upstreams stubbed. No network. `npm run test:shirt` |
-| `test/shirt-order.smoke.mjs` | 35 assertions driving the real page in headless Chromium against mocked APIs. `npm run test:shirt-ui` |
-| `test/shirt-orders-auth.test.mjs` | 26 assertions on Shopify credential handling (client credentials grant, token caching/refresh) and the order guardrails. `npm run test:shirt-auth` |
+| `test/shirt-order.smoke.mjs` | 38 assertions driving the real page in headless Chromium against mocked APIs. `npm run test:shirt-ui` |
+| `test/shirt-orders-auth.test.mjs` | 31 assertions on Shopify credential handling (client credentials grant, token caching/refresh) and the order guardrails. `npm run test:shirt-auth` |
 | `TSHIRT-ORDERING.md` | Setup steps, resolution rules, failure behaviour, auth notes. |
 
 ## Changed files (4)
