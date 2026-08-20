@@ -174,6 +174,11 @@ const SHOPIFY_OAUTH_TOKEN_URL = `https://${SHOPIFY_DOMAIN}/admin/oauth/access_to
 // with a token that expires mid-flight.
 const TOKEN_SKEW_MS = 5 * 60 * 1000;
 let _tokenCache = null;   // { token, expiresAt }
+// The scope list Shopify returns with the token — i.e. what the INSTALL actually
+// granted, which is not necessarily what the app version declares. The gap
+// between those two is the single most confusing failure in this integration, so
+// keep it to hand and report it.
+let _grantedScopes = '';
 // GET fires two Shopify queries concurrently, and on a cold container both
 // would race to mint their own token — two OAuth round trips for one request,
 // and needless load on an endpoint Shopify rate-limits. Concurrent callers
@@ -259,6 +264,7 @@ async function mintAccessToken(forceRefresh) {
     throw err;
   }
 
+  _grantedScopes = String(parsed.scope || '');
   const ttlMs = (Number(parsed.expires_in) || 86399) * 1000;
   _tokenCache = { token: parsed.access_token, expiresAt: Date.now() + Math.max(ttlMs - TOKEN_SKEW_MS, 30_000) };
   console.log(`[shirt-orders] minted a Shopify access token (scopes: ${parsed.scope || 'unknown'}, ttl ${Math.round(ttlMs / 1000)}s)`);
@@ -283,10 +289,29 @@ const SCOPE_FOR_FIELD = {
 function scopeAdviceFor(field, rawMessage) {
   const scope = SCOPE_FOR_FIELD[String(field).toLowerCase()];
   if (!scope) return rawMessage;
-  return `Shopify denied access to "${field}" — the app is missing the ${scope} scope. ` +
-    'Add it in the Dev Dashboard (Versions → scopes → Release), then approve the ' +
-    'updated scopes in the store admin: new scopes are not applied to an already ' +
-    'installed app automatically.';
+
+  const granted = _grantedScopes
+    ? _grantedScopes.split(',').map((x) => x.trim()).filter(Boolean)
+    : [];
+  const hasIt = granted.includes(scope);
+  const grantedNote = granted.length
+    ? ` The access token currently grants: ${granted.join(', ')}.`
+    : '';
+
+  // Two very different situations, and telling them apart saves a lot of time.
+  if (hasIt) {
+    // Declared, granted, still refused — not a scope-list problem.
+    return `Shopify denied access to "${field}" even though the token grants ${scope}.` +
+      grantedNote +
+      ' That usually means the data is gated behind protected-customer-data approval ' +
+      'for this app, rather than a missing scope.';
+  }
+  return `Shopify denied access to "${field}" — the ${scope} scope is not granted to ` +
+    'this installation.' + grantedNote +
+    ' If the scope IS listed on your released app version, the install itself is still ' +
+    'on the old scope set: re-install the app on the store (Dev Dashboard → Home → ' +
+    'Install app) to trigger the approval prompt for the new scopes. Releasing a ' +
+    'version does not re-grant scopes on its own.';
 }
 
 // ═══════════════════════════════════════════
@@ -745,7 +770,18 @@ async function handlePost(req, user) {
 
     const nameBits = studentName.split(/\s+/).filter(Boolean);
     const orderInput = {
-      lineItems: [{ variantId: variant.id, quantity }],
+      lineItems: [{
+        variantId: variant.id,
+        quantity,
+        // MUST be set explicitly. orderCreate is an order-INGESTION mutation —
+        // it takes the line item's attributes as given rather than deriving them
+        // from the variant, so an unspecified requiresShipping lands as false
+        // even though every shirt variant has requiresShipping: true. The result
+        // is an order Shopify considers to need no shipping: it skips the
+        // fulfillment/shipping workflow, so no label gets bought and the box
+        // never goes out. These are physical shirts; say so.
+        requiresShipping: true
+      }],
       shippingAddress: shipping,
       // Marked paid on purpose: these shirts are included in the program fee,
       // so the order should land in fulfilment without an amount owing.

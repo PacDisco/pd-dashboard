@@ -189,7 +189,8 @@ without a human seeing it.
    anything the client let through.
 3. Live stock check — 3XL currently has 0 on hand, so it's disabled in the
    dropdown and refused server-side with the actual number remaining.
-4. `orderCreate` with `financialStatus: PAID`, no shipping line (free), tagged
+4. `orderCreate` with `requiresShipping: true` on the line item,
+   `financialStatus: PAID`, no shipping line (so shipping is free), tagged
    `pd-shirt` and `pd-deal-<dealId>`, with the student, deal id and your email
    as order attributes so whoever packs the box knows who it's for.
 5. A note on the HubSpot deal: size, quantity, order number and link, where it
@@ -244,10 +245,21 @@ Three things have to happen, and the third is easy to miss:
 ## If a scope is missing
 
 Shopify reports this as `Access denied for <field> field`, which names the field
-but not the scope. The dashboard translates it: the message tells you which
-scope to add, that it goes in Dev Dashboard → Versions → Release, and that new
-scopes must then be approved in the store admin — they are **not** applied to an
-already-installed app automatically.
+but not the scope. The dashboard translates it, and — importantly — reports the
+scopes the **access token actually grants**, which is what the *installation*
+approved, not what the app version declares. Those two drift apart constantly,
+and the gap is invisible in Shopify's own error.
+
+So the message distinguishes two cases:
+
+- **Not granted to this installation.** The scope is missing from the token. If
+  it *is* listed on your released app version, the install is still on the old
+  scope set — re-install the app (Dev Dashboard → Home → Install app) to trigger
+  the approval prompt. Releasing a version does not re-grant scopes.
+- **Granted but still refused.** The token has the scope and Shopify refused
+  anyway, which points at protected-customer-data approval rather than the scope
+  list. A different problem, and it says so instead of sending you back to the
+  scope checkboxes.
 
 ## If the Shopify credentials are wrong
 
@@ -263,6 +275,26 @@ column falls back to plain "Order T-Shirt" buttons, and clicking one explains
 that Shopify isn't reachable instead of failing on submit.
 
 ---
+
+## A note on orderCreate line items
+
+`orderCreate` is an order-**ingestion** mutation: it takes each line item's
+attributes as given rather than deriving them from the variant. So fields you
+leave out are not inherited — they default. That bit us once already:
+
+- **`requiresShipping` must be set explicitly.** Every shirt variant has
+  `requiresShipping: true` in the store, but omitting it on the line item
+  produced orders Shopify considered to need no shipping. Those orders skip the
+  fulfillment/shipping workflow entirely — no label, no parcel. It is now set
+  to `true`, with a test asserting it.
+- **`taxable` is left unset (so, false)** on purpose. These shirts are included
+  in the program fee and not being sold, so no tax is collected. Set it if that
+  assumption ever changes.
+
+Separately, all seven variants currently have a weight of **0 kg** in Shopify.
+That is fine while shipping is free and manual, but carrier-calculated rates and
+international customs forms both need a real weight — worth filling in before
+relying on either.
 
 ## A note on Tailwind
 
@@ -312,7 +344,7 @@ Reading (`GET`) needs any dashboard role. Ordering (`POST`) needs one of
 | `netlify.toml` | `timeout = 26` for `enrollment` and `shirt-orders`. |
 | `test/enrollment-shirt.test.mjs` | **New.** 24 assertions on the server-side resolution rules, with both upstreams stubbed. |
 | `test/shirt-order.smoke.mjs` | **New.** 38 assertions driving the real page in headless Chromium. |
-| `test/shirt-orders-auth.test.mjs` | **New.** 31 assertions on Shopify credential handling and the order guardrails, all upstreams stubbed. |
+| `test/shirt-orders-auth.test.mjs` | **New.** 35 assertions on Shopify credential handling and the order guardrails, all upstreams stubbed. |
 
 ## Tests
 
@@ -322,5 +354,5 @@ npm run test:shirt-auth  # Shopify credentials + order guardrails (no network)
 npm run test:shirt-ui    # full page in headless Chromium (needs playwright)
 ```
 
-All 93 assertions pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
+All 97 assertions pass. `test:shirt-ui` skips cleanly with a message if Playwright isn't
 installed.

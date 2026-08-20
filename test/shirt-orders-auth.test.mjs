@@ -36,6 +36,8 @@ let hubspotShouldFail = false;
 let inventoryQuantity = 34;
 let denyField = null;   // e.g. 'orders' → simulate a missing read_orders scope
 let denyUntilRefresh = false;  // deny only while the FIRST minted token is in use
+let grantedScopes = 'write_orders,read_orders,read_products,write_customers';
+let lastOrderInput = null;
 
 const jsonResponse = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { 'Content-Type': 'application/json' }
@@ -102,7 +104,7 @@ globalThis.fetch = async (url, init) => {
     assert.match(body, /grant_type=client_credentials/);
     assert.match(body, /client_id=/);
     assert.match(body, /client_secret=/);
-    return jsonResponse({ access_token: oauthToken, scope: 'write_orders,read_orders', expires_in: 86399 });
+    return jsonResponse({ access_token: oauthToken, scope: grantedScopes, expires_in: 86399 });
   }
 
   if (u.includes('/admin/api/') && u.includes('graphql.json')) {
@@ -123,7 +125,10 @@ globalThis.fetch = async (url, init) => {
     }
     if (q.includes('ShirtProduct')) return jsonResponse(PRODUCT_RESPONSE());
     if (q.includes('ShirtOrders')) return jsonResponse(ORDERS_RESPONSE);
-    if (q.includes('CreateShirtOrder')) return jsonResponse(ORDER_CREATE_RESPONSE());
+    if (q.includes('CreateShirtOrder')) {
+      lastOrderInput = JSON.parse(init.body).variables;
+      return jsonResponse(ORDER_CREATE_RESPONSE());
+    }
     throw new Error(`unexpected GraphQL: ${q.slice(0, 60)}`);
   }
 
@@ -181,6 +186,7 @@ const reset = () => {
   oauthStatus = 200; oauthToken = 'minted-token-1';
   graphqlStatusQueue = []; orderCreateUserErrors = [];
   hubspotShouldFail = false; inventoryQuantity = 34; denyField = null; denyUntilRefresh = false;
+  grantedScopes = 'write_orders,read_orders,read_products,write_customers';
   delete process.env.SHOPIFY_ADMIN_TOKEN;
   process.env.SHOPIFY_CLIENT_ID = 'client-id';
   process.env.SHOPIFY_CLIENT_SECRET = 'client-secret';
@@ -392,6 +398,26 @@ check('a valid order is created and reported back with its Shopify identity', ()
   assert.match(data.order.adminUrl, /orders\/1000$/);
   assert.equal(data.warning, null);
 });
+check('the line item is marked as requiring shipping', () => {
+  // orderCreate does not inherit requiresShipping from the variant. Left unset it
+  // defaults to false, and Shopify then treats the order as needing no shipping —
+  // it never enters the fulfillment queue and the shirt is never posted.
+  const li = lastOrderInput.order.lineItems[0];
+  assert.equal(li.requiresShipping, true, 'a physical shirt must require shipping');
+  assert.equal(li.variantId, 'gid://shopify/ProductVariant/3');
+  assert.equal(li.quantity, 1);
+});
+
+check('the order carries the shipping address and paid status', () => {
+  const o = lastOrderInput.order;
+  assert.equal(o.financialStatus, 'PAID');
+  assert.equal(o.shippingAddress.address1, '4145 Captain Jack ln');
+  assert.equal(o.shippingAddress.countryCode, 'US');
+  assert.equal(o.shippingAddress.provinceCode, 'CO', 'the full state name must be sent as a code');
+  assert.ok(o.tags.includes('pd-shirt'));
+  assert.ok(o.tags.includes('pd-deal-101'));
+});
+
 check('the order is logged as a note associated to the deal', () => {
   assert.equal(calls.notes, 1);
   assert.equal(calls.associations, 1);
@@ -462,7 +488,35 @@ data = await resp.json();
 check('a denied product read fails loudly and names read_products', () => {
   assert.equal(resp.status, 502);
   assert.match(data.error, /read_products/);
-  assert.match(data.error, /Dev Dashboard/);
+});
+
+// The install granted an older, narrower scope set than the released version
+// declares — the case that is genuinely hard to diagnose from Shopify's message.
+reset();
+denyField = 'product';
+grantedScopes = 'write_orders,read_orders';   // read_products never granted
+mod = await freshModule();
+resp = await mod.default(req('GET'));
+data = await resp.json();
+check('a scope missing from the INSTALL is distinguished from a missing declaration', () => {
+  assert.match(data.error, /not granted to this installation/);
+  assert.match(data.error, /currently grants: write_orders, read_orders/,
+    'listing the granted scopes is what proves where the gap is');
+  assert.match(data.error, /re-install the app/);
+});
+
+// Granted but still refused — a different problem, and must not be misreported
+// as a missing scope.
+reset();
+denyField = 'product';
+grantedScopes = 'write_orders,read_orders,read_products,write_customers';
+mod = await freshModule();
+resp = await mod.default(req('GET'));
+data = await resp.json();
+check('a granted-but-refused scope is not misreported as missing', () => {
+  assert.match(data.error, /even though the token grants read_products/);
+  assert.ok(!/not granted to this installation/.test(data.error));
+  assert.match(data.error, /protected-customer-data/);
 });
 
 // A newly granted scope must not require waiting out the 24h token cache.
