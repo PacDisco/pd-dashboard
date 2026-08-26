@@ -87,6 +87,18 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .meta { color: var(--muted); font-size: 12px; margin: 0 0 22px; }
+  .compare-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--muted);
+    font-size: 12px; text-transform: uppercase; letter-spacing: .07em; cursor: pointer; }
+  .compare-toggle input { accent-color: var(--accent-2); cursor: pointer; }
+  .sep { color: var(--muted); font-size: 13px; }
+  .pill.active { color: var(--pd-black); background: var(--accent-2); border-color: var(--accent-2); }
+  .delta { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+  .delta.up { color: var(--up); background: rgba(129,194,67,0.14); }
+  .delta.down { color: var(--down); background: rgba(241,92,57,0.14); }
+  .delta.flat { color: var(--muted); background: rgba(138,148,156,0.12); }
+  .delta.new { color: var(--accent); background: rgba(85,187,210,0.14); }
+  .prev-val { color: var(--muted); font-size: 11px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  td.cmp { color: var(--accent-2); }
 
   /* KPIs */
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
@@ -143,6 +155,13 @@
   input.cell:focus { border-color: var(--accent); }
   input.cell.dirty { border-color: var(--accent-2); background: rgba(129,194,67,0.08); }
 
+  .fx-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; flex-wrap: wrap; }
+  .fx-bar label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
+  select.cur {
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 5px; padding: 2px 5px; font-family: inherit; font-size: 10px; margin-left: 6px;
+  }
+  select.cur:focus { border-color: var(--accent); color: var(--text); }
   .save-bar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
   .save-note { color: var(--muted); font-size: 12px; }
 
@@ -171,6 +190,18 @@
     <button class="pill" data-preset="6">Last 6 months</button>
     <button class="pill" data-preset="3">Last 3 months</button>
     <button class="primary" id="refresh">Apply</button>
+  </section>
+
+  <section class="ranges" id="compare-row">
+    <label class="compare-toggle" for="compare-on">
+      <input type="checkbox" id="compare-on" />
+      Compare to
+    </label>
+    <input type="month" id="from-b" class="hidden" />
+    <span class="sep hidden" id="cmp-sep">→</span>
+    <input type="month" id="to-b" class="hidden" />
+    <button class="pill hidden" data-cmp="yoy" id="cmp-yoy">Same period last year</button>
+    <button class="pill hidden" data-cmp="prev" id="cmp-prev">Previous period</button>
   </section>
 
   <p class="meta" id="generated"></p>
@@ -208,7 +239,12 @@
 
     <div class="card wide">
       <h2>Ad spend</h2>
-      <p class="h-sub">The only figures on this page that are typed rather than read. Enter what the platform billed; NZD is what the rest of the dashboard uses. Meta bills in USD — set the rate per row so a historical figure can always be explained.</p>
+      <p class="h-sub">The only figures on this page that are typed rather than read. Enter what each platform billed you, in the currency it billed in. Set each column's currency once; everything else on the dashboard uses the NZD conversion.</p>
+      <div class="fx-bar">
+        <label for="fx-rate">USD → NZD rate</label>
+        <input type="number" id="fx-rate" class="cell" step="0.0001" min="0.0001" inputmode="decimal" aria-label="USD to NZD conversion rate" />
+        <span class="save-note" id="fx-note"></span>
+      </div>
       <div class="scroll"><table id="spend-table"><tbody></tbody></table></div>
       <div class="save-bar">
         <button class="primary" id="save-spend" disabled>Save changes</button>
@@ -269,6 +305,33 @@ function fmtMonthLabel(ym) {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-NZ', { month: 'short', year: '2-digit', timeZone: 'UTC' });
 }
 function sum(arr) { return (arr || []).reduce((a, b) => a + (Number(b) || 0), 0); }
+function rangeLength(fromYM, toYM) {
+  const [fy, fm] = fromYM.split('-').map(Number);
+  const [ty, tm] = toYM.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm) + 1;
+}
+/* A percentage move is only meaningful against a non-zero base. Going 0 → 5 is
+   "new", not "+infinity"; 0 → 0 is nothing at all. Anything inside ±1% reads as
+   flat so noise doesn't get dressed up as a trend. */
+function deltaBadge(curr, prev) {
+  if (prev === 0 || prev == null) {
+    return curr > 0 ? '<span class="delta new">new</span>' : '<span class="delta flat">—</span>';
+  }
+  const pct = ((curr - prev) / prev) * 100;
+  const sign = pct >= 0 ? '+' : '';
+  const cls = pct > 1 ? 'up' : pct < -1 ? 'down' : 'flat';
+  return `<span class="delta ${cls}">${sign}${pct.toFixed(0)}%</span>`;
+}
+/* Cost per outcome is inverted: paying less is better, so a fall is good news.
+   Rendering it with the same colour logic as volume would be actively
+   misleading. */
+function costDeltaBadge(curr, prev) {
+  if (!prev || !curr) return '';
+  const pct = ((curr - prev) / prev) * 100;
+  const cls = pct < -1 ? 'up' : pct > 1 ? 'down' : 'flat';
+  const sign = pct >= 0 ? '+' : '';
+  return `<span class="delta ${cls}">${sign}${pct.toFixed(0)}%</span>`;
+}
 function nz(n) { return `NZ$${(Number(n) || 0).toLocaleString('en-NZ', { maximumFractionDigits: 0 })}`; }
 function nz2(n) { return `NZ$${(Number(n) || 0).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 function int(n) { return (Number(n) || 0).toLocaleString('en-NZ'); }
@@ -292,6 +355,14 @@ const els = {
   spendTable:document.getElementById('spend-table'),
   saveBtn:   document.getElementById('save-spend'),
   saveNote:  document.getElementById('save-note'),
+  compareOn: document.getElementById('compare-on'),
+  fromB:     document.getElementById('from-b'),
+  toB:       document.getElementById('to-b'),
+  cmpSep:    document.getElementById('cmp-sep'),
+  cmpYoy:    document.getElementById('cmp-yoy'),
+  cmpPrev:   document.getElementById('cmp-prev'),
+  fxRate:    document.getElementById('fx-rate'),
+  fxNote:    document.getElementById('fx-note'),
 };
 
 const SKELS = ['cost', 'hs', 'jf', 'trend', 'spend'];
@@ -303,8 +374,17 @@ function showSkeletons(on) {
 }
 
 const state = {
-  funnel: null,   // sales-funnel-data payload
-  spend: null,    // marketing-spend payload
+  spendError: null,
+  /* Currency per spendable channel, and the single USD→NZD rate applied to
+     every USD figure in the range. Both are seeded from whatever is already
+     stored so the app never silently re-rates historical rows with a
+     different number than the one they were saved under. */
+  currency: {},
+  fx: null,
+  funnel: null,   // sales-funnel-data payload, period A
+  spend: null,    // marketing-spend payload, period A
+  funnelB: null,  // period B, or null when comparison is off
+  spendB: null,
   dirty: new Map(), // `${ym}|${channel}` -> { month, channel, amount, currency, fxToNzd }
 };
 let charts = {};
@@ -337,38 +417,60 @@ function spendCoveredMonths() {
     .filter((i) => i >= 0);
 }
 
+/* One place that reduces a (funnel, spend) pair to comparable totals, so
+   period A and period B can never be computed by different code paths. */
+function totalsFor(funnel, spendPayload) {
+  const chans = spendPayload.channels.filter((c) => sum(spendPayload.spend[c]) > 0);
+  const covered = funnel.months
+    .map((_, i) => (chans.some((c) => Number(spendPayload.spend[c][i]) > 0) ? i : -1))
+    .filter((i) => i >= 0);
+  return {
+    spend: chans.reduce((acc, c) => acc + sum(spendPayload.spend[c]), 0),
+    sessions: sum(funnel.traffic),
+    leads: sum(funnel.contacts),
+    opps: sum(funnel.opportunities),
+    sales: sum(funnel.totalSales),
+    coveredMonths: covered.length,
+    monthCount: funnel.months.length,
+    salesInCovered: covered.reduce((a, i) => a + (Number(funnel.totalSales[i]) || 0), 0),
+  };
+}
+
 function renderKpis() {
   const f = state.funnel;
-  const totalSpend = channelsWithSpend().reduce((acc, c) => acc + sum(state.spend.spend[c]), 0);
-  const leads = sum(f.contacts);
-  const opps = sum(f.opportunities);
-  const sales = sum(f.totalSales);
-  const sessions = sum(f.traffic);
+  const A = totalsFor(f, state.spend);
+  const B = state.funnelB ? totalsFor(state.funnelB, state.spendB) : null;
 
-  // Restrict the blended ratio to the months that actually carry spend.
-  const covered = spendCoveredMonths();
-  const allCovered = covered.length === f.months.length;
-  const salesInCovered = covered.reduce((a, i) => a + (Number(f.totalSales[i]) || 0), 0);
-  const costSub = !covered.length
+  const costSub = !A.coveredMonths
     ? 'no spend recorded'
-    : allCovered
+    : A.coveredMonths === A.monthCount
       ? 'blended, all channels'
-      : `over ${covered.length} of ${f.months.length} months with spend`;
+      : `over ${A.coveredMonths} of ${A.monthCount} months with spend`;
+
+  const costA = A.spend && A.salesInCovered ? A.spend / A.salesInCovered : 0;
+  const costB = B && B.spend && B.salesInCovered ? B.spend / B.salesInCovered : 0;
 
   const tiles = [
-    { label: 'Ad spend',      value: nz(totalSpend),  sub: covered.length ? `${covered.length} month${covered.length === 1 ? '' : 's'} recorded` : 'entered by hand' },
-    { label: 'Sessions',      value: int(sessions),   sub: f.trafficSource === 'hubspot' ? 'HubSpot analytics' : 'unavailable' },
-    { label: 'Leads',         value: int(leads),      sub: 'PD-tagged contacts' },
-    { label: 'Opportunities', value: int(opps),       sub: 'application fee paid' },
-    { label: 'Sales',         value: int(sales),      sub: 'deposit received' },
-    { label: 'Cost per sale', value: costPer(totalSpend, salesInCovered), sub: costSub },
+    { label: 'Ad spend', value: nz(A.spend), sub: A.coveredMonths ? `${A.coveredMonths} month${A.coveredMonths === 1 ? '' : 's'} recorded` : 'entered by hand',
+      delta: B ? deltaBadge(A.spend, B.spend) : '', prev: B ? nz(B.spend) : '' },
+    { label: 'Sessions', value: int(A.sessions), sub: f.trafficSource === 'hubspot' ? 'HubSpot analytics' : 'unavailable',
+      delta: B ? deltaBadge(A.sessions, B.sessions) : '', prev: B ? int(B.sessions) : '' },
+    { label: 'Leads', value: int(A.leads), sub: 'PD-tagged contacts',
+      delta: B ? deltaBadge(A.leads, B.leads) : '', prev: B ? int(B.leads) : '' },
+    { label: 'Opportunities', value: int(A.opps), sub: 'application fee paid',
+      delta: B ? deltaBadge(A.opps, B.opps) : '', prev: B ? int(B.opps) : '' },
+    { label: 'Sales', value: int(A.sales), sub: 'deposit received',
+      delta: B ? deltaBadge(A.sales, B.sales) : '', prev: B ? int(B.sales) : '' },
+    { label: 'Cost per sale', value: costPer(A.spend, A.salesInCovered), sub: costSub,
+      delta: B ? costDeltaBadge(costA, costB) : '', prev: B && costB ? nz(costB) : '' },
   ];
 
   els.kpis.innerHTML = tiles.map((t) => `
     <div class="kpi">
       <div class="label">${t.label}</div>
-      <div class="value">${t.value}</div>
+      <div class="value">${t.value}${t.delta || ''}</div>
       <div class="sub">${t.sub}</div>
+      ${t.prev ? `<div class="prev-val">was ${t.prev}</div>` : ''}
     </div>`).join('');
 }
 
@@ -378,16 +480,31 @@ function channelsWithSpend() {
   return state.spend.channels.filter((c) => sum(state.spend.spend[c]) > 0);
 }
 
+function channelTotals(funnel, spendPayload, label) {
+  const hs = funnel.bySource.hubspot;
+  return {
+    spend: spendPayload.spend[label] ? sum(spendPayload.spend[label]) : 0,
+    leads: sum(hs.contacts[label]),
+    opps: sum(hs.opportunities[label]),
+    sales: sum(hs.totalSales[label]),
+  };
+}
+
 function renderCostTable() {
   const hs = state.funnel.bySource.hubspot;
+  const cmp = !!state.funnelB;
   // Union of channels that have spend and channels that produced anything.
   const labels = new Set([...channelsWithSpend(), ...(hs.labels || [])]);
+  if (cmp) {
+    // A channel that existed only in the prior period still belongs in the
+    // table — dropping it would hide the fact that it stopped producing.
+    for (const l of state.funnelB.bySource.hubspot.labels || []) labels.add(l);
+    for (const c of state.spendB.channels) if (sum(state.spendB.spend[c]) > 0) labels.add(c);
+  }
   const rows = [...labels].map((label) => {
-    const spend = state.spend.spend[label] ? sum(state.spend.spend[label]) : 0;
-    const leads = sum(hs.contacts[label]);
-    const opps = sum(hs.opportunities[label]);
-    const sales = sum(hs.totalSales[label]);
-    return { label, spend, leads, opps, sales };
+    const a = channelTotals(state.funnel, state.spend, label);
+    const b = cmp ? channelTotals(state.funnelB, state.spendB, label) : null;
+    return { label, ...a, b };
   }).sort((a, b) => (b.spend - a.spend) || (b.sales - a.sales) || (b.leads - a.leads));
 
   const t = rows.reduce((acc, r) => ({
@@ -395,10 +512,28 @@ function renderCostTable() {
     opps: acc.opps + r.opps, sales: acc.sales + r.sales,
   }), { spend: 0, leads: 0, opps: 0, sales: 0 });
 
+  const tb = cmp ? rows.reduce((acc, r) => ({
+    spend: acc.spend + r.b.spend, leads: acc.leads + r.b.leads,
+    opps: acc.opps + r.b.opps, sales: acc.sales + r.b.sales,
+  }), { spend: 0, leads: 0, opps: 0, sales: 0 }) : null;
+
+  const cmpHead = cmp
+    ? '<th class="n cmp">Sales, prior</th><th class="n cmp">Cost / sale, prior</th><th class="n">Change</th>'
+    : '';
+  const cmpCells = (r) => {
+    if (!cmp) return '';
+    const costA = r.spend && r.sales ? r.spend / r.sales : 0;
+    const costB = r.b.spend && r.b.sales ? r.b.spend / r.b.sales : 0;
+    return `<td class="n cmp">${int(r.b.sales)}</td>
+            <td class="n cmp">${costPer(r.b.spend, r.b.sales)}</td>
+            <td class="n">${costA && costB ? costDeltaBadge(costA, costB) : deltaBadge(r.sales, r.b.sales)}</td>`;
+  };
+
   els.costTable.innerHTML = `
     <thead><tr>
       <th>Channel</th><th class="n">Spend</th><th class="n">Leads</th><th class="n">Opps</th>
       <th class="n">Sales</th><th class="n">Cost / lead</th><th class="n">Cost / opp</th><th class="n">Cost / sale</th>
+      ${cmpHead}
     </tr></thead>
     <tbody>
       ${rows.map((r) => `
@@ -411,6 +546,7 @@ function renderCostTable() {
           <td class="n">${costPer(r.spend, r.leads)}</td>
           <td class="n">${costPer(r.spend, r.opps)}</td>
           <td class="n">${costPer(r.spend, r.sales)}</td>
+          ${cmpCells(r)}
         </tr>`).join('')}
       <tr class="total">
         <td>All channels</td>
@@ -419,6 +555,9 @@ function renderCostTable() {
         <td class="n">${costPer(t.spend, t.leads)}</td>
         <td class="n">${costPer(t.spend, t.opps)}</td>
         <td class="n">${costPer(t.spend, t.sales)}</td>
+        ${cmp ? `<td class="n cmp">${int(tb.sales)}</td>
+                 <td class="n cmp">${costPer(tb.spend, tb.sales)}</td>
+                 <td class="n">${deltaBadge(t.sales, tb.sales)}</td>` : ''}
       </tr>
     </tbody>`;
 }
@@ -474,6 +613,18 @@ function renderTrend() {
     data: {
       labels: months.map(fmtMonthLabel),
       datasets: [
+        ...(state.funnelB ? [
+          /* Prior period is aligned by POSITION in the range, not by calendar
+             month — that's the only way a 12-month window can sit against the
+             same 12 months a year earlier on one axis. The dashed styling and
+             the axis labels (which stay on period A) keep that explicit. */
+          { type: 'line', label: 'Sales, prior', data: state.funnelB.totalSales,
+            borderColor: COLORS.green, borderDash: [4, 4], borderWidth: 1.5,
+            pointRadius: 0, tension: .3, yAxisID: 'y', order: 4 },
+          { type: 'line', label: 'Opportunities, prior', data: state.funnelB.opportunities,
+            borderColor: COLORS.navy, borderDash: [4, 4], borderWidth: 1.5,
+            pointRadius: 0, tension: .3, yAxisID: 'y', order: 5 },
+        ] : []),
         { type: 'bar', label: 'Ad spend (NZ$)', data: spendByMonth, backgroundColor: 'rgba(85,187,210,0.35)', borderColor: COLORS.teal, borderWidth: 1, borderRadius: 4, yAxisID: 'y1', order: 3 },
         { type: 'line', label: 'Leads', data: f.contacts, borderColor: COLORS.muted, backgroundColor: COLORS.muted, tension: .3, pointRadius: 2, yAxisID: 'y', order: 2 },
         { type: 'line', label: 'Opportunities', data: f.opportunities, borderColor: COLORS.navy, backgroundColor: COLORS.navy, tension: .3, pointRadius: 2, yAxisID: 'y', order: 1 },
@@ -504,12 +655,37 @@ function existingRow(ym, channel) {
   return (state.spend.rows || []).find((r) => r.month === ym && r.channel === channel);
 }
 
+/* Seed the currency selects and the FX box from what's already stored.
+   Falls back to a labelled assumption only when nothing has been saved yet —
+   an unset rate must never masquerade as a looked-up one. */
+function seedFxFromStored() {
+  const rows = state.spend.rows || [];
+  state.currency = {};
+  for (const c of SPENDABLE) {
+    const row = rows.find((r) => r.channel === c);
+    state.currency[c] = row ? row.currency : (c === 'Paid Social' ? 'USD' : 'NZD');
+  }
+  const usdRow = rows.find((r) => r.currency === 'USD' && r.fxToNzd > 0);
+  state.fx = usdRow ? usdRow.fxToNzd : null;
+  els.fxRate.value = state.fx == null ? '' : state.fx;
+  els.fxNote.textContent = state.fx == null
+    ? 'Not set — enter the rate your accounts use. USD figures are not converted until you do.'
+    : 'Applied to every USD figure below.';
+}
+
+function usesUsd() {
+  return SPENDABLE.some((c) => state.currency[c] === 'USD');
+}
+
 function renderSpendTable() {
   const months = state.spend.months;
   els.spendTable.innerHTML = `
     <thead><tr>
       <th>Month</th>
-      ${SPENDABLE.map((c) => `<th class="n">${c}</th>`).join('')}
+      ${SPENDABLE.map((c) => `<th class="n">${c}<select class="cur" data-cur-for="${c}" aria-label="${c} billing currency">
+            <option value="NZD"${state.currency[c] === 'NZD' ? ' selected' : ''}>NZD</option>
+            <option value="USD"${state.currency[c] === 'USD' ? ' selected' : ''}>USD</option>
+          </select></th>`).join('')}
       <th class="n">Month total (NZ$)</th>
     </tr></thead>
     <tbody>
@@ -519,23 +695,39 @@ function renderSpendTable() {
           ${SPENDABLE.map((c) => {
             const row = existingRow(ym, c);
             const val = row ? row.amount : '';
-            const cur = row ? row.currency : (c === 'Paid Social' ? 'USD' : 'NZD');
-            const fx = row ? row.fxToNzd : (c === 'Paid Social' ? 1.75 : 1);
+            const cur = state.currency[c];
             return `<td class="n">
               <input class="cell" type="number" step="0.01" min="0" inputmode="decimal"
                      value="${val}" data-month="${ym}" data-channel="${c}"
-                     data-currency="${cur}" data-fx="${fx}"
-                     aria-label="${c} spend for ${fmtMonthLabel(ym)}"
-                     title="${cur}${cur !== 'NZD' ? ` · converted at ${fx}` : ''}" />
+                     aria-label="${c} spend for ${fmtMonthLabel(ym)}, in ${cur}"
+                     title="${cur}" />
             </td>`;
           }).join('')}
           <td class="n dim" data-total-for="${ym}">${nz(SPENDABLE.reduce((a, c) => a + (state.spend.spend[c] ? Number(state.spend.spend[c][i]) || 0 : 0), 0))}</td>
         </tr>`).join('')}
     </tbody>`;
 
+  const editable = !state.spend.unavailable;
   els.spendTable.querySelectorAll('input.cell').forEach((inp) => {
-    inp.addEventListener('input', onCellEdit);
+    if (editable) inp.addEventListener('input', onCellEdit);
+    else inp.disabled = true;
   });
+  els.spendTable.querySelectorAll('select.cur').forEach((sel) => {
+    sel.disabled = !editable;
+    sel.addEventListener('change', () => {
+      state.currency[sel.dataset.curFor] = sel.value;
+      // Changing a column's currency re-rates every edited cell in it.
+      for (const [k, v] of state.dirty) {
+        if (v.channel === sel.dataset.curFor) {
+          v.currency = sel.value;
+          v.fxToNzd = sel.value === 'USD' ? (state.fx || 0) : 1;
+          state.dirty.set(k, v);
+        }
+      }
+      updateSaveBar();
+    });
+  });
+  els.fxRate.disabled = !editable;
 }
 
 function onCellEdit(e) {
@@ -549,12 +741,13 @@ function onCellEdit(e) {
     state.dirty.delete(key);
     inp.classList.remove('dirty');
   } else {
+    const cur = state.currency[inp.dataset.channel] || 'NZD';
     state.dirty.set(key, {
       month: inp.dataset.month,
       channel: inp.dataset.channel,
       amount: raw === '' ? 0 : Number(raw),
-      currency: inp.dataset.currency,
-      fxToNzd: Number(inp.dataset.fx) || 1,
+      currency: cur,
+      fxToNzd: cur === 'USD' ? (state.fx || 0) : 1,
     });
     inp.classList.add('dirty');
   }
@@ -563,10 +756,15 @@ function onCellEdit(e) {
 
 function updateSaveBar() {
   const n = state.dirty.size;
-  els.saveBtn.disabled = n === 0;
+  const needsFx = [...state.dirty.values()].some((v) => v.currency === 'USD') && !state.fx;
+  // Saving a USD figure with no rate would write amount_nzd = 0 and quietly
+  // erase that month's cost. Block it and say what's missing.
+  els.saveBtn.disabled = n === 0 || needsFx;
   els.saveNote.textContent = n === 0
     ? 'No unsaved changes.'
-    : `${n} cell${n === 1 ? '' : 's'} changed.`;
+    : needsFx
+      ? `${n} cell${n === 1 ? '' : 's'} changed — set the USD → NZD rate before saving.`
+      : `${n} cell${n === 1 ? '' : 's'} changed.`;
 }
 
 async function saveSpend() {
@@ -595,9 +793,34 @@ async function saveSpend() {
   }
 }
 
+/* A spend payload shaped exactly like the API's, but empty — lets every
+   renderer below stay oblivious to the fact that spend didn't load. */
+function emptySpend(months) {
+  const channels = ['Paid Search', 'Paid Social', 'Organic Search', 'Organic Social',
+    'Email Marketing', 'Direct Traffic', 'Referrals', 'Other Campaigns',
+    'Offline Sources', 'AI Referrals'];
+  return {
+    months,
+    channels,
+    spend: Object.fromEntries(channels.map((c) => [c, months.map(() => 0)])),
+    rows: [],
+    unavailable: true,
+  };
+}
+
 /* -------- orchestration -------- */
 function renderTrafficNotice() {
   const s = state.funnel.trafficSource;
+  if (state.spendError) {
+    const missingTable = /does not exist|relation .* does not exist/i.test(state.spendError);
+    els.notice.innerHTML = missingTable
+      ? '<strong>Ad spend unavailable —</strong> the <code>marketing_spend</code> table hasn\'t been created yet. ' +
+        'Run <code>netlify db exec &lt; MIGRATION-marketing-spend.sql</code> from the repo root, or paste that file into the Neon SQL editor. ' +
+        'Everything else on this page is live and correct; only cost-per figures are missing.'
+      : `<strong>Ad spend unavailable —</strong> ${state.spendError}. Everything else on this page is live and correct; only cost-per figures are missing.`;
+    els.notice.classList.remove('hidden');
+    return;
+  }
   if (!HAS_CHARTS) {
     els.notice.innerHTML = '<strong>Charts unavailable —</strong> the charting library did not load. Every figure below is still live and correct; only the graphs are missing.';
     els.notice.classList.remove('hidden');
@@ -619,6 +842,7 @@ function rerender() {
   renderAttribution('hubspot', 'chart-hs', 'hs');
   renderAttribution('jotform', 'chart-jf', 'jf');
   renderTrend();
+  seedFxFromStored();
   renderSpendTable();
   updateSaveBar();
 }
@@ -632,20 +856,62 @@ async function load() {
   const from = els.from.value;
   const to = els.to.value;
   const qs = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const compare = els.compareOn.checked;
+  const fromB = compare ? els.fromB.value : null;
+  const toB = compare ? els.toB.value : null;
 
   try {
+    if (compare && (!fromB || !toB || fromB > toB)) {
+      throw new Error('Comparison range is invalid — check the second pair of dates.');
+    }
     // Spend is cheap and local; the funnel call is a live HubSpot crawl.
     // Fire both together so the page is bounded by the slower one.
-    const [funnel, spend] = await Promise.all([
+    //
+    // The funnel is load-bearing — without it there is no dashboard. Spend is
+    // an optional layer on top: if its table hasn't been migrated yet, or Neon
+    // is down, the funnel numbers are still worth showing. So a spend failure
+    // degrades to an empty grid and a notice rather than blanking the page.
+    const [funnelRes, spendRes] = await Promise.allSettled([
       fetchJson(`/api/sales-funnel-data?${qs}`),
       fetchJson(`/api/marketing-spend?${qs}`),
     ]);
+
+    if (funnelRes.status === 'rejected') throw funnelRes.reason;
+    const funnel = funnelRes.value;
+
+    let spend, spendError = null;
+    if (spendRes.status === 'fulfilled') {
+      spend = spendRes.value;
+    } else {
+      spendError = spendRes.reason?.message || String(spendRes.reason);
+      spend = emptySpend(funnel.months);
+    }
+
+    // Comparison period. A failure here is never fatal either — losing the
+    // prior period should cost you the deltas, not the dashboard.
+    let funnelB = null, spendB = null;
+    if (compare) {
+      const qsB = `from=${encodeURIComponent(fromB)}&to=${encodeURIComponent(toB)}`;
+      const [fB, sB] = await Promise.allSettled([
+        fetchJson(`/api/sales-funnel-data?${qsB}`),
+        fetchJson(`/api/marketing-spend?${qsB}`),
+      ]);
+      if (fB.status === 'fulfilled') {
+        funnelB = fB.value;
+        spendB = sB.status === 'fulfilled' ? sB.value : emptySpend(funnelB.months);
+      }
+    }
+
     state.funnel = funnel;
     state.spend = spend;
+    state.funnelB = funnelB;
+    state.spendB = spendB;
+    state.spendError = spendError;
     state.dirty.clear();
     rerender();
+    const cmpLabel = funnelB ? ` vs ${fmtMonthLabel(fromB)} – ${fmtMonthLabel(toB)}` : '';
     els.generated.textContent =
-      `${fmtMonthLabel(from)} – ${fmtMonthLabel(to)} · updated ${new Date(funnel.generatedAt).toLocaleString('en-NZ')}`;
+      `${fmtMonthLabel(from)} – ${fmtMonthLabel(to)}${cmpLabel} · updated ${new Date(funnel.generatedAt).toLocaleString('en-NZ')}`;
   } catch (err) {
     els.error.textContent = `Failed to load: ${err.message}`;
     els.error.classList.remove('hidden');
@@ -657,11 +923,41 @@ async function load() {
   }
 }
 
+function cmpControls() { return [els.fromB, els.toB, els.cmpSep, els.cmpYoy, els.cmpPrev]; }
+
+function activeCmpPreset() {
+  return els.cmpYoy.classList.contains('active') ? 'yoy'
+       : els.cmpPrev.classList.contains('active') ? 'prev' : null;
+}
+
+/* Derive range B from range A and the chosen preset. Kept in one place so the
+   two ranges can never be the same length by accident — comparing a 12-month
+   window to a 3-month one produces deltas that look real and aren't. */
+function syncRangeB() {
+  const preset = activeCmpPreset();
+  if (!preset || !els.from.value || !els.to.value) return;
+  if (preset === 'yoy') {
+    els.fromB.value = addMonths(els.from.value, -12);
+    els.toB.value = addMonths(els.to.value, -12);
+  } else {
+    const len = rangeLength(els.from.value, els.to.value);
+    els.toB.value = addMonths(els.from.value, -1);
+    els.fromB.value = addMonths(els.toB.value, -(len - 1));
+  }
+}
+
+function setCompareVisible(on) {
+  cmpControls().forEach((el) => el.classList.toggle('hidden', !on));
+  if (on && !activeCmpPreset()) els.cmpYoy.classList.add('active');
+  if (on) syncRangeB();
+}
+
 function setRange(monthsBack) {
   const now = new Date();
   const to = ymOf(now);
   els.to.value = to;
   els.from.value = addMonths(to, -(monthsBack - 1));
+  if (els.compareOn.checked) syncRangeB();
 }
 
 document.querySelectorAll('[data-preset]').forEach((btn) => {
@@ -672,6 +968,32 @@ document.querySelectorAll('[data-preset]').forEach((btn) => {
 });
 els.refresh.addEventListener('click', load);
 els.saveBtn.addEventListener('click', saveSpend);
+els.compareOn.addEventListener('change', () => {
+  setCompareVisible(els.compareOn.checked);
+  load();
+});
+[els.cmpYoy, els.cmpPrev].forEach((btn) => {
+  btn.addEventListener('click', () => {
+    [els.cmpYoy, els.cmpPrev].forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    syncRangeB();
+    load();
+  });
+});
+[els.from, els.to].forEach((inp) => inp.addEventListener('change', () => {
+  if (els.compareOn.checked) syncRangeB();
+}));
+els.fxRate.addEventListener('input', () => {
+  const v = Number(els.fxRate.value);
+  state.fx = Number.isFinite(v) && v > 0 ? v : null;
+  els.fxNote.textContent = state.fx == null
+    ? 'Not set — enter the rate your accounts use. USD figures are not converted until you do.'
+    : 'Applied to every USD figure below.';
+  for (const [k, val] of state.dirty) {
+    if (val.currency === 'USD') { val.fxToNzd = state.fx || 0; state.dirty.set(k, val); }
+  }
+  updateSaveBar();
+});
 
 setRange(12);
 load();

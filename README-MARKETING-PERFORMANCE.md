@@ -55,6 +55,36 @@ No new ones. It uses what's already configured:
 - `NETLIFY_DATABASE_URL` — for the spend table
 - `URL` / `DEPLOY_PRIME_URL` — for `verifiedUser` on spend writes
 
+## Comparing time periods
+
+Tick **Compare to** and the whole page switches to two periods: every KPI gains
+a percentage delta and a "was" figure, the cost table gains prior-period sales
+and cost-per-sale columns with a change badge, and the trend chart overlays the
+prior period as dashed lines.
+
+Two presets derive range B from range A so the two windows are always the same
+length — **Same period last year** (A shifted back twelve months) and
+**Previous period** (the same number of months immediately before A). Both dates
+stay editable if you want an arbitrary window. Comparing a 12-month range to a
+3-month one produces deltas that look real and aren't, which is why B is derived
+rather than typed by default.
+
+Three details worth knowing:
+
+- **Cost deltas invert.** A fall in cost per sale renders green, a rise red.
+  Volume metrics use the opposite convention, because for them up is good.
+  Colouring them the same way would be actively misleading.
+- **A zero base reads as "new", not as a percentage.** Going 0 → 5 has no
+  meaningful percentage; anything within ±1% reads as flat so noise isn't
+  dressed up as a trend.
+- **The prior period aligns by position, not calendar month.** That's the only
+  way twelve months can sit against the same twelve a year earlier on one axis.
+  The dashed styling and the axis labels (which stay on period A) keep it
+  explicit.
+
+A failure fetching period B is not fatal — you lose the deltas, not the
+dashboard.
+
 ## Two decisions worth knowing about
 
 **Reads are open, writes are gated.** `/api/*` sits outside the edge auth gate,
@@ -72,9 +102,13 @@ rankings, and the page says so.
 ## Known limits
 
 - **Ad spend is typed, not fetched.** Neither Google Ads nor Meta is connected
-  to this stack. The table is the store; somebody still enters the monthly
-  figure. Meta bills in USD, so each row carries its own FX rate rather than
-  burying an assumption in a formula.
+  to this stack, so you enter the monthly figure in the Ad spend grid at the
+  bottom of the page — a cell per month per channel, then Save. Set each
+  column's billing currency once from the dropdown in its header, and the
+  USD → NZD rate in the box above the grid. That rate is seeded from whatever
+  was last saved, never from a hardcoded guess; until it is set, USD figures
+  are not converted and the Save button stays disabled rather than writing a
+  zeroed NZD amount that would quietly erase a month's cost.
 - **Blended cost-per only counts months that have spend**, and says so on the
   tile. Dividing two months of spend by a year of sales produces a number that
   looks precise and means nothing.
@@ -82,6 +116,10 @@ rankings, and the page says so.
   as `Offline Sources` with the real channel stripped, which is why the
   self-reported panel exists and why the footnote flags it. The dashboard
   reports the problem rather than hiding it.
+- **A missing spend table degrades, it doesn't blank the page.** If
+  `MIGRATION-marketing-spend.sql` hasn't been run, the funnel still renders and
+  a notice names the migration to run. Spend is an optional layer, not a
+  dependency.
 - **Sessions can be unavailable.** If the HubSpot private app lacks the
   analytics scope the page shows a notice and carries on; every other figure is
   unaffected.
