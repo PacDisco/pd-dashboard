@@ -14,7 +14,9 @@
     "test:time-ui": "node test/timer-ui.smoke.mjs",
     "test:shirt": "node test/enrollment-shirt.test.mjs",
     "test:shirt-ui": "node test/shirt-order.smoke.mjs",
-    "test:shirt-auth": "node test/shirt-orders-auth.test.mjs"
+    "test:shirt-auth": "node test/shirt-orders-auth.test.mjs",
+    "test:drops": "node test/enrollment-drops.test.mjs",
+    "test:drops-ui": "node test/drop-student.smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

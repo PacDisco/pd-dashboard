@@ -278,8 +278,8 @@ const headers = await page.$$eval('table thead th', (ths) => ths.map((t) => t.te
 check('Shirt Size column sits between Travel Year and Stage', () => {
   assert.deepEqual(headers.slice(0, 6), ['Student Name', 'PD Program', 'Pipeline', 'Travel Year', 'Shirt Size', 'Stage']);
 });
-check('T-Shirt action column is last', () => {
-  assert.equal(headers[headers.length - 1], 'T-Shirt');
+check('the action columns close the table, T-Shirt then Status', () => {
+  assert.deepEqual(headers.slice(-3), ['Contacts', 'T-Shirt', 'Status']);
 });
 
 // ── 2. Cell contents ───────────────────────────────────────────────────
@@ -311,9 +311,12 @@ check('flagged size explains its provenance', () => {
 });
 
 // ── 3. Ordered badge ───────────────────────────────────────────────────
-const niaCell = await (await rowFor('Nia Tomalin')).$eval('td:last-child', (td) => td.textContent.trim());
+// Addressed by class, not `td:last-child`. The T-shirt column stopped being the
+// last one when the Status (dropped) column was added, and a positional
+// selector silently started clicking the wrong button.
+const niaCell = await (await rowFor('Nia Tomalin')).$eval('td.shirt-cell', (td) => td.textContent.trim());
 check('student with an existing order shows the Ordered badge', () => assert.match(niaCell, /Ordered/));
-const emmaCell = await (await rowFor('Emma Lyons')).$eval('td:last-child', (td) => td.textContent.trim());
+const emmaCell = await (await rowFor('Emma Lyons')).$eval('td.shirt-cell', (td) => td.textContent.trim());
 check('student without an order shows Order T-Shirt', () => assert.match(emmaCell, /Order T-Shirt/));
 
 // ── 4. Sorting ─────────────────────────────────────────────────────────
@@ -338,7 +341,7 @@ check('money columns still sort numerically after the column insert', () => {
 });
 
 // ── 5. Popup pre-fill ──────────────────────────────────────────────────
-await (await rowFor('Emma Lyons')).$eval('td:last-child button', (b) => b.click());
+await (await rowFor('Emma Lyons')).$eval('td.shirt-cell button', (b) => b.click());
 await page.waitForSelector('#shirt-modal:not(.hidden)');
 
 const prefill = await page.evaluate(() => ({
@@ -446,11 +449,11 @@ check('POST body carries everything the function needs', () => {
 });
 
 await page.evaluate(() => closeShirtModal());
-const emmaCellAfter = await (await rowFor('Emma Lyons')).$eval('td:last-child', (td) => td.textContent.trim());
+const emmaCellAfter = await (await rowFor('Emma Lyons')).$eval('td.shirt-cell', (td) => td.textContent.trim());
 check('row flips to Ordered without a page reload', () => assert.match(emmaCellAfter, /Ordered ×2/));
 
 // ── 8b. Inferred country ───────────────────────────────────────────────
-await (await rowFor('Abigail Dailey')).$eval('td:last-child button', (b) => b.click());
+await (await rowFor('Abigail Dailey')).$eval('td.shirt-cell button', (b) => b.click());
 await page.waitForSelector('#shirt-modal:not(.hidden)');
 const inferred = await page.evaluate(() => ({
   country: document.getElementById('shirt-country').value,
@@ -526,7 +529,7 @@ check('ordering stays enabled when only the orders lookup failed', () => {
 await page.evaluate(() => { delete window.__shirtOrdersWarning; closeShirtModal(); });
 
 // ── 9. Duplicate warning ───────────────────────────────────────────────
-await (await rowFor('Nia Tomalin')).$eval('td:last-child button[data-shirt-deal]', (b) => b.click());
+await (await rowFor('Nia Tomalin')).$eval('td.shirt-cell button[data-shirt-deal]', (b) => b.click());
 await page.waitForSelector('#shirt-modal:not(.hidden)');
 const dupWarn = await page.$eval('#shirt-existing', (e) => ({ hidden: e.classList.contains('hidden'), text: e.textContent }));
 check('a student with an order sees a duplicate warning naming it', () => {
@@ -538,7 +541,7 @@ check('a student with an order sees a duplicate warning naming it', () => {
 await page.evaluate(() => closeShirtModal());
 
 // ── 10. The no-data case ───────────────────────────────────────────────
-await (await rowFor('Nobody Home')).$eval('td:last-child button', (b) => b.click());
+await (await rowFor('Nobody Home')).$eval('td.shirt-cell button', (b) => b.click());
 await page.waitForSelector('#shirt-modal:not(.hidden)');
 const empty = await page.evaluate(() => ({
   size: document.getElementById('shirt-size').value,

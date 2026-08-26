@@ -1,0 +1,690 @@
+--- /tmp/orig/pd-dashboard-main/enrollment/index.html	2026-08-20 07:55:31.000000000 +0000
++++ enrollment/index.html	2026-08-22 11:08:44.113460747 +0000
+@@ -27,6 +27,14 @@
+      disabling at all: the user clicks and nothing happens, with no explanation.
+      Style it here instead, where it cannot silently vanish. */
+   button:disabled { opacity: 0.5; cursor: not-allowed; }
++  /* A dropped student keeps their row — they still hold a deal and still show
++     up in the money totals — but the row should read as "no longer travelling"
++     at a glance rather than needing the Status column to be read. */
++  tr.dropped-row { background: #fef2f2; }
++  tr.dropped-row:hover { background: #fee2e2; }
++  tr.dropped-row td { opacity: 0.72; }
++  /* The Status cell itself must stay fully legible: it carries the reason. */
++  tr.dropped-row td.status-cell { opacity: 1; }
+ </style>
+ </head>
+ <body>
+@@ -99,6 +107,44 @@
+   </div>
+ </div>
+ 
++<!-- Dropped Student Modal -->
++<div id="drop-modal" class="hidden" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;">
++  <div id="drop-modal-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.5);"></div>
++  <div style="position:relative; background:white; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); width:94%; max-width:520px; max-height:90vh; overflow:hidden; display:flex; flex-direction:column;">
++    <div class="flex items-start justify-between px-5 py-4 border-b border-gray-200">
++      <div>
++        <h3 id="drop-modal-title" class="text-lg font-bold text-gray-900">Mark student as dropped</h3>
++        <p id="drop-modal-sub" class="text-sm text-gray-500"></p>
++      </div>
++      <button onclick="closeDropModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none px-2" aria-label="Close">&times;</button>
++    </div>
++
++    <div id="drop-modal-body" class="px-5 py-4 overflow-y-auto">
++      <div id="drop-existing" class="hidden mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-900"></div>
++
++      <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1" for="drop-reason">Reason</label>
++      <textarea id="drop-reason" rows="4" maxlength="1000" placeholder="Why did they drop? e.g. withdrew for medical reasons, deferred to Spring 2027, visa refused&hellip;"
++        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"></textarea>
++      <p class="text-xs text-gray-500 mt-1">Saved with your name and today's date, and logged as a note on the student's HubSpot deal.</p>
++
++      <div class="mt-4 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-xs text-gray-600">
++        A dropped student is <strong>removed from the student count</strong>, but their
++        <strong>deal amount and payments still count</strong> toward Total Amount, Total Paid and Outstanding.
++      </div>
++
++      <div id="drop-error" class="hidden mt-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800"></div>
++    </div>
++
++    <div class="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50">
++      <button id="drop-undo" onclick="submitDrop('undrop')" class="hidden px-3 py-2 text-sm text-gray-600 hover:text-gray-900 underline">Put back in the student list</button>
++      <div class="flex items-center gap-2 ml-auto">
++        <button onclick="closeDropModal()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
++        <button id="drop-submit" onclick="submitDrop('drop')" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">Mark as dropped</button>
++      </div>
++    </div>
++  </div>
++</div>
++
+ <!-- Order T-Shirt Modal -->
+ <div id="shirt-modal" class="hidden" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;">
+   <div id="shirt-modal-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.5);"></div>
+@@ -200,19 +246,70 @@
+   return 'bg-gray-100 text-gray-800';
+ }
+ 
++// ═══════════════════════════════════════════
++// COUNTING RULES — mirrors netlify/functions/enrollment.js. Change both.
++// ═══════════════════════════════════════════
++// countsAsStudent — "how many students are travelling?" Excludes College Credit
++//                   / no-programme rows AND anyone marked dropped.
++// countsAsMoney   — "how much is this worth?" Excludes only the College Credit
++//                   / no-programme rows. A dropped student still signed and
++//                   still paid, so their deal stays in the money totals.
++function countsAsMoney(d) { return !d.excludeFromCount; }
++function countsAsStudent(d) { return !d.excludeFromCount && !d.dropped; }
++
+ function summaryFor(deals) {
+-  const counted = deals.filter(d => !d.excludeFromCount);
+-  const totalAmount = counted.reduce((s, d) => s + d.amount, 0);
+-  const totalPaid = counted.reduce((s, d) => s + d.totalPaid, 0);
+-  return { count: counted.length, totalAmount, totalPaid, outstanding: totalAmount - totalPaid };
++  const money = deals.filter(countsAsMoney);
++  const totalAmount = money.reduce((s, d) => s + d.amount, 0);
++  const totalPaid = money.reduce((s, d) => s + d.totalPaid, 0);
++  return {
++    count: deals.filter(countsAsStudent).length,
++    dropped: deals.filter(function(d) { return d.dropped; }).length,
++    totalAmount: totalAmount,
++    totalPaid: totalPaid,
++    outstanding: totalAmount - totalPaid
++  };
++}
++
++/**
++ * Recompute every number the payload carries from the deals themselves.
++ *
++ * Marking someone dropped changes the headcount, so the cards and tab badges
++ * have to move with it. Rather than patching each number by hand — which is how
++ * a tab badge ends up disagreeing with the table under it — recompute the lot
++ * from the same rules the server used, then re-render.
++ */
++function recomputeTotals(data) {
++  var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
++  var students = 0, dropped = 0, totalAmount = 0, totalPaid = 0;
++  for (var t = 0; t < allTabs.length; t++) {
++    var tab = allTabs[t];
++    var s = summaryFor(tab.deals || []);
++    tab.countedDeals = s.count;
++    tab.droppedDeals = s.dropped;
++    students += s.count;
++    dropped += s.dropped;
++    totalAmount += s.totalAmount;
++    totalPaid += s.totalPaid;
++  }
++  data.totalStudents = students;
++  data.droppedStudents = dropped;
++  data.totalAmount = totalAmount;
++  data.totalPaid = totalPaid;
++  data.outstanding = totalAmount - totalPaid;
++  return data;
+ }
+ 
+ // ═══════════════════════════════════════════
+ // RENDER FUNCTIONS
+ // ═══════════════════════════════════════════
+ function renderSummaryCards(summary) {
++  // Say out loud that dropped students left the headcount but not the money —
++  // otherwise a card reading 7 students against 8 rows looks like a bug.
++  var droppedNote = summary.dropped
++    ? '<div class="text-xs text-red-600 mt-1">' + summary.dropped + ' dropped &mdash; not counted, money still included</div>'
++    : '';
+   return '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">' +
+-    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Total Students</div><div class="text-2xl font-bold text-gray-900">' + summary.count + '</div></div>' +
++    '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Total Students</div><div class="text-2xl font-bold text-gray-900">' + summary.count + '</div>' + droppedNote + '</div>' +
+     '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Total Amount</div><div class="text-2xl font-bold text-gray-900">' + fmt(summary.totalAmount) + '</div></div>' +
+     '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Total Paid</div><div class="text-2xl font-bold text-green-700">' + fmt(summary.totalPaid) + '</div></div>' +
+     '<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4"><div class="text-sm text-gray-500">Outstanding</div><div class="text-2xl font-bold text-gray-600">' + fmt(summary.outstanding) + '</div></div>' +
+@@ -271,12 +368,31 @@
+     '&#128085; Order T-Shirt</button>';
+ }
+ 
++// The Status cell: either the button that marks a student dropped, or the
++// badge saying they are — carrying the reason, who marked it and when, since
++// that is the question anyone looking at a dropped row will ask next.
++function dropCellHtml(d) {
++  if (d.dropped) {
++    var when = d.droppedAt ? new Date(d.droppedAt).toLocaleDateString() : '';
++    var tip = 'Reason: ' + (d.dropReason || '—') +
++      (d.droppedBy ? '\nMarked by ' + d.droppedBy : '') +
++      (when ? ' on ' + when : '') +
++      '\nNot counted as a student. Deal amount and payments still count.';
++    return '<button type="button" data-drop-deal="' + d.id + '" title="' + escapeHtml(tip) + '" ' +
++      'class="inline-flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-800 rounded-lg text-xs font-semibold hover:bg-red-200 border border-red-200 whitespace-nowrap">' +
++      '&#9888; Dropped</button>';
++  }
++  return '<button type="button" data-drop-deal="' + d.id + '" title="Mark this student as dropped and record why" ' +
++    'class="inline-flex items-center gap-1 px-3 py-1.5 bg-white text-gray-600 rounded-lg text-xs font-medium hover:bg-red-50 hover:text-red-700 border border-gray-300 whitespace-nowrap">' +
++    'Mark dropped</button>';
++}
++
+ function renderTable(deals, tableId) {
+   var sorted = deals.slice().sort(function(a, b) { return a.studentName.localeCompare(b.studentName); });
+   var rows = '';
+   for (var i = 0; i < sorted.length; i++) {
+     var d = sorted[i];
+-    rows += '<tr class="hover:bg-gray-50 border-b border-gray-100 data-row">' +
++    rows += '<tr class="hover:bg-gray-50 border-b border-gray-100 data-row' + (d.dropped ? ' dropped-row' : '') + '" data-row-deal="' + d.id + '">' +
+       '<td class="px-4 py-3 text-sm font-medium whitespace-nowrap"><a href="' + d.hubspotUrl + '" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">' + d.studentName + '</a></td>' +
+       '<td class="px-4 py-3 text-sm text-gray-700">' + (d.pdProgram || '-') + '</td>' +
+       '<td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">' + d.pipeline + '</td>' +
+@@ -291,6 +407,7 @@
+         '</button>' +
+       '</td>' +
+       '<td class="px-4 py-3 text-center text-sm whitespace-nowrap shirt-cell" data-shirt-cell="' + d.id + '">' + shirtOrderCellHtml(d) + '</td>' +
++      '<td class="px-4 py-3 text-center text-sm whitespace-nowrap status-cell" data-drop-cell="' + d.id + '">' + dropCellHtml(d) + '</td>' +
+     '</tr>';
+   }
+ 
+@@ -307,6 +424,7 @@
+       '<th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer" data-col="7" data-sort="money">Total Paid &#x25B4;&#x25BE;</th>' +
+       '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Contacts</th>' +
+       '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">T-Shirt</th>' +
++      '<th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider" title="Dropped students stay in the table and in the money totals, but are not counted as students">Status</th>' +
+     '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+ }
+ 
+@@ -319,10 +437,12 @@
+   }
+   var sortedPrograms = Object.entries(byProgram).sort(function(a, b) { return b[1].length - a[1].length; });
+ 
+-  var allCountedDeals = deals.filter(function(d) { return !d.excludeFromCount; });
++  // These pills count students, so they use the same rule as the season tab
++  // badge and the Total Students card — dropped students are not in them.
++  var allCountedDeals = deals.filter(countsAsStudent);
+   var buttons = '<button class="sub-tab-btn sub-tab-active" data-subtab="' + parentId + '_all">All <span class="ml-1 text-xs opacity-70">' + allCountedDeals.length + '</span></button>';
+   for (var j = 0; j < sortedPrograms.length; j++) {
+-    var progCounted = sortedPrograms[j][1].filter(function(d) { return !d.excludeFromCount; });
++    var progCounted = sortedPrograms[j][1].filter(countsAsStudent);
+     buttons += '<button class="sub-tab-btn" data-subtab="' + parentId + '_p' + j + '">' + sortedPrograms[j][0] + ' <span class="ml-1 text-xs opacity-70">' + progCounted.length + '</span></button>';
+   }
+ 
+@@ -340,6 +460,9 @@
+ // BUILD FULL DASHBOARD
+ // ═══════════════════════════════════════════
+ function renderDashboard(data) {
++  // Held so a drop can be applied and the whole dashboard re-rendered from the
++  // same object — see applyDropChange().
++  window.__enrollmentData = data;
+   var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
+ 
+   // Build a registry keyed by deal id so the Contacts and Order T-Shirt buttons
+@@ -350,6 +473,12 @@
+     for (var k = 0; k < tDeals.length; k++) {
+       window.__dealRegistry[tDeals[k].id] = {
+         studentName: tDeals[k].studentName,
++        // Kept in sync by applyDropChange() so the modal and the badge can read
++        // the current state without walking the tab arrays again.
++        dropped: Boolean(tDeals[k].dropped),
++        dropReason: tDeals[k].dropReason || '',
++        droppedBy: tDeals[k].droppedBy || '',
++        droppedAt: tDeals[k].droppedAt || '',
+         contacts: tDeals[k].contacts || [],
+         pdProgram: tDeals[k].pdProgram || '',
+         travelYear: tDeals[k].travelYear || '',
+@@ -376,6 +505,15 @@
+ 
+   var updatedDate = new Date(data.updatedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+   var subtitle = data.totalStudents + ' enrolled students \u00b7 Live from HubSpot \u00b7 Updated ' + updatedDate;
++  if (data.droppedStudents) {
++    subtitle += ' \u00b7 ' + data.droppedStudents + ' dropped (not counted; their deal value still is)';
++  }
++  // If the drop records could not be read, every student looks active. Say so \u2014
++  // a headcount that is quietly too high is worse than one that admits it.
++  if (data.dropsAvailable === false) {
++    subtitle += ' \u00b7 \u26a0 Dropped-student records unavailable' +
++      (data.dropsError ? ': ' + data.dropsError : '') + ' \u2014 the student count may be too high';
++  }
+   // If the application lookup failed, shirt sizes fall back to HubSpot only and
+   // the column will look emptier than it should. Say so rather than let someone
+   // conclude the students never answered.
+@@ -400,7 +538,12 @@
+     var pastAttr = isPast ? ' data-past="true"' : '';
+     var pastLabel = isPast ? ' (Past)' : '';
+     var badgeCount = typeof tab.countedDeals === 'number' ? tab.countedDeals : tab.deals.length;
+-    tabHtml += '<button class="tab-btn' + active + '" data-tab="tab_' + i + '"' + pastAttr + '>' + tab.key + pastLabel + ' <span class="ml-1 text-xs bg-white bg-opacity-30 px-1.5 py-0.5 rounded-full">' + badgeCount + '</span></button>';
++    // The badge counts students, so dropped students are not in it. Name them
++    // in the tooltip rather than leaving the tab and the table disagreeing.
++    var badgeTip = tab.droppedDeals
++      ? ' title="' + tab.droppedDeals + ' dropped student' + (tab.droppedDeals === 1 ? '' : 's') + ' not included in this count"'
++      : '';
++    tabHtml += '<button class="tab-btn' + active + '" data-tab="tab_' + i + '"' + pastAttr + badgeTip + '>' + tab.key + pastLabel + ' <span class="ml-1 text-xs bg-white bg-opacity-30 px-1.5 py-0.5 rounded-full">' + badgeCount + '</span></button>';
+   }
+   tabBar.innerHTML = tabHtml;
+ 
+@@ -459,6 +602,7 @@
+   });
+ 
+   attachShirtListeners();
++  attachDropListeners();
+ 
+   document.querySelectorAll('th[data-col]').forEach(function(th) {
+     th.addEventListener('click', function() {
+@@ -555,6 +699,188 @@
+ });
+ 
+ // ═══════════════════════════════════════════
++// DROPPED STUDENTS
++// ═══════════════════════════════════════════
++// A student who enrolled and then left. HubSpot has no property for this — the
++// deal stays Closed Won because the money was real — so the flag and its reason
++// are stored by /api/enrollment-status and read back with the enrollment
++// payload. Dropping someone takes them out of the headcount and leaves their
++// deal amount and payments in the money totals.
++
++var _dropDealId = null;
++
++function attachDropListeners() {
++  document.querySelectorAll('[data-drop-deal]').forEach(function(btn) {
++    if (btn.dataset.bound === '1') return;
++    btn.dataset.bound = '1';
++    btn.addEventListener('click', function() { openDropModal(this.dataset.dropDeal); });
++  });
++}
++
++function openDropModal(dealId) {
++  var entry = (window.__dealRegistry || {})[dealId];
++  if (!entry) return;
++  _dropDealId = dealId;
++
++  var isDropped = Boolean(entry.dropped);
++  document.getElementById('drop-modal-title').textContent =
++    isDropped ? 'Dropped student' : 'Mark student as dropped';
++  document.getElementById('drop-modal-sub').textContent =
++    entry.studentName + (entry.pdProgram ? ' · ' + entry.pdProgram : '') +
++    (entry.travelYear ? ' · ' + entry.travelYear : '');
++
++  var existing = document.getElementById('drop-existing');
++  if (isDropped) {
++    var when = entry.droppedAt ? new Date(entry.droppedAt).toLocaleDateString() : '';
++    existing.innerHTML = '<strong>Already marked dropped</strong>' +
++      (entry.droppedBy ? ' by ' + escapeHtml(entry.droppedBy) : '') +
++      (when ? ' on ' + escapeHtml(when) : '') + '.';
++    existing.classList.remove('hidden');
++  } else {
++    existing.classList.add('hidden');
++  }
++
++  var reason = document.getElementById('drop-reason');
++  reason.value = entry.dropReason || '';
++
++  document.getElementById('drop-error').classList.add('hidden');
++
++  var submit = document.getElementById('drop-submit');
++  submit.disabled = false;
++  submit.textContent = isDropped ? 'Update reason' : 'Mark as dropped';
++
++  var undo = document.getElementById('drop-undo');
++  undo.disabled = false;
++  undo.textContent = 'Put back in the student list';
++  undo.classList.toggle('hidden', !isDropped);
++
++  var modal = document.getElementById('drop-modal');
++  modal.classList.remove('hidden');
++  modal.style.display = 'flex';
++  reason.focus();
++}
++
++function closeDropModal() {
++  var modal = document.getElementById('drop-modal');
++  modal.classList.add('hidden');
++  modal.style.display = 'none';
++  _dropDealId = null;
++}
++
++function showDropError(msg) {
++  var el = document.getElementById('drop-error');
++  el.textContent = msg;
++  el.classList.remove('hidden');
++}
++
++/**
++ * Write the change into the loaded payload and re-render.
++ *
++ * The deal object inside the tab arrays is the source the tables and the
++ * summaries are built from, so it — not just the cell — has to change. Totals
++ * are then recomputed from the same rules the server used, and the active tab
++ * and sub-tab are restored so the page does not jump back to the first season
++ * under the user.
++ */
++function applyDropChange(dealId, record) {
++  var data = window.__enrollmentData;
++  if (!data) return;
++
++  var allTabs = (data.currentTabs || []).concat(data.pastTabs || []);
++  for (var t = 0; t < allTabs.length; t++) {
++    var tDeals = allTabs[t].deals || [];
++    for (var k = 0; k < tDeals.length; k++) {
++      if (String(tDeals[k].id) !== String(dealId)) continue;
++      tDeals[k].dropped = Boolean(record);
++      tDeals[k].dropReason = record ? record.reason : '';
++      tDeals[k].droppedBy = record ? record.droppedBy : '';
++      tDeals[k].droppedAt = record ? record.droppedAt : '';
++    }
++  }
++
++  // Remember where the user was standing.
++  var activeTab = document.querySelector('.tab-btn.tab-btn-active');
++  var activeTabId = activeTab ? activeTab.dataset.tab : null;
++  var activeSub = null;
++  if (activeTabId) {
++    var pane = document.getElementById(activeTabId);
++    var subBtn = pane ? pane.querySelector('.sub-tab-btn.sub-tab-active') : null;
++    activeSub = subBtn ? subBtn.dataset.subtab : null;
++  }
++
++  recomputeTotals(data);
++  renderDashboard(data);
++  // The T-shirt column reads window.__shirtOrders, which survives the
++  // re-render, so the Ordered badges come back with it.
++
++  if (activeTabId) {
++    var btn = document.querySelector('.tab-btn[data-tab="' + activeTabId + '"]');
++    if (btn) btn.click();
++  }
++  if (activeSub) {
++    var sBtn = document.querySelector('.sub-tab-btn[data-subtab="' + activeSub + '"]');
++    if (sBtn) sBtn.click();
++  }
++}
++
++async function submitDrop(action) {
++  if (!_dropDealId) return;
++  var dealId = _dropDealId;
++  var entry = (window.__dealRegistry || {})[dealId] || {};
++  var reason = document.getElementById('drop-reason').value.trim();
++
++  if (action === 'drop' && !reason) {
++    return showDropError('Add a reason — it is what makes the drop readable later.');
++  }
++
++  var submit = document.getElementById('drop-submit');
++  var undo = document.getElementById('drop-undo');
++  var busy = action === 'drop' ? submit : undo;
++  var busyLabel = busy.textContent;
++  submit.disabled = true;
++  undo.disabled = true;
++  busy.textContent = 'Saving…';
++  document.getElementById('drop-error').classList.add('hidden');
++
++  try {
++    var resp = await fetch('/api/enrollment-status', {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({
++        dealId: dealId,
++        action: action,
++        reason: reason,
++        studentName: entry.studentName || ''
++      })
++    });
++    var data = await resp.json().catch(function() { return {}; });
++
++    if (!resp.ok || !data.ok) {
++      submit.disabled = false;
++      undo.disabled = false;
++      busy.textContent = busyLabel;
++      return showDropError(data.error || ('Save failed (HTTP ' + resp.status + ')'));
++    }
++
++    applyDropChange(dealId, data.record || null);
++    closeDropModal();
++    if (data.warning) console.warn('enrollment-status:', data.warning);
++  } catch (err) {
++    submit.disabled = false;
++    undo.disabled = false;
++    busy.textContent = busyLabel;
++    showDropError('Network error: ' + err.message);
++  }
++}
++
++document.addEventListener('click', function(e) {
++  if (e.target && e.target.id === 'drop-modal-overlay') closeDropModal();
++});
++document.addEventListener('keydown', function(e) {
++  if (e.key === 'Escape') closeDropModal();
++});
++
++// ═══════════════════════════════════════════
+ // ORDER T-SHIRT
+ // ═══════════════════════════════════════════
+ // Shopify variants and existing orders, filled in by loadShirtOrders().
+--- /tmp/orig/pd-dashboard-main/netlify/functions/enrollment.js	2026-08-20 07:55:31.000000000 +0000
++++ netlify/functions/enrollment.js	2026-08-22 11:01:15.969471930 +0000
+@@ -4,6 +4,7 @@
+ // Endpoint: /api/enrollment
+ 
+ import shirt from './_shared/shirt.js';
++import drops from './_shared/drops.mjs';
+ 
+ const HUBSPOT_API = 'https://api.hubapi.com';
+ const PORTAL_ID = '3855728';
+@@ -727,12 +728,13 @@
+   return out;
+ }
+ 
+-function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex) {
++function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex, dropMap) {
+   const processed = [];
+   dealToContacts = dealToContacts || new Map();
+   excludedStageIds = excludedStageIds || new Set();
+   liveStageLabels = liveStageLabels || new Map();
+   appIndex = appIndex || { byEmail: new Map(), byName: new Map(), ambiguousNames: new Set() };
++  dropMap = dropMap || {};
+ 
+   for (const deal of rawDeals) {
+     const props = deal.properties || {};
+@@ -794,6 +796,10 @@
+     // Flag deals with empty or College Credit PD Program (still shown in table, excluded from counts)
+     const excludeFromCount = !pdProgram || pdProgram.toLowerCase().includes('college credit');
+ 
++    // A student marked dropped on the dashboard. They keep their row and their
++    // money — only the headcount changes. See _shared/drops.mjs.
++    const dropRecord = dropMap[String(deal.id)] || null;
++
+     const dealContacts = dealToContacts.get(deal.id) || [];
+     const merch = resolveShirt(deal, dealContacts, studentName, appIndex);
+ 
+@@ -808,6 +814,11 @@
+       amount,
+       totalPaid,
+       excludeFromCount,
++      // Dropped: out of the headcount, still in the money totals.
++      dropped: Boolean(dropRecord),
++      dropReason: dropRecord ? dropRecord.reason : '',
++      droppedBy: dropRecord ? dropRecord.droppedBy : '',
++      droppedAt: dropRecord ? dropRecord.droppedAt : '',
+       hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${deal.id}`,
+       // Flights-related fields (editable via /api/flights-update). Datetime
+       // fields come back as ISO 8601 strings from HubSpot.
+@@ -838,6 +849,25 @@
+ }
+ 
+ // ═══════════════════════════════════════════
++// COUNTING RULES
++// ═══════════════════════════════════════════
++// Two different questions, two different filters, and conflating them is the
++// bug this section exists to prevent:
++//
++//   countsAsStudent  — "how many students are travelling?"  Excludes the
++//                      College Credit / no-programme rows AND anyone marked
++//                      dropped. Drives every headcount and tab badge.
++//   countsAsMoney    — "how much is this season worth?"  Excludes only the
++//                      College Credit / no-programme rows. A dropped student
++//                      still signed, still paid, and their deal amount and
++//                      payments stay in Total Amount and Total Paid.
++//
++// The dashboard mirrors both rules in enrollment/index.html — change them
++// together.
++function countsAsMoney(d) { return !d.excludeFromCount; }
++function countsAsStudent(d) { return !d.excludeFromCount && !d.dropped; }
++
++// ═══════════════════════════════════════════
+ // GROUP BY SEASON / YEAR
+ // ═══════════════════════════════════════════
+ function groupBySeason(deals) {
+@@ -846,10 +876,11 @@
+   for (const d of deals) {
+     const key = `${d.season} ${d.travelYear}`;
+     if (!groups[key]) {
+-      groups[key] = { key, season: d.season, year: d.travelYear, deals: [], countedDeals: 0 };
++      groups[key] = { key, season: d.season, year: d.travelYear, deals: [], countedDeals: 0, droppedDeals: 0 };
+     }
+     groups[key].deals.push(d);
+-    if (!d.excludeFromCount) groups[key].countedDeals++;
++    if (countsAsStudent(d)) groups[key].countedDeals++;
++    if (d.dropped) groups[key].droppedDeals++;
+   }
+ 
+   // Sort: by year then season order
+@@ -894,11 +925,15 @@
+     // in parallel — three independent upstreams. The Jotform call is wrapped so
+     // that a Jotform outage degrades shirt sizes to the HubSpot fallback rather
+     // than failing the whole dashboard.
+-    const [rawDeals, { excluded: excludedStageIds, labels: liveStageLabels }, appIndex] =
++    const [rawDeals, { excluded: excludedStageIds, labels: liveStageLabels }, appIndex, dropResult] =
+       await Promise.all([
+         fetchAllDeals(token),
+         fetchExcludedStageIds(token),
+-        fetchApplicationExtras()
++        fetchApplicationExtras(),
++        // Dropped-student records from Netlify Blobs. readDrops() never throws —
++        // losing the drop markers skews the headcount, but throwing here would
++        // lose the entire table.
++        drops.readDrops()
+       ]);
+ 
+     // Fetch deal→contact associations via the v4 batch endpoint.
+@@ -924,22 +959,34 @@
+     // dashboard can render the same picklist HubSpot has.
+     const insurancePolicyOptions = await fetchPropertyOptions(token, 'insurance_policy');
+ 
+-    const processed = processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex);
++    const processed = processDeals(
++      rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex, dropResult.drops
++    );
+     const { current, past } = groupBySeason(processed);
+     const withSize = processed.filter(d => d.shirtSize).length;
+     console.log(`enrollment: shirt size resolved for ${withSize}/${processed.length} deals (Jotform index ok: ${appIndex.ok})`);
+ 
+-    // Summary stats (exclude College Credit / empty PD Program from counts)
+-    const counted = processed.filter(d => !d.excludeFromCount);
+-    const totalAmount = counted.reduce((s, d) => s + d.amount, 0);
+-    const totalPaid = counted.reduce((s, d) => s + d.totalPaid, 0);
++    // Summary stats. Two filters, deliberately: the money totals keep dropped
++    // students, the headcount does not. See the COUNTING RULES section.
++    const moneyDeals = processed.filter(countsAsMoney);
++    const studentDeals = processed.filter(countsAsStudent);
++    const totalAmount = moneyDeals.reduce((s, d) => s + d.amount, 0);
++    const totalPaid = moneyDeals.reduce((s, d) => s + d.totalPaid, 0);
++    const droppedCount = processed.filter(d => d.dropped).length;
++    console.log(`enrollment: ${studentDeals.length} students counted, ${droppedCount} marked dropped (their money still counts)`);
+ 
+     return new Response(JSON.stringify({
+       updatedAt: new Date().toISOString(),
+-      totalStudents: counted.length,
++      totalStudents: studentDeals.length,
+       totalAmount,
+       totalPaid,
+       outstanding: totalAmount - totalPaid,
++      // Dropped students: excluded from totalStudents, included in the money.
++      droppedStudents: droppedCount,
++      // False when the drop records could not be read, so the dashboard can say
++      // the headcount may be stale instead of silently showing nobody dropped.
++      dropsAvailable: dropResult.ok,
++      dropsError: dropResult.ok ? '' : dropResult.error,
+       currentTabs: current,
+       pastTabs: past,
+       // Picklist options for the Flights dashboard.
+@@ -971,3 +1018,8 @@
+ };
+ 
+ export const config = { path: '/api/enrollment' };
++
++// Exported for test/enrollment-drops.test.mjs. Netlify only reads the default
++// export and `config`, so naming these costs nothing at runtime and lets the
++// counting rules be tested directly instead of through two stubbed upstreams.
++export { countsAsMoney, countsAsStudent, processDeals, groupBySeason };
+--- /tmp/orig/pd-dashboard-main/test/shirt-order.smoke.mjs	2026-08-20 07:55:31.000000000 +0000
++++ test/shirt-order.smoke.mjs	2026-08-22 11:04:42.473466777 +0000
+@@ -278,8 +278,8 @@
+ check('Shirt Size column sits between Travel Year and Stage', () => {
+   assert.deepEqual(headers.slice(0, 6), ['Student Name', 'PD Program', 'Pipeline', 'Travel Year', 'Shirt Size', 'Stage']);
+ });
+-check('T-Shirt action column is last', () => {
+-  assert.equal(headers[headers.length - 1], 'T-Shirt');
++check('the action columns close the table, T-Shirt then Status', () => {
++  assert.deepEqual(headers.slice(-3), ['Contacts', 'T-Shirt', 'Status']);
+ });
+ 
+ // ── 2. Cell contents ───────────────────────────────────────────────────
+@@ -311,9 +311,12 @@
+ });
+ 
+ // ── 3. Ordered badge ───────────────────────────────────────────────────
+-const niaCell = await (await rowFor('Nia Tomalin')).$eval('td:last-child', (td) => td.textContent.trim());
++// Addressed by class, not `td:last-child`. The T-shirt column stopped being the
++// last one when the Status (dropped) column was added, and a positional
++// selector silently started clicking the wrong button.
++const niaCell = await (await rowFor('Nia Tomalin')).$eval('td.shirt-cell', (td) => td.textContent.trim());
+ check('student with an existing order shows the Ordered badge', () => assert.match(niaCell, /Ordered/));
+-const emmaCell = await (await rowFor('Emma Lyons')).$eval('td:last-child', (td) => td.textContent.trim());
++const emmaCell = await (await rowFor('Emma Lyons')).$eval('td.shirt-cell', (td) => td.textContent.trim());
+ check('student without an order shows Order T-Shirt', () => assert.match(emmaCell, /Order T-Shirt/));
+ 
+ // ── 4. Sorting ─────────────────────────────────────────────────────────
+@@ -338,7 +341,7 @@
+ });
+ 
+ // ── 5. Popup pre-fill ──────────────────────────────────────────────────
+-await (await rowFor('Emma Lyons')).$eval('td:last-child button', (b) => b.click());
++await (await rowFor('Emma Lyons')).$eval('td.shirt-cell button', (b) => b.click());
+ await page.waitForSelector('#shirt-modal:not(.hidden)');
+ 
+ const prefill = await page.evaluate(() => ({
+@@ -446,11 +449,11 @@
+ });
+ 
+ await page.evaluate(() => closeShirtModal());
+-const emmaCellAfter = await (await rowFor('Emma Lyons')).$eval('td:last-child', (td) => td.textContent.trim());
++const emmaCellAfter = await (await rowFor('Emma Lyons')).$eval('td.shirt-cell', (td) => td.textContent.trim());
+ check('row flips to Ordered without a page reload', () => assert.match(emmaCellAfter, /Ordered ×2/));
+ 
+ // ── 8b. Inferred country ───────────────────────────────────────────────
+-await (await rowFor('Abigail Dailey')).$eval('td:last-child button', (b) => b.click());
++await (await rowFor('Abigail Dailey')).$eval('td.shirt-cell button', (b) => b.click());
+ await page.waitForSelector('#shirt-modal:not(.hidden)');
+ const inferred = await page.evaluate(() => ({
+   country: document.getElementById('shirt-country').value,
+@@ -526,7 +529,7 @@
+ await page.evaluate(() => { delete window.__shirtOrdersWarning; closeShirtModal(); });
+ 
+ // ── 9. Duplicate warning ───────────────────────────────────────────────
+-await (await rowFor('Nia Tomalin')).$eval('td:last-child button[data-shirt-deal]', (b) => b.click());
++await (await rowFor('Nia Tomalin')).$eval('td.shirt-cell button[data-shirt-deal]', (b) => b.click());
+ await page.waitForSelector('#shirt-modal:not(.hidden)');
+ const dupWarn = await page.$eval('#shirt-existing', (e) => ({ hidden: e.classList.contains('hidden'), text: e.textContent }));
+ check('a student with an order sees a duplicate warning naming it', () => {
+@@ -538,7 +541,7 @@
+ await page.evaluate(() => closeShirtModal());
+ 
+ // ── 10. The no-data case ───────────────────────────────────────────────
+-await (await rowFor('Nobody Home')).$eval('td:last-child button', (b) => b.click());
++await (await rowFor('Nobody Home')).$eval('td.shirt-cell button', (b) => b.click());
+ await page.waitForSelector('#shirt-modal:not(.hidden)');
+ const empty = await page.evaluate(() => ({
+   size: document.getElementById('shirt-size').value,
+--- /tmp/orig/pd-dashboard-main/package.json	2026-08-20 07:55:31.000000000 +0000
++++ package.json	2026-08-22 11:07:59.661461856 +0000
+@@ -14,7 +14,9 @@
+     "test:time-ui": "node test/timer-ui.smoke.mjs",
+     "test:shirt": "node test/enrollment-shirt.test.mjs",
+     "test:shirt-ui": "node test/shirt-order.smoke.mjs",
+-    "test:shirt-auth": "node test/shirt-orders-auth.test.mjs"
++    "test:shirt-auth": "node test/shirt-orders-auth.test.mjs",
++    "test:drops": "node test/enrollment-drops.test.mjs",
++    "test:drops-ui": "node test/drop-student.smoke.mjs"
+   },
+   "dependencies": {
+     "@anthropic-ai/sdk": "^0.90.0",

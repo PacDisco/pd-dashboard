@@ -4,6 +4,7 @@
 // Endpoint: /api/enrollment
 
 import shirt from './_shared/shirt.js';
+import drops from './_shared/drops.mjs';
 
 const HUBSPOT_API = 'https://api.hubapi.com';
 const PORTAL_ID = '3855728';
@@ -727,12 +728,13 @@ function resolveShirt(deal, contacts, studentName, appIndex) {
   return out;
 }
 
-function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex) {
+function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex, dropMap) {
   const processed = [];
   dealToContacts = dealToContacts || new Map();
   excludedStageIds = excludedStageIds || new Set();
   liveStageLabels = liveStageLabels || new Map();
   appIndex = appIndex || { byEmail: new Map(), byName: new Map(), ambiguousNames: new Set() };
+  dropMap = dropMap || {};
 
   for (const deal of rawDeals) {
     const props = deal.properties || {};
@@ -794,6 +796,10 @@ function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabel
     // Flag deals with empty or College Credit PD Program (still shown in table, excluded from counts)
     const excludeFromCount = !pdProgram || pdProgram.toLowerCase().includes('college credit');
 
+    // A student marked dropped on the dashboard. They keep their row and their
+    // money — only the headcount changes. See _shared/drops.mjs.
+    const dropRecord = dropMap[String(deal.id)] || null;
+
     const dealContacts = dealToContacts.get(deal.id) || [];
     const merch = resolveShirt(deal, dealContacts, studentName, appIndex);
 
@@ -808,6 +814,11 @@ function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabel
       amount,
       totalPaid,
       excludeFromCount,
+      // Dropped: out of the headcount, still in the money totals.
+      dropped: Boolean(dropRecord),
+      dropReason: dropRecord ? dropRecord.reason : '',
+      droppedBy: dropRecord ? dropRecord.droppedBy : '',
+      droppedAt: dropRecord ? dropRecord.droppedAt : '',
       hubspotUrl: `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${deal.id}`,
       // Flights-related fields (editable via /api/flights-update). Datetime
       // fields come back as ISO 8601 strings from HubSpot.
@@ -838,6 +849,25 @@ function processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabel
 }
 
 // ═══════════════════════════════════════════
+// COUNTING RULES
+// ═══════════════════════════════════════════
+// Two different questions, two different filters, and conflating them is the
+// bug this section exists to prevent:
+//
+//   countsAsStudent  — "how many students are travelling?"  Excludes the
+//                      College Credit / no-programme rows AND anyone marked
+//                      dropped. Drives every headcount and tab badge.
+//   countsAsMoney    — "how much is this season worth?"  Excludes only the
+//                      College Credit / no-programme rows. A dropped student
+//                      still signed, still paid, and their deal amount and
+//                      payments stay in Total Amount and Total Paid.
+//
+// The dashboard mirrors both rules in enrollment/index.html — change them
+// together.
+function countsAsMoney(d) { return !d.excludeFromCount; }
+function countsAsStudent(d) { return !d.excludeFromCount && !d.dropped; }
+
+// ═══════════════════════════════════════════
 // GROUP BY SEASON / YEAR
 // ═══════════════════════════════════════════
 function groupBySeason(deals) {
@@ -846,10 +876,11 @@ function groupBySeason(deals) {
   for (const d of deals) {
     const key = `${d.season} ${d.travelYear}`;
     if (!groups[key]) {
-      groups[key] = { key, season: d.season, year: d.travelYear, deals: [], countedDeals: 0 };
+      groups[key] = { key, season: d.season, year: d.travelYear, deals: [], countedDeals: 0, droppedDeals: 0 };
     }
     groups[key].deals.push(d);
-    if (!d.excludeFromCount) groups[key].countedDeals++;
+    if (countsAsStudent(d)) groups[key].countedDeals++;
+    if (d.dropped) groups[key].droppedDeals++;
   }
 
   // Sort: by year then season order
@@ -894,11 +925,15 @@ export default async (req) => {
     // in parallel — three independent upstreams. The Jotform call is wrapped so
     // that a Jotform outage degrades shirt sizes to the HubSpot fallback rather
     // than failing the whole dashboard.
-    const [rawDeals, { excluded: excludedStageIds, labels: liveStageLabels }, appIndex] =
+    const [rawDeals, { excluded: excludedStageIds, labels: liveStageLabels }, appIndex, dropResult] =
       await Promise.all([
         fetchAllDeals(token),
         fetchExcludedStageIds(token),
-        fetchApplicationExtras()
+        fetchApplicationExtras(),
+        // Dropped-student records from Netlify Blobs. readDrops() never throws —
+        // losing the drop markers skews the headcount, but throwing here would
+        // lose the entire table.
+        drops.readDrops()
       ]);
 
     // Fetch deal→contact associations via the v4 batch endpoint.
@@ -924,22 +959,34 @@ export default async (req) => {
     // dashboard can render the same picklist HubSpot has.
     const insurancePolicyOptions = await fetchPropertyOptions(token, 'insurance_policy');
 
-    const processed = processDeals(rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex);
+    const processed = processDeals(
+      rawDeals, dealToContacts, excludedStageIds, liveStageLabels, appIndex, dropResult.drops
+    );
     const { current, past } = groupBySeason(processed);
     const withSize = processed.filter(d => d.shirtSize).length;
     console.log(`enrollment: shirt size resolved for ${withSize}/${processed.length} deals (Jotform index ok: ${appIndex.ok})`);
 
-    // Summary stats (exclude College Credit / empty PD Program from counts)
-    const counted = processed.filter(d => !d.excludeFromCount);
-    const totalAmount = counted.reduce((s, d) => s + d.amount, 0);
-    const totalPaid = counted.reduce((s, d) => s + d.totalPaid, 0);
+    // Summary stats. Two filters, deliberately: the money totals keep dropped
+    // students, the headcount does not. See the COUNTING RULES section.
+    const moneyDeals = processed.filter(countsAsMoney);
+    const studentDeals = processed.filter(countsAsStudent);
+    const totalAmount = moneyDeals.reduce((s, d) => s + d.amount, 0);
+    const totalPaid = moneyDeals.reduce((s, d) => s + d.totalPaid, 0);
+    const droppedCount = processed.filter(d => d.dropped).length;
+    console.log(`enrollment: ${studentDeals.length} students counted, ${droppedCount} marked dropped (their money still counts)`);
 
     return new Response(JSON.stringify({
       updatedAt: new Date().toISOString(),
-      totalStudents: counted.length,
+      totalStudents: studentDeals.length,
       totalAmount,
       totalPaid,
       outstanding: totalAmount - totalPaid,
+      // Dropped students: excluded from totalStudents, included in the money.
+      droppedStudents: droppedCount,
+      // False when the drop records could not be read, so the dashboard can say
+      // the headcount may be stale instead of silently showing nobody dropped.
+      dropsAvailable: dropResult.ok,
+      dropsError: dropResult.ok ? '' : dropResult.error,
       currentTabs: current,
       pastTabs: past,
       // Picklist options for the Flights dashboard.
@@ -971,3 +1018,8 @@ export default async (req) => {
 };
 
 export const config = { path: '/api/enrollment' };
+
+// Exported for test/enrollment-drops.test.mjs. Netlify only reads the default
+// export and `config`, so naming these costs nothing at runtime and lets the
+// counting rules be tested directly instead of through two stubbed upstreams.
+export { countsAsMoney, countsAsStudent, processDeals, groupBySeason };
