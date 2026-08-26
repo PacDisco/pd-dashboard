@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-16T23:45:59.918Z",
+  "generatedAt": "2026-08-26T04:14:14.535Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -76,6 +76,26 @@
       "url": "/field-media/"
     },
     {
+      "slug": "flight-programs",
+      "title": "Programs Flight Booking Portal Configuration",
+      "description": "Manage the programs students choose in the flight booking portal — arrival airport, arrival date/time, and program end date/time.",
+      "category": "Operations",
+      "icon": "🗓️",
+      "owner": "",
+      "pinned": false,
+      "order": 22,
+      "colors": [
+        "#0ea5e9",
+        "#6ee7b7"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations",
+        "flights"
+      ],
+      "url": "/flight-programs/"
+    },
+    {
       "slug": "flights",
       "title": "Flights",
       "description": "Student flights tracker mirroring the enrollment pipeline, focused on logistics and program assignments (no payment data).",
@@ -133,6 +153,26 @@
       "url": "/instructor-field-reports/"
     },
     {
+      "slug": "instructors",
+      "title": "Instructors",
+      "description": "Instructor roster and applicant pipeline — application answers, uploaded documents, program-leading history, onboarding status, and lifecycle status (current, potential, new applicant, blacklisted). Filter by location, gender, weeks led, programs led, qualifications and more.",
+      "category": "Programs",
+      "icon": "🧑‍🏫",
+      "owner": "",
+      "pinned": false,
+      "order": 20,
+      "colors": [
+        "#7c3aed",
+        "#c4b5fd"
+      ],
+      "allowedRoles": [
+        "admin",
+        "programs",
+        "operations"
+      ],
+      "url": "/instructors/"
+    },
+    {
       "slug": "invoices",
       "title": "Invoices & Payments",
       "description": "Upload invoices, email them in, or manually schedule payments. AI parses each invoice and slots it into a weekly pay schedule with approve / reschedule / paid checkboxes.",
@@ -165,6 +205,27 @@
       "url": "/lead-data-sheet/"
     },
     {
+      "slug": "marketing-performance",
+      "title": "Marketing Performance",
+      "description": "Cost per lead, opportunity and sale by channel — ad spend joined to the live HubSpot funnel, with cookie attribution shown against what applicants actually say.",
+      "category": "Outreach",
+      "icon": "📈",
+      "owner": "",
+      "pinned": false,
+      "order": 15,
+      "colors": [
+        "#55BBD2",
+        "#f15c39"
+      ],
+      "allowedRoles": [
+        "admin",
+        "outreach",
+        "operations",
+        "admissions"
+      ],
+      "url": "/marketing-performance/"
+    },
+    {
       "slug": "pd-whatsapp",
       "title": "Add Pacific Discovery WhatsApp Contact",
       "description": "Quickly save a new contact to your Google address book. Sign in with Google, fill in name, email, and phone, and save — the contact lands directly in contacts.google.com.",
@@ -186,7 +247,7 @@
     {
       "slug": "pipeline",
       "title": "Pipeline",
-      "description": "Live deal pipeline across all season programs with stage-by-stage drill-downs.",
+      "description": "Live, editable replica of the advisor pipeline tab from the Pipeline & Commission Reports sheet — filter, sort, and edit cells straight back to Google Sheets.",
       "category": "Enrollment",
       "icon": "🪜",
       "owner": "",
@@ -203,6 +264,26 @@
         "operations"
       ],
       "url": "/pipeline/"
+    },
+    {
+      "slug": "program-schedule",
+      "title": "Upcoming Programs",
+      "description": "At-a-glance schedule of upcoming programs across all brands — program, brand, dates, location, headcount and notes. Filter by brand.",
+      "category": "Programs",
+      "icon": "📅",
+      "owner": "",
+      "pinned": true,
+      "order": 20,
+      "colors": [
+        "#2563eb",
+        "#22d3ee"
+      ],
+      "allowedRoles": [
+        "admin",
+        "programs",
+        "operations"
+      ],
+      "url": "/program-schedule/"
     },
     {
       "slug": "sales-funnel",
@@ -268,7 +349,7 @@
     {
       "slug": "slider",
       "title": "Slider Manager",
-      "description": "Manage dashboard sliders and homepage content.",
+      "description": "Manage homepage hero slider content — synced live to pacificdiscovery.org.",
       "category": "Outreach",
       "icon": "🎛️",
       "owner": "",
@@ -278,6 +359,7 @@
         "#22d3ee"
       ],
       "allowedRoles": [
+        "admin",
         "outreach"
       ],
       "url": "/slider/"
@@ -321,10 +403,84 @@
       "url": "/student-uploads/"
     },
     {
+      "slug": "time-tracking",
+      "title": "Time Tracker",
+      "description": "Tick timer for contractors — start/stop a live timer against a project, add or fix entries by hand, and see the week's hours. An admin approves a period and pushes the total straight into Invoices & Payments.",
+      "category": "Finance",
+      "icon": "⏱️",
+      "owner": "",
+      "pinned": false,
+      "order": 26,
+      "colors": [
+        "#0f766e",
+        "#2dd4bf"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations",
+        "programs",
+        "admissions",
+        "outreach",
+        "flights",
+        "unearthed",
+        "contractor"
+      ],
+      "url": "/time-tracking/"
+    },
+    {
+      "slug": "ue-applications",
+      "title": "UE Application Assignments",
+      "description": "UE Application Form submissions — filter, match to HubSpot contacts, and assign to Unearthed Program records with association labels.",
+      "category": "Unearthed",
+      "icon": "🗂️",
+      "owner": "",
+      "pinned": false,
+      "order": 22,
+      "colors": [
+        "#0d9488",
+        "#f59e0b"
+      ],
+      "allowedRoles": [
+        "admin"
+      ],
+      "url": "/ue-applications/"
+    },
+    {
+      "slug": "ue-flights",
+      "title": "Unearthed Flight Ticket Upload",
+      "description": "Upload flight ticket PDFs — Claude reads each passenger name and files the ticket into that student's Google Drive folder automatically.",
+      "category": "Unearthed",
+      "icon": "🎫",
+      "owner": "",
+      "pinned": false,
+      "order": 21,
+      "colors": [
+        "#0ea5e9",
+        "#6ee7b7"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations",
+        "flights"
+      ],
+      "url": "/ue-flights/"
+    },
+    {
+      "slug": "unearthed-stripe",
+      "title": "Unearthed Stripe Payments · Unearthed Education",
+      "description": "",
+      "category": "General",
+      "icon": "📊",
+      "owner": "",
+      "pinned": false,
+      "allowedRoles": [],
+      "url": "/unearthed-stripe/"
+    },
+    {
       "slug": "unearthed-whatsapp",
       "title": "Add Unearthed WhatsApp Contact",
       "description": "Save a contact directly to the Unearthed Education shared address book (info@unearthededucation.org) — no Google sign-in required.",
-      "category": "Outreach",
+      "category": "Unearthed",
       "icon": "🌱",
       "owner": "",
       "pinned": false,

@@ -2,24 +2,47 @@
 # Coarse baseline: any authenticated user with a role can reach these paths.
 # Fine-grained permissions are enforced by netlify/edge-functions/auth-gate.js.
 
-/api/config        200!    Role=admin,admissions,outreach,programs,operations,flights
+/api/config        200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed,contractor
 /api/users         200!    Role=admin
 /api/users/*       200!    Role=admin
-/Contacts/*                  200!    Role=admin,admissions,outreach,programs,operations,flights
-/cashflow/*                  200!    Role=admin,admissions,outreach,programs,operations,flights
-/enrollment/*                200!    Role=admin,admissions,outreach,programs,operations,flights
-/field-media/*               200!    Role=admin,admissions,outreach,programs,operations,flights
-/flights/*                   200!    Role=admin,admissions,outreach,programs,operations,flights
-/forward-business-report/*   200!    Role=admin,admissions,outreach,programs,operations,flights
-/instructor-field-reports/*  200!    Role=admin,admissions,outreach,programs,operations,flights
-/invoices/*                  200!    Role=admin,admissions,outreach,programs,operations,flights
-/lead-data-sheet/*           200!    Role=admin,admissions,outreach,programs,operations,flights
-/pd-whatsapp/*               200!    Role=admin,admissions,outreach,programs,operations,flights
-/pipeline/*                  200!    Role=admin,admissions,outreach,programs,operations,flights
-/sales-funnel/*              200!    Role=admin,admissions,outreach,programs,operations,flights
-/sign-inbox/*                200!    Role=admin,admissions,outreach,programs,operations,flights
-/sign-request/*              200!    Role=admin,admissions,outreach,programs,operations,flights
-/slider/*                    200!    Role=admin,admissions,outreach,programs,operations,flights
-/stripe/*                    200!    Role=admin,admissions,outreach,programs,operations,flights
-/student-uploads/*           200!    Role=admin,admissions,outreach,programs,operations,flights
-/unearthed-whatsapp/*        200!    Role=admin,admissions,outreach,programs,operations,flights
+
+# Service-to-service: the instructor PORTAL is a different Netlify site and
+# has no Netlify Identity session, so this one CANNOT carry a Role= gate.
+# It authenticates with the INSTRUCTOR_PORTAL_KEY shared secret instead
+# (constant-time compare in netlify/functions/instructor-checklist.js).
+# An explicit rewrite (not a bare pass-through) so it always resolves.
+/api/instructor-checklist  /.netlify/functions/instructor-checklist  200!
+
+# ⚠ DO NOT add a `/api/*  200!  Role=...` baseline here. _redirects is
+# processed BEFORE netlify.toml and the first match wins, so a wildcard
+# /api/* rule with no destination expands to a forced self-rewrite
+# (/api/:splat) and shadows netlify.toml's /api/* → /.netlify/functions/
+# mapping — every dashboard data call 404s. The remaining /api/* endpoints
+# ARE currently unauthenticated (auth-gate.js excludes /api/*); the fix
+# belongs in auth-gate.js, not here. See INSTRUCTOR-CHECKLIST.md.
+/Contacts/*                  200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/cashflow/*                  200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/enrollment/*                200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/field-media/*               200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/flight-programs/*           200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/flights/*                   200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/forward-business-report/*   200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/instructor-field-reports/*  200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/instructors/*               200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/invoices/*                  200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/lead-data-sheet/*           200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/marketing-performance/*     200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/pd-whatsapp/*               200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/pipeline/*                  200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/program-schedule/*          200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/sales-funnel/*              200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/sign-inbox/*                200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/sign-request/*              200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/slider/*                    200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/stripe/*                    200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/student-uploads/*           200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/time-tracking/*             200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed,contractor
+/ue-applications/*           200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/ue-flights/*                200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/unearthed-stripe/*          200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/unearthed-whatsapp/*        200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed

@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pacific Discovery · Marketing Performance</title>
+<meta name="description" content="Cost per lead, opportunity and sale by channel — ad spend joined to the live HubSpot funnel, with cookie attribution shown against what applicants actually say." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --pd-teal:    #55BBD2;
+    --pd-green:   #81C243;
+    --pd-navy:    #3B5998;
+    --pd-blue:    #0A96DB;
+    --pd-black:   #212121;
+    --pd-charcoal:#4a4a4a;
+    --pd-orange:  #f15c39;
+    --pd-white:   #fefeff;
+    --pd-offwhite:#f8f8f8;
+
+    --bg:        #16191c;
+    --panel:     #1d2226;
+    --panel-2:   #252b30;
+    --line:      #2f363d;
+    --text:      var(--pd-white);
+    --muted:     #8a949c;
+    --accent:    var(--pd-teal);
+    --accent-2:  var(--pd-green);
+    --accent-3:  var(--pd-navy);
+    --warn:      var(--pd-orange);
+    --up:        var(--pd-green);
+    --down:      var(--pd-orange);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(1100px 600px at 85% -10%, rgba(85,187,210,0.10), transparent 60%),
+      radial-gradient(900px 500px at 5% 5%, rgba(129,194,67,0.06), transparent 60%),
+      var(--bg);
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 32px 32px 96px; }
+
+  header.page { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+  .title { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: clamp(32px, 4.2vw, 48px); margin: 0; line-height: 1.05; }
+  .title em {
+    font-style: italic;
+    background: linear-gradient(135deg, var(--pd-teal), var(--pd-green));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: var(--muted); font-size: 14px; max-width: 560px; margin: 8px 0 0; line-height: 1.55; }
+
+  /* controls */
+  .ranges { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .ranges label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
+  input[type=month], select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; font-family: inherit; font-size: 13px;
+  }
+  .pill {
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 14px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .pill:hover { color: var(--text); border-color: var(--accent); }
+  button.primary {
+    background: linear-gradient(135deg, var(--pd-teal), var(--pd-green));
+    color: #10262b; border: 0; border-radius: 8px; padding: 8px 20px;
+    font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .55; cursor: default; }
+  button.ghost {
+    background: transparent; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 14px; font-family: inherit; font-size: 13px; cursor: pointer;
+  }
+  button.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+  button.ghost:disabled { opacity: .4; cursor: default; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .meta { color: var(--muted); font-size: 12px; margin: 0 0 22px; }
+
+  /* KPIs */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-2) 70%, transparent); opacity: .8; }
+  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .kpi .value { font-family: 'Fraunces', Georgia, serif; font-size: 32px; font-weight: 500; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .kpi .sub { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+  /* cards */
+  .cards { display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 980px) { .cards { grid-template-columns: 1fr 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px 18px; position: relative; }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 19px; margin: 0 0 4px; }
+  .card .h-sub { color: var(--muted); font-size: 12px; margin: 0 0 18px; line-height: 1.5; }
+  .chart-wrap { position: relative; height: 280px; }
+  .card.wide .chart-wrap { height: 320px; }
+
+  .skeleton {
+    position: absolute; inset: 60px 24px 16px; border-radius: 8px;
+    background: linear-gradient(110deg, var(--panel-2) 30%, #2c333a 50%, var(--panel-2) 70%);
+    background-size: 200% 100%; animation: shimmer 1.4s linear infinite; pointer-events: none;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+  .hidden { display: none !important; }
+  .error {
+    color: var(--warn); font-size: 13px; padding: 12px;
+    background: rgba(241,92,57,0.08); border: 1px solid rgba(241,92,57,0.25); border-radius: 8px;
+  }
+  .notice {
+    color: var(--muted); font-size: 12px; padding: 11px 14px; line-height: 1.55;
+    background: rgba(85,187,210,0.06); border: 1px solid rgba(85,187,210,0.22); border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .notice strong { color: var(--text); }
+
+  /* tables */
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 500; }
+  td.n, th.n { text-align: right; }
+  tbody tr:hover td { background: var(--panel-2); }
+  tr.total td { font-weight: 600; border-top: 1px solid var(--line); border-bottom: none; background: var(--panel-2); }
+  td.dim { color: var(--muted); }
+
+  input.cell {
+    width: 92px; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+    font-family: inherit; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  input.cell:focus { border-color: var(--accent); }
+  input.cell.dirty { border-color: var(--accent-2); background: rgba(129,194,67,0.08); }
+
+  .save-bar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .save-note { color: var(--muted); font-size: 12px; }
+
+  .footnote { color: var(--muted); font-size: 12px; line-height: 1.65; margin-top: 32px; max-width: 900px; }
+  .footnote strong { color: var(--text); }
+</style>
+</head>
+<body>
+<!-- pd-back-button -->
+<a href="/" style="display:inline-flex;align-items:center;gap:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:500;color:#374151;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;margin:12px 0 0 16px;padding:6px 14px;box-shadow:0 1px 2px rgba(0,0,0,0.05);" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">&larr; Back to dashboards</a>
+
+<div class="wrap">
+  <header class="page">
+    <div>
+      <h1 class="title">Marketing <em>Performance</em></h1>
+      <p class="subtitle">Ad spend joined to the live HubSpot funnel — what each channel costs per lead, per opportunity and per sale, and how cookie attribution compares with what applicants actually tell us.</p>
+    </div>
+  </header>
+
+  <section class="ranges">
+    <label for="from">From</label>
+    <input type="month" id="from" />
+    <label for="to">To</label>
+    <input type="month" id="to" />
+    <button class="pill" data-preset="12">Last 12 months</button>
+    <button class="pill" data-preset="6">Last 6 months</button>
+    <button class="pill" data-preset="3">Last 3 months</button>
+    <button class="primary" id="refresh">Apply</button>
+  </section>
+
+  <p class="meta" id="generated"></p>
+  <div id="error-banner" class="error hidden" style="margin-bottom:24px;"></div>
+  <div id="traffic-notice" class="notice hidden"></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="cards">
+
+    <div class="card wide">
+      <h2>Cost per outcome, by channel</h2>
+      <p class="h-sub">The join this dashboard exists for: hand-entered ad spend against live HubSpot outcomes. Channels with no spend recorded show their volume but no cost — that is not zero cost, it is unmeasured.</p>
+      <div class="scroll"><table id="cost-table"><tbody></tbody></table></div>
+      <div class="skeleton" id="skel-cost"></div>
+    </div>
+
+    <div class="card">
+      <h2>What the cookie says</h2>
+      <p class="h-sub">HubSpot Original Source on the student contact. Leads over the selected range.</p>
+      <div class="chart-wrap"><canvas id="chart-hs"></canvas><div class="skeleton" id="skel-hs"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>What applicants say</h2>
+      <p class="h-sub">The application form's own “How did you find us?” answer. A different taxonomy to the left — compare the shape and the ranking, not row against row.</p>
+      <div class="chart-wrap"><canvas id="chart-jf"></canvas><div class="skeleton" id="skel-jf"></div></div>
+    </div>
+
+    <div class="card wide">
+      <h2>Month by month</h2>
+      <p class="h-sub">Spend as bars against the funnel as lines. Opportunity means the application fee was paid; sale means a deposit was received.</p>
+      <div class="chart-wrap"><canvas id="chart-trend"></canvas><div class="skeleton" id="skel-trend"></div></div>
+    </div>
+
+    <div class="card wide">
+      <h2>Ad spend</h2>
+      <p class="h-sub">The only figures on this page that are typed rather than read. Enter what the platform billed; NZD is what the rest of the dashboard uses. Meta bills in USD — set the rate per row so a historical figure can always be explained.</p>
+      <div class="scroll"><table id="spend-table"><tbody></tbody></table></div>
+      <div class="save-bar">
+        <button class="primary" id="save-spend" disabled>Save changes</button>
+        <span class="save-note" id="save-note">No unsaved changes.</span>
+      </div>
+      <div class="skeleton" id="skel-spend"></div>
+    </div>
+
+  </section>
+
+  <p class="footnote">
+    <strong>Sources.</strong> Funnel, sessions and attribution are read live from HubSpot and Jotform on every load via <code>/api/sales-funnel-data</code>. Ad spend comes from <code>/api/marketing-spend</code> and is entered by hand, because neither Google Ads nor Meta is connected to this stack.
+    <strong>Definitions.</strong> Lead = contact created with Company Tag “Pacific Discovery”. Opportunity = deal entering an Application Fee Received stage. Sale = deal entering a Deposit Paid stage, counted once in the month the deposit landed.
+    <strong>Excluded.</strong> College Credit deals, test records, and the Unearthed Education pipeline.
+    <strong>Health warning.</strong> Original Source is unreliable while records arriving through Zapier land as “Offline Sources” with their real channel stripped. Where the two attribution panels disagree, the application-form answer is the more credible of the two.
+  </p>
+</div>
+
+<script>
+/* ============================================================
+   Marketing Performance
+   Reads:  /api/sales-funnel-data  (live HubSpot + Jotform)
+           /api/marketing-spend    (Neon-stored manual ad spend)
+   Writes: /api/marketing-spend?action=upsert
+   ============================================================ */
+
+const COLORS = {
+  teal:   '#55BBD2',
+  green:  '#81C243',
+  navy:   '#3B5998',
+  blue:   '#0A96DB',
+  orange: '#f15c39',
+  muted:  '#8a949c',
+};
+const SERIES = [COLORS.teal, COLORS.green, COLORS.navy, COLORS.blue, COLORS.orange, '#a78bfa', '#f0b429', '#6ab39a', '#e879a6', '#7c9bff'];
+
+/* Chart.js comes from a CDN. If that request fails — offline, blocked network,
+   CDN outage — the numbers on this page are still perfectly good, so degrade
+   to the tables rather than taking the whole dashboard down with a
+   ReferenceError before anything renders. */
+const HAS_CHARTS = typeof window.Chart !== 'undefined';
+if (HAS_CHARTS) {
+  Chart.defaults.color = COLORS.muted;
+  Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.borderColor = '#2f363d';
+}
+
+/* -------- month helpers -------- */
+function ymOf(d) { return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; }
+function addMonths(ym, n) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return ymOf(d);
+}
+function fmtMonthLabel(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-NZ', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+}
+function sum(arr) { return (arr || []).reduce((a, b) => a + (Number(b) || 0), 0); }
+function nz(n) { return `NZ$${(Number(n) || 0).toLocaleString('en-NZ', { maximumFractionDigits: 0 })}`; }
+function nz2(n) { return `NZ$${(Number(n) || 0).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+function int(n) { return (Number(n) || 0).toLocaleString('en-NZ'); }
+/* Cost per outcome is meaningless with no spend, and infinite with no
+   outcome. Both cases render as an em dash rather than a misleading number. */
+function costPer(spend, count) {
+  if (!spend) return '—';
+  if (!count) return '—';
+  return nz(spend / count);
+}
+
+const els = {
+  from:      document.getElementById('from'),
+  to:        document.getElementById('to'),
+  refresh:   document.getElementById('refresh'),
+  generated: document.getElementById('generated'),
+  error:     document.getElementById('error-banner'),
+  notice:    document.getElementById('traffic-notice'),
+  kpis:      document.getElementById('kpis'),
+  costTable: document.getElementById('cost-table'),
+  spendTable:document.getElementById('spend-table'),
+  saveBtn:   document.getElementById('save-spend'),
+  saveNote:  document.getElementById('save-note'),
+};
+
+const SKELS = ['cost', 'hs', 'jf', 'trend', 'spend'];
+function showSkeletons(on) {
+  SKELS.forEach((k) => {
+    const el = document.getElementById(`skel-${k}`);
+    if (el) el.classList.toggle('hidden', !on);
+  });
+}
+
+const state = {
+  funnel: null,   // sales-funnel-data payload
+  spend: null,    // marketing-spend payload
+  dirty: new Map(), // `${ym}|${channel}` -> { month, channel, amount, currency, fxToNzd }
+};
+let charts = {};
+function destroyChart(key) {
+  if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+}
+
+/* -------- fetching -------- */
+async function fetchJson(url) {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.json()).error || ''; } catch { detail = await res.text(); }
+    throw new Error(`${res.status}${detail ? ': ' + detail.slice(0, 200) : ''}`);
+  }
+  const data = await res.json();
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+/* -------- KPIs -------- */
+/* Months with at least one spend figure recorded. Blended cost-per is only
+   honest across these — dividing two months of spend by a year of sales
+   produces a number that looks precise and means nothing. */
+function spendCoveredMonths() {
+  const chans = channelsWithSpend();
+  return state.spend.months
+    .map((_, i) => chans.some((c) => Number(state.spend.spend[c][i]) > 0))
+    .map((covered, i) => (covered ? i : -1))
+    .filter((i) => i >= 0);
+}
+
+function renderKpis() {
+  const f = state.funnel;
+  const totalSpend = channelsWithSpend().reduce((acc, c) => acc + sum(state.spend.spend[c]), 0);
+  const leads = sum(f.contacts);
+  const opps = sum(f.opportunities);
+  const sales = sum(f.totalSales);
+  const sessions = sum(f.traffic);
+
+  // Restrict the blended ratio to the months that actually carry spend.
+  const covered = spendCoveredMonths();
+  const allCovered = covered.length === f.months.length;
+  const salesInCovered = covered.reduce((a, i) => a + (Number(f.totalSales[i]) || 0), 0);
+  const costSub = !covered.length
+    ? 'no spend recorded'
+    : allCovered
+      ? 'blended, all channels'
+      : `over ${covered.length} of ${f.months.length} months with spend`;
+
+  const tiles = [
+    { label: 'Ad spend',      value: nz(totalSpend),  sub: covered.length ? `${covered.length} month${covered.length === 1 ? '' : 's'} recorded` : 'entered by hand' },
+    { label: 'Sessions',      value: int(sessions),   sub: f.trafficSource === 'hubspot' ? 'HubSpot analytics' : 'unavailable' },
+    { label: 'Leads',         value: int(leads),      sub: 'PD-tagged contacts' },
+    { label: 'Opportunities', value: int(opps),       sub: 'application fee paid' },
+    { label: 'Sales',         value: int(sales),      sub: 'deposit received' },
+    { label: 'Cost per sale', value: costPer(totalSpend, salesInCovered), sub: costSub },
+  ];
+
+  els.kpis.innerHTML = tiles.map((t) => `
+    <div class="kpi">
+      <div class="label">${t.label}</div>
+      <div class="value">${t.value}</div>
+      <div class="sub">${t.sub}</div>
+    </div>`).join('');
+}
+
+/* -------- cost per outcome -------- */
+function channelsWithSpend() {
+  if (!state.spend) return [];
+  return state.spend.channels.filter((c) => sum(state.spend.spend[c]) > 0);
+}
+
+function renderCostTable() {
+  const hs = state.funnel.bySource.hubspot;
+  // Union of channels that have spend and channels that produced anything.
+  const labels = new Set([...channelsWithSpend(), ...(hs.labels || [])]);
+  const rows = [...labels].map((label) => {
+    const spend = state.spend.spend[label] ? sum(state.spend.spend[label]) : 0;
+    const leads = sum(hs.contacts[label]);
+    const opps = sum(hs.opportunities[label]);
+    const sales = sum(hs.totalSales[label]);
+    return { label, spend, leads, opps, sales };
+  }).sort((a, b) => (b.spend - a.spend) || (b.sales - a.sales) || (b.leads - a.leads));
+
+  const t = rows.reduce((acc, r) => ({
+    spend: acc.spend + r.spend, leads: acc.leads + r.leads,
+    opps: acc.opps + r.opps, sales: acc.sales + r.sales,
+  }), { spend: 0, leads: 0, opps: 0, sales: 0 });
+
+  els.costTable.innerHTML = `
+    <thead><tr>
+      <th>Channel</th><th class="n">Spend</th><th class="n">Leads</th><th class="n">Opps</th>
+      <th class="n">Sales</th><th class="n">Cost / lead</th><th class="n">Cost / opp</th><th class="n">Cost / sale</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map((r) => `
+        <tr>
+          <td>${r.label}</td>
+          <td class="n ${r.spend ? '' : 'dim'}">${r.spend ? nz(r.spend) : '—'}</td>
+          <td class="n">${int(r.leads)}</td>
+          <td class="n">${int(r.opps)}</td>
+          <td class="n">${int(r.sales)}</td>
+          <td class="n">${costPer(r.spend, r.leads)}</td>
+          <td class="n">${costPer(r.spend, r.opps)}</td>
+          <td class="n">${costPer(r.spend, r.sales)}</td>
+        </tr>`).join('')}
+      <tr class="total">
+        <td>All channels</td>
+        <td class="n">${nz(t.spend)}</td><td class="n">${int(t.leads)}</td>
+        <td class="n">${int(t.opps)}</td><td class="n">${int(t.sales)}</td>
+        <td class="n">${costPer(t.spend, t.leads)}</td>
+        <td class="n">${costPer(t.spend, t.opps)}</td>
+        <td class="n">${costPer(t.spend, t.sales)}</td>
+      </tr>
+    </tbody>`;
+}
+
+/* -------- attribution: two rankings, deliberately not paired -------- */
+function renderAttribution(mode, canvasId, key) {
+  const src = state.funnel.bySource[mode];
+  const rows = (src.labels || [])
+    .map((label) => ({ label, n: sum(src.contacts[label]) }))
+    .filter((r) => r.n > 0)
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 10);
+
+  destroyChart(key);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !HAS_CHARTS) return;
+  charts[key] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map((r) => r.label),
+      datasets: [{
+        label: 'Leads',
+        data: rows.map((r) => r.n),
+        backgroundColor: mode === 'hubspot' ? COLORS.teal : COLORS.orange,
+        borderRadius: 4,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#2f363d' }, ticks: { precision: 0 } },
+        y: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+/* -------- monthly trend -------- */
+function renderTrend() {
+  const f = state.funnel;
+  const months = f.months;
+  const spendByMonth = months.map((_, i) =>
+    channelsWithSpend().reduce((acc, c) => acc + (Number(state.spend.spend[c][i]) || 0), 0));
+
+  destroyChart('trend');
+  const ctx = document.getElementById('chart-trend');
+  if (!ctx || !HAS_CHARTS) return;
+  charts.trend = new Chart(ctx, {
+    data: {
+      labels: months.map(fmtMonthLabel),
+      datasets: [
+        { type: 'bar', label: 'Ad spend (NZ$)', data: spendByMonth, backgroundColor: 'rgba(85,187,210,0.35)', borderColor: COLORS.teal, borderWidth: 1, borderRadius: 4, yAxisID: 'y1', order: 3 },
+        { type: 'line', label: 'Leads', data: f.contacts, borderColor: COLORS.muted, backgroundColor: COLORS.muted, tension: .3, pointRadius: 2, yAxisID: 'y', order: 2 },
+        { type: 'line', label: 'Opportunities', data: f.opportunities, borderColor: COLORS.navy, backgroundColor: COLORS.navy, tension: .3, pointRadius: 2, yAxisID: 'y', order: 1 },
+        { type: 'line', label: 'Sales', data: f.totalSales, borderColor: COLORS.green, backgroundColor: COLORS.green, tension: .3, pointRadius: 3, borderWidth: 2, yAxisID: 'y', order: 0 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true } } },
+      scales: {
+        y:  { beginAtZero: true, position: 'left',  grid: { color: '#2f363d' }, title: { display: true, text: 'Count' }, ticks: { precision: 0 } },
+        y1: { beginAtZero: true, position: 'right', grid: { display: false },   title: { display: true, text: 'NZ$' } },
+        x:  { grid: { display: false } },
+      },
+    },
+  });
+}
+
+/* -------- spend editor -------- */
+/* Only the channels you can actually buy are offered for entry. Recording
+   spend against Organic Search would be a category error, and an editable
+   cell is an invitation to make one. */
+const SPENDABLE = ['Paid Search', 'Paid Social', 'Other Campaigns', 'Email Marketing'];
+
+function existingRow(ym, channel) {
+  return (state.spend.rows || []).find((r) => r.month === ym && r.channel === channel);
+}
+
+function renderSpendTable() {
+  const months = state.spend.months;
+  els.spendTable.innerHTML = `
+    <thead><tr>
+      <th>Month</th>
+      ${SPENDABLE.map((c) => `<th class="n">${c}</th>`).join('')}
+      <th class="n">Month total (NZ$)</th>
+    </tr></thead>
+    <tbody>
+      ${months.map((ym, i) => `
+        <tr>
+          <td>${fmtMonthLabel(ym)}</td>
+          ${SPENDABLE.map((c) => {
+            const row = existingRow(ym, c);
+            const val = row ? row.amount : '';
+            const cur = row ? row.currency : (c === 'Paid Social' ? 'USD' : 'NZD');
+            const fx = row ? row.fxToNzd : (c === 'Paid Social' ? 1.75 : 1);
+            return `<td class="n">
+              <input class="cell" type="number" step="0.01" min="0" inputmode="decimal"
+                     value="${val}" data-month="${ym}" data-channel="${c}"
+                     data-currency="${cur}" data-fx="${fx}"
+                     aria-label="${c} spend for ${fmtMonthLabel(ym)}"
+                     title="${cur}${cur !== 'NZD' ? ` · converted at ${fx}` : ''}" />
+            </td>`;
+          }).join('')}
+          <td class="n dim" data-total-for="${ym}">${nz(SPENDABLE.reduce((a, c) => a + (state.spend.spend[c] ? Number(state.spend.spend[c][i]) || 0 : 0), 0))}</td>
+        </tr>`).join('')}
+    </tbody>`;
+
+  els.spendTable.querySelectorAll('input.cell').forEach((inp) => {
+    inp.addEventListener('input', onCellEdit);
+  });
+}
+
+function onCellEdit(e) {
+  const inp = e.target;
+  const key = `${inp.dataset.month}|${inp.dataset.channel}`;
+  const raw = inp.value.trim();
+  const row = existingRow(inp.dataset.month, inp.dataset.channel);
+  const original = row ? String(row.amount) : '';
+
+  if (raw === original) {
+    state.dirty.delete(key);
+    inp.classList.remove('dirty');
+  } else {
+    state.dirty.set(key, {
+      month: inp.dataset.month,
+      channel: inp.dataset.channel,
+      amount: raw === '' ? 0 : Number(raw),
+      currency: inp.dataset.currency,
+      fxToNzd: Number(inp.dataset.fx) || 1,
+    });
+    inp.classList.add('dirty');
+  }
+  updateSaveBar();
+}
+
+function updateSaveBar() {
+  const n = state.dirty.size;
+  els.saveBtn.disabled = n === 0;
+  els.saveNote.textContent = n === 0
+    ? 'No unsaved changes.'
+    : `${n} cell${n === 1 ? '' : 's'} changed.`;
+}
+
+async function saveSpend() {
+  if (!state.dirty.size) return;
+  els.saveBtn.disabled = true;
+  els.saveNote.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/marketing-spend?action=upsert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: [...state.dirty.values()] }),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json()).error || ''; } catch { /* body already consumed or not JSON */ }
+      throw new Error(detail || `Server ${res.status}`);
+    }
+    state.dirty.clear();
+    els.saveNote.textContent = 'Saved. Reloading…';
+    await load();
+  } catch (err) {
+    els.saveNote.textContent = '';
+    els.error.textContent = `Could not save spend: ${err.message}`;
+    els.error.classList.remove('hidden');
+    updateSaveBar();
+  }
+}
+
+/* -------- orchestration -------- */
+function renderTrafficNotice() {
+  const s = state.funnel.trafficSource;
+  if (!HAS_CHARTS) {
+    els.notice.innerHTML = '<strong>Charts unavailable —</strong> the charting library did not load. Every figure below is still live and correct; only the graphs are missing.';
+    els.notice.classList.remove('hidden');
+    return;
+  }
+  if (s === 'hubspot') { els.notice.classList.add('hidden'); return; }
+  const why = s === 'scope-missing'
+    ? 'the HubSpot private app is missing the analytics scope'
+    : s === 'empty' ? 'HubSpot returned no sessions for this range'
+    : 'the HubSpot analytics call failed';
+  els.notice.innerHTML = `<strong>Sessions unavailable —</strong> ${why}. Every other figure on this page is unaffected.`;
+  els.notice.classList.remove('hidden');
+}
+
+function rerender() {
+  renderTrafficNotice();
+  renderKpis();
+  renderCostTable();
+  renderAttribution('hubspot', 'chart-hs', 'hs');
+  renderAttribution('jotform', 'chart-jf', 'jf');
+  renderTrend();
+  renderSpendTable();
+  updateSaveBar();
+}
+
+async function load() {
+  els.refresh.disabled = true;
+  els.refresh.textContent = 'Loading…';
+  els.error.classList.add('hidden');
+  showSkeletons(true);
+
+  const from = els.from.value;
+  const to = els.to.value;
+  const qs = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+
+  try {
+    // Spend is cheap and local; the funnel call is a live HubSpot crawl.
+    // Fire both together so the page is bounded by the slower one.
+    const [funnel, spend] = await Promise.all([
+      fetchJson(`/api/sales-funnel-data?${qs}`),
+      fetchJson(`/api/marketing-spend?${qs}`),
+    ]);
+    state.funnel = funnel;
+    state.spend = spend;
+    state.dirty.clear();
+    rerender();
+    els.generated.textContent =
+      `${fmtMonthLabel(from)} – ${fmtMonthLabel(to)} · updated ${new Date(funnel.generatedAt).toLocaleString('en-NZ')}`;
+  } catch (err) {
+    els.error.textContent = `Failed to load: ${err.message}`;
+    els.error.classList.remove('hidden');
+    console.error(err);
+  } finally {
+    showSkeletons(false);
+    els.refresh.disabled = false;
+    els.refresh.textContent = 'Apply';
+  }
+}
+
+function setRange(monthsBack) {
+  const now = new Date();
+  const to = ymOf(now);
+  els.to.value = to;
+  els.from.value = addMonths(to, -(monthsBack - 1));
+}
+
+document.querySelectorAll('[data-preset]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setRange(Number(btn.dataset.preset));
+    load();
+  });
+});
+els.refresh.addEventListener('click', load);
+els.saveBtn.addEventListener('click', saveSpend);
+
+setRange(12);
+load();
+</script>
+</body>
+</html>

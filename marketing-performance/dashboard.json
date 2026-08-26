@@ -1,0 +1,10 @@
+{
+  "title": "Marketing Performance",
+  "description": "Cost per lead, opportunity and sale by channel — ad spend joined to the live HubSpot funnel, with cookie attribution shown against what applicants actually say.",
+  "category": "Outreach",
+  "icon": "📈",
+  "pinned": false,
+  "order": 15,
+  "colors": ["#55BBD2", "#f15c39"],
+  "allowedRoles": ["admin", "outreach", "operations", "admissions"]
+}
