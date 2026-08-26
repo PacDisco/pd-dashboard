@@ -127,9 +127,65 @@ const funnel = {
       },
     },
   },
+  offline: {
+    // Shaped to match the real portal: Offline is the biggest bucket, a
+    // minority of it is recoverable from the drill-downs, and the majority
+    // has no drill-down at all.
+    contacts: {
+      total:       spread(60, [1, .9, .8]),
+      recovered:   spread(25, [1, .9, .8]),
+      unrecovered: spread(35, [1, .9, .8]),
+      byChannel: {
+        "Paid Social":     spread(10, [1, .9, .8]),
+        "Referrals":       spread(9,  [1, .9, .8]),
+        "Paid Search":     spread(4,  [1, .9, .8]),
+        "AI Referrals":    spread(1,  [1, 1, 1]),
+        "Email Marketing": spread(1,  [1, 1, 1]),
+        "Not recoverable": spread(35, [1, .9, .8]),
+      },
+      byDetail: {
+        "Facebook":               spread(10, [1, .9, .8]),
+        "gooverseas.com":         spread(6,  [1, .9, .8]),
+        "TeenLife":               spread(3,  [1, .9, .8]),
+        "Performance Max - Europe": spread(4, [1, .9, .8]),
+        "<script>x</script>":     spread(1,  [1, 1, 1]),
+        "PD Newsletter":          spread(1,  [1, 1, 1]),
+      },
+      byRaw: {},
+    },
+    opportunities: {
+      total: spread(6, [1, .8, .6]), recovered: spread(3, [1, .8, .6]), unrecovered: spread(3, [1, .8, .6]),
+      byChannel: {}, byRaw: {},
+      byDetail: { "Facebook": spread(2, [1, .8, .6]), "gooverseas.com": spread(2, [1, .8, .6]) },
+    },
+    totalSales: {
+      total: spread(3, [1, .8, .6]), recovered: spread(2, [1, .8, .6]), unrecovered: spread(1, [1, .8, .6]),
+      byChannel: {}, byRaw: {},
+      byDetail: { "Facebook": spread(1, [1, .8, .6]), "gooverseas.com": spread(1, [1, .8, .6]) },
+    },
+    unrecoveredLabel: "Not recoverable",
+    drilldownProps: ["original_source_drill_down_3", "original_source_drill_down_4", "original_source_drill_down_5"],
+  },
+  applications: {
+    matched: spread(22, [1, .9, 1]),
+    formIds: ["240277257210046"],
+    available: true,
+    noApplicationLabel: "(No application on file)",
+    blankLabel: "(Application left blank)",
+  },
   bySubSource: { detailFieldsByPrimary: {}, labels: {}, contacts: {}, opportunities: {}, salesViaDp: {}, salesSkipDp: {}, totalSales: {} },
   generatedAt: new Date().toISOString(),
 };
+
+// The bucket that used to swallow the panel. It must be present in the payload
+// and absent from the chart.
+funnel.bySource.jotform.labels.push("(No application on file)", "(Application left blank)");
+funnel.bySource.jotform.contacts["(No application on file)"] = spread(64, [1, .9, .8]);
+funnel.bySource.jotform.contacts["(Application left blank)"] = spread(2, [1, 1, 1]);
+for (const k of ["opportunities", "totalSales"]) {
+  funnel.bySource.jotform[k]["(No application on file)"] = spread(0, [0]);
+  funnel.bySource.jotform[k]["(Application left blank)"] = spread(0, [0]);
+}
 
 const CHANNELS = [
   "Paid Search", "Paid Social", "Organic Search", "Organic Social", "Email Marketing",
@@ -234,13 +290,68 @@ if (chartsAvailable) {
   check("trend chart drawn", drawn.trend);
   check("both taxonomies plotted independently", drawn.hsBars > 0 && drawn.jfBars > 0,
     `hs=${drawn.hsBars} jf=${drawn.jfBars}`);
+
+  // --- the (Unknown) regression: the never-asked bucket must not be a bar
+  const jfLabels = await page.evaluate(() =>
+    window.Chart.getChart("chart-jf")?.data?.labels || []);
+  check("jotform chart excludes the never-asked bucket",
+    !jfLabels.includes("(No application on file)"), jfLabels.join("|"));
+  check("jotform chart keeps genuinely blank answers visible",
+    jfLabels.includes("(Application left blank)"), jfLabels.join("|"));
+  check("jotform chart is led by a real answer, not a placeholder",
+    jfLabels[0] === "Social Media", `top=${jfLabels[0]}`);
+
+  // --- offline breakout
+  const off = await page.evaluate(() => {
+    const c = window.Chart.getChart("chart-offline");
+    return { labels: c?.data?.labels || [], data: c?.data?.datasets?.[0]?.data || [],
+             colors: c?.data?.datasets?.[0]?.backgroundColor || [] };
+  });
+  check("offline breakout chart drawn", off.labels.length > 0);
+  check("offline split is ranked by volume",
+    off.data.slice(0, -1).every((v, i, a) => i === 0 || a[i - 1] >= v), off.data.join(","));
+  check("unrecovered remainder is last, not hidden",
+    off.labels[off.labels.length - 1] === "Not recoverable");
+  check("unrecovered remainder is greyed out",
+    off.colors[off.colors.length - 1] === "#4a5560", String(off.colors[off.colors.length - 1]));
 } else {
   console.log("  · Chart.js unreachable — asserting the no-charts fallback instead");
   check("degrades without charts, tables still render",
     (await page.locator("#cost-table tbody tr").count()) > 1);
   check("tells the reader charts are missing",
     (await page.locator("#traffic-notice").innerText()).includes("Charts unavailable"));
+  check("offline table renders without charts",
+    (await page.locator("#offline-table tbody tr").count()) > 1);
 }
+
+// --- offline breakout: the numbers and the honesty, chart or no chart
+const offHead = await page.locator("#offline-head").innerText();
+check("offline header states the Offline volume", /648\s*Offline leads/.test(offHead.replace(/,/g, "")), offHead);
+check("offline header states recovery as a share", /%/.test(offHead), offHead);
+check("offline header names the unreadable remainder", /no drill-down/i.test(offHead), offHead);
+
+const offRows = await page.locator("#offline-table tbody tr").count();
+check("offline detail table lists the recovered sources", offRows > 1, `rows=${offRows}`);
+const offText = await page.locator("#offline-table").innerText();
+check("offline table surfaces the referring domain", offText.includes("gooverseas.com"));
+check("offline table surfaces the ad campaign", offText.includes("Performance Max - Europe"));
+check("offline table carries the unrecovered row", /No drill-down recorded/.test(offText));
+check("offline table joins leads to opps and sales",
+  /Leads[\s\S]*Opps[\s\S]*Sales/i.test(offText), offText.slice(0, 80));
+
+// A utm_source is attacker-controlled free text and lands in this table.
+const injected = await page.evaluate(() =>
+  document.querySelectorAll("#offline-table script").length);
+check("drill-down values are escaped, not executed", injected === 0);
+check("the escaped value is still shown as text",
+  offText.includes("<script>x</script>"));
+
+// --- self-reported coverage: the denominator that makes the panel readable
+const cov = await page.locator("#jf-coverage").innerText();
+check("coverage line states how many answered", /\d+ answers/.test(cov), cov);
+check("coverage line states who was never asked", /never (reached|asked)/i.test(cov), cov);
+check("coverage line warns against reading it as a share of all leads",
+  /not as a share of all leads/i.test(cov), cov);
 
 // --- spend editor
 const cells = await page.locator("#spend-table input.cell").count();
@@ -360,6 +471,37 @@ check("degraded: explains the missing table", /marketing_spend/.test(notice2), n
 check("degraded: names the migration to run", /MIGRATION-marketing-spend\.sql/.test(notice2));
 check("degraded: spend inputs disabled", await page2.locator("#spend-table input.cell").first().isDisabled());
 await page2.close();
+
+// --- stale-function run: the page ships, the function hasn't been redeployed
+// yet, so the payload has no `offline` / `applications` keys. The new panels
+// should say so and everything else should carry on, rather than the page
+// dying on a property read.
+console.log("\n  stale-function run — funnel payload predates the offline breakout:\n");
+const page3 = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+const errs3 = [];
+page3.on("pageerror", (e) => errs3.push(String(e)));
+if (chartJs) {
+  await page3.route("**/chart.umd.min.js", (r) =>
+    r.fulfill({ status: 200, contentType: "application/javascript", body: chartJs }));
+}
+await page3.route("**/fonts.googleapis.com/**", (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" }));
+await page3.route("**/api/sales-funnel-data*", (r) => {
+  const { offline, applications, ...old } = funnel;
+  return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(old) });
+});
+await page3.route("**/api/marketing-spend*", (r) =>
+  r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(spend) }));
+await page3.goto(pageUrl, { waitUntil: "domcontentloaded" });
+await page3.waitForFunction(() => document.querySelectorAll("#kpis .kpi").length > 0, { timeout: 15000 });
+await page3.waitForTimeout(400);
+
+check("stale: no page errors", errs3.length === 0, errs3.join(" | "));
+check("stale: funnel KPIs still render", (await page3.locator("#kpis .kpi").count()) === 6);
+check("stale: offline panel says it is unavailable",
+  /unavailable/i.test(await page3.locator("#offline-head").innerText()));
+check("stale: jotform panel falls back rather than lying",
+  (await page3.locator("#jf-coverage").innerText()).length > 0);
+await page3.close();
 
 await browser.close();
 server.close();

@@ -165,6 +165,14 @@
   .save-bar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
   .save-note { color: var(--muted); font-size: 12px; }
 
+  .coverage { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 12px 0 0; }
+  .coverage strong { color: var(--text); }
+  .offline-head { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: baseline; margin: 4px 0 18px; }
+  .offline-stat { font-size: 13px; color: var(--muted); }
+  .offline-stat b { color: var(--text); font-size: 19px; font-weight: 600; margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .offline-grid { display: grid; grid-template-columns: minmax(280px, 5fr) minmax(300px, 6fr); gap: 24px; align-items: start; }
+  @media (max-width: 900px) { .offline-grid { grid-template-columns: 1fr; } }
+  tr.unrecovered td { color: var(--muted); font-style: italic; }
   .footnote { color: var(--muted); font-size: 12px; line-height: 1.65; margin-top: 32px; max-width: 900px; }
   .footnote strong { color: var(--text); }
 </style>
@@ -227,8 +235,19 @@
 
     <div class="card">
       <h2>What applicants say</h2>
-      <p class="h-sub">The application form's own “How did you find us?” answer. A different taxonomy to the left — compare the shape and the ranking, not row against row.</p>
+      <p class="h-sub" id="jf-sub">The application form's own “How did you find us?” answer. A different taxonomy to the left — compare the shape and the ranking, not row against row.</p>
       <div class="chart-wrap"><canvas id="chart-jf"></canvas><div class="skeleton" id="skel-jf"></div></div>
+      <p class="coverage" id="jf-coverage"></p>
+    </div>
+
+    <div class="card wide">
+      <h2>Inside Offline Sources</h2>
+      <p class="h-sub">Offline is not a channel — it is what HubSpot writes when the tracking cookie never reached it. The real source usually survives in the source drill-downs, so this reads them back. What can't be recovered is counted, not guessed.</p>
+      <div class="offline-head" id="offline-head"></div>
+      <div class="offline-grid">
+        <div class="chart-wrap"><canvas id="chart-offline"></canvas><div class="skeleton" id="skel-offline"></div></div>
+        <div class="scroll"><table id="offline-table"><tbody></tbody></table></div>
+      </div>
     </div>
 
     <div class="card wide">
@@ -259,7 +278,8 @@
     <strong>Sources.</strong> Funnel, sessions and attribution are read live from HubSpot and Jotform on every load via <code>/api/sales-funnel-data</code>. Ad spend comes from <code>/api/marketing-spend</code> and is entered by hand, because neither Google Ads nor Meta is connected to this stack.
     <strong>Definitions.</strong> Lead = contact created with Company Tag “Pacific Discovery”. Opportunity = deal entering an Application Fee Received stage. Sale = deal entering a Deposit Paid stage, counted once in the month the deposit landed.
     <strong>Excluded.</strong> College Credit deals, test records, and the Unearthed Education pipeline.
-    <strong>Health warning.</strong> Original Source is unreliable while records arriving through Zapier land as “Offline Sources” with their real channel stripped. Where the two attribution panels disagree, the application-form answer is the more credible of the two.
+    <strong>Health warning.</strong> Original Source is unreliable while records arriving through Zapier land as “Offline Sources” with their real channel stripped. <em>Inside Offline Sources</em> reads the real channel back out of <code>original_source_drill_down_3/4/5</code>, where the form's <code>utm_source</code>, <code>utm_medium</code> and <code>utm_campaign</code> survive — but only for records that carried a UTM in the first place, which is why a large remainder stays unrecovered. Fixing the source at the point of capture is still the real repair; this panel is a read of the damage, not a substitute.
+    <strong>On the two attribution panels.</strong> They cover different populations. The cookie panel covers every lead. The self-reported panel covers only leads who submitted an application, because that is the only place the question is asked — the count underneath it says how many that is. Comparing their totals is a category error; comparing their rankings is the point.
   </p>
 </div>
 
@@ -335,6 +355,13 @@ function costDeltaBadge(curr, prev) {
 function nz(n) { return `NZ$${(Number(n) || 0).toLocaleString('en-NZ', { maximumFractionDigits: 0 })}`; }
 function nz2(n) { return `NZ$${(Number(n) || 0).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 function int(n) { return (Number(n) || 0).toLocaleString('en-NZ'); }
+/* Drill-down values are whatever landed in a utm_ parameter, so they are
+   attacker-influenced free text and never go into innerHTML raw. */
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+  ));
+}
 /* Cost per outcome is meaningless with no spend, and infinite with no
    outcome. Both cases render as an em dash rather than a misleading number. */
 function costPer(spend, count) {
@@ -365,7 +392,7 @@ const els = {
   fxNote:    document.getElementById('fx-note'),
 };
 
-const SKELS = ['cost', 'hs', 'jf', 'trend', 'spend'];
+const SKELS = ['cost', 'hs', 'jf', 'offline', 'trend', 'spend'];
 function showSkeletons(on) {
   SKELS.forEach((k) => {
     const el = document.getElementById(`skel-${k}`);
@@ -563,9 +590,46 @@ function renderCostTable() {
 }
 
 /* -------- attribution: two rankings, deliberately not paired -------- */
+
+/* The self-reported panel can only speak for people who submitted an
+   application — the question doesn't exist anywhere else. Leaving the rest in
+   as one giant "(Unknown)" bar was what made the panel useless: it buried the
+   answers under a bucket of people who were never asked. They come out of the
+   chart and get stated as a denominator underneath it instead. */
+function renderJotformCoverage() {
+  const el = document.getElementById('jf-coverage');
+  if (!el) return;
+  const f = state.funnel;
+  const apps = f.applications || {};
+  const leads = sum(f.contacts);
+  const matched = sum(apps.matched);
+  const src = f.bySource.jotform || {};
+  const noApp = apps.noApplicationLabel || '(No application on file)';
+  const blank = apps.blankLabel || '(Application left blank)';
+  const answered = (src.labels || [])
+    .filter((l) => l !== noApp && l !== blank)
+    .reduce((a, l) => a + sum(src.contacts[l]), 0);
+
+  if (apps.available === false) {
+    el.innerHTML = '<strong>No application data —</strong> Jotform did not respond, so this panel is falling back to the HubSpot contact property, which is largely unpopulated.';
+    return;
+  }
+  const notAsked = Math.max(0, leads - matched);
+  el.innerHTML =
+    `<strong>${int(answered)} answers</strong> from ${int(matched)} leads with an application on file. ` +
+    `The other ${int(notAsked)} of ${int(leads)} leads in this range never reached the application form, ` +
+    `so they were never asked — they are excluded from the bars above rather than shown as unknown. ` +
+    `Read this as the ranking among applicants, not as a share of all leads.`;
+}
+
 function renderAttribution(mode, canvasId, key) {
   const src = state.funnel.bySource[mode];
+  const apps = state.funnel.applications || {};
+  const hidden = mode === 'jotform'
+    ? new Set([apps.noApplicationLabel || '(No application on file)'])
+    : new Set();
   const rows = (src.labels || [])
+    .filter((label) => !hidden.has(label))
     .map((label) => ({ label, n: sum(src.contacts[label]) }))
     .filter((r) => r.n > 0)
     .sort((a, b) => b.n - a.n)
@@ -597,6 +661,124 @@ function renderAttribution(mode, canvasId, key) {
       },
     },
   });
+}
+
+/* -------- inside Offline Sources --------
+   Offline is the largest bar on the cookie panel and the least informative.
+   The drill-downs recover the real channel for a substantial minority of it;
+   the rest is stated as unrecovered so the split can never be mistaken for
+   full coverage. */
+const OFFLINE_CHANNEL_COLORS = {
+  'Paid Search':     COLORS.teal,
+  'Paid Social':     COLORS.orange,
+  'Referrals':       '#7FB069',
+  'Email Marketing': '#C98BDB',
+  'Organic Social':  '#E8B44A',
+  'Organic Search':  '#5A8FD6',
+  'AI Referrals':    '#4FD1C5',
+};
+const OFFLINE_MUTED = '#4a5560';
+
+function renderOffline() {
+  const head = document.getElementById('offline-head');
+  const table = document.getElementById('offline-table');
+  const off = state.funnel.offline;
+
+  if (!off) {
+    if (head) head.innerHTML = '<span class="offline-stat">Offline breakout unavailable — the funnel API predates this panel.</span>';
+    if (table) table.innerHTML = '';
+    destroyChart('offline');
+    return;
+  }
+
+  const c = off.contacts;
+  const total = sum(c.total);
+  const recovered = sum(c.recovered);
+  const unrecovered = sum(c.unrecovered);
+  const pct = total ? Math.round((recovered / total) * 100) : 0;
+  const allLeads = sum(state.funnel.contacts);
+  const offShare = allLeads ? Math.round((total / allLeads) * 100) : 0;
+
+  head.innerHTML = total === 0
+    ? '<span class="offline-stat">No Offline-attributed records in this range.</span>'
+    : [
+        `<span class="offline-stat"><b>${int(total)}</b>Offline leads (${offShare}% of all leads)</span>`,
+        `<span class="offline-stat"><b>${int(recovered)}</b>real channel recovered (${pct}%)</span>`,
+        `<span class="offline-stat"><b>${int(unrecovered)}</b>no drill-down to read (${100 - pct}%)</span>`,
+      ].join('');
+
+  // Chart: recovered channels, with the unrecovered remainder always last and
+  // greyed, so the eye can't read the split as complete.
+  const unrecLabel = off.unrecoveredLabel || 'Not recoverable';
+  const channels = Object.keys(c.byChannel || {})
+    .filter((k) => k !== unrecLabel)
+    .map((label) => ({ label, n: sum(c.byChannel[label]) }))
+    .filter((r) => r.n > 0)
+    .sort((a, b) => b.n - a.n);
+  if (unrecovered > 0) channels.push({ label: unrecLabel, n: unrecovered, muted: true });
+
+  destroyChart('offline');
+  const ctx = document.getElementById('chart-offline');
+  if (ctx && HAS_CHARTS && channels.length) {
+    charts.offline = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: channels.map((r) => r.label),
+        datasets: [{
+          label: 'Offline leads',
+          data: channels.map((r) => r.n),
+          backgroundColor: channels.map((r) =>
+            r.muted ? OFFLINE_MUTED : (OFFLINE_CHANNEL_COLORS[r.label] || '#8b949e')),
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, grid: { color: '#2f363d' }, ticks: { precision: 0 } },
+          y: { grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // Table: the raw drill-down pairs behind each recovered channel, plus what
+  // each is worth further down the funnel.
+  const opp = off.opportunities || { byDetail: {} };
+  const sal = off.totalSales || { byDetail: {} };
+  const details = Object.keys(c.byDetail || {})
+    .map((label) => ({
+      label,
+      leads: sum(c.byDetail[label]),
+      opps: sum((opp.byDetail || {})[label]),
+      sales: sum((sal.byDetail || {})[label]),
+    }))
+    .filter((r) => r.leads > 0)
+    .sort((a, b) => b.leads - a.leads);
+
+  const rows = details.map((r) => `
+    <tr>
+      <td>${esc(r.label)}</td>
+      <td class="n">${int(r.leads)}</td>
+      <td class="n">${int(r.opps)}</td>
+      <td class="n">${int(r.sales)}</td>
+    </tr>`).join('');
+
+  const unrecRow = unrecovered > 0 ? `
+    <tr class="unrecovered">
+      <td>No drill-down recorded</td>
+      <td class="n">${int(unrecovered)}</td>
+      <td class="n">${int(sum(opp.unrecovered))}</td>
+      <td class="n">${int(sum(sal.unrecovered))}</td>
+    </tr>` : '';
+
+  table.innerHTML = `
+    <thead><tr><th>Recovered source</th><th class="n">Leads</th><th class="n">Opps</th><th class="n">Sales</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="4">Nothing recovered in this range.</td></tr>'}${unrecRow}</tbody>`;
 }
 
 /* -------- monthly trend -------- */
@@ -841,6 +1023,8 @@ function rerender() {
   renderCostTable();
   renderAttribution('hubspot', 'chart-hs', 'hs');
   renderAttribution('jotform', 'chart-jf', 'jf');
+  renderJotformCoverage();
+  renderOffline();
   renderTrend();
   seedFxFromStored();
   renderSpendTable();

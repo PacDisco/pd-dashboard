@@ -44,6 +44,14 @@ const SOURCE_PROPS = {
   jotform: "how_did_you_find_us_",
 };
 
+// dd3 ≈ utm_source, dd4 ≈ utm_medium, dd5 ≈ utm_campaign — but see the note
+// above recoverOffline(); HubSpot writes its own categories here too.
+const DRILLDOWN_PROPS = [
+  "original_source_drill_down_3",
+  "original_source_drill_down_4",
+  "original_source_drill_down_5",
+];
+
 // Jotform primaries that have a detail field on the contact record
 const JOTFORM_DETAIL_FIELDS = {
   "Gap Year Advisor or Independent Educational Consultant": "advisor_name",
@@ -65,6 +73,119 @@ const HUBSPOT_SOURCE_LABELS = {
 };
 
 const UNKNOWN_LABEL = "(Unknown)";
+
+// Jotform mode has two very different kinds of "no answer", and collapsing
+// them into one (Unknown) bar is what made that panel unreadable: it put the
+// ~1,600 leads who were never asked the question in the same bucket as the
+// handful of applicants who left it blank. They mean opposite things.
+const NO_APPLICATION_LABEL = "(No application on file)";
+const APPLICATION_BLANK_LABEL = "(Application left blank)";
+
+// ============================================================
+// Offline recovery — original_source_drill_down_3/4/5
+//
+// Records created through Zapier arrive without the tracking cookie, so
+// HubSpot stamps Original Source = OFFLINE and the real channel is lost from
+// hs_analytics_source. It is NOT lost from the drill-downs: the form posts
+// utm_source / utm_medium / utm_campaign through to drill_down_3 / 4 / 5, and
+// HubSpot writes its own values there for email sends, referring domains and
+// list imports.
+//
+// Over the twelve months to Aug 2026 that recovers the true channel on 459 of
+// 1,093 Offline PD leads (42%). The remaining 634 have no drill-down at all
+// and are reported as unrecovered rather than guessed at — see OFFLINE_RULES
+// below for exactly what each rule claims.
+//
+// drill_down_3 is not consistently utm_source. Sometimes it IS the source
+// ("adwords", "chatgpt.com"); sometimes it is a HubSpot-side category with the
+// vendor in drill_down_4 ("Recruitment" / "TeenLife", "referrals" /
+// "gooverseas.com"). Every rule therefore reads dd3 and dd4 together.
+// ============================================================
+
+// Evaluated in order; first match wins. `test` receives lowercased dd3/dd4.
+const OFFLINE_RULES = [
+  {
+    channel: "Paid Search",
+    test: (d3, d4) =>
+      ["adwords", "google", "googleads", "google-ads", "google_ads", "paid search", "paidsearch"].includes(d3) ||
+      (d3 === "landing page" && /search|cpc|ppc|paid/.test(d4)),
+  },
+  {
+    channel: "Paid Social",
+    test: (d3, d4) =>
+      /^(facebook|fb|ig|instagram|meta|facebook\.com|instagram\.com|paid social|paidsocial)$/.test(d3) &&
+      /paid|cpc|ppc|social/.test(d4),
+  },
+  {
+    channel: "Organic Social",
+    test: (d3) =>
+      /^(facebook|fb|ig|instagram|meta|facebook\.com|instagram\.com|tiktok|linkedin|youtube|pinterest|reddit)$/.test(d3),
+  },
+  {
+    channel: "Email Marketing",
+    test: (d3, d4) =>
+      /^(hs_email|email|newsletter|mailchimp|klaviyo)$/.test(d3) || d4 === "email",
+  },
+  {
+    channel: "AI Referrals",
+    test: (d3) =>
+      /^(chatgpt\.com|chat\.openai\.com|perplexity\.ai|gemini\.google\.com|copilot\.microsoft\.com|claude\.ai|you\.com|bard\.google\.com)$/.test(d3),
+  },
+  {
+    channel: "Organic Search",
+    test: (d3) => /^(bing|bing\.com|duckduckgo|duckduckgo\.com|yahoo|ecosia\.org|organic)$/.test(d3),
+  },
+  {
+    channel: "Referrals",
+    // "referrals"/"recruitment" put the partner in dd4; a bare domain in dd3
+    // (gooverseas.com, studiekeuzemaken.nl) is itself the referrer. Named
+    // partners are listed so they survive a rename of the dd3 category.
+    test: (d3, d4) =>
+      ["referrals", "referral", "recruitment", "partner", "teenlife", "gooverseas", "goabroad"].includes(d3) ||
+      d4 === "referral" ||
+      /\.(com|org|net|nl|co|edu|io|au|nz|uk|de|fr|es|ca)$/.test(d3),
+  },
+];
+
+const OFFLINE_UNRECOVERED = "Not recoverable";
+
+// Returns { channel, detail } for an Offline record, or null when the
+// drill-downs are empty. `detail` is the most specific true thing available —
+// the referring domain, the campaign, or the raw source — never a guess.
+function recoverOffline(dd3, dd4, dd5) {
+  const raw3 = (dd3 || "").trim();
+  const raw4 = (dd4 || "").trim();
+  const raw5 = (dd5 || "").trim();
+  if (!raw3 && !raw4) return null;
+
+  const d3 = raw3.toLowerCase();
+  const d4 = raw4.toLowerCase();
+
+  let channel = null;
+  for (const rule of OFFLINE_RULES) {
+    if (rule.test(d3, d4)) { channel = rule.channel; break; }
+  }
+
+  // Detail: prefer the referring domain / vendor over the category name,
+  // then the campaign, then the bare source.
+  let detail;
+  if (channel === "Referrals") {
+    detail = raw4 && raw4.toLowerCase() !== "referral" ? raw4 : raw3;
+  } else if (channel === "Paid Search" || channel === "Paid Social" || channel === "Email Marketing") {
+    detail = raw5 || raw3;
+  } else {
+    detail = raw3 || raw4;
+  }
+
+  return {
+    // An unmatched drill-down is reported under its own raw value rather than
+    // being swept into "Other Campaigns" — an invented channel is worse than a
+    // visibly unmapped one, and this is how new rules get noticed.
+    channel: channel || `Unmapped: ${raw3 || raw4}`,
+    detail: detail || raw3 || raw4,
+    raw: [raw3, raw4].filter(Boolean).join(" › "),
+  };
+}
 
 // -------- Helpers --------
 
@@ -193,6 +314,7 @@ async function fetchContactSources(contactIds) {
     "email",
     SOURCE_PROPS.hubspot,
     SOURCE_PROPS.jotform,
+    ...DRILLDOWN_PROPS,
     ...Object.values(JOTFORM_DETAIL_FIELDS),
   ];
   const map = new Map();
@@ -210,6 +332,9 @@ async function fetchContactSources(contactIds) {
         email: p.email || null,
         hubspot: p[SOURCE_PROPS.hubspot] || null,
         jotform: p[SOURCE_PROPS.jotform] || null,
+        dd3: p[DRILLDOWN_PROPS[0]] || null,
+        dd4: p[DRILLDOWN_PROPS[1]] || null,
+        dd5: p[DRILLDOWN_PROPS[2]] || null,
         advisor_name: p.advisor_name || null,
         event_name_and_location: p.event_name_and_location || null,
         word_of_mouth_referral_name: p.word_of_mouth_referral_name || null,
@@ -268,12 +393,20 @@ function hubspotSourceLabel(raw) {
   return HUBSPOT_SOURCE_LABELS[raw] || raw;
 }
 
+// The self-reported answer, or the reason there isn't one.
+function jotformLabel(entry) {
+  if (!entry) return NO_APPLICATION_LABEL;
+  if (entry.jotform) return entry.jotform;
+  return entry.hasApplication ? APPLICATION_BLANK_LABEL : NO_APPLICATION_LABEL;
+}
+
 async function fetchPdContacts(startISO, endISO) {
   const props = [
     "createdate",
     "email",
     SOURCE_PROPS.hubspot,
     SOURCE_PROPS.jotform,
+    ...DRILLDOWN_PROPS,
     ...Object.values(JOTFORM_DETAIL_FIELDS),
   ];
   const all = [];
@@ -306,6 +439,9 @@ async function fetchPdContacts(startISO, endISO) {
         email: p.email || null,
         hubspot: p[SOURCE_PROPS.hubspot] || null,
         jotform: p[SOURCE_PROPS.jotform] || null,
+        dd3: p[DRILLDOWN_PROPS[0]] || null,
+        dd4: p[DRILLDOWN_PROPS[1]] || null,
+        dd5: p[DRILLDOWN_PROPS[2]] || null,
         advisor_name: p.advisor_name || null,
         event_name_and_location: p.event_name_and_location || null,
         word_of_mouth_referral_name: p.word_of_mouth_referral_name || null,
@@ -393,7 +529,14 @@ function enrichJotform(entry, jotformMap) {
   const email = (entry.email || "").trim().toLowerCase();
   if (!email) return entry;
   const jf = jotformMap.get(email);
-  if (!jf) return entry;
+  // hasApplication records whether this person is even in the population the
+  // question was put to. Without it the panel can't tell "didn't answer" from
+  // "was never asked", and the second dwarfs the first roughly 4:1.
+  if (!jf) {
+    entry.hasApplication = Boolean(entry.jotform);
+    return entry;
+  }
+  entry.hasApplication = true;
   if (jf.primary) entry.jotform = jf.primary;
   if (jf.advisor) entry.advisor_name = jf.advisor;
   if (jf.event) entry.event_name_and_location = jf.event;
@@ -552,7 +695,7 @@ export default async (req) => {
       const entry = sourceMap.get(cid);
       if (!entry) return UNKNOWN_LABEL;
       if (mode === "hubspot") return hubspotSourceLabel(entry.hubspot);
-      return entry.jotform || UNKNOWN_LABEL;
+      return jotformLabel(entry);
     }
 
     // Sub-source detail value (advisor / event / referrer) for a deal
@@ -592,6 +735,52 @@ export default async (req) => {
     const monthOf = (iso) => (iso ? iso.slice(0, 7) : null);
     const idxOf = (ym) => months.indexOf(ym);
 
+    // -------- Offline breakout --------
+    // One accumulator per population. `total` is every Offline record;
+    // `recovered` + `unrecovered` always sum to it, so the page can state what
+    // share of the Offline bar it has actually explained.
+    const makeOffline = () => ({
+      total: emptyArr(),
+      recovered: emptyArr(),
+      unrecovered: emptyArr(),
+      byChannel: {},
+      byDetail: {},
+      byRaw: {},
+    });
+    const bump = (obj, key, idx) => {
+      if (!obj[key]) obj[key] = emptyArr();
+      obj[key][idx]++;
+    };
+    function recordOffline(acc, entry, idx) {
+      acc.total[idx]++;
+      const rec = recoverOffline(entry.dd3, entry.dd4, entry.dd5);
+      if (!rec) {
+        acc.unrecovered[idx]++;
+        bump(acc.byChannel, OFFLINE_UNRECOVERED, idx);
+        return;
+      }
+      acc.recovered[idx]++;
+      bump(acc.byChannel, rec.channel, idx);
+      bump(acc.byDetail, rec.detail, idx);
+      bump(acc.byRaw, rec.raw, idx);
+    }
+    const offlineContacts = makeOffline();
+    const offlineOpps = makeOffline();
+    const offlineSales = makeOffline();
+
+    // How many leads in each month are even in the application population —
+    // the denominator the self-reported panel is really working from.
+    const applicationsMatched = emptyArr();
+
+    // Offline recovery for a deal, via its student contact.
+    function recordOfflineDeal(acc, deal, idx) {
+      const cid = dealContactId(deal);
+      const entry = cid ? sourceMap.get(cid) : null;
+      if (!entry) return;
+      if (hubspotSourceLabel(entry.hubspot) !== "Offline Sources") return;
+      recordOffline(acc, entry, idx);
+    }
+
     // Opportunities
     const oppsTotal = emptyArr();
     const oppsBySource = makeBucketMap();
@@ -607,6 +796,7 @@ export default async (req) => {
       if (seenAfDeal.has(key)) continue;
       seenAfDeal.add(key);
       oppsTotal[idx]++;
+      recordOfflineDeal(offlineOpps, d, idx);
       const hsLabel = dealSource(d, "hubspot");
       const jfLabel = dealSource(d, "jotform");
       ensure(oppsBySource, "hubspot", hsLabel)[idx]++;
@@ -626,6 +816,7 @@ export default async (req) => {
       const idx = idxOf(ym);
       if (idx < 0) continue;
       salesDpTotal[idx]++;
+      recordOfflineDeal(offlineSales, d, idx);
       const hsLabel = dealSource(d, "hubspot");
       const jfLabel = dealSource(d, "jotform");
       ensure(salesDpBySource, "hubspot", hsLabel)[idx]++;
@@ -653,6 +844,7 @@ export default async (req) => {
       const idx = idxOf(ym);
       if (idx < 0) continue;
       salesSkipTotal[idx]++;
+      recordOfflineDeal(offlineSales, d, idx);
       skippedNames[ym].push({ name: d.properties.dealname, cw_date: date });
       const hsLabel = dealSource(d, "hubspot");
       const jfLabel = dealSource(d, "jotform");
@@ -683,7 +875,9 @@ export default async (req) => {
         for (const c of contacts) {
           enrichJotform(c, jotformMap);
           const hsLabel = hubspotSourceLabel(c.hubspot);
-          const jfLabel = c.jotform || UNKNOWN_LABEL;
+          const jfLabel = jotformLabel(c);
+          if (c.hasApplication) applicationsMatched[idx]++;
+          if (hsLabel === "Offline Sources") recordOffline(offlineContacts, c, idx);
           ensure(contactsBySource, "hubspot", hsLabel)[idx]++;
           ensure(contactsBySource, "jotform", jfLabel)[idx]++;
           const fieldName = JOTFORM_DETAIL_FIELDS[jfLabel];
@@ -779,6 +973,22 @@ export default async (req) => {
             salesSkipDp: salesSkipBySource.jotform,
             totalSales: totalSalesBySource.jotform,
           },
+        },
+        offline: {
+          contacts: offlineContacts,
+          opportunities: offlineOpps,
+          totalSales: offlineSales,
+          unrecoveredLabel: OFFLINE_UNRECOVERED,
+          drilldownProps: DRILLDOWN_PROPS,
+        },
+        applications: {
+          // Leads matched to a submitted application form, per month. The
+          // self-reported panel can only speak for these.
+          matched: applicationsMatched,
+          formIds: JOTFORM_APP_FORM_IDS,
+          available: jotformMap.size > 0,
+          noApplicationLabel: NO_APPLICATION_LABEL,
+          blankLabel: APPLICATION_BLANK_LABEL,
         },
         bySubSource: {
           detailFieldsByPrimary: JOTFORM_DETAIL_FIELDS,
