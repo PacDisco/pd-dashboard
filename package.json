@@ -17,7 +17,8 @@
     "test:shirt-auth": "node test/shirt-orders-auth.test.mjs",
     "test:drops": "node test/enrollment-drops.test.mjs",
     "test:drops-ui": "node test/drop-student.smoke.mjs",
-    "test:marketing": "node test/marketing-performance.smoke.mjs"
+    "test:marketing": "node test/marketing-performance.smoke.mjs",
+    "test:jotform-attribution": "node test/jotform-attribution.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

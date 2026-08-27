@@ -470,6 +470,50 @@ function jfAnswerToString(a) {
   return String(a);
 }
 
+// Fields that never carry an answer. Reading them was the original bug: on the
+// PD application form "How Did You Find Pacific Discovery?" is a control_head —
+// a section banner above the question, not the question. A label match on it
+// therefore matched a field with no `answer`, the value was dropped, and the
+// real dropdown one row below ("Please let us know how you found us") was never
+// looked at. Every submission came back with a null attribution answer, which
+// is why the panel was (Unknown) end to end.
+const JF_NON_ANSWER_TYPES = new Set([
+  "control_head",
+  "control_text",
+  "control_button",
+  "control_pagebreak",
+  "control_divider",
+  "control_collapse",
+  "control_image",
+]);
+
+// Fields are scored, not first-match-wins, because the same form contains
+// several near-miss labels (a section header, the dropdown, and "Who found
+// us?", which records whether the student or a parent did the finding — a
+// different question entirely). Highest score wins; -1 means "not this field".
+//
+// Jotform's `name` is the stable identifier and survives label rewording, so
+// it outranks any text match. Text matching is the fallback that lets a new
+// form be added to JOTFORM_APP_FORM_IDS with no code change.
+function attributionFieldRank(name, t) {
+  if (name === "pleaseLet") return 5;                                  // PD application form
+  if (/^how did you (find|hear)/.test(t)) return 3;
+  if (/how did you (find|hear)/.test(t)) return 2;
+  if (/how you (found|heard)|where did you (find|hear)/.test(t)) return 1;
+  return -1;
+}
+
+function emailFieldRank(name, t) {
+  if (name === "participantsEmail") return 5;                          // PD application form
+  if (!t.includes("email")) return -1;
+  // Parent and guardian emails sit on the same form and must never win: they
+  // resolve to a different HubSpot contact, so a match would file the
+  // student's answer against their mother's record.
+  if (/parent|guardian|secondary/.test(t)) return -1;
+  if (/participant|student|applicant|your/.test(t)) return 2;
+  return 1;
+}
+
 async function fetchJotformAttribution() {
   // Map<emailLower, { primary, advisor, event, wordOfMouth }>
   const map = new Map();
@@ -494,17 +538,26 @@ async function fetchJotformAttribution() {
       const content = data.content || [];
       for (const sub of content) {
         const answers = sub.answers || {};
-        let email = null, primary = null, advisor = null, event = null, wom = null;
+        let email = null, emailRank = -1;
+        let primary = null, primaryRank = -1;
+        let advisor = null, event = null, wom = null;
         for (const qid of Object.keys(answers)) {
           const q = answers[qid] || {};
+          if (JF_NON_ANSWER_TYPES.has(q.type)) continue;
+          const name = q.name || "";
           const t = (q.text || "").toLowerCase();
           const val = jfAnswerToString(q.answer);
           if (!val) continue;
-          if (t.includes("participant") && t.includes("email")) email = val.toLowerCase();
-          else if (t.includes("how did you find")) primary = val;
-          else if (t.includes("advisor") && t.includes("consultant")) advisor = val;
-          else if (t.includes("name and location of the event")) event = val;
-          else if (t.includes("word of mouth referral")) wom = val;
+
+          const er = emailFieldRank(name, t);
+          if (er > emailRank) { emailRank = er; email = val.toLowerCase(); }
+
+          const pr = attributionFieldRank(name, t);
+          if (pr > primaryRank) { primaryRank = pr; primary = val; }
+
+          if (name === "advisorOr" || (t.includes("advisor") && t.includes("consultant"))) advisor = val;
+          else if (name === "pleaseState" || t.includes("name and location of the event")) event = val;
+          else if (name === "wordOf" || t.includes("word of mouth referral")) wom = val;
         }
         if (!email) continue;
         const prev = map.get(email) || {};
