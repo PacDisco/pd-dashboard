@@ -165,9 +165,23 @@
   .save-bar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
   .save-note { color: var(--muted); font-size: 12px; }
 
-  .metric-switch { display: flex; gap: 6px; margin: 0 0 14px; flex-wrap: wrap; }
-  .metric-switch .pill { padding: 4px 12px; font-size: 11px; }
+  .switch-row { display: flex; gap: 6px 18px; margin: 0 0 14px; flex-wrap: wrap; align-items: center; }
+  .metric-switch, .view-switch { display: flex; gap: 6px; flex-wrap: wrap; }
+  .view-switch { margin-left: auto; }
+  .view-switch::before {
+    content: ''; align-self: stretch; width: 1px; background: var(--line); margin-right: 12px;
+  }
+  .metric-switch .pill, .view-switch .pill { padding: 4px 12px; font-size: 11px; }
   .card .scroll { margin-top: 14px; }
+  /* A twelve-month matrix scrolls sideways; the source name has to stay put or
+     the row loses its identity halfway across. */
+  table.matrix th.sticky, table.matrix td.sticky {
+    position: sticky; left: 0; background: var(--panel); z-index: 1;
+  }
+  table.matrix tbody tr:hover td.sticky { background: var(--panel-2); }
+  table.matrix tr.total td.sticky { background: var(--panel-2); }
+  table.matrix td, table.matrix th { padding: 7px 9px; }
+  td.zero { color: #4a5560; }
   td.lead-cell { white-space: normal; max-width: 240px; }
   td.won { color: var(--up); font-weight: 600; }
   .coverage { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 12px 0 0; }
@@ -235,10 +249,16 @@
     <div class="card">
       <h2>What the cookie says</h2>
       <p class="h-sub">HubSpot Original Source on the student contact, over the selected range.</p>
-      <div class="metric-switch" data-panel="hs" role="group" aria-label="Rank cookie sources by">
-        <button class="pill active" data-metric="contacts">Leads</button>
-        <button class="pill" data-metric="opportunities">Opportunities</button>
-        <button class="pill" data-metric="totalSales">Sales</button>
+      <div class="switch-row">
+        <div class="metric-switch" data-panel="hs" role="group" aria-label="Rank cookie sources by">
+          <button class="pill active" data-metric="contacts">Leads</button>
+          <button class="pill" data-metric="opportunities">Opportunities</button>
+          <button class="pill" data-metric="totalSales">Sales</button>
+        </div>
+        <div class="view-switch" data-panel="hs" role="group" aria-label="Cookie source view">
+          <button class="pill active" data-view="total">Total</button>
+          <button class="pill" data-view="month">By month</button>
+        </div>
       </div>
       <div class="chart-wrap"><canvas id="chart-hs"></canvas><div class="skeleton" id="skel-hs"></div></div>
       <div class="scroll"><table id="hs-table"><tbody></tbody></table></div>
@@ -247,10 +267,16 @@
     <div class="card">
       <h2>What applicants say</h2>
       <p class="h-sub" id="jf-sub">The application form's own “How did you find us?” answer. A different taxonomy to the left — compare the shape and the ranking, not row against row.</p>
-      <div class="metric-switch" data-panel="jf" role="group" aria-label="Rank self-reported sources by">
-        <button class="pill active" data-metric="contacts">Leads</button>
-        <button class="pill" data-metric="opportunities">Opportunities</button>
-        <button class="pill" data-metric="totalSales">Sales</button>
+      <div class="switch-row">
+        <div class="metric-switch" data-panel="jf" role="group" aria-label="Rank self-reported sources by">
+          <button class="pill active" data-metric="contacts">Leads</button>
+          <button class="pill" data-metric="opportunities">Opportunities</button>
+          <button class="pill" data-metric="totalSales">Sales</button>
+        </div>
+        <div class="view-switch" data-panel="jf" role="group" aria-label="Self-reported source view">
+          <button class="pill active" data-view="total">Total</button>
+          <button class="pill" data-view="month">By month</button>
+        </div>
       </div>
       <div class="chart-wrap"><canvas id="chart-jf"></canvas><div class="skeleton" id="skel-jf"></div></div>
       <div class="scroll"><table id="jf-table"><tbody></tbody></table></div>
@@ -424,6 +450,9 @@ const state = {
      than global: the usual question is "the cookie says this brings leads —
      does it bring sales?", which needs the two panels on different metrics. */
   attrMetric: { hs: 'contacts', jf: 'contacts' },
+  /* 'total' = ranked bars for the whole range; 'month' = the spreadsheet
+     layout, source down the side and months across. */
+  attrView: { hs: 'total', jf: 'total' },
   /* Currency per spendable channel, and the single USD→NZD rate applied to
      every USD figure in the range. Both are seeded from whatever is already
      stored so the app never silently re-rates historical rows with a
@@ -624,6 +653,7 @@ function renderCostTable() {
 function renderAttributionTable(key, all, metric) {
   const table = document.getElementById(`${key}-table`);
   if (!table) return;
+  table.classList.remove('matrix');
   const rows = [...all].sort((a, b) => (b[metric] - a[metric]) || (b.contacts - a.contacts));
   const tot = rows.reduce((a, r) => ({
     contacts: a.contacts + r.contacts,
@@ -650,6 +680,94 @@ function renderAttributionTable(key, all, metric) {
         <td class="n">${int(tot.totalSales)}</td>
       </tr>
     </tbody>`;
+}
+
+/* The spreadsheet layout: one row per source, one column per month, the way
+   the Google Sheet has always presented this. Reads the metric currently
+   selected on the panel, so Leads / Opps / Sales each get their own matrix
+   rather than needing three tables. */
+function renderMatrixTable(tableId, rows, months, metric) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  table.classList.add('matrix');
+
+  const colTotals = months.map((_, i) => rows.reduce((a, r) => a + (Number(r.series[i]) || 0), 0));
+  const grand = colTotals.reduce((a, b) => a + b, 0);
+  // A month with nothing in it reads as a dash, not a 0 — twelve columns of
+  // zeroes is noise the eye has to filter before it can find the signal.
+  const numCell = (v) => `<td class="n${v ? '' : ' zero'}">${v ? int(v) : '–'}</td>`;
+
+  table.innerHTML = `
+    <thead><tr>
+      <th class="sticky">Source</th>
+      ${months.map((m) => `<th class="n">${esc(fmtMonthLabel(m))}</th>`).join('')}
+      <th class="n">Total</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map((r) => `<tr>
+        <td class="sticky lead-cell">${esc(r.label)}</td>
+        ${months.map((_, i) => numCell(Number(r.series[i]) || 0)).join('')}
+        <td class="n">${int(r[metric])}</td>
+      </tr>`).join('') || `<tr><td colspan="${months.length + 2}">Nothing in this range.</td></tr>`}
+      <tr class="total">
+        <td class="sticky">Total</td>
+        ${colTotals.map((v) => numCell(v)).join('')}
+        <td class="n">${int(grand)}</td>
+      </tr>
+    </tbody>`;
+}
+
+/* Stacked columns, one per month. Beyond about six series a stack stops being
+   readable, so the tail is pooled into "Other sources" rather than rendered as
+   a band too thin to see and too many to tell apart in the legend. */
+const STACK_MAX_SERIES = 6;
+
+function renderMonthlyStack(canvasId, key, rows, months, metric) {
+  destroyChart(key);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !HAS_CHARTS) return;
+
+  const top = rows.slice(0, STACK_MAX_SERIES);
+  const rest = rows.slice(STACK_MAX_SERIES);
+  const datasets = top.map((r, i) => ({
+    label: r.label,
+    data: months.map((_, mi) => Number(r.series[mi]) || 0),
+    backgroundColor: SERIES[i % SERIES.length],
+    borderRadius: 2,
+    borderSkipped: false,
+  }));
+  if (rest.length) {
+    datasets.push({
+      label: `Other sources (${rest.length})`,
+      data: months.map((_, mi) => rest.reduce((a, r) => a + (Number(r.series[mi]) || 0), 0)),
+      backgroundColor: COLORS.muted,
+      borderRadius: 2,
+      borderSkipped: false,
+    });
+  }
+
+  charts[key] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: months.map(fmtMonthLabel), datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 10 }, padding: 10 } },
+        tooltip: { itemSort: (a, b) => b.parsed.y - a.parsed.y },
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: {
+          stacked: true, beginAtZero: true,
+          grid: { color: '#2f363d' },
+          ticks: { precision: 0 },
+          title: { display: true, text: METRIC_LABEL[metric], color: '#8a949c', font: { size: 10 } },
+        },
+      },
+    },
+  });
 }
 
 function renderJotformCoverage() {
@@ -684,12 +802,15 @@ function renderAttribution(mode, canvasId, key) {
   const src = state.funnel.bySource[mode];
   const apps = state.funnel.applications || {};
   const metric = state.attrMetric[key] || 'contacts';
+  const view = state.attrView[key] || 'total';
+  const months = state.funnel.months || [];
   const hidden = mode === 'jotform'
     ? new Set([apps.noApplicationLabel || '(No application on file)'])
     : new Set();
 
   // Every source gets all three figures so the table can show the whole funnel
-  // regardless of which one the chart is ranked by.
+  // regardless of which one the chart is ranked by, plus the per-month series
+  // the spreadsheet view needs.
   const all = (src.labels || [])
     .filter((label) => !hidden.has(label))
     .map((label) => ({
@@ -697,8 +818,18 @@ function renderAttribution(mode, canvasId, key) {
       contacts: sum(src.contacts[label]),
       opportunities: sum((src.opportunities || {})[label]),
       totalSales: sum((src.totalSales || {})[label]),
+      series: (src[metric] || {})[label] || months.map(() => 0),
     }))
     .filter((r) => r.contacts > 0 || r.opportunities > 0 || r.totalSales > 0);
+
+  if (view === 'month') {
+    const monthly = all
+      .filter((r) => r[metric] > 0)
+      .sort((a, b) => b[metric] - a[metric]);
+    renderMatrixTable(`${key}-table`, monthly, months, metric);
+    renderMonthlyStack(canvasId, key, monthly, months, metric);
+    return;
+  }
 
   renderAttributionTable(key, all, metric);
 
@@ -1231,19 +1362,32 @@ document.querySelectorAll('[data-preset]').forEach((btn) => {
 els.refresh.addEventListener('click', load);
 els.saveBtn.addEventListener('click', saveSpend);
 
-/* Switching metric is a re-read of data already in hand — no refetch, so the
-   ranking flips instantly and the two panels can be flicked between. */
-document.querySelectorAll('.metric-switch').forEach((group) => {
-  const key = group.dataset.panel;
-  group.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-metric]');
-    if (!btn || !state.funnel) return;
-    group.querySelectorAll('.pill').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    state.attrMetric[key] = btn.dataset.metric;
-    renderAttribution(key === 'hs' ? 'hubspot' : 'jotform', `chart-${key}`, key);
+/* Switching metric or view is a re-read of data already in hand — no refetch,
+   so the panel flips instantly and the two can be flicked between. */
+function redrawPanel(key) {
+  // A twelve-column matrix does not fit a half-width card, and the point of
+  // the spreadsheet view is being able to read across the year. The card takes
+  // the full row while it is showing one, and gives it back on the way out.
+  const card = document.querySelector(`.view-switch[data-panel="${key}"]`)?.closest('.card');
+  if (card) card.classList.toggle('wide', state.attrView[key] === 'month');
+  renderAttribution(key === 'hs' ? 'hubspot' : 'jotform', `chart-${key}`, key);
+}
+
+function wireSwitch(selector, prop, attr) {
+  document.querySelectorAll(selector).forEach((group) => {
+    const key = group.dataset.panel;
+    group.addEventListener('click', (e) => {
+      const btn = e.target.closest(`button[data-${attr}]`);
+      if (!btn || !state.funnel) return;
+      group.querySelectorAll('.pill').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state[prop][key] = btn.dataset[attr];
+      redrawPanel(key);
+    });
   });
-});
+}
+wireSwitch('.metric-switch', 'attrMetric', 'metric');
+wireSwitch('.view-switch', 'attrView', 'view');
 els.compareOn.addEventListener('change', () => {
   setCompareVisible(els.compareOn.checked);
   load();

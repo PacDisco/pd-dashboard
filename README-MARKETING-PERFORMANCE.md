@@ -170,16 +170,41 @@ The line under the chart states how many answers came from how many applicants,
 and how many leads were never asked, so the panel reads as *the ranking among
 applicants* — which is all it was ever able to say.
 
-## Which sources turn into sales
+## Which sources turn into sales, and when
 
-Both attribution panels carry a **Leads / Opportunities / Sales** switch and a
-table beneath the chart. The switch re-ranks the chart instantly from data
+Both attribution panels carry two switches: **Leads / Opportunities / Sales**
+(what to count) and **Total / By month** (how to lay it out), plus a table
+beneath the chart. The switch re-ranks the chart instantly from data
 already in hand — no refetch — and the two panels switch independently, because
 the usual question puts them on different metrics: *the cookie says this brings
 leads, but does it bring sales?* Sales render in green so it's obvious at a
 glance which view you're on. The table always shows all three stages with a
 total row, so a source that brings volume and no revenue is visible without
 touching the switch.
+
+### The spreadsheet view
+
+Next to the metric pills is **Total / By month**. `By month` swaps the ranked
+bars for the layout the Google Sheet has always used — one row per source, one
+column per month, a total column on the right and a total row at the bottom —
+for whichever metric is selected. So *Sales → By month* is the sheet's clients
+tab, read live from HubSpot instead of typed.
+
+Details that matter in use:
+
+- **The card takes the full row** while a matrix is open, and gives it back on
+  the way out. Twelve columns do not fit a half-width card, and the point of
+  the view is reading across the year.
+- **The source column is pinned** so a row keeps its identity when the year
+  scrolls sideways.
+- **Empty months render as `–`, not `0`.** Twelve columns of zeroes is noise the
+  eye has to filter before it can find anything.
+- **The chart becomes stacked columns per month**, capped at six sources with
+  the tail pooled into `Other sources (n)` — beyond six, a stack is bands too
+  thin to see and a legend too long to read. The matrix below it always lists
+  every source, so nothing is hidden by the cap.
+- Each panel switches independently, and switching is a re-read of data already
+  loaded — no refetch.
 
 **These columns are not a cohort, and the page won't pretend otherwise.** A
 deposit received in July nearly always belongs to a lead created months

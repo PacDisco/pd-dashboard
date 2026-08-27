@@ -338,6 +338,54 @@ if (chartsAvailable) {
   check("switching back restores the lead ranking",
     (await page.evaluate(() => window.Chart.getChart("chart-jf").data.labels)).join("|") === byLeads.join("|"));
 
+  // --- by-month view: the spreadsheet layout
+  await page.locator('.view-switch[data-panel="jf"] button[data-view="month"]').click();
+  await page.waitForTimeout(250);
+  const stacked = await page.evaluate(() => {
+    const c = window.Chart.getChart("chart-jf");
+    return {
+      labels: c.data.labels,
+      series: c.data.datasets.map((d) => d.label),
+      stackedX: c.options.scales.x.stacked === true,
+      stackedY: c.options.scales.y.stacked === true,
+      firstRow: c.data.datasets[0].data.length,
+    };
+  });
+  check("month view puts months on the x axis", stacked.labels.length === 12, `n=${stacked.labels.length}`);
+  check("month view labels months, not sources", /^[A-Z][a-z]{2,4} \d{2}$/.test(stacked.labels[0]), stacked.labels[0]);
+  check("month view stacks the sources", stacked.stackedX && stacked.stackedY);
+  check("each series spans every month", stacked.firstRow === 12, `len=${stacked.firstRow}`);
+  check("long tail is pooled, not rendered as hairlines",
+    stacked.series.length <= 7, `series=${stacked.series.length}`);
+  check("the pooled series says how many it covers",
+    stacked.series.some((s) => /^Other sources \(\d+\)$/.test(s)), stacked.series.join("|"));
+
+  const matrixHead = await page.locator("#jf-table thead").innerText();
+  check("matrix header is months", (matrixHead.match(/\b[A-Z]{3,4} \d{2}\b/g) || []).length === 12, matrixHead);
+  check("matrix keeps a Source column and a Total column",
+    /SOURCE/i.test(matrixHead) && /TOTAL/i.test(matrixHead), matrixHead);
+  const stickies = await page.locator("#jf-table td.sticky").count();
+  check("source name is pinned while the year scrolls", stickies > 1, `sticky=${stickies}`);
+  check("empty months read as a dash, not a zero",
+    (await page.locator("#jf-table td.zero").count()) > 0);
+
+  // Row totals in the matrix must agree with the totals view, or one of the
+  // two is lying.
+  const womRow = await page.locator('#jf-table tbody tr', { hasText: 'Word of Mouth' }).first().innerText();
+  const womTotal = womRow.trim().split(/\s+/).pop();
+  check("matrix row total matches the totals view", womTotal === "32", `got ${womTotal}`);
+
+  check("card widens so a year of columns is readable",
+    await page.locator('#jf-table').evaluate((t) => t.closest('.card').classList.contains('wide')));
+
+  await page.locator('.view-switch[data-panel="jf"] button[data-view="total"]').click();
+  await page.waitForTimeout(250);
+  check("leaving month view restores the ranked bars",
+    (await page.evaluate(() => window.Chart.getChart("chart-jf").data.datasets.length)) === 1);
+  check("card gives the row back",
+    !(await page.locator('#jf-table').evaluate((t) => t.closest('.card').classList.contains('wide'))));
+  check("totals table returns", /Leads[\s\S]*Opps[\s\S]*Sales/i.test(await page.locator("#jf-table").innerText()));
+
   // --- offline breakout
   const off = await page.evaluate(() => {
     const c = window.Chart.getChart("chart-offline");
@@ -494,6 +542,15 @@ check("cmp: unchecking restores single-period table",
 
 await page.screenshot({ path: join(here, "..", "marketing-performance-preview.png"), fullPage: true });
 console.log("\n  screenshot → marketing-performance-preview.png");
+
+// One more with the spreadsheet view open, since that layout is the thing
+// most likely to break silently on a CSS change.
+await page.locator('.view-switch[data-panel="jf"] button[data-view="month"]').click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: join(here, "..", "marketing-performance-bymonth.png"), fullPage: true });
+console.log("  screenshot → marketing-performance-bymonth.png");
+await page.locator('.view-switch[data-panel="jf"] button[data-view="total"]').click();
+await page.waitForTimeout(250);
 
 // ---------------------------------------------------------------
 // Degradation: the spend table missing must NOT take the page down.
