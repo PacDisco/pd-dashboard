@@ -62,7 +62,21 @@ function spread(total, weights) {
 const funnel = {
   months: MONTHS,
   traffic: TRAFFIC,
-  trafficByChannel: {},
+  // Channel sessions deliberately sum LOWER than `traffic`, as they do in the
+  // real portal: HubSpot's channel breakdown does not account for every visit.
+  // Offline Sources and AI Referrals are absent entirely — a session is a
+  // website visit, so those buckets do not exist in the traffic endpoint.
+  trafficByChannel: {
+    "Organic Search":  TRAFFIC.map((t) => Math.round(t * 0.34)),
+    "Direct Traffic":  TRAFFIC.map((t) => Math.round(t * 0.21)),
+    "Paid Search":     TRAFFIC.map((t) => Math.round(t * 0.14)),
+    "Referrals":       TRAFFIC.map((t) => Math.round(t * 0.11)),
+    "Organic Social":  TRAFFIC.map((t) => Math.round(t * 0.07)),
+    "Paid Social":     TRAFFIC.map((t) => Math.round(t * 0.05)),
+    "Email Marketing": TRAFFIC.map((t) => Math.round(t * 0.03)),
+    // Draws traffic, produces no contacts — must still appear in the panel.
+    "Other Campaigns": TRAFFIC.map((t) => Math.round(t * 0.02)),
+  },
   trafficSource: "hubspot",
   trafficViewId: "16405",
   contacts: LEADS,
@@ -268,6 +282,16 @@ check("total spend KPI computed", spendKpi.includes("3,988") || spendKpi.include
 
 const costRows = await page.locator("#cost-table tbody tr").count();
 check("cost table has rows", costRows > 1, `rows=${costRows}`);
+check("cost table carries sessions",
+  /SESSIONS/i.test(await page.locator("#cost-table thead").innerText()));
+check("cost table orders the funnel left to right",
+  /Spend[\s\S]*Sessions[\s\S]*Leads[\s\S]*Opps[\s\S]*Sales/i.test(
+    await page.locator("#cost-table thead").innerText()));
+check("traffic-only channels are not omitted from the cost table",
+  /Other Campaigns/.test(await page.locator("#cost-table").innerText()));
+check("Offline shows n/a sessions, not zero",
+  /Offline Sources\s+—\s+n\/a/.test(await page.locator("#cost-table").innerText()),
+  (await page.locator("#cost-table").innerText()).split("\n").find((l) => l.includes("Offline")) || "");
 
 const costText = await page.locator("#cost-table").innerText();
 check("cost/lead rendered for Paid Search", /Paid Search/.test(costText));
@@ -338,6 +362,44 @@ if (chartsAvailable) {
   check("switching back restores the lead ranking",
     (await page.evaluate(() => window.Chart.getChart("chart-jf").data.labels)).join("|") === byLeads.join("|"));
 
+  // --- sessions: joins the cookie taxonomy, cannot join the applicant one
+  await page.locator('.metric-switch[data-panel="hs"] button[data-metric="sessions"]').click();
+  await page.waitForTimeout(200);
+  const sess = await page.evaluate(() => {
+    const c = window.Chart.getChart("chart-hs");
+    return { labels: c.data.labels, data: c.data.datasets[0].data, legend: c.data.datasets[0].label };
+  });
+  check("cookie panel can rank by sessions", sess.legend === "Sessions", String(sess.legend));
+  check("sessions ranking is sorted", sess.data.every((v, i, a) => i === 0 || a[i - 1] >= v), sess.data.join(","));
+  check("sessions ranking is led by organic search",
+    sess.labels[0] === "Organic Search", String(sess.labels[0]));
+  check("Offline drops out of a sessions ranking, since it has none",
+    !sess.labels.includes("Offline Sources"), sess.labels.join("|"));
+  check("a channel with traffic but no contacts still appears",
+    sess.labels.includes("Other Campaigns"), sess.labels.join("|"));
+
+  const hsTable = await page.locator("#hs-table").innerText();
+  check("cookie table gains a sessions column", /SESSIONS/i.test(hsTable));
+  check("cookie table marks sessionless channels n/a", /Offline Sources\s+n\/a/.test(hsTable),
+    hsTable.split("\n").find((l) => l.includes("Offline")) || "");
+
+  const sessNote = await page.locator("#hs-coverage").innerText();
+  check("panel states how many sessions were attributed", /\d[\d,]* sessions/.test(sessNote), sessNote);
+  check("panel owns up to the unattributed remainder",
+    /not broken out by channel/.test(sessNote), sessNote);
+  check("panel explains why some channels read n/a", /n\/a rather than zero/.test(sessNote), sessNote);
+
+  check("applicant panel offers no sessions view",
+    await page.locator('.metric-switch[data-panel="jf"] button[data-metric="sessions"]').isDisabled());
+  const whyNoSessions = await page
+    .locator('.metric-switch[data-panel="jf"] button[data-metric="sessions"]').getAttribute("title");
+  check("and says why", /not channels|not a channel/i.test(whyNoSessions || ""), String(whyNoSessions));
+  const jfCols = await page.locator("#jf-table thead").innerText();
+  check("applicant table has no empty sessions column", !/SESSIONS/i.test(jfCols), jfCols);
+
+  await page.locator('.metric-switch[data-panel="hs"] button[data-metric="contacts"]').click();
+  await page.waitForTimeout(200);
+
   // --- by-month view: the spreadsheet layout
   await page.locator('.view-switch[data-panel="jf"] button[data-view="month"]').click();
   await page.waitForTimeout(250);
@@ -385,6 +447,36 @@ if (chartsAvailable) {
   check("card gives the row back",
     !(await page.locator('#jf-table').evaluate((t) => t.closest('.card').classList.contains('wide'))));
   check("totals table returns", /Leads[\s\S]*Opps[\s\S]*Sales/i.test(await page.locator("#jf-table").innerText()));
+
+  // --- the combination Jake actually asked for: sessions, by month
+  await page.locator('.metric-switch[data-panel="hs"] button[data-metric="sessions"]').click();
+  await page.locator('.view-switch[data-panel="hs"] button[data-view="month"]').click();
+  await page.waitForTimeout(300);
+  const sessMatrix = await page.locator("#hs-table").innerText();
+  check("sessions matrix renders months across",
+    (await page.locator("#hs-table thead th").count()) === 14, // source + 12 months + total
+    `cols=${await page.locator("#hs-table thead th").count()}`);
+  check("sessions matrix carries four-figure monthly counts",
+    /\b[1-9],\d{3}\b/.test(sessMatrix), sessMatrix.slice(0, 200));
+  const sessStack = await page.evaluate(() => {
+    const c = window.Chart.getChart("chart-hs");
+    return { y: c.options.scales.y.title.text, series: c.data.datasets.length };
+  });
+  check("sessions stack labels its axis", sessStack.y === "Sessions", String(sessStack.y));
+  check("sessions stack pools its tail", sessStack.series <= 7, `series=${sessStack.series}`);
+
+  // Row total in the sessions matrix must match the totals view for that row.
+  const organicRow = await page.locator('#hs-table tbody tr', { hasText: 'Organic Search' }).first().innerText();
+  const organicTotal = Number(organicRow.trim().split(/\s+/).pop().replace(/,/g, ""));
+  const expected = await page.evaluate(() =>
+    Math.round([8100, 8700, 9300, 10200, 11400, 9600, 10100, 9200, 9800, 10688, 10043, 6200]
+      .reduce((a, t) => a + Math.round(t * 0.34), 0)));
+  check("sessions matrix row total is the sum of its months",
+    organicTotal === expected, `got ${organicTotal}, expected ${expected}`);
+
+  await page.locator('.view-switch[data-panel="hs"] button[data-view="total"]').click();
+  await page.locator('.metric-switch[data-panel="hs"] button[data-metric="contacts"]').click();
+  await page.waitForTimeout(250);
 
   // --- offline breakout
   const off = await page.evaluate(() => {

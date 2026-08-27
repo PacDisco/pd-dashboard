@@ -170,11 +170,42 @@ The line under the chart states how many answers came from how many applicants,
 and how many leads were never asked, so the panel reads as *the ranking among
 applicants* — which is all it was ever able to say.
 
+## Sessions join one taxonomy, not both
+
+Sessions now appear in the cost table and as a metric on the cookie panel, so
+the funnel reads **Sessions → Leads → Opps → Sales** end to end.
+
+They are **not** offered on the self-reported panel, and the pill there is
+disabled rather than absent so the reason is visible where the question gets
+asked. HubSpot counts sessions per *traffic channel*; the application form
+returns *answers* — "Word of Mouth", "Go Overseas", "Gap Year Association".
+There is no session figure for those and no defensible mapping to invent one.
+An empty Sessions column on that panel would read as "zero sessions", which is
+a claim, not a gap.
+
+Three consequences visible on the page:
+
+- **Offline Sources and AI Referrals read `n/a`, not `0`.** A session is a
+  website visit; no visit is attributed to those records at all. Zero would say
+  the channel drew no traffic, which isn't what the data means.
+- **Channels that only drew traffic now appear.** The cost table used to list
+  channels with spend or contacts. A channel sending thousands of sessions and
+  producing nothing is exactly the finding the table should surface, so traffic
+  channels are unioned in.
+- **The channel breakdown doesn't sum to the Sessions KPI**, and the note under
+  the cookie panel says by how much. Analytics counts visits per channel;
+  Original Source stamps a contact once. Anything the breakdown doesn't account
+  for is stated rather than absorbed silently into a total row.
+
+Sessions are deliberately **not** added to the Month-by-month trend chart. At
+~10,000 a month against ~80 leads they would need a third axis and would flatten
+every other series into the baseline.
+
 ## Which sources turn into sales, and when
 
-Both attribution panels carry two switches: **Leads / Opportunities / Sales**
-(what to count) and **Total / By month** (how to lay it out), plus a table
-beneath the chart. The switch re-ranks the chart instantly from data
+Both attribution panels carry two switches: **Sessions / Leads / Opportunities
+/ Sales** (what to count — Sessions on the cookie panel only) and **Total / By
+month** (how to lay it out), plus a table beneath the chart. The switch re-ranks the chart instantly from data
 already in hand — no refetch — and the two panels switch independently, because
 the usual question puts them on different metrics: *the cookie says this brings
 leads, but does it bring sales?* Sales render in green so it's obvious at a

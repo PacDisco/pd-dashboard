@@ -172,6 +172,8 @@
     content: ''; align-self: stretch; width: 1px; background: var(--line); margin-right: 12px;
   }
   .metric-switch .pill, .view-switch .pill { padding: 4px 12px; font-size: 11px; }
+  .pill:disabled { opacity: .38; cursor: not-allowed; }
+  .pill:disabled:hover { color: var(--muted); border-color: var(--line); }
   .card .scroll { margin-top: 14px; }
   /* A twelve-month matrix scrolls sideways; the source name has to stay put or
      the row loses its identity halfway across. */
@@ -251,6 +253,7 @@
       <p class="h-sub">HubSpot Original Source on the student contact, over the selected range.</p>
       <div class="switch-row">
         <div class="metric-switch" data-panel="hs" role="group" aria-label="Rank cookie sources by">
+          <button class="pill" data-metric="sessions">Sessions</button>
           <button class="pill active" data-metric="contacts">Leads</button>
           <button class="pill" data-metric="opportunities">Opportunities</button>
           <button class="pill" data-metric="totalSales">Sales</button>
@@ -262,6 +265,7 @@
       </div>
       <div class="chart-wrap"><canvas id="chart-hs"></canvas><div class="skeleton" id="skel-hs"></div></div>
       <div class="scroll"><table id="hs-table"><tbody></tbody></table></div>
+      <p class="coverage" id="hs-coverage"></p>
     </div>
 
     <div class="card">
@@ -269,6 +273,8 @@
       <p class="h-sub" id="jf-sub">The application form's own “How did you find us?” answer. A different taxonomy to the left — compare the shape and the ranking, not row against row.</p>
       <div class="switch-row">
         <div class="metric-switch" data-panel="jf" role="group" aria-label="Rank self-reported sources by">
+          <button class="pill" data-metric="sessions" disabled
+            title="HubSpot counts sessions per traffic channel. “Word of Mouth” and “Go Overseas” are answers on a form, not channels, so there is no session figure to show against them. Sessions live on the cookie panel.">Sessions</button>
           <button class="pill active" data-metric="contacts">Leads</button>
           <button class="pill" data-metric="opportunities">Opportunities</button>
           <button class="pill" data-metric="totalSales">Sales</button>
@@ -558,10 +564,22 @@ function channelsWithSpend() {
   return state.spend.channels.filter((c) => sum(state.spend.spend[c]) > 0);
 }
 
+/* Sessions come from HubSpot Analytics, which emits the same channel labels as
+   Original Source — so they join the cookie taxonomy and only that one. There
+   is no session count for "Word of Mouth" or "Go Overseas"; those are answers
+   on a form, not traffic channels. Two labels also never carry sessions by
+   definition: a record stamped Offline Sources has no attributed visit, and AI
+   Referrals is not a channel HubSpot's sessions endpoint reports. */
+function sessionsFor(funnel, label) {
+  return sum((funnel.trafficByChannel || {})[label]);
+}
+const SESSIONS_UNAVAILABLE_FOR = new Set(['Offline Sources', 'AI Referrals']);
+
 function channelTotals(funnel, spendPayload, label) {
   const hs = funnel.bySource.hubspot;
   return {
     spend: spendPayload.spend[label] ? sum(spendPayload.spend[label]) : 0,
+    sessions: sessionsFor(funnel, label),
     leads: sum(hs.contacts[label]),
     opps: sum(hs.opportunities[label]),
     sales: sum(hs.totalSales[label]),
@@ -571,8 +589,15 @@ function channelTotals(funnel, spendPayload, label) {
 function renderCostTable() {
   const hs = state.funnel.bySource.hubspot;
   const cmp = !!state.funnelB;
-  // Union of channels that have spend and channels that produced anything.
-  const labels = new Set([...channelsWithSpend(), ...(hs.labels || [])]);
+  // Union of channels that have spend, channels that produced anything, and
+  // channels that only drew traffic. That last group is the interesting one:
+  // a channel sending thousands of sessions and no contacts is a finding, and
+  // omitting it because it has no row in bySource would hide it.
+  const labels = new Set([
+    ...channelsWithSpend(),
+    ...(hs.labels || []),
+    ...Object.keys(state.funnel.trafficByChannel || {}),
+  ]);
   if (cmp) {
     // A channel that existed only in the prior period still belongs in the
     // table — dropping it would hide the fact that it stopped producing.
@@ -583,12 +608,12 @@ function renderCostTable() {
     const a = channelTotals(state.funnel, state.spend, label);
     const b = cmp ? channelTotals(state.funnelB, state.spendB, label) : null;
     return { label, ...a, b };
-  }).sort((a, b) => (b.spend - a.spend) || (b.sales - a.sales) || (b.leads - a.leads));
+  }).sort((a, b) => (b.spend - a.spend) || (b.sales - a.sales) || (b.leads - a.leads) || (b.sessions - a.sessions));
 
   const t = rows.reduce((acc, r) => ({
-    spend: acc.spend + r.spend, leads: acc.leads + r.leads,
+    spend: acc.spend + r.spend, sessions: acc.sessions + r.sessions, leads: acc.leads + r.leads,
     opps: acc.opps + r.opps, sales: acc.sales + r.sales,
-  }), { spend: 0, leads: 0, opps: 0, sales: 0 });
+  }), { spend: 0, sessions: 0, leads: 0, opps: 0, sales: 0 });
 
   const tb = cmp ? rows.reduce((acc, r) => ({
     spend: acc.spend + r.b.spend, leads: acc.leads + r.b.leads,
@@ -609,7 +634,7 @@ function renderCostTable() {
 
   els.costTable.innerHTML = `
     <thead><tr>
-      <th>Channel</th><th class="n">Spend</th><th class="n">Leads</th><th class="n">Opps</th>
+      <th>Channel</th><th class="n">Spend</th><th class="n">Sessions</th><th class="n">Leads</th><th class="n">Opps</th>
       <th class="n">Sales</th><th class="n">Cost / lead</th><th class="n">Cost / opp</th><th class="n">Cost / sale</th>
       ${cmpHead}
     </tr></thead>
@@ -618,6 +643,9 @@ function renderCostTable() {
         <tr>
           <td>${r.label}</td>
           <td class="n ${r.spend ? '' : 'dim'}">${r.spend ? nz(r.spend) : '—'}</td>
+          <td class="n ${r.sessions ? '' : 'dim'}" ${SESSIONS_UNAVAILABLE_FOR.has(r.label)
+            ? 'title="Sessions are website visits. Offline records have no visit attributed to them, and HubSpot&#39;s sessions endpoint has no AI Referrals bucket."' : ''}>${
+            r.sessions ? int(r.sessions) : (SESSIONS_UNAVAILABLE_FOR.has(r.label) ? 'n/a' : '—')}</td>
           <td class="n">${int(r.leads)}</td>
           <td class="n">${int(r.opps)}</td>
           <td class="n">${int(r.sales)}</td>
@@ -628,7 +656,9 @@ function renderCostTable() {
         </tr>`).join('')}
       <tr class="total">
         <td>All channels</td>
-        <td class="n">${nz(t.spend)}</td><td class="n">${int(t.leads)}</td>
+        <td class="n">${nz(t.spend)}</td>
+        <td class="n">${int(t.sessions)}</td>
+        <td class="n">${int(t.leads)}</td>
         <td class="n">${int(t.opps)}</td><td class="n">${int(t.sales)}</td>
         <td class="n">${costPer(t.spend, t.leads)}</td>
         <td class="n">${costPer(t.spend, t.opps)}</td>
@@ -654,30 +684,37 @@ function renderAttributionTable(key, all, metric) {
   const table = document.getElementById(`${key}-table`);
   if (!table) return;
   table.classList.remove('matrix');
-  const rows = [...all].sort((a, b) => (b[metric] - a[metric]) || (b.contacts - a.contacts));
-  const tot = rows.reduce((a, r) => ({
-    contacts: a.contacts + r.contacts,
-    opportunities: a.opportunities + r.opportunities,
-    totalSales: a.totalSales + r.totalSales,
-  }), { contacts: 0, opportunities: 0, totalSales: 0 });
+  // Sessions only exist for the cookie taxonomy, so the column only exists
+  // there. Showing an all-blank Sessions column on the applicant panel would
+  // imply the figure exists and is zero, which is a different claim.
+  const cols = key === 'hs'
+    ? ['sessions', 'contacts', 'opportunities', 'totalSales']
+    : ['contacts', 'opportunities', 'totalSales'];
+  const head = { sessions: 'Sessions', contacts: 'Leads', opportunities: 'Opps', totalSales: 'Sales' };
 
-  const cell = (r, m) =>
-    `<td class="n${m === 'totalSales' && r.totalSales > 0 ? ' won' : ''}">${int(r[m])}</td>`;
+  const rows = [...all].sort((a, b) => (b[metric] - a[metric]) || (b.contacts - a.contacts));
+  const tot = Object.fromEntries(cols.map((c) => [c, rows.reduce((a, r) => a + r[c], 0)]));
+
+  const cell = (r, m) => {
+    if (m === 'sessions' && !r.sessions) {
+      const na = SESSIONS_UNAVAILABLE_FOR.has(r.label);
+      return `<td class="n dim"${na ? ' title="No website visit is attributed to these records."' : ''}>${na ? 'n/a' : '–'}</td>`;
+    }
+    return `<td class="n${m === 'totalSales' && r.totalSales > 0 ? ' won' : ''}">${int(r[m])}</td>`;
+  };
 
   table.innerHTML = `
     <thead><tr>
-      <th>Source</th><th class="n">Leads</th><th class="n">Opps</th><th class="n">Sales</th>
+      <th>Source</th>${cols.map((c) => `<th class="n">${head[c]}</th>`).join('')}
     </tr></thead>
     <tbody>
       ${rows.map((r) => `<tr>
         <td class="lead-cell">${esc(r.label)}</td>
-        ${cell(r, 'contacts')}${cell(r, 'opportunities')}${cell(r, 'totalSales')}
-      </tr>`).join('') || '<tr><td colspan="4">Nothing in this range.</td></tr>'}
+        ${cols.map((c) => cell(r, c)).join('')}
+      </tr>`).join('') || `<tr><td colspan="${cols.length + 1}">Nothing in this range.</td></tr>`}
       <tr class="total">
         <td>Total</td>
-        <td class="n">${int(tot.contacts)}</td>
-        <td class="n">${int(tot.opportunities)}</td>
-        <td class="n">${int(tot.totalSales)}</td>
+        ${cols.map((c) => `<td class="n">${int(tot[c])}</td>`).join('')}
       </tr>
     </tbody>`;
 }
@@ -770,6 +807,35 @@ function renderMonthlyStack(canvasId, key, rows, months, metric) {
   });
 }
 
+/* Sessions and leads are counted by different HubSpot systems, and the two
+   don't reconcile cleanly: analytics reports visits per channel; Original
+   Source stamps a contact once. Anything the channel breakdown doesn't account
+   for is stated rather than quietly absorbed into the total row. */
+function renderSessionsNote() {
+  const el = document.getElementById('hs-coverage');
+  if (!el) return;
+  const f = state.funnel;
+  if (f.trafficSource !== 'hubspot') {
+    el.innerHTML = '<strong>Sessions unavailable</strong> for this range, so the Sessions view is empty. Every other figure in this panel is unaffected.';
+    return;
+  }
+  const overall = sum(f.traffic);
+  const byChannel = Object.values(f.trafficByChannel || {}).reduce((a, arr) => a + sum(arr), 0);
+  const gap = overall - byChannel;
+  const parts = [
+    `<strong>${int(byChannel)} sessions</strong> attributed to a channel, of ${int(overall)} in total.`,
+  ];
+  // A percent or two is rounding between two endpoints; more than that is worth
+  // knowing about before anyone builds a cost-per-session on it.
+  if (Math.abs(gap) > Math.max(1, overall * 0.01)) {
+    parts.push(gap > 0
+      ? `${int(gap)} are not broken out by channel, so the Sessions column sums lower than the KPI above.`
+      : `The channel breakdown sums ${int(-gap)} higher than the headline — HubSpot counts a visit under more than one channel in some cases.`);
+  }
+  parts.push('Sessions are website visits, so Offline Sources and AI Referrals show <em>n/a</em> rather than zero — no visit is attributed to those records at all.');
+  el.innerHTML = parts.join(' ');
+}
+
 function renderJotformCoverage() {
   const el = document.getElementById('jf-coverage');
   if (!el) return;
@@ -796,7 +862,9 @@ function renderJotformCoverage() {
     `Read this as the ranking among applicants, not as a share of all leads.`;
 }
 
-const METRIC_LABEL = { contacts: 'Leads', opportunities: 'Opportunities', totalSales: 'Sales' };
+const METRIC_LABEL = {
+  sessions: 'Sessions', contacts: 'Leads', opportunities: 'Opportunities', totalSales: 'Sales',
+};
 
 function renderAttribution(mode, canvasId, key) {
   const src = state.funnel.bySource[mode];
@@ -811,16 +879,27 @@ function renderAttribution(mode, canvasId, key) {
   // Every source gets all three figures so the table can show the whole funnel
   // regardless of which one the chart is ranked by, plus the per-month series
   // the spreadsheet view needs.
-  const all = (src.labels || [])
+  // Sessions come from a different endpoint keyed by the same channel labels,
+  // so a channel can appear in traffic without appearing in bySource at all
+  // (visits that never became a contact). Those channels still belong in the
+  // list — that gap is the whole story of a channel that draws and doesn't
+  // convert.
+  const byChannel = mode === 'hubspot' ? (state.funnel.trafficByChannel || {}) : {};
+  const labelSet = new Set([...(src.labels || []), ...Object.keys(byChannel)]);
+
+  const all = [...labelSet]
     .filter((label) => !hidden.has(label))
     .map((label) => ({
       label,
+      sessions: mode === 'hubspot' ? sessionsFor(state.funnel, label) : 0,
       contacts: sum(src.contacts[label]),
       opportunities: sum((src.opportunities || {})[label]),
       totalSales: sum((src.totalSales || {})[label]),
-      series: (src[metric] || {})[label] || months.map(() => 0),
+      series: metric === 'sessions'
+        ? (byChannel[label] || months.map(() => 0))
+        : ((src[metric] || {})[label] || months.map(() => 0)),
     }))
-    .filter((r) => r.contacts > 0 || r.opportunities > 0 || r.totalSales > 0);
+    .filter((r) => r.sessions > 0 || r.contacts > 0 || r.opportunities > 0 || r.totalSales > 0);
 
   if (view === 'month') {
     const monthly = all
@@ -1232,6 +1311,7 @@ function rerender() {
   renderCostTable();
   renderAttribution('hubspot', 'chart-hs', 'hs');
   renderAttribution('jotform', 'chart-jf', 'jf');
+  renderSessionsNote();
   renderJotformCoverage();
   renderOffline();
   renderTrend();
