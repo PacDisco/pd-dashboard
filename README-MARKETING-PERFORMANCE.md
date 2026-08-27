@@ -170,6 +170,27 @@ The line under the chart states how many answers came from how many applicants,
 and how many leads were never asked, so the panel reads as *the ranking among
 applicants* — which is all it was ever able to say.
 
+## Which sources turn into sales
+
+Both attribution panels carry a **Leads / Opportunities / Sales** switch and a
+table beneath the chart. The switch re-ranks the chart instantly from data
+already in hand — no refetch — and the two panels switch independently, because
+the usual question puts them on different metrics: *the cookie says this brings
+leads, but does it bring sales?* Sales render in green so it's obvious at a
+glance which view you're on. The table always shows all three stages with a
+total row, so a source that brings volume and no revenue is visible without
+touching the switch.
+
+**These columns are not a cohort, and the page won't pretend otherwise.** A
+deposit received in July nearly always belongs to a lead created months
+earlier — the gap-year cycle runs long. The three columns are counts of things
+that happened inside the window, from overlapping but different populations.
+Comparing the *rankings* is legitimate and is the point; dividing sales by leads
+produces something that looks like a conversion rate and isn't one, so the
+dashboard doesn't offer that number. A true cohort conversion rate needs leads
+tracked forward to their own eventual deposit, which is a different query and a
+different panel.
+
 ## This changes `/sales-funnel/` too
 
 `sales-funnel-data.mjs` is shared. Two behaviour changes land there as well:

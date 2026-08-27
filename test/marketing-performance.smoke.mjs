@@ -301,6 +301,43 @@ if (chartsAvailable) {
   check("jotform chart is led by a real answer, not a placeholder",
     jfLabels[0] === "Social Media", `top=${jfLabels[0]}`);
 
+  // --- metric switch: the whole point is that the ranking changes
+  const byLeads = await page.evaluate(() => window.Chart.getChart("chart-jf").data.labels);
+  await page.locator('.metric-switch[data-panel="jf"] button[data-metric="totalSales"]').click();
+  await page.waitForTimeout(200);
+  const bySales = await page.evaluate(() => ({
+    labels: window.Chart.getChart("chart-jf").data.labels,
+    data: window.Chart.getChart("chart-jf").data.datasets[0].data,
+    colour: window.Chart.getChart("chart-jf").data.datasets[0].backgroundColor,
+    legend: window.Chart.getChart("chart-jf").data.datasets[0].label,
+  }));
+  check("switching to Sales re-ranks the chart",
+    bySales.labels.join("|") !== byLeads.join("|"), `leads=${byLeads[0]} sales=${bySales.labels[0]}`);
+  check("Sales ranking is actually sorted by sales",
+    bySales.data.every((v, i, a) => i === 0 || a[i - 1] >= v), bySales.data.join(","));
+  check("Sales view is colour-coded distinctly", bySales.colour === "#81C243", String(bySales.colour));
+  check("chart legend names the active metric", bySales.legend === "Sales", String(bySales.legend));
+  check("sources with leads but no sales drop out of the Sales chart",
+    !bySales.labels.includes("Go Abroad"), bySales.labels.join("|"));
+
+  // The table keeps all three stages regardless of what the chart shows.
+  const jfTableSales = await page.locator("#jf-table").innerText();
+  check("table still shows every stage under the Sales view",
+    /Leads[\s\S]*Opps[\s\S]*Sales/i.test(jfTableSales));
+  check("table reorders with the chart",
+    jfTableSales.indexOf("Word of Mouth") < jfTableSales.indexOf("Go Abroad"), jfTableSales.slice(0, 120));
+
+  // Each panel switches on its own — the usual question puts them on
+  // different metrics ("brings leads, but does it bring sales?").
+  const hsStillLeads = await page.evaluate(() =>
+    window.Chart.getChart("chart-hs").data.datasets[0].label);
+  check("the two panels switch independently", hsStillLeads === "Leads", String(hsStillLeads));
+
+  await page.locator('.metric-switch[data-panel="jf"] button[data-metric="contacts"]').click();
+  await page.waitForTimeout(200);
+  check("switching back restores the lead ranking",
+    (await page.evaluate(() => window.Chart.getChart("chart-jf").data.labels)).join("|") === byLeads.join("|"));
+
   // --- offline breakout
   const off = await page.evaluate(() => {
     const c = window.Chart.getChart("chart-offline");
@@ -345,6 +382,26 @@ const injected = await page.evaluate(() =>
 check("drill-down values are escaped, not executed", injected === 0);
 check("the escaped value is still shown as text",
   offText.includes("<script>x</script>"));
+
+// --- attribution tables: the funnel per source, chart or no chart
+const jfTable = await page.locator("#jf-table").innerText();
+check("self-reported table carries leads, opps and sales",
+  /Leads[\s\S]*Opps[\s\S]*Sales/i.test(jfTable));
+check("self-reported table totals its columns", /Total/.test(jfTable));
+check("self-reported table excludes the never-asked bucket",
+  !jfTable.includes("No application on file"), jfTable.slice(0, 200));
+check("cookie table renders too",
+  (await page.locator("#hs-table tbody tr").count()) > 1);
+
+// A source that produced sales this window must show them, or the panel
+// cannot answer "which of these turned into sales".
+check("a converting source shows a non-zero sales figure",
+  /Word of Mouth\s+\d+\s+\d+\s+[1-9]/.test(jfTable), jfTable.slice(0, 300));
+
+// --- the cohort caveat must be stated, not implied
+const foot = await page.locator(".footnote").innerText();
+check("page warns leads and sales are not a cohort", /not a cohort/i.test(foot));
+check("page declines to present a conversion rate", /conversion rate and isn't one/i.test(foot));
 
 // --- self-reported coverage: the denominator that makes the panel readable
 const cov = await page.locator("#jf-coverage").innerText();

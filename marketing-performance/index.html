@@ -165,6 +165,11 @@
   .save-bar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
   .save-note { color: var(--muted); font-size: 12px; }
 
+  .metric-switch { display: flex; gap: 6px; margin: 0 0 14px; flex-wrap: wrap; }
+  .metric-switch .pill { padding: 4px 12px; font-size: 11px; }
+  .card .scroll { margin-top: 14px; }
+  td.lead-cell { white-space: normal; max-width: 240px; }
+  td.won { color: var(--up); font-weight: 600; }
   .coverage { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 12px 0 0; }
   .coverage strong { color: var(--text); }
   .offline-head { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: baseline; margin: 4px 0 18px; }
@@ -229,14 +234,26 @@
 
     <div class="card">
       <h2>What the cookie says</h2>
-      <p class="h-sub">HubSpot Original Source on the student contact. Leads over the selected range.</p>
+      <p class="h-sub">HubSpot Original Source on the student contact, over the selected range.</p>
+      <div class="metric-switch" data-panel="hs" role="group" aria-label="Rank cookie sources by">
+        <button class="pill active" data-metric="contacts">Leads</button>
+        <button class="pill" data-metric="opportunities">Opportunities</button>
+        <button class="pill" data-metric="totalSales">Sales</button>
+      </div>
       <div class="chart-wrap"><canvas id="chart-hs"></canvas><div class="skeleton" id="skel-hs"></div></div>
+      <div class="scroll"><table id="hs-table"><tbody></tbody></table></div>
     </div>
 
     <div class="card">
       <h2>What applicants say</h2>
       <p class="h-sub" id="jf-sub">The application form's own “How did you find us?” answer. A different taxonomy to the left — compare the shape and the ranking, not row against row.</p>
+      <div class="metric-switch" data-panel="jf" role="group" aria-label="Rank self-reported sources by">
+        <button class="pill active" data-metric="contacts">Leads</button>
+        <button class="pill" data-metric="opportunities">Opportunities</button>
+        <button class="pill" data-metric="totalSales">Sales</button>
+      </div>
       <div class="chart-wrap"><canvas id="chart-jf"></canvas><div class="skeleton" id="skel-jf"></div></div>
+      <div class="scroll"><table id="jf-table"><tbody></tbody></table></div>
       <p class="coverage" id="jf-coverage"></p>
     </div>
 
@@ -279,6 +296,7 @@
     <strong>Definitions.</strong> Lead = contact created with Company Tag “Pacific Discovery”. Opportunity = deal entering an Application Fee Received stage. Sale = deal entering a Deposit Paid stage, counted once in the month the deposit landed.
     <strong>Excluded.</strong> College Credit deals, test records, and the Unearthed Education pipeline.
     <strong>Health warning.</strong> Original Source is unreliable while records arriving through Zapier land as “Offline Sources” with their real channel stripped. <em>Inside Offline Sources</em> reads the real channel back out of <code>original_source_drill_down_3/4/5</code>, where the form's <code>utm_source</code>, <code>utm_medium</code> and <code>utm_campaign</code> survive — but only for records that carried a UTM in the first place, which is why a large remainder stays unrecovered. Fixing the source at the point of capture is still the real repair; this panel is a read of the damage, not a substitute.
+    <strong>Leads and sales in these tables are not a cohort.</strong> A deposit received in July usually belongs to a lead created months earlier — the gap-year cycle runs long. So read the Leads, Opps and Sales columns as three counts that happened in the window, and compare the <em>rankings</em> between them. Dividing one by the other looks like a conversion rate and isn't one, which is why the page doesn't offer that number.
     <strong>On the two attribution panels.</strong> They cover different populations. The cookie panel covers every lead. The self-reported panel covers only leads who submitted an application, because that is the only place the question is asked — the count underneath it says how many that is. Comparing their totals is a category error; comparing their rankings is the point.
   </p>
 </div>
@@ -402,6 +420,10 @@ function showSkeletons(on) {
 
 const state = {
   spendError: null,
+  /* Which funnel stage each attribution panel is ranked by. Per-panel rather
+     than global: the usual question is "the cookie says this brings leads —
+     does it bring sales?", which needs the two panels on different metrics. */
+  attrMetric: { hs: 'contacts', jf: 'contacts' },
   /* Currency per spendable channel, and the single USD→NZD rate applied to
      every USD figure in the range. Both are seeded from whatever is already
      stored so the app never silently re-rates historical rows with a
@@ -596,6 +618,40 @@ function renderCostTable() {
    as one giant "(Unknown)" bar was what made the panel useless: it buried the
    answers under a bucket of people who were never asked. They come out of the
    chart and get stated as a denominator underneath it instead. */
+/* The three funnel stages side by side, sorted by whichever the chart is
+   ranked on. This is what answers "which of these turned into sales" — the
+   ranking by leads and the ranking by sales are rarely the same list. */
+function renderAttributionTable(key, all, metric) {
+  const table = document.getElementById(`${key}-table`);
+  if (!table) return;
+  const rows = [...all].sort((a, b) => (b[metric] - a[metric]) || (b.contacts - a.contacts));
+  const tot = rows.reduce((a, r) => ({
+    contacts: a.contacts + r.contacts,
+    opportunities: a.opportunities + r.opportunities,
+    totalSales: a.totalSales + r.totalSales,
+  }), { contacts: 0, opportunities: 0, totalSales: 0 });
+
+  const cell = (r, m) =>
+    `<td class="n${m === 'totalSales' && r.totalSales > 0 ? ' won' : ''}">${int(r[m])}</td>`;
+
+  table.innerHTML = `
+    <thead><tr>
+      <th>Source</th><th class="n">Leads</th><th class="n">Opps</th><th class="n">Sales</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map((r) => `<tr>
+        <td class="lead-cell">${esc(r.label)}</td>
+        ${cell(r, 'contacts')}${cell(r, 'opportunities')}${cell(r, 'totalSales')}
+      </tr>`).join('') || '<tr><td colspan="4">Nothing in this range.</td></tr>'}
+      <tr class="total">
+        <td>Total</td>
+        <td class="n">${int(tot.contacts)}</td>
+        <td class="n">${int(tot.opportunities)}</td>
+        <td class="n">${int(tot.totalSales)}</td>
+      </tr>
+    </tbody>`;
+}
+
 function renderJotformCoverage() {
   const el = document.getElementById('jf-coverage');
   if (!el) return;
@@ -622,15 +678,32 @@ function renderJotformCoverage() {
     `Read this as the ranking among applicants, not as a share of all leads.`;
 }
 
+const METRIC_LABEL = { contacts: 'Leads', opportunities: 'Opportunities', totalSales: 'Sales' };
+
 function renderAttribution(mode, canvasId, key) {
   const src = state.funnel.bySource[mode];
   const apps = state.funnel.applications || {};
+  const metric = state.attrMetric[key] || 'contacts';
   const hidden = mode === 'jotform'
     ? new Set([apps.noApplicationLabel || '(No application on file)'])
     : new Set();
-  const rows = (src.labels || [])
+
+  // Every source gets all three figures so the table can show the whole funnel
+  // regardless of which one the chart is ranked by.
+  const all = (src.labels || [])
     .filter((label) => !hidden.has(label))
-    .map((label) => ({ label, n: sum(src.contacts[label]) }))
+    .map((label) => ({
+      label,
+      contacts: sum(src.contacts[label]),
+      opportunities: sum((src.opportunities || {})[label]),
+      totalSales: sum((src.totalSales || {})[label]),
+    }))
+    .filter((r) => r.contacts > 0 || r.opportunities > 0 || r.totalSales > 0);
+
+  renderAttributionTable(key, all, metric);
+
+  const rows = all
+    .map((r) => ({ label: r.label, n: r[metric] }))
     .filter((r) => r.n > 0)
     .sort((a, b) => b.n - a.n)
     .slice(0, 10);
@@ -643,9 +716,14 @@ function renderAttribution(mode, canvasId, key) {
     data: {
       labels: rows.map((r) => r.label),
       datasets: [{
-        label: 'Leads',
+        label: METRIC_LABEL[metric],
+        // Sales get their own colour: the whole point of the switch is to see
+        // the ranking change, and a colour change makes it unmistakable which
+        // metric you are looking at when comparing the two panels.
         data: rows.map((r) => r.n),
-        backgroundColor: mode === 'hubspot' ? COLORS.teal : COLORS.orange,
+        backgroundColor: metric === 'totalSales'
+          ? COLORS.green
+          : (mode === 'hubspot' ? COLORS.teal : COLORS.orange),
         borderRadius: 4,
         borderSkipped: false,
       }],
@@ -1152,6 +1230,20 @@ document.querySelectorAll('[data-preset]').forEach((btn) => {
 });
 els.refresh.addEventListener('click', load);
 els.saveBtn.addEventListener('click', saveSpend);
+
+/* Switching metric is a re-read of data already in hand — no refetch, so the
+   ranking flips instantly and the two panels can be flicked between. */
+document.querySelectorAll('.metric-switch').forEach((group) => {
+  const key = group.dataset.panel;
+  group.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-metric]');
+    if (!btn || !state.funnel) return;
+    group.querySelectorAll('.pill').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.attrMetric[key] = btn.dataset.metric;
+    renderAttribution(key === 'hs' ? 'hubspot' : 'jotform', `chart-${key}`, key);
+  });
+});
 els.compareOn.addEventListener('change', () => {
   setCompareVisible(els.compareOn.checked);
   load();
