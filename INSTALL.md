@@ -1,4 +1,4 @@
-# Upcoming Programs — install (3 steps)
+# EDA Group Programs Calendar — install (3 steps)
 
 New files (drop into the repo at the same paths):
   MIGRATION-program-schedule.sql          ← run once against the DB

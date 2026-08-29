@@ -1,6 +1,6 @@
 /**
  * Program Schedule — single Netlify Function with action routing.
- * Backs the "Upcoming Programs" tracker: a simple, at-a-glance list of programs
+ * Backs the "EDA Group Programs Calendar" tracker: a simple, at-a-glance list of programs
  * across all brands (program name, brand, location, start/end dates, headcount,
  * notes). Separate from flight-programs (which drives the student flight portal).
  *
@@ -28,7 +28,10 @@ function sql() {
 // Brands offered in the UI. Kept permissive server-side: unknown brands are
 // still accepted (trimmed) so the list can grow without a code change, but the
 // value must be non-empty.
-const BRANDS = ['EDA Group', 'Unearthed Education', 'Pacific Discovery', 'Pure Exploration', 'Conference'];
+// 'Leave' is last on purpose: the first five are business units, and Leave is a
+// category for time nobody is running a program. Keeping it at the end of the
+// list keeps the brands reading as brands.
+const BRANDS = ['EDA Group', 'Unearthed Education', 'Pacific Discovery', 'Pure Exploration', 'Conference', 'Leave'];
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CORS_HEADERS = {

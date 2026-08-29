@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Upcoming Programs</title>
+<title>EDA Group Programs Calendar</title>
 <meta name="description" content="Date-ordered itinerary of upcoming programs across all brands — program, brand, dates, location, headcount and notes. Filter by brand, or switch to a calendar view.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <style>
@@ -54,7 +54,7 @@
 
   <div class="flex items-center justify-between mb-2">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">📅 Upcoming Programs</h1>
+      <h1 class="text-2xl font-bold text-gray-900">📅 EDA Group Programs Calendar</h1>
       <p class="text-sm text-gray-500 mt-1">A shared itinerary of programs across all brands, ordered by date. Add a program, tag its brand, set the dates, and jot notes. Filter by brand, or switch to the calendar.</p>
     </div>
     <a href="/" class="text-sm text-blue-600 hover:underline">← Dashboards</a>
@@ -107,14 +107,19 @@
 
 <script>
 var API = '/api/program-schedule';
-var BRANDS = ['EDA Group','Unearthed Education','Pacific Discovery','Pure Exploration','Conference'];
+// Only a fallback — the server sends the real list on load. Keep it in step with
+// BRANDS in netlify/functions/program-schedule.js.
+var BRANDS = ['EDA Group','Unearthed Education','Pacific Discovery','Pure Exploration','Conference','Leave'];
 // Brand → colours. A stable palette so each brand reads consistently.
+// Teal for Leave: the remaining hue that doesn't collide with a brand pill, the
+// blue/green/grey status pills, or the red `archived` pill sitting beside it.
 var BRAND_COLORS = {
   'EDA Group':           { bg:'#e0e7ff', fg:'#3730a3' },
   'Unearthed Education': { bg:'#ffedd5', fg:'#c2410c' },
   'Pacific Discovery':   { bg:'#e0f2fe', fg:'#075985' },
   'Pure Exploration':    { bg:'#ede9fe', fg:'#6d28d9' },
-  'Conference':          { bg:'#fef3c7', fg:'#92400e' }
+  'Conference':          { bg:'#fef3c7', fg:'#92400e' },
+  'Leave':               { bg:'#ccfbf1', fg:'#115e59' }
 };
 var FALLBACK_COLOR = { bg:'#f1f5f9', fg:'#475569' };
 
