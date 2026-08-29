@@ -37,6 +37,26 @@
   .pill-lock { background:#e5e7eb; color:#4b5563; }
   .pill-live { background:#dcfce7; color:#166534; }
   .pill-manual { background:#fef3c7; color:#92400e; }
+  .pill-import { background:#ede9fe; color:#5b21b6; }
+  .pill-dupe { background:#fef3c7; color:#92400e; }
+  .pill-err { background:#fee2e2; color:#b91c1c; }
+  .pill-ok { background:#dcfce7; color:#166534; }
+  /* The import preview is a wide table inside a modal — it scrolls on its own
+     rather than making the whole dialog scroll sideways. */
+  .modal.wide { max-width: 960px; }
+  .imp-scroll { max-height:46vh; overflow:auto; border:1px solid #e5e7eb; border-radius:10px; }
+  .imp-tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .imp-tbl th { position:sticky; top:0; background:#f9fafb; z-index:1; text-align:left; font-size:11px;
+                text-transform:uppercase; letter-spacing:.04em; color:#6b7280; padding:7px 9px; border-bottom:1px solid #e5e7eb; }
+  .imp-tbl td { padding:7px 9px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+  .imp-tbl tr.row-error td { background:#fef2f2; }
+  .imp-tbl tr.row-dupe td { background:#fffbeb; }
+  .imp-tbl tr.row-skip td { opacity:.45; }
+  .imp-paste { width:100%; min-height:150px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px;
+               padding:10px; border:1px solid #d1d5db; border-radius:10px; resize:vertical; white-space:pre; }
+  .imp-paste:focus { outline:none; border-color:#0f766e; box-shadow:0 0 0 3px rgba(15,118,110,.15); }
+  .imp-note { background:#f0fdfa; border:1px solid #99f6e4; color:#115e59; font-size:12px; padding:8px 10px; border-radius:8px; }
+  .imp-warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:12px; padding:8px 10px; border-radius:8px; }
   .pill-timer { background:#e0f2fe; color:#075985; }
   .pill-paid { background:#dcfce7; color:#166534; }
   .pill-due { background:#fee2e2; color:#b91c1c; }
@@ -154,6 +174,7 @@
           <div class="text-xs text-gray-500">Week total</div>
           <div id="wk-total" class="text-2xl font-bold text-gray-900 mono">0.00 h</div>
         </div>
+        <button id="btn-import" class="btn btn-ghost" title="Paste a spreadsheet of hours">⭱ Bulk import</button>
         <button id="btn-manual" class="btn btn-primary">+ Add entry by hand</button>
       </div>
     </div>
@@ -491,7 +512,8 @@ function entryRow(e) {
   var live = !e.ended_at;
   var badges = live ? '<span class="pill pill-live">running</span>'
     : (e.locked ? '<span class="pill pill-lock">🔒 approved</span>' : '')
-      + (e.source === 'manual' ? '<span class="pill pill-manual ml-1">by hand</span>' : '');
+      + (e.source === 'manual' ? '<span class="pill pill-manual ml-1">by hand</span>' : '')
+      + (e.source === 'import' ? '<span class="pill pill-import ml-1">imported</span>' : '');
   return '<div class="entry">'
     + '<div class="text-sm font-semibold text-gray-900 mono" style="width:74px">' + (live ? '—' : hours(e.minutes) + ' h') + '</div>'
     + '<div class="flex-1 min-w-0">'
@@ -606,14 +628,547 @@ async function removeEntry(id) {
   catch (e) { toast(e.message, true); }
 }
 
+/* ---------------------------------------------------------- bulk import */
+/*
+ * Paste a spreadsheet of hours instead of typing entries one at a time.
+ *
+ * Paste is the primary input and the file picker is the fallback, not the other
+ * way round: the hours are already sitting in Sheets or Excel, and copying a
+ * block out of them skips save-as-CSV, the file dialog, and the whole family of
+ * encoding bugs. It also works on a phone.
+ *
+ * Everything below only PARSES. Nothing is trusted: the same rows go to the
+ * server for validation, and the preview you see is the server's own verdict,
+ * not this file's guess at one. The one thing the client does own is timezones —
+ * a local date plus a clock time becomes an ISO instant here, exactly as the
+ * by-hand modal does, because the browser is the only thing that knows them.
+ */
+function isMgr() { return !!(ME && ME.isManager); }
+
+var IMPORT = { parsed: [], report: [], include: {}, slashDates: false, unmapped: [], lastBatch: null };
+
+/* Split delimited text, honouring "quoted, fields" and doubled "" escapes. */
+function parseDelimited(text, delim) {
+  var rows = [], row = [], cur = '', quoted = false, i = 0;
+  while (i < text.length) {
+    var ch = text.charAt(i);
+    if (quoted) {
+      if (ch === '"') {
+        if (text.charAt(i + 1) === '"') { cur += '"'; i += 2; continue; }
+        quoted = false; i++; continue;
+      }
+      cur += ch; i++; continue;
+    }
+    if (ch === '"') { quoted = true; i++; continue; }
+    if (ch === delim) { row.push(cur); cur = ''; i++; continue; }
+    if (ch === '\r') { i++; continue; }
+    if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; i++; continue; }
+    cur += ch; i++;
+  }
+  row.push(cur); rows.push(row);
+  return rows.filter(function (r) {
+    return r.some(function (c) { return String(c).trim() !== ''; });
+  });
+}
+
+/* Tabs win when present — that's what a spreadsheet puts on the clipboard. */
+function sniffDelimiter(text) {
+  var first = text.split('\n').filter(function (l) { return l.trim() !== ''; })[0] || '';
+  if (first.indexOf('\t') !== -1) return '\t';
+  if (first.indexOf(';') !== -1 && first.indexOf(',') === -1) return ';';
+  return ',';
+}
+
+/*
+ * Header synonyms, in two tiers. Unambiguous names are matched first across the
+ * whole header row, and only then are the loose ones allowed to fill what's
+ * still empty. That ordering is what makes this dashboard's own CSV export
+ * re-importable: it carries both a `Contractor` (display name) and an `Email`
+ * column, and a single-pass match would bind the person to the name column and
+ * then reject every row for not being an email address.
+ */
+var IMPORT_ALIASES = {
+  date:        ['date', 'work date', 'workdate', 'day', 'when'],
+  project:     ['project', 'project name', 'project code'],
+  description: ['description', 'notes', 'note', 'details', 'comment', 'comments'],
+  start:       ['started', 'start', 'start time', 'begin', 'time in'],
+  end:         ['finished', 'finish', 'end', 'end time', 'time out'],
+  hours:       ['hours', 'hrs', 'hour', 'duration', 'decimal hours'],
+  email:       ['email', 'e-mail', 'contractor email', 'staff email']
+};
+var IMPORT_ALIASES_WEAK = {
+  project:     ['code', 'job', 'client', 'task name'],
+  description: ['task', 'what'],
+  start:       ['from', 'in'],
+  end:         ['to', 'out'],
+  hours:       ['qty', 'quantity', 'time'],
+  email:       ['contractor', 'person', 'who', 'staff', 'user', 'name']
+};
+
+function normHeader(cell) {
+  return String(cell == null ? '' : cell).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+function matchIn(table, cell) {
+  var v = normHeader(cell);
+  if (!v) return null;
+  for (var field in table) if (table[field].indexOf(v) !== -1) return field;
+  return null;
+}
+function matchHeader(cell) {
+  return matchIn(IMPORT_ALIASES, cell) || matchIn(IMPORT_ALIASES_WEAK, cell);
+}
+
+/* Bind header cells to fields: strong names first, then the loose ones. */
+function mapHeaderRow(cells) {
+  var map = {}, taken = {}, unmapped = [];
+  cells.forEach(function (cell, idx) {
+    var f = matchIn(IMPORT_ALIASES, cell);
+    if (f && map[f] === undefined) { map[f] = idx; taken[idx] = true; }
+  });
+  cells.forEach(function (cell, idx) {
+    if (taken[idx]) return;
+    var f = matchIn(IMPORT_ALIASES_WEAK, cell);
+    if (f && map[f] === undefined) { map[f] = idx; taken[idx] = true; }
+  });
+  cells.forEach(function (cell, idx) {
+    if (!taken[idx] && normHeader(cell)) unmapped.push(String(cell).trim());
+  });
+  return { map: map, unmapped: unmapped };
+}
+
+/* A row is a header row if enough of its cells are recognisable column names. */
+function looksLikeHeader(cells) {
+  var hits = cells.filter(function (c) { return matchHeader(c); }).length;
+  return hits >= 2;
+}
+
+var MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+function validYmd(y, m, d) {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  var dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCMonth() + 1 !== m || dt.getUTCDate() !== d) return null;
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+
+/*
+ * Dates, in the formats a real sheet contains. Slash dates are read
+ * DAY/MONTH — the NZ and European convention, and the one the rest of this
+ * dashboard uses. That choice is announced in the preview rather than guessed
+ * at silently, because 03/04 is a different day depending on who typed it.
+ */
+function parseLooseDate(raw) {
+  var s = String(raw == null ? '' : raw).trim();
+  if (!s) return null;
+  var m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (m) return { ymd: validYmd(+m[1], +m[2], +m[3]), slash: false };
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2}|\d{4})$/);
+  if (m) {
+    var y = +m[3]; if (y < 100) y += 2000;
+    return { ymd: validYmd(y, +m[2], +m[1]), slash: true };
+  }
+  // "29 Aug 2026", "29 August 2026", "Aug 29, 2026"
+  m = s.match(/^(\d{1,2})\s+([a-z]{3,})\.?,?\s+(\d{4})$/i);
+  if (m) {
+    var mi = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase());
+    return mi < 0 ? null : { ymd: validYmd(+m[3], mi + 1, +m[1]), slash: false };
+  }
+  m = s.match(/^([a-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})$/i);
+  if (m) {
+    var mj = MONTHS.indexOf(m[1].slice(0, 3).toLowerCase());
+    return mj < 0 ? null : { ymd: validYmd(+m[3], mj + 1, +m[2]), slash: false };
+  }
+  return null;
+}
+
+/* Clock times: 9:00, 09:00, 0900, 9am, 5:30 PM, 17:30:00. */
+function parseClock(raw) {
+  var s = String(raw == null ? '' : raw).trim().toLowerCase().replace(/\./g, ':');
+  if (!s) return null;
+  var ap = null;
+  var ampm = s.match(/\s*(am|pm)$/);
+  if (ampm) { ap = ampm[1]; s = s.slice(0, ampm.index).trim(); }
+  var h, mi, m;
+  if ((m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/))) { h = +m[1]; mi = +m[2]; }
+  else if ((m = s.match(/^(\d{1,2})$/)))               { h = +m[1]; mi = 0; }
+  else if ((m = s.match(/^(\d{3,4})$/)))               { h = Math.floor(+m[1] / 100); mi = +m[1] % 100; }
+  else return null;
+  if (ap) {
+    if (h < 1 || h > 12) return null;
+    if (ap === 'pm' && h !== 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+  }
+  if (h > 23 || mi > 59) return null;
+  return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+}
+
+/* Durations: 1.5, 1:30, "1h 30m", "90m". */
+function parseHoursVal(raw) {
+  var s = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!s) return null;
+  var m = s.match(/^(\d+):([0-5]\d)$/);
+  if (m) return +m[1] + (+m[2]) / 60;
+  m = s.match(/^(\d+(?:\.\d+)?)\s*h(?:rs?|ours?)?(?:\s*(\d{1,2})\s*m(?:in(?:ute)?s?)?)?$/);
+  if (m) return +m[1] + (m[2] ? +m[2] / 60 : 0);
+  m = s.match(/^(\d+)\s*m(?:in(?:ute)?s?)?$/);
+  if (m) return +m[1] / 60;
+  m = s.match(/^(\d+(?:[.,]\d+)?)$/);
+  if (m) return Number(m[1].replace(',', '.'));
+  return null;
+}
+
+/* Reads a field out of one row by the column map, or '' if that column is absent. */
+function cellReader(cells, map) {
+  return function (field) {
+    var idx = map[field];
+    return idx === undefined || idx === null ? '' : String(cells[idx] == null ? '' : cells[idx]).trim();
+  };
+}
+
+/*
+ * Text → rows the server can validate. Rows that don't survive parsing come
+ * back as errors with their original line number, so the preview can show every
+ * line of the paste, good and bad, in the order it was pasted.
+ */
+function buildImportRows(text) {
+  var delim = sniffDelimiter(text);
+  var grid = parseDelimited(text, delim);
+  if (!grid.length) return { rows: [], errors: [], slashDates: false, mapped: null, unmapped: [] };
+
+  var map = {}, unmapped = [], startAt = 0;
+  if (looksLikeHeader(grid[0])) {
+    var bound = mapHeaderRow(grid[0]);
+    map = bound.map;
+    unmapped = bound.unmapped;
+    startAt = 1;
+  } else {
+    // No header row: fall back to the column order this dashboard's own CSV
+    // export uses — Date, Contractor, Email, Project, Code, Description,
+    // Started, Finished, Hours, Status.
+    map = { date: 0, email: 2, project: 3, description: 5, start: 6, end: 7, hours: 8 };
+  }
+
+  var rows = [], errors = [], slashDates = false;
+  for (var r = startAt; r < grid.length; r++) {
+    var cells = grid[r];
+    var line = r + 1;
+    var cell = cellReader(cells, map);
+    var rawDate = cell('date');
+    var d = parseLooseDate(rawDate);
+    if (!d || !d.ymd) {
+      errors.push({ line: line, status: 'error', raw: cells.join(' · '),
+        message: rawDate ? 'couldn\'t read the date "' + rawDate + '"' : 'no date in this row' });
+      continue;
+    }
+    var startTxt = cell('start'), endTxt = cell('end'), hoursTxt = cell('hours');
+    var startClock = parseClock(startTxt);
+    var endClock = parseClock(endTxt);
+    var hrs = parseHoursVal(hoursTxt);
+    var startIso, endIso;
+
+    if (startClock && endClock) {
+      startIso = localToIso(d.ymd, startClock);
+      endIso = localToIso(d.ymd, endClock);
+      // A finish before the start means the shift crossed midnight.
+      if (Date.parse(endIso) <= Date.parse(startIso)) endIso = new Date(Date.parse(endIso) + 86400000).toISOString();
+    } else if (hrs && hrs > 0) {
+      // Hours only: anchor at the given start if there was one, else 09:00 —
+      // the same nominal start the by-hand "Just hours" mode uses.
+      startIso = localToIso(d.ymd, startClock || '09:00');
+      endIso = new Date(Date.parse(startIso) + Math.round(hrs * 60) * 60000).toISOString();
+    } else {
+      errors.push({ line: line, status: 'error', raw: cells.join(' · '),
+        message: (startTxt || endTxt || hoursTxt)
+          ? 'couldn\'t read the times — need a start and finish, or a number of hours'
+          : 'no start/finish times and no hours in this row' });
+      continue;
+    }
+
+    var email = cell('email');
+    if (email && email.indexOf('@') === -1) {
+      errors.push({ line: line, status: 'error', raw: cells.join(' · '),
+        message: '"' + email + '" is a name, not an email — the person column needs their sign-in email' });
+      continue;
+    }
+
+    // Only raise the day/month warning for rows that actually survived — a
+    // warning about a row that was rejected anyway just sends people hunting.
+    if (d.slash) slashDates = true;
+
+    rows.push({
+      line: line,
+      work_date: d.ymd,
+      started_at: startIso,
+      ended_at: endIso,
+      project: cell('project'),
+      description: cell('description'),
+      contractor_email: email || undefined
+    });
+  }
+  return { rows: rows, errors: errors, slashDates: slashDates, mapped: map, unmapped: unmapped };
+}
+
+/* --------------------------------------------------------- import modal */
+function importModal() {
+  IMPORT = { parsed: [], report: [], include: {}, slashDates: false, unmapped: [], lastBatch: null };
+  var adminHint = isMgr()
+    ? ' Add an <strong>Email</strong> column to log time for someone else; leave it out and everything lands on you.'
+    : '';
+  $('modal-root').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal wide p-5">'
+    + '<h3 class="text-base font-bold text-gray-900 mb-1">Bulk import time</h3>'
+    + '<p class="text-xs text-gray-500 mb-3">Copy the rows straight out of Excel or Google Sheets and paste them below.'
+      + ' Nothing is saved until you\'ve seen the preview.' + adminHint + '</p>'
+    + '<div id="imp-step1">'
+      + '<div class="imp-note mb-3"><strong>Columns:</strong> Date, Project, Description, Started, Finished, Hours'
+        + (isMgr() ? ', Email' : '') + '.'
+        + ' A header row is matched by name in any order. Give <em>either</em> Started + Finished <em>or</em> Hours.'
+        + ' Project matches a project\'s name or its code.</div>'
+      + '<textarea id="imp-text" class="imp-paste" placeholder="Date&#9;Project&#9;Description&#9;Hours&#10;'
+        + '2026-08-24&#9;WEB&#9;Enrolment funnel report&#9;3.5&#10;'
+        + '25/08/2026&#9;WEB&#9;Bug fixes&#9;1:45"></textarea>'
+      + '<div class="flex items-center justify-between gap-2 mt-3 flex-wrap">'
+        + '<div class="flex items-center gap-2">'
+          + '<input id="imp-file" type="file" accept=".csv,.tsv,.txt,text/csv" class="hidden">'
+          + '<button class="btn btn-ghost" onclick="document.getElementById(\'imp-file\').click()">📄 Choose a CSV instead</button>'
+          + '<button class="btn btn-ghost" onclick="downloadImportTemplate()">⭳ Template</button>'
+        + '</div>'
+        + '<div class="flex items-center gap-2">'
+          + '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
+          + '<button id="imp-check" class="btn btn-primary">Check rows →</button>'
+        + '</div>'
+      + '</div>'
+    + '</div>'
+    + '<div id="imp-step2" class="hidden"></div>'
+    + '<div id="imp-err" class="text-sm text-red-600 mt-3"></div>'
+    + '</div></div>';
+
+  $('imp-file').onchange = function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      $('imp-text').value = String(reader.result || '').replace(/^﻿/, '');
+      toast('Loaded ' + f.name);
+    };
+    reader.onerror = function () { toast('Couldn\'t read that file.', true); };
+    reader.readAsText(f);
+  };
+  $('imp-check').onclick = previewImport;
+}
+
+function downloadImportTemplate() {
+  var head = ['Date', 'Project', 'Description', 'Started', 'Finished', 'Hours'];
+  if (isMgr()) head.push('Email');
+  var sample = [todayStr(), (PROJECTS[0] && (PROJECTS[0].code || PROJECTS[0].name)) || '', 'What you worked on', '09:00', '12:30', ''];
+  if (isMgr()) sample.push('');
+  var csv = [head.join(','), sample.join(',')].join('\r\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'time-import-template.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+async function previewImport() {
+  var err = $('imp-err');
+  err.textContent = '';
+  var text = ($('imp-text').value || '').replace(/^﻿/, '');
+  if (!text.trim()) { err.textContent = 'Paste some rows first.'; return; }
+
+  var parsed = buildImportRows(text);
+  if (!parsed.rows.length && !parsed.errors.length) { err.textContent = 'Nothing readable in that paste.'; return; }
+
+  $('imp-check').disabled = true;
+  var report = [];
+  try {
+    if (parsed.rows.length) {
+      var out = await api('POST', 'import-entries', { rows: parsed.rows, dry_run: true });
+      report = out.rows || [];
+    }
+  } catch (e) {
+    err.textContent = e.message; $('imp-check').disabled = false; return;
+  } finally { $('imp-check').disabled = false; }
+
+  // Client-side parse failures and the server's verdict are one list, in the
+  // order the rows were pasted, so a line number in the preview is the line
+  // number in the spreadsheet.
+  IMPORT.report = report.concat(parsed.errors).sort(function (a, b) { return a.line - b.line; });
+  // Keep the rows exactly as they were sent for validation. The commit re-sends
+  // these, not the server's rendering of them, so what gets imported is what was
+  // checked — no round-trip through display names to lose an email column in.
+  IMPORT.parsed = parsed.rows;
+  IMPORT.slashDates = parsed.slashDates;
+  IMPORT.unmapped = parsed.unmapped || [];
+  IMPORT.include = {};
+  IMPORT.report.forEach(function (r) { IMPORT.include[r.line] = r.status === 'ok'; });
+  renderImportPreview();
+}
+
+function renderImportPreview() {
+  var rep = IMPORT.report;
+  var counts = { ok: 0, duplicate: 0, error: 0 };
+  rep.forEach(function (r) { counts[r.status] = (counts[r.status] || 0) + 1; });
+
+  var notes = '';
+  if (IMPORT.slashDates) {
+    notes += '<div class="imp-warn mb-2">Slash dates were read as <strong>day/month</strong> — check a row or two below before importing.</div>';
+  }
+  if (counts.duplicate) {
+    notes += '<div class="imp-warn mb-2">' + counts.duplicate + ' row' + (counts.duplicate === 1 ? '' : 's')
+      + ' look' + (counts.duplicate === 1 ? 's' : '') + ' like time that\'s already logged. They\'re unticked — tick one if it really is separate work.</div>';
+  }
+  if (IMPORT.unmapped && IMPORT.unmapped.length) {
+    notes += '<div class="imp-warn mb-2">Ignored column' + (IMPORT.unmapped.length === 1 ? '' : 's') + ': '
+      + esc(IMPORT.unmapped.join(', ')) + '.</div>';
+  }
+
+  var body = rep.map(function (r) {
+    var cls = r.status === 'error' ? 'row-error' : (r.status === 'duplicate' ? 'row-dupe' : '');
+    if (r.status !== 'error' && !IMPORT.include[r.line]) cls += ' row-skip';
+    var badge = r.status === 'ok' ? '<span class="pill pill-ok">ok</span>'
+      : r.status === 'duplicate' ? '<span class="pill pill-dupe">repeat?</span>'
+      : '<span class="pill pill-err">problem</span>';
+    var tick = r.status === 'error'
+      ? '<span class="text-gray-300">—</span>'
+      : '<input type="checkbox" ' + (IMPORT.include[r.line] ? 'checked' : '')
+        + ' onchange="toggleImportRow(' + r.line + ', this.checked)">';
+    if (r.status === 'error') {
+      return '<tr class="' + cls + '" data-line="' + r.line + '"><td>' + tick + '</td><td class="mono text-gray-400">' + r.line + '</td>'
+        + '<td colspan="5" class="text-red-700">' + esc(r.message)
+        + (r.raw ? '<div class="text-xs text-gray-400 mt-0.5 truncate">' + esc(r.raw) + '</div>' : '') + '</td>'
+        + '<td>' + badge + '</td></tr>';
+    }
+    return '<tr class="' + cls + '" data-line="' + r.line + '">'
+      + '<td>' + tick + '</td>'
+      + '<td class="mono text-gray-400">' + r.line + '</td>'
+      + '<td class="mono whitespace-nowrap">' + esc(r.work_date) + '</td>'
+      + '<td class="whitespace-nowrap">' + (r.project_name ? esc(r.project_name) : '<span class="text-gray-400">No project</span>') + '</td>'
+      + '<td class="whitespace-nowrap">' + hhmm(r.started_at) + ' → ' + hhmm(r.ended_at) + '</td>'
+      + '<td class="mono whitespace-nowrap">' + hours(r.minutes) + ' h</td>'
+      + '<td>' + esc(r.description || '') + (isMgr() ? '<div class="text-xs text-gray-400">' + esc(r.contractor_name || '') + '</div>' : '') + '</td>'
+      + '<td>' + badge + (r.message ? '<div class="text-xs text-gray-500 mt-0.5">' + esc(r.message) + '</div>' : '') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  $('imp-step1').classList.add('hidden');
+  var step2 = $('imp-step2');
+  step2.classList.remove('hidden');
+  step2.innerHTML = notes
+    + '<div class="imp-scroll"><table class="imp-tbl"><thead><tr>'
+      + '<th style="width:34px"></th><th style="width:44px">Line</th><th>Date</th><th>Project</th>'
+      + '<th>Times</th><th>Hours</th><th>Description</th><th style="width:150px">Status</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>'
+    + '<div class="flex items-center justify-between gap-3 mt-3 flex-wrap">'
+      + '<div id="imp-summary" class="text-sm text-gray-600"></div>'
+      + '<div class="flex items-center gap-2">'
+        + '<button class="btn btn-ghost" onclick="backToImportPaste()">← Back to the paste</button>'
+        + '<button id="imp-commit" class="btn btn-primary">Import</button>'
+      + '</div>'
+    + '</div>';
+  $('imp-commit').onclick = commitImport;
+  updateImportSummary();
+}
+
+/* Toggle in place rather than re-rendering — a full repaint would throw away
+   the scroll position, which is unusable in a 300-row preview. */
+function toggleImportRow(line, on) {
+  IMPORT.include[line] = !!on;
+  var row = IMPORT.report.filter(function (r) { return r.line === line; })[0];
+  var tr = document.querySelector('.imp-tbl tr[data-line="' + line + '"]');
+  if (tr && row) {
+    tr.className = (row.status === 'duplicate' ? 'row-dupe' : '') + (on ? '' : ' row-skip');
+  }
+  updateImportSummary();
+}
+
+function selectedImportRows() {
+  return IMPORT.report.filter(function (r) { return r.status !== 'error' && IMPORT.include[r.line]; });
+}
+
+function updateImportSummary() {
+  var sel = selectedImportRows();
+  var mins = sel.reduce(function (s, r) { return s + (r.minutes || 0); }, 0);
+  var errs = IMPORT.report.filter(function (r) { return r.status === 'error'; }).length;
+  var el = $('imp-summary');
+  if (!el) return;
+  el.innerHTML = '<strong>' + sel.length + '</strong> row' + (sel.length === 1 ? '' : 's') + ' ticked · '
+    + '<strong>' + hours(mins) + ' h</strong>'
+    + (errs ? ' · <span class="text-red-600">' + errs + ' row' + (errs === 1 ? '' : 's') + ' can\'t be imported and will be left out</span>' : '');
+  var btn = $('imp-commit');
+  if (btn) btn.disabled = sel.length === 0;
+}
+
+function backToImportPaste() {
+  $('imp-step2').classList.add('hidden');
+  $('imp-step1').classList.remove('hidden');
+  $('imp-err').textContent = '';
+}
+
+async function commitImport() {
+  var sel = selectedImportRows();
+  if (!sel.length) return;
+  var keep = {};
+  sel.forEach(function (r) { keep[r.line] = true; });
+  var payload = IMPORT.parsed.filter(function (r) { return keep[r.line]; });
+  if (!payload.length) return;
+  $('imp-commit').disabled = true;
+  $('imp-commit').textContent = 'Importing…';
+  try {
+    var out = await api('POST', 'import-entries', { rows: payload, dry_run: false });
+    IMPORT.lastBatch = out.batchId;
+    closeModal();
+    await loadWeek();
+    if (tab === 'team') await loadTeam();
+    showUndoImport(out.imported, out.batchId);
+  } catch (e) {
+    $('imp-err').textContent = e.message;
+    $('imp-commit').disabled = false;
+    $('imp-commit').textContent = 'Import';
+  }
+}
+
+/*
+ * The undo offer is the whole reason people will paste without flinching, so it
+ * has to be visible and it has to last longer than a toast. It stays until it's
+ * used or dismissed.
+ */
+function showUndoImport(count, batchId) {
+  var bar = document.createElement('div');
+  bar.id = 'undo-import';
+  bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:20px;z-index:60;'
+    + 'background:#111827;color:#fff;border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:12px;'
+    + 'box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:13px;';
+  bar.innerHTML = '<span>Imported <strong>' + count + '</strong> entr' + (count === 1 ? 'y' : 'ies') + '.</span>'
+    + '<button id="undo-import-btn" style="background:#374151;color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600">Undo this import</button>'
+    + '<button id="undo-import-x" aria-label="Dismiss" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px;line-height:1">×</button>';
+  var old = $('undo-import'); if (old) old.remove();
+  document.body.appendChild(bar);
+  $('undo-import-x').onclick = function () { bar.remove(); };
+  $('undo-import-btn').onclick = async function () {
+    this.disabled = true;
+    try {
+      var out = await api('POST', 'undo-import', { batch_id: batchId });
+      bar.remove();
+      toast('Removed ' + out.undone + ' imported entr' + (out.undone === 1 ? 'y' : 'ies'));
+      await loadWeek();
+      if (tab === 'team') await loadTeam();
+    } catch (e) { toast(e.message, true); this.disabled = false; }
+  };
+}
+
 /* ------------------------------------------------------------------- CSV */
 function exportCsv() {
   var b = weekBounds();
-  var rows = [['Date', 'Contractor', 'Project', 'Code', 'Description', 'Started', 'Finished', 'Hours', 'Status']];
+  // `Email` is here so the export can be pasted straight back into Bulk import:
+  // the person column has to hold something the server can resolve, and two
+  // contractors can share a display name.
+  var rows = [['Date', 'Contractor', 'Email', 'Project', 'Code', 'Description', 'Started', 'Finished', 'Hours', 'Status']];
   var src = (tab === 'team' ? TEAM_ENTRIES : ENTRIES).filter(function (e) { return e.ended_at; });
   src.slice().sort(function (a, c) { return ymd(a.work_date).localeCompare(ymd(c.work_date)) || Date.parse(a.started_at) - Date.parse(c.started_at); })
     .forEach(function (e) {
-      rows.push([ymd(e.work_date), e.contractor_name || e.contractor_email || '', e.project_name || '', e.project_code || '',
+      rows.push([ymd(e.work_date), e.contractor_name || e.contractor_email || '', e.contractor_email || '',
+        e.project_name || '', e.project_code || '',
         e.description || '', hhmm(e.started_at), hhmm(e.ended_at), hours(e.minutes), e.locked ? 'approved' : 'unapproved']);
     });
   if (rows.length === 1) { toast('Nothing to export for this period.', true); return; }
@@ -830,6 +1385,7 @@ $('btn-stop').onclick = stopTimer;
 $('btn-discard').onclick = discardTimer;
 $('btn-manual').onclick = function () { manualEntryModal(null); };
 $('btn-csv').onclick = exportCsv;
+$('btn-import').onclick = importModal;
 $('tab-week').onclick = function () { setTab('week'); };
 $('tab-team').onclick = function () { setTab('team'); };
 $('tab-admin').onclick = function () { setTab('admin'); };

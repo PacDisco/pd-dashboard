@@ -21,6 +21,10 @@
  *     create-entry  POST  -> { work_date, started_at, ended_at, project_id?, description? }
  *     update-entry  POST  -> { id, patch: {…} }
  *     delete-entry  POST  -> { id }
+ *     import-entries POST -> { rows: [...], dry_run } — bulk paste; dry_run
+ *                            (the default) validates and returns a per-row
+ *                            report, dry_run:false commits the batch
+ *     undo-import   POST  -> { batch_id }  (removes a whole import)
  *
  *   Manager only (admin)
  *     contractors      GET   -> roster with period totals
@@ -42,6 +46,7 @@
  */
 
 const { neon } = require('@neondatabase/serverless');
+const { randomUUID } = require('node:crypto');
 
 let _sql;
 function sql() {
@@ -485,6 +490,271 @@ async function handleDeleteEntry(caller, body) {
   return ok({ deleted: id, approvalRetotalled: approvalId || undefined });
 }
 
+// ------------------------------------------------------------ bulk import
+/**
+ * Bulk import — paste a spreadsheet of hours instead of typing entries one by
+ * one. Same trust model as everything else here: a contractor can only ever
+ * import onto themselves, a manager may name someone else per row.
+ *
+ * The CLIENT parses the CSV/TSV and converts each row's local date + clock time
+ * into ISO instants, exactly as the by-hand modal already does — that keeps the
+ * timezone contract at the top of this file intact, with the browser owning
+ * timezones and the server owning durations.
+ *
+ * Two phases over one handler:
+ *   dry_run: true   validate everything, write nothing, return a per-row report
+ *   dry_run: false  re-validate from scratch, then insert as a single statement
+ *
+ * The commit deliberately re-runs the whole validation rather than trusting the
+ * preview it just sent back: between the two calls a period can be approved or a
+ * project deactivated, and a preview token would only paper over that.
+ *
+ * All-or-nothing. One multi-row INSERT is atomic in Postgres, so a batch either
+ * lands whole or not at all — a half-imported timesheet is the failure mode that
+ * makes people stop trusting the feature.
+ */
+const MAX_IMPORT_ROWS = 500;
+
+/** Build the lookup tables an import needs, in two queries rather than 2N. */
+async function importLookups(caller) {
+  const projects = await sql()`SELECT id, name, code, is_active FROM time_projects`;
+  const byKey = new Map();
+  for (const p of projects) {
+    // Code first: it's the shorter, more deliberate identifier, so if a code and
+    // some other project's name collide the code is what the typist meant.
+    if (p.code) byKey.set(`c:${String(p.code).trim().toLowerCase()}`, p);
+    byKey.set(`n:${String(p.name).trim().toLowerCase()}`, p);
+  }
+  const contractors = caller.isManager
+    ? await sql()`SELECT id, email, full_name, is_active FROM time_contractors`
+    : [];
+  const byEmail = new Map();
+  for (const c of contractors) byEmail.set(String(c.email).trim().toLowerCase(), c);
+  return { byKey, byEmail };
+}
+
+function resolveProject(byKey, raw) {
+  if (raw === null || raw === undefined || String(raw).trim() === '') return { id: null, name: null };
+  const key = String(raw).trim().toLowerCase();
+  const hit = byKey.get(`c:${key}`) || byKey.get(`n:${key}`);
+  if (!hit) throw new Error(`no project called "${String(raw).trim()}" — check the spelling or add it under Projects first`);
+  if (hit.is_active === false) throw new Error(`project "${hit.name}" is archived — reactivate it under Projects first`);
+  return { id: hit.id, name: hit.name };
+}
+
+/**
+ * Validate one candidate row into the shape the INSERT wants. Throws with a
+ * message written for whoever is staring at row 37 of their paste.
+ */
+function validateImportRow(raw, ctx) {
+  const workDate  = coerceDate('date', raw.work_date);
+  const startedAt = coerceInstant('start time', raw.started_at);
+  const endedAt   = coerceInstant('finish time', raw.ended_at);
+
+  const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
+  if (minutes <= 0)          throw new Error('the finish time is not after the start time');
+  if (minutes > MAX_MINUTES) throw new Error('longer than 24 hours — split it across days');
+
+  const project = resolveProject(ctx.byKey, raw.project);
+
+  // Who the row is for. A contractor's rows are pinned to them whatever the
+  // sheet says; only a manager's email column is honoured.
+  let contractor = ctx.self;
+  const email = optText(raw.contractor_email, 320);
+  if (email && namesSomeoneElse(email, ctx)) {
+    if (!ctx.isManager) throw new Error('you can only import your own time — remove the email column');
+    const hit = ctx.byEmail.get(email.trim().toLowerCase());
+    if (!hit) throw new Error(`no contractor with the email ${email.trim()} — they need to open the Time Tracker once first`);
+    contractor = hit;
+  }
+  if (contractor.is_active === false) {
+    throw new Error(`${contractor.full_name || contractor.email} is deactivated — reactivate them before importing their time`);
+  }
+
+  return {
+    contractor_id: contractor.id,
+    contractor_name: contractor.full_name || contractor.email,
+    project_id: project.id,
+    project_name: project.name,
+    work_date: workDate,
+    started_at: startedAt.toISOString(),
+    ended_at: endedAt.toISOString(),
+    minutes,
+    description: optText(raw.description),
+  };
+}
+
+/** True when the row's email column points at anyone other than the caller. */
+function namesSomeoneElse(email, ctx) {
+  return String(email).trim().toLowerCase() !== String(ctx.self.email).trim().toLowerCase();
+}
+
+/** Dates already covered by an approval, for the contractors in this batch. */
+async function approvedDateGuard(candidates) {
+  const ids = [...new Set(candidates.map((c) => c.contractor_id))];
+  if (!ids.length) return () => false;
+  const dates = candidates.map((c) => c.work_date).sort();
+  const rows = await sql().query(
+    `SELECT contractor_id, period_start, period_end
+       FROM time_approvals
+      WHERE contractor_id = ANY($1::int[])
+        AND period_end >= $2 AND period_start <= $3`,
+    [ids, dates[0], dates[dates.length - 1]]
+  );
+  const spans = rows.map((r) => ({ cid: r.contractor_id, from: dstr(r.period_start), to: dstr(r.period_end) }));
+  return (row) => spans.some((s) => s.cid === row.contractor_id && row.work_date >= s.from && row.work_date <= s.to);
+}
+
+/**
+ * Rows that look like something already logged. A warning, never a hard error:
+ * two identical half-hour blocks on the same day are perfectly legitimate, and
+ * refusing them would make the honest case impossible. The client defaults to
+ * leaving them out; the person can put them back.
+ */
+async function duplicateProbe(candidates) {
+  if (!candidates.length) return () => false;
+  const ids = [...new Set(candidates.map((c) => c.contractor_id))];
+  const dates = [...new Set(candidates.map((c) => c.work_date))];
+  const rows = await sql().query(
+    `SELECT contractor_id, work_date, started_at, minutes
+       FROM time_entries
+      WHERE contractor_id = ANY($1::int[]) AND work_date = ANY($2::date[]) AND ended_at IS NOT NULL`,
+    [ids, dates]
+  );
+  const seen = new Set(rows.map((r) =>
+    `${r.contractor_id}|${dstr(r.work_date)}|${new Date(r.started_at).toISOString()}|${r.minutes}`));
+  return (row) => seen.has(`${row.contractor_id}|${row.work_date}|${row.started_at}|${row.minutes}`);
+}
+
+async function handleImportEntries(caller, body) {
+  const self = await ensureContractor(caller);
+  if (!caller.isManager) { try { assertActive(self); } catch (e) { return bad(e.message, e.status); } }
+
+  const rows = body.rows;
+  if (!Array.isArray(rows) || !rows.length) return bad('nothing to import — paste some rows first');
+  if (rows.length > MAX_IMPORT_ROWS) {
+    return bad(`that's ${rows.length} rows — import at most ${MAX_IMPORT_ROWS} at a time`);
+  }
+
+  const { byKey, byEmail } = await importLookups(caller);
+  const ctx = { self, byKey, byEmail, isManager: caller.isManager };
+
+  // Pass 1 — shape and identity, row by row.
+  const report = [];
+  const candidates = [];
+  rows.forEach((raw, i) => {
+    const line = Number(raw && raw.line) || i + 1;
+    try {
+      const c = validateImportRow(raw || {}, ctx);
+      c.line = line;
+      candidates.push(c);
+      report.push({ line, status: 'ok', ...c });
+    } catch (e) {
+      report.push({ line, status: 'error', message: e.message });
+    }
+  });
+
+  // Pass 2 — the two checks that need the whole batch in hand, so they cost one
+  // query each instead of one per row.
+  if (candidates.length) {
+    const isApproved = await approvedDateGuard(candidates);
+    const isDupe = await duplicateProbe(candidates);
+    // Repeats *within the paste itself* count too — a sheet with the same block
+    // pasted twice is the commonest way a batch goes in doubled, and nothing in
+    // the database can catch it because neither copy is there yet.
+    const withinBatch = new Set();
+    for (const entry of report) {
+      if (entry.status !== 'ok') continue;
+      const key = `${entry.contractor_id}|${entry.work_date}|${entry.started_at}|${entry.minutes}`;
+      if (isApproved(entry)) {
+        entry.status = 'error';
+        entry.message = 'that day is inside an approved timesheet — undo the approval first';
+      } else if (isDupe(entry)) {
+        entry.status = 'duplicate';
+        entry.message = 'looks like this is already logged';
+      } else if (withinBatch.has(key)) {
+        entry.status = 'duplicate';
+        entry.message = 'the same row appears earlier in this paste';
+      }
+      withinBatch.add(key);
+    }
+  }
+
+  const summary = {
+    total: report.length,
+    ok: report.filter((r) => r.status === 'ok').length,
+    duplicates: report.filter((r) => r.status === 'duplicate').length,
+    errors: report.filter((r) => r.status === 'error').length,
+  };
+
+  if (body.dry_run !== false) return ok({ dryRun: true, summary, rows: report });
+
+  // ---- commit
+  if (summary.errors) {
+    return bad(`${summary.errors} of ${summary.total} rows can't be imported — fix or remove them and try again`, 422);
+  }
+  const importable = report.filter((r) => r.status === 'ok' || r.status === 'duplicate');
+  if (!importable.length) return bad('nothing left to import');
+
+  const batchId = randomUUID();
+  const cols = 10;
+  const values = [];
+  const args = [];
+  importable.forEach((r, i) => {
+    const b = i * cols;
+    values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10})`);
+    args.push(r.contractor_id, r.project_id, r.work_date, r.started_at, r.ended_at,
+      r.minutes, r.description, 'import', false, batchId);
+  });
+  const inserted = await sql().query(
+    `INSERT INTO time_entries
+       (contractor_id, project_id, work_date, started_at, ended_at, minutes, description, source, locked, import_batch_id)
+     VALUES ${values.join(', ')}
+     RETURNING id`,
+    args
+  );
+
+  return ok({
+    imported: inserted.length,
+    batchId,
+    summary,
+    // What actually went in, so the client can say "42 rows, 2 of them possible
+    // repeats" rather than a bare count.
+    duplicatesIncluded: importable.filter((r) => r.status === 'duplicate').length,
+  });
+}
+
+/**
+ * Take a whole import back out. Keyed on the batch id, which only imported rows
+ * carry, so this can never reach a timer tick or a hand-typed entry.
+ *
+ * Refuses a batch with any locked row rather than deleting around it: a partly
+ * withdrawn import leaves hours no one can account for, which is worse than
+ * making someone undo the approval first.
+ */
+async function handleUndoImport(caller, body) {
+  const self = await ensureContractor(caller);
+  const batchId = String((body && body.batch_id) || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId)) {
+    return bad('batch_id required');
+  }
+
+  const rows = await sql()`
+    SELECT id, contractor_id, locked FROM time_entries WHERE import_batch_id = ${batchId}
+  `;
+  if (!rows.length) return bad('that import has already been undone, or never existed', 404);
+
+  if (!caller.isManager && rows.some((r) => r.contractor_id !== self.id)) {
+    return bad('that import includes other people\'s time — an admin has to undo it', 403);
+  }
+  if (rows.some((r) => r.locked)) {
+    return bad('part of that import is on an approved timesheet — undo the approval first, then remove the import', 409);
+  }
+
+  const gone = await sql()`DELETE FROM time_entries WHERE import_batch_id = ${batchId} RETURNING id`;
+  return ok({ undone: gone.length, batchId });
+}
+
 // ------------------------------------------------------- manager: roster
 async function handleContractors(caller, qs) {
   if (!caller.isManager) return bad('admin role required', 403);
@@ -806,6 +1076,10 @@ function defaultDueDate(periodEnd) {
   return base.toISOString().slice(0, 10);
 }
 
+// Pure, DB-free pieces of the import path, exposed for test/time-import.test.mjs.
+// Netlify only ever looks at `handler`, so this is inert in production.
+exports.__test = { validateImportRow, resolveProject, namesSomeoneElse, MAX_IMPORT_ROWS };
+
 // -------------------------------------------------------------------------
 exports.handler = async (event, context) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: JSON_HEADERS, body: '' };
@@ -837,6 +1111,8 @@ exports.handler = async (event, context) => {
       if (action === 'create-entry')     return await handleCreateEntry(caller, body);
       if (action === 'update-entry')     return await handleUpdateEntry(caller, body);
       if (action === 'delete-entry')     return await handleDeleteEntry(caller, body);
+      if (action === 'import-entries')   return await handleImportEntries(caller, body);
+      if (action === 'undo-import')      return await handleUndoImport(caller, body);
       if (action === 'save-contractor')  return await handleSaveContractor(caller, body);
       if (action === 'save-project')     return await handleSaveProject(caller, body);
       if (action === 'delete-project')   return await handleDeleteProject(caller, body);
