@@ -63,37 +63,66 @@ things follow the constants by hand and need editing to match:
 - `roundQuarter()` in `time-tracking/index.html`, which mirrors the rule for the
   by-hand preview only — the server's answer is always the one that's stored
 
-## Existing entries
+## Existing entries — the retroactive pass
 
-Nothing was back-filled. Rows logged before this change keep their exact
-minutes, and approved timesheets are left alone on purpose — rewriting hours
-behind an issued invoice should be a deliberate act, not a side effect of a
-deploy.
+Nothing rounds automatically on deploy. Entries logged before this change keep
+their exact minutes until an admin runs the back-fill, under
+**⚙️ Projects → Round historical entries**.
 
-To round the **unapproved** backlog:
+**Preview first, always.** The tool reports, per contractor, how many entries
+would change, the before and after totals, and — where a rate is on file — what
+the change is worth in money. That last column is the point: "+42 minutes"
+doesn't mean anything until it reads "+NZD 56.00". Nothing is written until you
+press the second button.
+
+**Dates are optional.** Leave them blank for all history, or window it to a
+financial year.
+
+**It only touches unapproved entries** (`locked = FALSE AND approval_id IS
+NULL`). Anything on an approved timesheet is excluded and counted separately in
+the preview, so the numbers reconcile. Moving a total someone has signed off —
+let alone one behind an issued invoice — is not something a button should be able
+to do. If an approved entry genuinely needs correcting, undo the approval first.
+
+**Running timers are excluded**, so a live entry can't be rounded mid-tick.
+
+### Getting it back
+
+The commit returns every entry's prior value and the browser saves them as
+`time-rounding-backup-<date>.csv` before showing the result. To reverse a run:
 
 ```sql
--- Check first.
-SELECT count(*) FROM time_entries
- WHERE locked = FALSE AND ended_at IS NOT NULL AND minutes % 15 <> 0;
-
-UPDATE time_entries
-   SET minutes = LEAST(1440, GREATEST(15, ROUND(minutes / 15.0) * 15))::int
- WHERE locked = FALSE AND ended_at IS NOT NULL AND minutes % 15 <> 0;
+-- from the CSV: entry_id, minutes_before, minutes_after
+UPDATE time_entries SET minutes = <minutes_before> WHERE id = <entry_id>;
 ```
 
-Approved rows are excluded by `locked = FALSE`. Do not widen that.
+There's no schema column tracking this — a cleanup that runs once doesn't earn
+one — so **keep the CSV** if you might want the run back.
 
 ## Tests
 
 ```
-npm run test:time-import
+npm run test:time-import        # no database needed
+npm run test:time-rounding-db   # needs DATABASE_URL
 ```
 
-Covers exact quarters, nearest-not-up-not-down, the 7.5-minute midpoint, the
-short-entry floor, the 24h cap, and that rounding is applied *after* validation
-so a zero-length entry is still refused rather than floored into existence.
+The first covers the pure rule: exact quarters, nearest-not-up-not-down, the
+7.5-minute midpoint, the short-entry floor, the 24h cap, and that rounding is
+applied *after* validation so a zero-length entry is still refused rather than
+floored into existence.
 
-The `handleStop` SQL was checked against `roundMinutes()` on a real PostgreSQL 16
-across every duration from 1 minute to 24h, plus the exact midpoints — no
-disagreement.
+The second is the one that matters for the SQL. Because the rule is written
+twice — JavaScript and SQL — and two dialects of one rule is precisely the
+arrangement that drifts, it runs the real handler against a real PostgreSQL and
+compares `handleStop`'s expression to `roundMinutes()` across every duration from
+1 minute to 24 hours plus the exact midpoints. It also pins the back-fill's blast
+radius: approved, paid and running entries must come through untouched, and the
+before-values must restore exactly. It works in a throwaway schema and drops it
+afterwards, and skips cleanly when `DATABASE_URL` isn't set.
+
+```
+initdb -D /tmp/pgd -U postgres --auth=trust
+pg_ctl -D /tmp/pgd -o "-k /tmp/pgrun -p 5433" start
+DATABASE_URL="postgres://postgres@localhost:5433/postgres?host=/tmp/pgrun" \
+  npm run test:time-rounding-db
+```

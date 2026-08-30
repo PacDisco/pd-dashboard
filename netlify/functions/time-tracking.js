@@ -35,6 +35,9 @@
  *     approve          POST  -> { contractor_id, period_start, period_end, notes? }
  *     unapprove        POST  -> { id }        (only while not yet pushed to payments)
  *     push-payment     POST  -> { id, due_date?, invoice_number? } -> writes a `payments` row
+ *     round-history    POST  -> { from?, to?, dry_run } — retroactively round
+ *                              UNAPPROVED entries to the quarter hour; dry_run
+ *                              (the default) reports the effect per contractor
  *
  * Required env var:
  *   NETLIFY_DATABASE_URL   (auto-injected when Netlify DB / Neon is provisioned)
@@ -795,6 +798,147 @@ async function handleUndoImport(caller, body) {
   return ok({ undone: gone.length, batchId });
 }
 
+// -------------------------------------------- manager: retroactive rounding
+/**
+ * Round entries logged BEFORE quarter-hour billing was turned on.
+ *
+ * Deliberately narrow: it only ever touches entries that are not on an approved
+ * timesheet (`locked = FALSE AND approval_id IS NULL`). Anything an admin has
+ * signed off stays exactly as approved — moving a total someone has already put
+ * their name to, let alone one behind an issued invoice, is not something a
+ * deploy or a button press should be able to do.
+ *
+ * Two phases, like the import:
+ *   dry_run: true   report what would change, per contractor, and write nothing
+ *   dry_run: false  apply it in one statement
+ *
+ * Reversible without a stored backup: `minutes` was always derived from
+ * started_at / ended_at, and those instants are never rounded, so the original
+ * value of any entry is recomputable from the row itself. See TIME-ROUNDING.md.
+ */
+// Everything is qualified with `e.` and every query aliases time_entries AS e,
+// so these fragments read the same whether or not there's a join in scope.
+const BACKFILL_WHERE = `
+  e.locked = FALSE
+  AND e.approval_id IS NULL
+  AND e.ended_at IS NOT NULL
+  AND e.minutes % ${ROUND_TO_MINUTES} <> 0
+`;
+// Mirrors roundMinutes(). Verified against it on PostgreSQL 16 across every
+// duration from one minute to 24 hours — see TIME-ROUNDING.md.
+const BACKFILL_ROUNDED = `LEAST(${MAX_MINUTES}, GREATEST(${MIN_BILLABLE_MINUTES},
+  ROUND(e.minutes / ${ROUND_TO_MINUTES}.0) * ${ROUND_TO_MINUTES}))::int`;
+
+async function handleRoundHistory(caller, body) {
+  if (!caller.isManager) return bad('admin role required', 403);
+
+  // An optional window, so a cleanup can be limited to (say) the current
+  // financial year rather than all history.
+  let from = null, to = null;
+  try {
+    if (body.from) from = coerceDate('from', body.from);
+    if (body.to)   to   = coerceDate('to', body.to);
+  } catch (e) { return bad(e.message); }
+  if (from && to && from > to) return bad('`from` cannot be after `to`');
+
+  const args = [];
+  let window = '';
+  if (from) { args.push(from); window += ` AND e.work_date >= $${args.length}`; }
+  if (to)   { args.push(to);   window += ` AND e.work_date <= $${args.length}`; }
+
+  // Per-contractor effect, in minutes and (where a rate is set) in money, so the
+  // person clicking this sees what it costs before it happens rather than after.
+  const perPerson = await sql().query(
+    `SELECT c.id, c.email, c.full_name, c.hourly_rate, c.currency,
+            COUNT(*)::int                                   AS entries,
+            COALESCE(SUM(e.minutes), 0)::int                AS before_minutes,
+            COALESCE(SUM(${BACKFILL_ROUNDED}), 0)::int      AS after_minutes,
+            MIN(e.work_date)                                AS first_entry,
+            MAX(e.work_date)                                AS last_entry
+       FROM time_entries e
+       JOIN time_contractors c ON c.id = e.contractor_id
+      WHERE ${BACKFILL_WHERE}${window}
+      GROUP BY c.id
+      ORDER BY LOWER(COALESCE(c.full_name, c.email))`,
+    args
+  );
+
+  const people = perPerson.map((r) => {
+    const delta = r.after_minutes - r.before_minutes;
+    const rate = r.hourly_rate === null ? null : Number(r.hourly_rate);
+    return {
+      contractor_id: r.id,
+      name: r.full_name || r.email,
+      email: r.email,
+      entries: r.entries,
+      before_minutes: r.before_minutes,
+      after_minutes: r.after_minutes,
+      delta_minutes: delta,
+      currency: r.currency,
+      // Null rather than 0 when no rate is set — "no rate on file" and "costs
+      // nothing" are different things and shouldn't look the same in the UI.
+      delta_amount: rate === null ? null : Math.round((delta / 60) * rate * 100) / 100,
+      first_entry: dstr(r.first_entry),
+      last_entry: dstr(r.last_entry),
+    };
+  });
+
+  const summary = {
+    entries: people.reduce((s, p) => s + p.entries, 0),
+    contractors: people.length,
+    before_minutes: people.reduce((s, p) => s + p.before_minutes, 0),
+    after_minutes: people.reduce((s, p) => s + p.after_minutes, 0),
+  };
+  summary.delta_minutes = summary.after_minutes - summary.before_minutes;
+
+  // How much is being left alone, and why — otherwise "487 entries rounded" begs
+  // the question of what happened to everything else.
+  const skipped = await sql().query(
+    `SELECT COUNT(*) FILTER (WHERE a.payment_id IS NOT NULL)::int AS paid,
+            COUNT(*) FILTER (WHERE a.payment_id IS NULL)::int     AS approved_unpaid
+       FROM time_entries e
+       LEFT JOIN time_approvals a ON a.id = e.approval_id
+      WHERE e.approval_id IS NOT NULL
+        AND e.ended_at IS NOT NULL
+        AND e.minutes % ${ROUND_TO_MINUTES} <> 0${window}`,
+    args
+  );
+
+  const out = {
+    dryRun: body.dry_run !== false,
+    from, to,
+    summary,
+    people,
+    skipped: { approvedUnpaid: skipped[0].approved_unpaid, paid: skipped[0].paid },
+  };
+  if (out.dryRun) return ok(out);
+
+  if (!summary.entries) return bad('nothing to round — every unapproved entry is already on a quarter hour');
+
+  // Return the old value alongside the new one. This is a one-way bulk edit, so
+  // the client saves the before-state as a CSV the moment it lands — cheaper
+  // than a schema column for a cleanup that runs once, and it makes a restore a
+  // single UPDATE from a file rather than an archaeology exercise.
+  // The self-join reads the pre-update snapshot: SET expressions and a FROM
+  // subquery both see the row as it was when the statement began.
+  const done = await sql().query(
+    `UPDATE time_entries AS e
+        SET minutes = ${BACKFILL_ROUNDED}
+       FROM (SELECT id, minutes AS was FROM time_entries) o
+      WHERE o.id = e.id AND ${BACKFILL_WHERE}${window}
+      RETURNING e.id, o.was, e.minutes AS now`,
+    args
+  );
+  console.log(`time-tracking: ${caller.email} rounded ${done.length} historical entries`
+    + ` (${summary.delta_minutes >= 0 ? '+' : ''}${summary.delta_minutes} min)`);
+  return ok({
+    ...out,
+    dryRun: false,
+    rounded: done.length,
+    changes: done.map((r) => ({ id: r.id, was: r.was, now: r.now })),
+  });
+}
+
 // ------------------------------------------------------- manager: roster
 async function handleContractors(caller, qs) {
   if (!caller.isManager) return bad('admin role required', 403);
@@ -1162,6 +1306,7 @@ exports.handler = async (event, context) => {
       if (action === 'approve')          return await handleApprove(caller, body);
       if (action === 'unapprove')        return await handleUnapprove(caller, body);
       if (action === 'push-payment')     return await handlePushPayment(caller, body);
+      if (action === 'round-history')    return await handleRoundHistory(caller, body);
     }
 
     return bad(`unknown action '${action}' for method ${method}`);
