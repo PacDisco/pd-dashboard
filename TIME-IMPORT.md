@@ -43,7 +43,7 @@ listed as ignored rather than silently dropped.
 | **Project** | project name or its code (`WEB`) | optional; case-insensitive |
 | **Description** | free text | optional |
 | **Started** / **Finished** | `9:00`, `09:00`, `0900`, `9am`, `5:30 PM` | a finish before the start reads as crossing midnight |
-| **Hours** | `1.5`, `1:30`, `1h 30m`, `90m` | use *either* Started+Finished *or* Hours |
+| **Hours** | `1.5`, `1:30`, `1h 30m`, `90m` | use *either* Started+Finished *or* Hours; rounded to the nearest quarter |
 | **Email** | sign-in email | admin only; omit and everything lands on you |
 
 Also accepted as looser synonyms: `Day`/`When`, `Code`/`Job`/`Client`,
@@ -51,6 +51,10 @@ Also accepted as looser synonyms: `Day`/`When`, `Code`/`Job`/`Client`,
 
 With no header row at all, columns are read in the order the dashboard's own CSV
 export writes them, so **an exported week pastes straight back in**.
+
+Imported rows are rounded to the nearest quarter hour like everything else, and
+the preview shows the rounded figure — so what you see before importing is what
+gets logged.
 
 ### Two things worth knowing
 

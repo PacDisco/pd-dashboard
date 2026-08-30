@@ -43,6 +43,12 @@
  * calendar day the work belongs to) plus full ISO instants for started_at /
  * ended_at. The server stores those verbatim and derives `minutes` itself, so
  * durations can never be spoofed from the browser.
+ *
+ * Rounding: `minutes` is snapped to the nearest quarter hour (floor 15) on every
+ * write — see ROUND_TO_MINUTES below. started_at / ended_at keep the true
+ * instants, so the entry still records when the work actually happened; only the
+ * billable quantity is rounded. That means (ended_at - started_at) and `minutes`
+ * can legitimately disagree, and nothing should recompute one from the other.
  */
 
 const { neon } = require('@neondatabase/serverless');
@@ -59,6 +65,32 @@ function sql() {
 // behind this too, so widening it exposes what every contractor is paid.
 const MANAGER_ROLES = ['admin'];
 const MAX_MINUTES = 1440;          // matches the DB constraint (24h)
+
+// Billing granularity. Every entry is snapped to the nearest quarter hour as it
+// is saved — timer, by hand, and bulk import alike — so the hours a contractor
+// sees in their own week are exactly the hours that get approved and invoiced.
+// Rounding at approval time instead would make those two numbers disagree.
+//
+// The floor matters as much as the rounding: without it a 3-minute entry would
+// round to zero and sit in the list looking logged while being worth nothing.
+// Anything deliberate enough to log is worth a quarter of an hour.
+const ROUND_TO_MINUTES = 15;
+const MIN_BILLABLE_MINUTES = 15;
+
+/**
+ * Snap a raw duration to the billing granularity.
+ *
+ * Nearest, not up or down: 7 minutes becomes 0:00 + the floor, 8 becomes 0:15,
+ * and over a month the over- and under-rounding cancel rather than accumulating
+ * against one side. Call this AFTER the raw duration has been validated — a
+ * backwards or over-long entry should be refused on its real length, not on a
+ * rounded one that might squeak under the cap.
+ */
+function roundMinutes(raw) {
+  const snapped = Math.round(raw / ROUND_TO_MINUTES) * ROUND_TO_MINUTES;
+  return Math.max(MIN_BILLABLE_MINUTES, Math.min(MAX_MINUTES, snapped));
+}
+
 // NZD first: it's the default across the rest of the payments pipeline.
 const CURRENCIES = ['NZD', 'USD', 'AUD', 'EUR', 'GBP', 'CAD'];
 
@@ -337,25 +369,30 @@ async function handleStop(caller, body) {
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
 
-  // minutes is derived from the DB clock, never from the client. At least 1
-  // minute for any deliberate start/stop; capped at 24h so a timer forgotten
-  // over a weekend can still be closed out (and then edited).
+  // minutes is derived from the DB clock, never from the client, then snapped to
+  // the billing quarter — done in the same statement so there is no window where
+  // a stopped entry holds an unrounded duration. Capped at 24h so a timer
+  // forgotten over a weekend can still be closed out (and then edited).
+  const ROUNDED = `LEAST(${MAX_MINUTES}, GREATEST(${MIN_BILLABLE_MINUTES},
+      ROUND(EXTRACT(EPOCH FROM (NOW() - started_at)) / 60.0 / ${ROUND_TO_MINUTES}) * ${ROUND_TO_MINUTES}))::int`;
   const rows = id
-    ? await sql()`
-        UPDATE time_entries SET ended_at = NOW(),
-          minutes = LEAST(${MAX_MINUTES}, GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - started_at)) / 60)))::int
-        WHERE id = ${id} AND contractor_id = ${self.id} AND ended_at IS NULL
-        RETURNING id, minutes`
-    : await sql()`
-        UPDATE time_entries SET ended_at = NOW(),
-          minutes = LEAST(${MAX_MINUTES}, GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - started_at)) / 60)))::int
-        WHERE contractor_id = ${self.id} AND ended_at IS NULL
-        RETURNING id, minutes`;
+    ? await sql().query(
+        `UPDATE time_entries SET ended_at = NOW(), minutes = ${ROUNDED}
+         WHERE id = $1 AND contractor_id = $2 AND ended_at IS NULL
+         RETURNING id, minutes, started_at, ended_at`, [id, self.id])
+    : await sql().query(
+        `UPDATE time_entries SET ended_at = NOW(), minutes = ${ROUNDED}
+         WHERE contractor_id = $1 AND ended_at IS NULL
+         RETURNING id, minutes, started_at, ended_at`, [self.id]);
 
   if (!rows.length) return bad('no running timer to stop', 404);
   const entry = await sql().query(`${ENTRY_SELECT} WHERE e.id = $1`, [rows[0].id]);
   const capped = rows[0].minutes >= MAX_MINUTES;
-  return ok({ entry: entry[0], capped, running: null });
+  // What the clock actually read, so the UI can say "0:07 → billed 0:15" rather
+  // than leaving someone to wonder why a short timer became a quarter hour.
+  const elapsed = Math.round(
+    (new Date(rows[0].ended_at).getTime() - new Date(rows[0].started_at).getTime()) / 60000);
+  return ok({ entry: entry[0], capped, running: null, elapsedMinutes: elapsed, roundedTo: rows[0].minutes });
 }
 
 async function handleDiscard(caller, body) {
@@ -384,9 +421,10 @@ async function handleCreateEntry(caller, body) {
     description = optText(body.description);
   } catch (e) { return bad(e.message, /own time entries/.test(e.message) ? 403 : 400); }
 
-  const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
-  if (minutes <= 0) return bad('the finish time must be after the start time');
-  if (minutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours — split it across days');
+  const rawMinutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
+  if (rawMinutes <= 0) return bad('the finish time must be after the start time');
+  if (rawMinutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours — split it across days');
+  const minutes = roundMinutes(rawMinutes);
 
   const rows = await sql()`
     INSERT INTO time_entries
@@ -443,9 +481,10 @@ async function handleUpdateEntry(caller, body) {
   } catch (e) { return bad(e.message); }
 
   if (touchedTimes) {
-    const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
-    if (minutes <= 0) return bad('the finish time must be after the start time');
-    if (minutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours');
+    const rawMinutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
+    if (rawMinutes <= 0) return bad('the finish time must be after the start time');
+    if (rawMinutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours');
+    const minutes = roundMinutes(rawMinutes);
     args.push(startedAt.toISOString()); sets.push(`started_at = $${args.length}`);
     args.push(endedAt.toISOString());   sets.push(`ended_at = $${args.length}`);
     args.push(minutes);                 sets.push(`minutes = $${args.length}`);
@@ -551,9 +590,10 @@ function validateImportRow(raw, ctx) {
   const startedAt = coerceInstant('start time', raw.started_at);
   const endedAt   = coerceInstant('finish time', raw.ended_at);
 
-  const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
-  if (minutes <= 0)          throw new Error('the finish time is not after the start time');
-  if (minutes > MAX_MINUTES) throw new Error('longer than 24 hours — split it across days');
+  const rawMinutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
+  if (rawMinutes <= 0)          throw new Error('the finish time is not after the start time');
+  if (rawMinutes > MAX_MINUTES) throw new Error('longer than 24 hours — split it across days');
+  const minutes = roundMinutes(rawMinutes);
 
   const project = resolveProject(ctx.byKey, raw.project);
 
@@ -1078,7 +1118,10 @@ function defaultDueDate(periodEnd) {
 
 // Pure, DB-free pieces of the import path, exposed for test/time-import.test.mjs.
 // Netlify only ever looks at `handler`, so this is inert in production.
-exports.__test = { validateImportRow, resolveProject, namesSomeoneElse, MAX_IMPORT_ROWS };
+exports.__test = {
+  validateImportRow, resolveProject, namesSomeoneElse, MAX_IMPORT_ROWS,
+  roundMinutes, ROUND_TO_MINUTES, MIN_BILLABLE_MINUTES, MAX_MINUTES,
+};
 
 // -------------------------------------------------------------------------
 exports.handler = async (event, context) => {

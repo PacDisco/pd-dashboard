@@ -438,7 +438,13 @@ async function stopTimer() {
     $('t-desc').value = '';
     renderTimer();
     if (out.capped) toast('That timer had been running over 24 hours — it was capped at 24h. Edit the entry to set the real time.', true);
-    else toast('Logged ' + hm(out.entry.minutes) + (out.entry.project_name ? ' on ' + out.entry.project_name : ''));
+    else {
+      // Say so when the clock and the logged figure differ, otherwise a 7-minute
+      // timer turning into a quarter of an hour reads as a bug.
+      var rounded = out.elapsedMinutes != null && out.elapsedMinutes !== out.entry.minutes
+        ? ' (' + hm(out.elapsedMinutes) + ' rounded to the quarter hour)' : '';
+      toast('Logged ' + hm(out.entry.minutes) + (out.entry.project_name ? ' on ' + out.entry.project_name : '') + rounded);
+    }
     await loadWeek();
   } catch (e) { toast(e.message, true); }
   finally { $('btn-stop').disabled = false; }
@@ -514,8 +520,16 @@ function entryRow(e) {
     : (e.locked ? '<span class="pill pill-lock">🔒 approved</span>' : '')
       + (e.source === 'manual' ? '<span class="pill pill-manual ml-1">by hand</span>' : '')
       + (e.source === 'import' ? '<span class="pill pill-import ml-1">imported</span>' : '');
+  // Entries bill in quarter hours but keep the true start/finish instants, so the
+  // clock and the logged figure can differ. Where they do, mark it and say why on
+  // hover — an unexplained 09:00 → 09:07 worth 0.25 h looks like a broken sum.
+  var elapsed = live ? null : Math.round((Date.parse(e.ended_at) - Date.parse(e.started_at)) / 60000);
+  var wasRounded = elapsed !== null && elapsed !== e.minutes;
+  var dur = live ? '—' : hours(e.minutes) + ' h';
+  var durStyle = 'width:74px' + (wasRounded ? ';border-bottom:1px dotted #cbd5e1;cursor:help' : '');
+  var durTitle = wasRounded ? ' title="' + esc(hm(elapsed)) + ' on the clock, rounded to the quarter hour"' : '';
   return '<div class="entry">'
-    + '<div class="text-sm font-semibold text-gray-900 mono" style="width:74px">' + (live ? '—' : hours(e.minutes) + ' h') + '</div>'
+    + '<div class="text-sm font-semibold text-gray-900 mono" style="' + durStyle + '"' + durTitle + '>' + dur + '</div>'
     + '<div class="flex-1 min-w-0">'
       + '<div class="text-sm text-gray-800">' + (e.project_name ? esc(e.project_name) : '<span class="text-gray-400">No project</span>')
       + ' <span class="text-xs text-gray-400 ml-1">' + hhmm(e.started_at) + ' → ' + (live ? 'now' : hhmm(e.ended_at)) + '</span></div>'
@@ -548,6 +562,7 @@ function manualEntryModal(existing) {
       + '<div class="md:col-span-6 m-hours hidden"><label class="lbl">Hours worked</label><input id="m-hours" type="number" step="0.25" min="0.02" max="24" class="fld" placeholder="1.5"></div>'
       + '<div class="md:col-span-12"><label class="lbl">Description <span class="text-gray-400 font-normal">(optional)</span></label><input id="m-desc" class="fld" value="' + esc(e && e.description ? e.description : '') + '"></div>'
     + '</div>'
+    + '<div id="m-round" class="text-xs text-gray-500 mt-3"></div>'
     + '<div id="m-err" class="text-sm text-red-600 mt-3"></div>'
     + '<div class="flex items-center justify-end gap-2 mt-4">'
       + '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
@@ -562,8 +577,48 @@ function manualEntryModal(existing) {
     $('m-mode-hours').classList.toggle('active', mode === 'hours');
     document.querySelectorAll('.m-times').forEach(function (n) { n.classList.toggle('hidden', mode !== 'times'); });
     document.querySelectorAll('.m-hours').forEach(function (n) { n.classList.toggle('hidden', mode !== 'hours'); });
+    previewRounding();
   }
+  // Show what the entry will actually be saved as, live. Typing 1.6 hours and
+  // finding 1.5 in the list afterwards is the kind of surprise that makes people
+  // distrust the whole tracker; better to say so while they're still looking.
+  ['m-date', 'm-start', 'm-end', 'm-hours'].forEach(function (id) {
+    var el = $(id); if (el) el.addEventListener('input', previewRounding);
+  });
+  previewRounding();
   $('m-save').onclick = function () { saveManual(e); };
+}
+
+/* Entries bill in quarter hours; this is the note under the by-hand form. */
+function previewRounding() {
+  var el = $('m-round');
+  if (!el) return;
+  var mins = manualMinutes();
+  if (mins === null || mins <= 0) { el.textContent = ''; return; }
+  var billed = roundQuarter(mins);
+  el.innerHTML = billed === mins
+    ? 'Will be logged as <strong>' + hours(billed) + ' h</strong>.'
+    : 'Time is logged in quarter hours — <strong>' + hm(mins) + '</strong> will be saved as <strong>'
+      + hours(billed) + ' h</strong>.';
+}
+
+/* Mirrors roundMinutes() in netlify/functions/time-tracking.js. Display only —
+   the server rounds independently and its answer is the one that's stored. */
+function roundQuarter(mins) { return Math.max(15, Math.min(1440, Math.round(mins / 15) * 15)); }
+
+/* Raw minutes currently described by the by-hand form, or null if unreadable. */
+function manualMinutes() {
+  var date = $('m-date') && $('m-date').value;
+  if (!date) return null;
+  if ($('m-mode-hours') && $('m-mode-hours').classList.contains('active')) {
+    var h = Number($('m-hours').value);
+    return isFinite(h) && h > 0 ? Math.round(h * 60) : null;
+  }
+  var s = $('m-start').value, en = $('m-end').value;
+  if (!s || !en) return null;
+  var a = Date.parse(localToIso(date, s)), b = Date.parse(localToIso(date, en));
+  if (b <= a) b += 86400000;                       // crossing midnight
+  return Math.round((b - a) / 60000);
 }
 
 async function saveManual(existing) {
@@ -923,7 +978,8 @@ function importModal() {
       + '<div class="imp-note mb-3"><strong>Columns:</strong> Date, Project, Description, Started, Finished, Hours'
         + (isMgr() ? ', Email' : '') + '.'
         + ' A header row is matched by name in any order. Give <em>either</em> Started + Finished <em>or</em> Hours.'
-        + ' Project matches a project\'s name or its code.</div>'
+        + ' Project matches a project\'s name or its code.'
+        + ' Every row is rounded to the nearest quarter hour — the preview shows what will actually be logged.</div>'
       + '<textarea id="imp-text" class="imp-paste" placeholder="Date&#9;Project&#9;Description&#9;Hours&#10;'
         + '2026-08-24&#9;WEB&#9;Enrolment funnel report&#9;3.5&#10;'
         + '25/08/2026&#9;WEB&#9;Bug fixes&#9;1:45"></textarea>'
