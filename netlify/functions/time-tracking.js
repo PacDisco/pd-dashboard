@@ -35,8 +35,9 @@
  *     approve          POST  -> { contractor_id, period_start, period_end, notes? }
  *     unapprove        POST  -> { id }        (only while not yet pushed to payments)
  *     push-payment     POST  -> { id, due_date?, invoice_number? } -> writes a `payments` row
- *     round-history    POST  -> { from?, to?, dry_run } — retroactively round
- *                              UNAPPROVED entries to the quarter hour; dry_run
+ *     restore-exact    POST  -> { from?, to?, dry_run } — recompute UNAPPROVED
+ *                              entries' minutes from their recorded start/finish
+ *                              times, undoing the old per-entry rounding; dry_run
  *                              (the default) reports the effect per contractor
  *
  * Required env var:
@@ -47,11 +48,12 @@
  * ended_at. The server stores those verbatim and derives `minutes` itself, so
  * durations can never be spoofed from the browser.
  *
- * Rounding: `minutes` is snapped to the nearest quarter hour (floor 15) on every
- * write — see ROUND_TO_MINUTES below. started_at / ended_at keep the true
- * instants, so the entry still records when the work actually happened; only the
- * billable quantity is rounded. That means (ended_at - started_at) and `minutes`
- * can legitimately disagree, and nothing should recompute one from the other.
+ * Rounding: entries store EXACT minutes. Billing is in quarter hours, and that
+ * rounding is applied to TOTALS — the week total, a roster period, an approved
+ * timesheet — never to individual entries. Rounding each entry and then summing
+ * accumulates the errors instead of cancelling them; see ROUND_TO_MINUTES below
+ * for the worked example. Every total a person is shown or paid goes through
+ * roundBillableMinutes(); raw sums are for arithmetic, not for display.
  */
 
 const { neon } = require('@neondatabase/serverless');
@@ -69,29 +71,34 @@ function sql() {
 const MANAGER_ROLES = ['admin'];
 const MAX_MINUTES = 1440;          // matches the DB constraint (24h)
 
-// Billing granularity. Every entry is snapped to the nearest quarter hour as it
-// is saved — timer, by hand, and bulk import alike — so the hours a contractor
-// sees in their own week are exactly the hours that get approved and invoiced.
-// Rounding at approval time instead would make those two numbers disagree.
+// Billing granularity. Time is billed in quarter hours.
 //
-// The floor matters as much as the rounding: without it a 3-minute entry would
-// round to zero and sit in the list looking logged while being worth nothing.
-// Anything deliberate enough to log is worth a quarter of an hour.
+// The rounding happens on the TOTAL, not on each entry, and that distinction is
+// the whole design. Rounding every entry and then adding them up accumulates the
+// per-entry errors instead of cancelling them: 14 real entries summing to 938
+// minutes (15.63 h) round individually to 915 (15.25 h) — 23 minutes of worked
+// time gone, with the loss growing as the entry count does. Rounding the sum
+// gives 945 (15.75 h), which is what 938 minutes actually rounds to.
+//
+// So entries keep their exact minutes and every total a person is shown or paid
+// is rounded at the point it is totalled. One rounding step, no accumulation.
 const ROUND_TO_MINUTES = 15;
 const MIN_BILLABLE_MINUTES = 15;
 
 /**
- * Snap a raw duration to the billing granularity.
+ * Round a TOTAL to the billing granularity.
  *
- * Nearest, not up or down: 7 minutes becomes 0:00 + the floor, 8 becomes 0:15,
- * and over a month the over- and under-rounding cancel rather than accumulating
- * against one side. Call this AFTER the raw duration has been validated — a
- * backwards or over-long entry should be refused on its real length, not on a
- * rounded one that might squeak under the cap.
+ * Nearest, not up or down. Zero stays zero — an empty week is not a quarter of
+ * an hour — but any real total is worth at least one quarter, so a period with
+ * three minutes in it bills as 0:15 rather than rounding away to nothing.
+ *
+ * There is deliberately no 24h cap here: MAX_MINUTES bounds a single ENTRY, and
+ * a week's total is expected to exceed it.
  */
-function roundMinutes(raw) {
-  const snapped = Math.round(raw / ROUND_TO_MINUTES) * ROUND_TO_MINUTES;
-  return Math.max(MIN_BILLABLE_MINUTES, Math.min(MAX_MINUTES, snapped));
+function roundBillableMinutes(raw) {
+  const n = Number(raw) || 0;
+  if (n <= 0) return 0;
+  return Math.max(MIN_BILLABLE_MINUTES, Math.round(n / ROUND_TO_MINUTES) * ROUND_TO_MINUTES);
 }
 
 // NZD first: it's the default across the rest of the payments pipeline.
@@ -234,20 +241,30 @@ async function assertApprovalEditable(entry) {
   return appr.id;
 }
 
+// Round a summed minutes expression, in SQL. Mirrors roundBillableMinutes():
+// nearest quarter, zero stays zero, anything else is worth at least one quarter.
+// A timesheet total is what gets paid, so this is the number that has to be
+// right — and it is computed from the EXACT entry minutes, once, at the end.
+const ROUND_TOTAL_SQL = (expr) =>
+  `(CASE WHEN (${expr}) <= 0 THEN 0
+         ELSE GREATEST(${MIN_BILLABLE_MINUTES},
+              ROUND((${expr}) / ${ROUND_TO_MINUTES}.0) * ${ROUND_TO_MINUTES}) END)::int`;
+
 /** Re-total an approval after one of its entries was edited or removed. */
 async function recomputeApproval(approvalId) {
   if (!approvalId) return;
-  await sql()`
-    UPDATE time_approvals a
-    SET total_minutes = t.m,
-        amount = CASE WHEN a.hourly_rate IS NULL THEN NULL
-                      ELSE ROUND((t.m / 60.0) * a.hourly_rate, 2) END
-    FROM (
-      SELECT COALESCE(SUM(minutes), 0)::int AS m
-      FROM time_entries WHERE approval_id = ${approvalId}
-    ) t
-    WHERE a.id = ${approvalId}
-  `;
+  await sql().query(
+    `UPDATE time_approvals a
+     SET total_minutes = t.m,
+         amount = CASE WHEN a.hourly_rate IS NULL THEN NULL
+                       ELSE ROUND((t.m / 60.0) * a.hourly_rate, 2) END
+     FROM (
+       SELECT ${ROUND_TOTAL_SQL('COALESCE(SUM(minutes), 0)')} AS m
+       FROM time_entries WHERE approval_id = $1
+     ) t
+     WHERE a.id = $1`,
+    [approvalId]
+  );
 }
 
 async function targetContractorId(caller, self, requested) {
@@ -372,30 +389,26 @@ async function handleStop(caller, body) {
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
 
-  // minutes is derived from the DB clock, never from the client, then snapped to
-  // the billing quarter — done in the same statement so there is no window where
-  // a stopped entry holds an unrounded duration. Capped at 24h so a timer
+  // minutes is derived from the DB clock, never from the client, and stored
+  // EXACT — the quarter-hour rounding happens when hours are totalled, not here.
+  // At least 1 minute for any deliberate start/stop; capped at 24h so a timer
   // forgotten over a weekend can still be closed out (and then edited).
-  const ROUNDED = `LEAST(${MAX_MINUTES}, GREATEST(${MIN_BILLABLE_MINUTES},
-      ROUND(EXTRACT(EPOCH FROM (NOW() - started_at)) / 60.0 / ${ROUND_TO_MINUTES}) * ${ROUND_TO_MINUTES}))::int`;
+  const EXACT = `LEAST(${MAX_MINUTES}, GREATEST(1,
+      ROUND(EXTRACT(EPOCH FROM (NOW() - started_at)) / 60)))::int`;
   const rows = id
     ? await sql().query(
-        `UPDATE time_entries SET ended_at = NOW(), minutes = ${ROUNDED}
+        `UPDATE time_entries SET ended_at = NOW(), minutes = ${EXACT}
          WHERE id = $1 AND contractor_id = $2 AND ended_at IS NULL
-         RETURNING id, minutes, started_at, ended_at`, [id, self.id])
+         RETURNING id, minutes`, [id, self.id])
     : await sql().query(
-        `UPDATE time_entries SET ended_at = NOW(), minutes = ${ROUNDED}
+        `UPDATE time_entries SET ended_at = NOW(), minutes = ${EXACT}
          WHERE contractor_id = $1 AND ended_at IS NULL
-         RETURNING id, minutes, started_at, ended_at`, [self.id]);
+         RETURNING id, minutes`, [self.id]);
 
   if (!rows.length) return bad('no running timer to stop', 404);
   const entry = await sql().query(`${ENTRY_SELECT} WHERE e.id = $1`, [rows[0].id]);
   const capped = rows[0].minutes >= MAX_MINUTES;
-  // What the clock actually read, so the UI can say "0:07 → billed 0:15" rather
-  // than leaving someone to wonder why a short timer became a quarter hour.
-  const elapsed = Math.round(
-    (new Date(rows[0].ended_at).getTime() - new Date(rows[0].started_at).getTime()) / 60000);
-  return ok({ entry: entry[0], capped, running: null, elapsedMinutes: elapsed, roundedTo: rows[0].minutes });
+  return ok({ entry: entry[0], capped, running: null });
 }
 
 async function handleDiscard(caller, body) {
@@ -424,10 +437,10 @@ async function handleCreateEntry(caller, body) {
     description = optText(body.description);
   } catch (e) { return bad(e.message, /own time entries/.test(e.message) ? 403 : 400); }
 
-  const rawMinutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
-  if (rawMinutes <= 0) return bad('the finish time must be after the start time');
-  if (rawMinutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours — split it across days');
-  const minutes = roundMinutes(rawMinutes);
+  // Stored exact. Rounding happens when hours are totalled, not per entry.
+  const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
+  if (minutes <= 0) return bad('the finish time must be after the start time');
+  if (minutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours — split it across days');
 
   const rows = await sql()`
     INSERT INTO time_entries
@@ -484,10 +497,9 @@ async function handleUpdateEntry(caller, body) {
   } catch (e) { return bad(e.message); }
 
   if (touchedTimes) {
-    const rawMinutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
-    if (rawMinutes <= 0) return bad('the finish time must be after the start time');
-    if (rawMinutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours');
-    const minutes = roundMinutes(rawMinutes);
+    const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
+    if (minutes <= 0) return bad('the finish time must be after the start time');
+    if (minutes > MAX_MINUTES) return bad('a single entry cannot be longer than 24 hours');
     args.push(startedAt.toISOString()); sets.push(`started_at = $${args.length}`);
     args.push(endedAt.toISOString());   sets.push(`ended_at = $${args.length}`);
     args.push(minutes);                 sets.push(`minutes = $${args.length}`);
@@ -593,10 +605,9 @@ function validateImportRow(raw, ctx) {
   const startedAt = coerceInstant('start time', raw.started_at);
   const endedAt   = coerceInstant('finish time', raw.ended_at);
 
-  const rawMinutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
-  if (rawMinutes <= 0)          throw new Error('the finish time is not after the start time');
-  if (rawMinutes > MAX_MINUTES) throw new Error('longer than 24 hours — split it across days');
-  const minutes = roundMinutes(rawMinutes);
+  const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
+  if (minutes <= 0)          throw new Error('the finish time is not after the start time');
+  if (minutes > MAX_MINUTES) throw new Error('longer than 24 hours — split it across days');
 
   const project = resolveProject(ctx.byKey, raw.project);
 
@@ -798,42 +809,45 @@ async function handleUndoImport(caller, body) {
   return ok({ undone: gone.length, batchId });
 }
 
-// -------------------------------------------- manager: retroactive rounding
+// ------------------------------------- manager: restore exact entry minutes
 /**
- * Round entries logged BEFORE quarter-hour billing was turned on.
+ * Put back the exact minutes on entries that were rounded individually.
  *
- * Deliberately narrow: it only ever touches entries that are not on an approved
- * timesheet (`locked = FALSE AND approval_id IS NULL`). Anything an admin has
- * signed off stays exactly as approved — moving a total someone has already put
- * their name to, let alone one behind an issued invoice, is not something a
- * deploy or a button press should be able to do.
+ * An earlier version of this tracker snapped every entry to a quarter hour as it
+ * was saved. That was wrong: rounding each entry and then adding them up
+ * accumulates the errors rather than cancelling them, so a week of fourteen
+ * entries could lose twenty-odd minutes of real work. Billing now rounds the
+ * TOTAL instead, which needs the entries underneath it to be exact.
  *
- * Two phases, like the import:
+ * Nothing was lost by that rounding: `minutes` has always been derived from
+ * started_at / ended_at, and those instants were never rounded, so the true
+ * duration of every affected entry is recoverable from the row itself. This
+ * recomputes it.
+ *
+ * Deliberately narrow, same as before: entries on an approved timesheet are left
+ * exactly as approved. A running timer has no ended_at and is skipped.
+ *
+ * Two phases:
  *   dry_run: true   report what would change, per contractor, and write nothing
- *   dry_run: false  apply it in one statement
- *
- * Reversible without a stored backup: `minutes` was always derived from
- * started_at / ended_at, and those instants are never rounded, so the original
- * value of any entry is recomputable from the row itself. See TIME-ROUNDING.md.
+ *   dry_run: false  apply it in one statement, returning every prior value
  */
-// Everything is qualified with `e.` and every query aliases time_entries AS e,
-// so these fragments read the same whether or not there's a join in scope.
-const BACKFILL_WHERE = `
+const EXACT_MINUTES_SQL = `LEAST(${MAX_MINUTES}, GREATEST(1,
+  ROUND(EXTRACT(EPOCH FROM (e.ended_at - e.started_at)) / 60)))::int`;
+
+// Which entries this tool may look at at all.
+const RESTORE_SCOPE = `
   e.locked = FALSE
   AND e.approval_id IS NULL
   AND e.ended_at IS NOT NULL
-  AND e.minutes % ${ROUND_TO_MINUTES} <> 0
+  AND e.started_at IS NOT NULL
 `;
-// Mirrors roundMinutes(). Verified against it on PostgreSQL 16 across every
-// duration from one minute to 24 hours — see TIME-ROUNDING.md.
-const BACKFILL_ROUNDED = `LEAST(${MAX_MINUTES}, GREATEST(${MIN_BILLABLE_MINUTES},
-  ROUND(e.minutes / ${ROUND_TO_MINUTES}.0) * ${ROUND_TO_MINUTES}))::int`;
+// …and which of those actually disagree with their recorded times.
+const DIFFERS = `e.minutes IS DISTINCT FROM ${EXACT_MINUTES_SQL}`;
+const RESTORE_WHERE = `${RESTORE_SCOPE} AND ${DIFFERS}`;
 
-async function handleRoundHistory(caller, body) {
+async function handleRestoreExact(caller, body) {
   if (!caller.isManager) return bad('admin role required', 403);
 
-  // An optional window, so a cleanup can be limited to (say) the current
-  // financial year rather than all history.
   let from = null, to = null;
   try {
     if (body.from) from = coerceDate('from', body.from);
@@ -846,33 +860,43 @@ async function handleRoundHistory(caller, body) {
   if (from) { args.push(from); window += ` AND e.work_date >= $${args.length}`; }
   if (to)   { args.push(to);   window += ` AND e.work_date <= $${args.length}`; }
 
-  // Per-contractor effect, in minutes and (where a rate is set) in money, so the
-  // person clicking this sees what it costs before it happens rather than after.
+  // Per contractor: what's stored now, what the clock actually says, and — since
+  // billing rounds the total — what each of those totals bills as. The billed
+  // column is the one that matters; the rest is showing the working.
+  // The totals span EVERY unapproved entry the person has in the window, not
+  // just the ones that change — "billed 3.25 h → 3.58 h" across four corrected
+  // rows tells an admin nothing about the invoice. `entries` counts only what
+  // actually moves, and the HAVING drops anyone with nothing to correct.
   const perPerson = await sql().query(
     `SELECT c.id, c.email, c.full_name, c.hourly_rate, c.currency,
-            COUNT(*)::int                                   AS entries,
-            COALESCE(SUM(e.minutes), 0)::int                AS before_minutes,
-            COALESCE(SUM(${BACKFILL_ROUNDED}), 0)::int      AS after_minutes,
-            MIN(e.work_date)                                AS first_entry,
-            MAX(e.work_date)                                AS last_entry
+            COUNT(*) FILTER (WHERE ${DIFFERS})::int         AS entries,
+            COALESCE(SUM(e.minutes), 0)::int                AS stored_minutes,
+            COALESCE(SUM(${EXACT_MINUTES_SQL}), 0)::int     AS exact_minutes,
+            MIN(e.work_date) FILTER (WHERE ${DIFFERS})      AS first_entry,
+            MAX(e.work_date) FILTER (WHERE ${DIFFERS})      AS last_entry
        FROM time_entries e
        JOIN time_contractors c ON c.id = e.contractor_id
-      WHERE ${BACKFILL_WHERE}${window}
+      WHERE ${RESTORE_SCOPE}${window}
       GROUP BY c.id
+     HAVING COUNT(*) FILTER (WHERE ${DIFFERS}) > 0
       ORDER BY LOWER(COALESCE(c.full_name, c.email))`,
     args
   );
 
   const people = perPerson.map((r) => {
-    const delta = r.after_minutes - r.before_minutes;
+    const billedBefore = roundBillableMinutes(r.stored_minutes);
+    const billedAfter  = roundBillableMinutes(r.exact_minutes);
+    const delta = billedAfter - billedBefore;
     const rate = r.hourly_rate === null ? null : Number(r.hourly_rate);
     return {
       contractor_id: r.id,
       name: r.full_name || r.email,
       email: r.email,
       entries: r.entries,
-      before_minutes: r.before_minutes,
-      after_minutes: r.after_minutes,
+      stored_minutes: r.stored_minutes,
+      exact_minutes: r.exact_minutes,
+      billed_before: billedBefore,
+      billed_after: billedAfter,
       delta_minutes: delta,
       currency: r.currency,
       // Null rather than 0 when no rate is set — "no rate on file" and "costs
@@ -886,21 +910,22 @@ async function handleRoundHistory(caller, body) {
   const summary = {
     entries: people.reduce((s, p) => s + p.entries, 0),
     contractors: people.length,
-    before_minutes: people.reduce((s, p) => s + p.before_minutes, 0),
-    after_minutes: people.reduce((s, p) => s + p.after_minutes, 0),
+    stored_minutes: people.reduce((s, p) => s + p.stored_minutes, 0),
+    exact_minutes: people.reduce((s, p) => s + p.exact_minutes, 0),
+    billed_before: people.reduce((s, p) => s + p.billed_before, 0),
+    billed_after: people.reduce((s, p) => s + p.billed_after, 0),
   };
-  summary.delta_minutes = summary.after_minutes - summary.before_minutes;
+  summary.delta_minutes = summary.billed_after - summary.billed_before;
 
-  // How much is being left alone, and why — otherwise "487 entries rounded" begs
-  // the question of what happened to everything else.
+  // What's being left alone, and why — otherwise the counts beg the question.
   const skipped = await sql().query(
     `SELECT COUNT(*) FILTER (WHERE a.payment_id IS NOT NULL)::int AS paid,
             COUNT(*) FILTER (WHERE a.payment_id IS NULL)::int     AS approved_unpaid
        FROM time_entries e
        LEFT JOIN time_approvals a ON a.id = e.approval_id
       WHERE e.approval_id IS NOT NULL
-        AND e.ended_at IS NOT NULL
-        AND e.minutes % ${ROUND_TO_MINUTES} <> 0${window}`,
+        AND e.ended_at IS NOT NULL AND e.started_at IS NOT NULL
+        AND e.minutes IS DISTINCT FROM ${EXACT_MINUTES_SQL}${window}`,
     args
   );
 
@@ -913,28 +938,24 @@ async function handleRoundHistory(caller, body) {
   };
   if (out.dryRun) return ok(out);
 
-  if (!summary.entries) return bad('nothing to round — every unapproved entry is already on a quarter hour');
+  if (!summary.entries) return bad('nothing to restore — every unapproved entry already matches its recorded times');
 
-  // Return the old value alongside the new one. This is a one-way bulk edit, so
-  // the client saves the before-state as a CSV the moment it lands — cheaper
-  // than a schema column for a cleanup that runs once, and it makes a restore a
-  // single UPDATE from a file rather than an archaeology exercise.
-  // The self-join reads the pre-update snapshot: SET expressions and a FROM
-  // subquery both see the row as it was when the statement began.
+  // Return the old value alongside the new one so the client can save a CSV of
+  // the before-state. The self-join reads the pre-update snapshot.
   const done = await sql().query(
     `UPDATE time_entries AS e
-        SET minutes = ${BACKFILL_ROUNDED}
+        SET minutes = ${EXACT_MINUTES_SQL}
        FROM (SELECT id, minutes AS was FROM time_entries) o
-      WHERE o.id = e.id AND ${BACKFILL_WHERE}${window}
+      WHERE o.id = e.id AND ${RESTORE_WHERE}${window}
       RETURNING e.id, o.was, e.minutes AS now`,
     args
   );
-  console.log(`time-tracking: ${caller.email} rounded ${done.length} historical entries`
-    + ` (${summary.delta_minutes >= 0 ? '+' : ''}${summary.delta_minutes} min)`);
+  console.log(`time-tracking: ${caller.email} restored exact minutes on ${done.length} entries`
+    + ` (billed ${summary.delta_minutes >= 0 ? '+' : ''}${summary.delta_minutes} min)`);
   return ok({
     ...out,
     dryRun: false,
-    rounded: done.length,
+    restored: done.length,
     changes: done.map((r) => ({ id: r.id, was: r.was, now: r.now })),
   });
 }
@@ -946,8 +967,9 @@ async function handleContractors(caller, qs) {
   try { ({ from, to } = range({ from: qs.from, to: qs.to })); } catch (e) { return bad(e.message); }
   const rows = await sql().query(
     `SELECT c.*,
-            COALESCE(SUM(e.minutes) FILTER (WHERE e.work_date BETWEEN $1 AND $2 AND e.ended_at IS NOT NULL), 0)::int AS period_minutes,
-            COALESCE(SUM(e.minutes) FILTER (WHERE e.work_date BETWEEN $1 AND $2 AND e.ended_at IS NOT NULL AND e.locked = FALSE), 0)::int AS unapproved_minutes,
+            ${ROUND_TOTAL_SQL(`COALESCE(SUM(e.minutes) FILTER (WHERE e.work_date BETWEEN $1 AND $2 AND e.ended_at IS NOT NULL), 0)`)} AS period_minutes,
+            COALESCE(SUM(e.minutes) FILTER (WHERE e.work_date BETWEEN $1 AND $2 AND e.ended_at IS NOT NULL), 0)::int AS period_minutes_exact,
+            ${ROUND_TOTAL_SQL(`COALESCE(SUM(e.minutes) FILTER (WHERE e.work_date BETWEEN $1 AND $2 AND e.ended_at IS NOT NULL AND e.locked = FALSE), 0)`)} AS unapproved_minutes,
             MAX(e.work_date) AS last_logged,
             BOOL_OR(e.ended_at IS NULL) AS timer_running
      FROM time_contractors c
@@ -1120,10 +1142,14 @@ async function handleApprove(caller, body) {
     }
   }
 
-  const rows = await sql()`
-    WITH pend AS (
+  // Written with .query() rather than the tagged-template form because the
+  // rounding expression has to reach Postgres as SQL. In a tagged template every
+  // ${…} becomes a bind parameter, so interpolating ROUND_TOTAL_SQL there sends
+  // the expression as a text value and the statement fails at run time.
+  const rows = await sql().query(
+    `WITH pend AS (
       SELECT id, minutes FROM time_entries
-      WHERE contractor_id = ${cid} AND work_date BETWEEN ${start} AND ${end}
+      WHERE contractor_id = $1 AND work_date BETWEEN $2 AND $3
         AND ended_at IS NOT NULL AND locked = FALSE
       -- FOR UPDATE serialises two managers clicking approve at the same moment:
       -- the second waits, re-checks locked = FALSE against the now-committed
@@ -1131,14 +1157,20 @@ async function handleApprove(caller, body) {
       -- could write a full-value timesheet for the same hours.
       FOR UPDATE
     ), tot AS (
-      SELECT COALESCE(SUM(minutes), 0)::int AS m, COUNT(*)::int AS n FROM pend
+      -- The timesheet total is rounded here, ONCE, from the exact entry minutes.
+      -- Rounding the entries first and summing those would lose time; see
+      -- ROUND_TO_MINUTES at the top of this file.
+      SELECT ${ROUND_TOTAL_SQL('COALESCE(SUM(minutes), 0)')} AS m,
+             COUNT(*)::int AS n,
+             COALESCE(SUM(minutes), 0)::int AS raw_m
+        FROM pend
     ), ins AS (
       INSERT INTO time_approvals
         (contractor_id, period_start, period_end, total_minutes, hourly_rate, currency, amount, approved_by, notes)
-      SELECT ${cid}, ${start}, ${end}, tot.m, ${rate}, ${contractor.currency},
-             CASE WHEN ${rate}::numeric IS NULL THEN NULL
-                  ELSE ROUND((tot.m / 60.0) * ${rate}::numeric, 2) END,
-             ${caller.email}, ${notes}
+      SELECT $1, $2, $3, tot.m, $4::numeric, $5,
+             CASE WHEN $4::numeric IS NULL THEN NULL
+                  ELSE ROUND((tot.m / 60.0) * $4::numeric, 2) END,
+             $6, $7
       FROM tot WHERE tot.n > 0
       RETURNING *
     ), upd AS (
@@ -1148,8 +1180,10 @@ async function handleApprove(caller, body) {
     )
     SELECT (SELECT row_to_json(ins) FROM ins) AS approval,
            (SELECT COUNT(*)::int FROM upd)    AS locked_count,
-           (SELECT n FROM tot)                AS pending_count
-  `;
+           (SELECT n FROM tot)                AS pending_count,
+           (SELECT raw_m FROM tot)            AS raw_minutes`,
+    [cid, start, end, rate, contractor.currency, caller.email, notes]
+  );
 
   if (!rows[0].approval) {
     return bad('nothing to approve in that period — the entries are already approved or there are none');
@@ -1158,6 +1192,8 @@ async function handleApprove(caller, body) {
     approval: rows[0].approval,
     lockedEntries: rows[0].locked_count,
     needsRate: rate === null,
+    // The exact sum behind the rounded timesheet, so the UI can show both.
+    rawMinutes: rows[0].raw_minutes,
   });
 }
 
@@ -1264,7 +1300,8 @@ function defaultDueDate(periodEnd) {
 // Netlify only ever looks at `handler`, so this is inert in production.
 exports.__test = {
   validateImportRow, resolveProject, namesSomeoneElse, MAX_IMPORT_ROWS,
-  roundMinutes, ROUND_TO_MINUTES, MIN_BILLABLE_MINUTES, MAX_MINUTES,
+  roundBillableMinutes, ROUND_TOTAL_SQL, EXACT_MINUTES_SQL,
+  ROUND_TO_MINUTES, MIN_BILLABLE_MINUTES, MAX_MINUTES,
 };
 
 // -------------------------------------------------------------------------
@@ -1306,7 +1343,7 @@ exports.handler = async (event, context) => {
       if (action === 'approve')          return await handleApprove(caller, body);
       if (action === 'unapprove')        return await handleUnapprove(caller, body);
       if (action === 'push-payment')     return await handlePushPayment(caller, body);
-      if (action === 'round-history')    return await handleRoundHistory(caller, body);
+      if (action === 'restore-exact')    return await handleRestoreExact(caller, body);
     }
 
     return bad(`unknown action '${action}' for method ${method}`);

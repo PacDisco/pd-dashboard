@@ -243,11 +243,13 @@
     </div>
 
     <div class="bg-white border border-gray-200 rounded-xl p-5 mt-5">
-      <h2 class="text-sm font-semibold text-gray-700">Round historical entries</h2>
+      <h2 class="text-sm font-semibold text-gray-700">Restore exact entry times</h2>
       <p class="text-xs text-gray-500 mt-0.5 mb-3">
-        Time logged before quarter-hour billing was switched on still carries its exact minutes.
-        This rounds those to the nearest quarter, the same way new entries are rounded as they're saved.
-        Entries on an approved timesheet are never touched. Leave the dates blank for all history.
+        An earlier version rounded every entry to a quarter hour as it was saved, which lost real time as
+        the entries added up. Billing now rounds the <em>total</em> instead, so the entries underneath it
+        need to be exact. This recomputes them from each entry's recorded start and finish times — nothing
+        was lost, those were never rounded. Entries on an approved timesheet are left alone.
+        Leave the dates blank for all history.
       </p>
       <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
         <div class="md:col-span-3"><label class="lbl">From <span class="text-gray-400 font-normal">(optional)</span></label><input id="rh-from" type="date" class="fld"></div>
@@ -453,13 +455,7 @@ async function stopTimer() {
     $('t-desc').value = '';
     renderTimer();
     if (out.capped) toast('That timer had been running over 24 hours — it was capped at 24h. Edit the entry to set the real time.', true);
-    else {
-      // Say so when the clock and the logged figure differ, otherwise a 7-minute
-      // timer turning into a quarter of an hour reads as a bug.
-      var rounded = out.elapsedMinutes != null && out.elapsedMinutes !== out.entry.minutes
-        ? ' (' + hm(out.elapsedMinutes) + ' rounded to the quarter hour)' : '';
-      toast('Logged ' + hm(out.entry.minutes) + (out.entry.project_name ? ' on ' + out.entry.project_name : '') + rounded);
-    }
+    else toast('Logged ' + hm(out.entry.minutes) + (out.entry.project_name ? ' on ' + out.entry.project_name : ''));
     await loadWeek();
   } catch (e) { toast(e.message, true); }
   finally { $('btn-stop').disabled = false; }
@@ -491,7 +487,13 @@ function renderWeek() {
   var b = weekBounds();
   var finished = ENTRIES.filter(function (e) { return e.ended_at; });
   var total = finished.reduce(function (s, e) { return s + (e.minutes || 0); }, 0);
-  $('wk-total').textContent = hours(total) + ' h';
+  // The headline is the billable figure — rounded once, from the exact sum.
+  // The day and project breakdowns below stay exact: they're working, not
+  // billing, and rounding each of them would no longer add up to this.
+  var billedTotal = billed(total);
+  $('wk-total').textContent = hours(billedTotal) + ' h';
+  $('wk-total').title = billedTotal === total
+    ? '' : hours(total) + ' h logged, billed to the quarter hour';
   var lockedCount = finished.filter(function (e) { return e.locked; }).length;
   $('wk-sub').textContent = finished.length + ' entr' + (finished.length === 1 ? 'y' : 'ies')
     + (lockedCount ? ' · ' + lockedCount + ' approved & locked' : '')
@@ -535,16 +537,11 @@ function entryRow(e) {
     : (e.locked ? '<span class="pill pill-lock">🔒 approved</span>' : '')
       + (e.source === 'manual' ? '<span class="pill pill-manual ml-1">by hand</span>' : '')
       + (e.source === 'import' ? '<span class="pill pill-import ml-1">imported</span>' : '');
-  // Entries bill in quarter hours but keep the true start/finish instants, so the
-  // clock and the logged figure can differ. Where they do, mark it and say why on
-  // hover — an unexplained 09:00 → 09:07 worth 0.25 h looks like a broken sum.
-  var elapsed = live ? null : Math.round((Date.parse(e.ended_at) - Date.parse(e.started_at)) / 60000);
-  var wasRounded = elapsed !== null && elapsed !== e.minutes;
+  // Entries show their exact logged time. Rounding to the quarter happens on the
+  // week total and the timesheet, never here — see billed().
   var dur = live ? '—' : hours(e.minutes) + ' h';
-  var durStyle = 'width:74px' + (wasRounded ? ';border-bottom:1px dotted #cbd5e1;cursor:help' : '');
-  var durTitle = wasRounded ? ' title="' + esc(hm(elapsed)) + ' on the clock, rounded to the quarter hour"' : '';
   return '<div class="entry">'
-    + '<div class="text-sm font-semibold text-gray-900 mono" style="' + durStyle + '"' + durTitle + '>' + dur + '</div>'
+    + '<div class="text-sm font-semibold text-gray-900 mono" style="width:74px">' + dur + '</div>'
     + '<div class="flex-1 min-w-0">'
       + '<div class="text-sm text-gray-800">' + (e.project_name ? esc(e.project_name) : '<span class="text-gray-400">No project</span>')
       + ' <span class="text-xs text-gray-400 ml-1">' + hhmm(e.started_at) + ' → ' + (live ? 'now' : hhmm(e.ended_at)) + '</span></div>'
@@ -577,7 +574,6 @@ function manualEntryModal(existing) {
       + '<div class="md:col-span-6 m-hours hidden"><label class="lbl">Hours worked</label><input id="m-hours" type="number" step="0.25" min="0.02" max="24" class="fld" placeholder="1.5"></div>'
       + '<div class="md:col-span-12"><label class="lbl">Description <span class="text-gray-400 font-normal">(optional)</span></label><input id="m-desc" class="fld" value="' + esc(e && e.description ? e.description : '') + '"></div>'
     + '</div>'
-    + '<div id="m-round" class="text-xs text-gray-500 mt-3"></div>'
     + '<div id="m-err" class="text-sm text-red-600 mt-3"></div>'
     + '<div class="flex items-center justify-end gap-2 mt-4">'
       + '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>'
@@ -592,48 +588,19 @@ function manualEntryModal(existing) {
     $('m-mode-hours').classList.toggle('active', mode === 'hours');
     document.querySelectorAll('.m-times').forEach(function (n) { n.classList.toggle('hidden', mode !== 'times'); });
     document.querySelectorAll('.m-hours').forEach(function (n) { n.classList.toggle('hidden', mode !== 'hours'); });
-    previewRounding();
   }
-  // Show what the entry will actually be saved as, live. Typing 1.6 hours and
-  // finding 1.5 in the list afterwards is the kind of surprise that makes people
-  // distrust the whole tracker; better to say so while they're still looking.
-  ['m-date', 'm-start', 'm-end', 'm-hours'].forEach(function (id) {
-    var el = $(id); if (el) el.addEventListener('input', previewRounding);
-  });
-  previewRounding();
   $('m-save').onclick = function () { saveManual(e); };
 }
 
-/* Entries bill in quarter hours; this is the note under the by-hand form. */
-function previewRounding() {
-  var el = $('m-round');
-  if (!el) return;
-  var mins = manualMinutes();
-  if (mins === null || mins <= 0) { el.textContent = ''; return; }
-  var billed = roundQuarter(mins);
-  el.innerHTML = billed === mins
-    ? 'Will be logged as <strong>' + hours(billed) + ' h</strong>.'
-    : 'Time is logged in quarter hours — <strong>' + hm(mins) + '</strong> will be saved as <strong>'
-      + hours(billed) + ' h</strong>.';
-}
-
-/* Mirrors roundMinutes() in netlify/functions/time-tracking.js. Display only —
-   the server rounds independently and its answer is the one that's stored. */
-function roundQuarter(mins) { return Math.max(15, Math.min(1440, Math.round(mins / 15) * 15)); }
-
-/* Raw minutes currently described by the by-hand form, or null if unreadable. */
-function manualMinutes() {
-  var date = $('m-date') && $('m-date').value;
-  if (!date) return null;
-  if ($('m-mode-hours') && $('m-mode-hours').classList.contains('active')) {
-    var h = Number($('m-hours').value);
-    return isFinite(h) && h > 0 ? Math.round(h * 60) : null;
-  }
-  var s = $('m-start').value, en = $('m-end').value;
-  if (!s || !en) return null;
-  var a = Date.parse(localToIso(date, s)), b = Date.parse(localToIso(date, en));
-  if (b <= a) b += 86400000;                       // crossing midnight
-  return Math.round((b - a) / 60000);
+/* Mirrors roundBillableMinutes() in netlify/functions/time-tracking.js. Display
+   only — the server rounds independently and its answer is what gets paid.
+   Rounds a TOTAL, never an individual entry: rounding entries and then summing
+   accumulates the error, which is how a week of 938 real minutes turned into
+   915 instead of 945. Zero stays zero; anything else bills at 15 minutes up. */
+function billed(mins) {
+  var n = Number(mins) || 0;
+  if (n <= 0) return 0;
+  return Math.max(15, Math.round(n / 15) * 15);
 }
 
 async function saveManual(existing) {
@@ -994,7 +961,7 @@ function importModal() {
         + (isMgr() ? ', Email' : '') + '.'
         + ' A header row is matched by name in any order. Give <em>either</em> Started + Finished <em>or</em> Hours.'
         + ' Project matches a project\'s name or its code.'
-        + ' Every row is rounded to the nearest quarter hour — the preview shows what will actually be logged.</div>'
+        + ' Rows are logged exactly as given; quarter-hour rounding is applied to the week and timesheet totals.</div>'
       + '<textarea id="imp-text" class="imp-paste" placeholder="Date&#9;Project&#9;Description&#9;Hours&#10;'
         + '2026-08-24&#9;WEB&#9;Enrolment funnel report&#9;3.5&#10;'
         + '25/08/2026&#9;WEB&#9;Bug fixes&#9;1:45"></textarea>'
@@ -1228,14 +1195,17 @@ function showUndoImport(count, batchId) {
   };
 }
 
-/* ------------------------------------ admin: round historical entries */
+/* ------------------------------- admin: restore exact entry minutes */
 /*
- * A retroactive pass for time logged before quarter-hour billing existed.
+ * Undoes the old per-entry rounding by recomputing each entry's minutes from its
+ * recorded start and finish times.
  *
  * Preview first, always. This edits many rows at once and there is no "undo
  * import" equivalent to lean on, so the admin sees the effect per contractor —
- * in hours AND in money where a rate is on file — before anything moves. The
- * money column is the point: "+42 minutes" means nothing until it reads "$56".
+ * what's stored, what the clock says, and what each of those BILLS as once the
+ * total is rounded — before anything moves. The billed column is the one that
+ * matters; a change of nine minutes in the raw sum may not move the invoice at
+ * all, and the admin should be able to see that rather than guess.
  *
  * On commit the server returns every old value, and the browser saves them as a
  * CSV immediately. That file is the way back if the run was a mistake.
@@ -1255,9 +1225,8 @@ async function previewRoundHistory() {
   $('rh-out').innerHTML = '<div class="flex justify-center py-6"><div class="loading-spinner"></div></div>';
   try {
     var body = rhWindow();
-    body.action = 'round-history';
     body.dry_run = true;
-    RH = await api('POST', 'round-history', body);
+    RH = await api('POST', 'restore-exact', body);
     renderRoundHistory();
   } catch (e) {
     RH = null;
@@ -1282,9 +1251,9 @@ function renderRoundHistory() {
   var el = $('rh-out');
 
   if (!s.entries) {
-    el.innerHTML = '<div class="imp-note">Nothing to round'
+    el.innerHTML = '<div class="imp-note">Nothing to correct'
       + (RH.from || RH.to ? ' in that date range' : '')
-      + ' — every unapproved entry is already on a quarter hour.</div>'
+      + ' — every unapproved entry already matches its recorded times.</div>'
       + rhSkippedNote();
     return;
   }
@@ -1294,8 +1263,10 @@ function renderRoundHistory() {
       + '<td><div class="font-semibold text-gray-800">' + esc(p.name) + '</div>'
         + '<div class="text-xs text-gray-400">' + esc(p.first_entry) + ' → ' + esc(p.last_entry) + '</div></td>'
       + '<td class="mono">' + p.entries + '</td>'
-      + '<td class="mono">' + hours(p.before_minutes) + ' h</td>'
-      + '<td class="mono font-semibold">' + hours(p.after_minutes) + ' h</td>'
+      + '<td class="mono text-gray-500">' + hours(p.stored_minutes) + ' h</td>'
+      + '<td class="mono text-gray-500">' + hours(p.exact_minutes) + ' h</td>'
+      + '<td class="mono">' + hours(p.billed_before) + ' h</td>'
+      + '<td class="mono font-semibold">' + hours(p.billed_after) + ' h</td>'
       + '<td class="mono">' + rhDelta(p.delta_minutes) + '</td>'
       + '<td class="mono">' + rhMoney(p) + '</td>'
       + '</tr>';
@@ -1303,17 +1274,20 @@ function renderRoundHistory() {
 
   el.innerHTML =
     '<div class="imp-warn mb-3"><strong>' + s.entries + ' entr' + (s.entries === 1 ? 'y' : 'ies') + '</strong> across '
-      + s.contractors + ' ' + (s.contractors === 1 ? 'person' : 'people') + ' would change: '
-      + hours(s.before_minutes) + ' h → <strong>' + hours(s.after_minutes) + ' h</strong> ('
-      + (s.delta_minutes === 0 ? 'no net change' : (s.delta_minutes > 0 ? '+' : '−') + hm(Math.abs(s.delta_minutes)) + ' overall')
+      + s.contractors + ' ' + (s.contractors === 1 ? 'person' : 'people') + ' would be corrected. '
+      + 'Billed hours: ' + hours(s.billed_before) + ' h → <strong>' + hours(s.billed_after) + ' h</strong> ('
+      + (s.delta_minutes === 0 ? 'no change to what anyone is paid' : (s.delta_minutes > 0 ? '+' : '−') + hm(Math.abs(s.delta_minutes)) + ' overall')
       + ').</div>'
     + '<div class="imp-scroll"><table class="imp-tbl"><thead><tr>'
-      + '<th>Contractor</th><th>Entries</th><th>Now</th><th>After</th><th>Change</th><th>Cost of change</th>'
+      + '<th>Contractor</th><th>Entries</th><th>Stored</th><th>Actual</th>'
+      + '<th>Billed now</th><th>Billed after</th><th>Change</th><th>Cost of change</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div class="text-xs text-gray-500 mt-2">Stored is what the rounding left behind; Actual is what the recorded start and finish times say. '
+      + 'The billed columns are those totals rounded to the quarter hour — that\'s what reaches an invoice.</div>'
     + rhSkippedNote()
     + '<div class="flex items-center justify-between gap-3 mt-3 flex-wrap">'
       + '<div class="text-xs text-gray-500">A CSV of the current values is saved to your downloads the moment this runs, so it can be put back.</div>'
-      + '<button id="rh-go" class="btn btn-primary">Round ' + s.entries + ' entr' + (s.entries === 1 ? 'y' : 'ies') + '</button>'
+      + '<button id="rh-go" class="btn btn-primary">Correct ' + s.entries + ' entr' + (s.entries === 1 ? 'y' : 'ies') + '</button>'
     + '</div>';
   $('rh-go').onclick = commitRoundHistory;
 }
@@ -1327,31 +1301,31 @@ function rhSkippedNote() {
   if (sk.approvedUnpaid) bits.push(sk.approvedUnpaid + ' on an approved timesheet');
   if (sk.paid) bits.push(sk.paid + ' already pushed to Invoices & Payments');
   return '<div class="text-xs text-gray-500 mt-2">'
-    + n + ' off-quarter entr' + (n === 1 ? 'y is' : 'ies are') + ' being left alone: ' + bits.join(', ')
+    + n + ' rounded entr' + (n === 1 ? 'y is' : 'ies are') + ' being left alone: ' + bits.join(', ')
     + '. Approved hours are never changed here — undo the approval first if one really needs correcting.</div>';
 }
 
 async function commitRoundHistory() {
   var s = RH.summary;
-  if (!confirm('Round ' + s.entries + ' entries across ' + s.contractors + ' people?\n\n'
-      + hours(s.before_minutes) + ' h becomes ' + hours(s.after_minutes) + ' h.\n'
+  if (!confirm('Correct ' + s.entries + ' entr' + (s.entries === 1 ? 'y' : 'ies')
+      + ' across ' + s.contractors + ' ' + (s.contractors === 1 ? 'person' : 'people') + '?\n\n'
+      + 'Billed hours go from ' + hours(s.billed_before) + ' h to ' + hours(s.billed_after) + ' h.\n'
       + 'A CSV of the current values will be saved to your downloads.')) return;
 
   var btn = $('rh-go');
-  btn.disabled = true; btn.textContent = 'Rounding…';
+  btn.disabled = true; btn.textContent = 'Correcting…';
   try {
     var body = rhWindow();
-    body.action = 'round-history';
     body.dry_run = false;
-    var out = await api('POST', 'round-history', body);
+    var out = await api('POST', 'restore-exact', body);
     downloadRoundBackup(out.changes || []);
-    toast('Rounded ' + out.rounded + ' entries — backup CSV saved to your downloads');
+    toast('Restored exact times on ' + out.restored + ' entries — backup CSV saved to your downloads');
     await previewRoundHistory();     // re-run the check; it should now come back empty
     await loadWeek();
     if (tab === 'team') await loadTeam();
   } catch (e) {
     toast(e.message, true);
-    btn.disabled = false; btn.textContent = 'Round ' + s.entries + ' entries';
+    btn.disabled = false; btn.textContent = 'Correct ' + s.entries + ' entries';
   }
 }
 
@@ -1363,7 +1337,7 @@ function downloadRoundBackup(changes) {
   var csv = rows.map(function (r) { return r.join(','); }).join('\r\n');
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
-  a.download = 'time-rounding-backup-' + todayStr() + '.csv';
+  a.download = 'time-minutes-backup-' + todayStr() + '.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
 }

@@ -284,7 +284,7 @@ console.log('\nserver row validation');
 
 process.env.NETLIFY_DATABASE_URL = 'postgres://unused';
 const { __test } = require(path.join(root, 'netlify/functions/time-tracking.js'));
-const { validateImportRow, resolveProject, namesSomeoneElse, roundMinutes, MAX_MINUTES } = __test;
+const { validateImportRow, resolveProject, namesSomeoneElse, roundBillableMinutes, MAX_MINUTES } = __test;
 
 const PROJECTS = new Map([
   ['c:web', { id: 7, name: 'Website rebuild', code: 'WEB', is_active: true }],
@@ -314,56 +314,82 @@ test('a good row resolves its project and lands on the caller', () => {
 });
 
 // ═══════════════════════════════════════════
-// QUARTER-HOUR ROUNDING
+// QUARTER-HOUR ROUNDING — of TOTALS, not entries
 // ═══════════════════════════════════════════
-console.log('\nquarter-hour rounding');
+console.log('\nquarter-hour rounding (totals)');
 
 test('exact quarters are left alone', () => {
-  [15, 30, 45, 60, 90, 480].forEach((m) => assert.equal(roundMinutes(m), m));
+  [15, 30, 45, 60, 90, 480, 945].forEach((m) => assert.equal(roundBillableMinutes(m), m));
 });
 
 test('rounds to the NEAREST quarter, not up and not down', () => {
-  assert.equal(roundMinutes(22), 15, '22 min is nearer 15 than 30');
-  assert.equal(roundMinutes(23), 30, '23 min is nearer 30 than 15');
-  assert.equal(roundMinutes(52), 45);
-  assert.equal(roundMinutes(53), 60);
+  assert.equal(roundBillableMinutes(22), 15, '22 min is nearer 15 than 30');
+  assert.equal(roundBillableMinutes(23), 30, '23 min is nearer 30 than 15');
+  assert.equal(roundBillableMinutes(52), 45);
+  assert.equal(roundBillableMinutes(53), 60);
 });
 
-test('a half-quarter goes up, so 7.5 min is never worth nothing', () => {
-  assert.equal(roundMinutes(38), 45, '37.5 is the midpoint; 38 rounds up');
+test('a half-quarter goes up', () => {
+  assert.equal(roundBillableMinutes(37.5), 45);
 });
 
-test('short entries are floored at a quarter, never rounded away', () => {
-  // Without the floor a 3-minute entry sits in the week list looking logged
-  // while being worth nothing on the invoice.
-  assert.equal(roundMinutes(1), 15);
-  assert.equal(roundMinutes(3), 15);
-  assert.equal(roundMinutes(7), 15);
-  assert.equal(roundMinutes(8), 15);
+test('zero stays zero — an empty week is not a quarter of an hour', () => {
+  assert.equal(roundBillableMinutes(0), 0);
+  assert.equal(roundBillableMinutes(null), 0);
+  assert.equal(roundBillableMinutes(-5), 0);
 });
 
-test('rounding can never push an entry past the 24h cap', () => {
-  assert.equal(roundMinutes(MAX_MINUTES), MAX_MINUTES);
-  assert.equal(roundMinutes(MAX_MINUTES - 1), MAX_MINUTES);
-  assert.ok(roundMinutes(MAX_MINUTES) <= MAX_MINUTES, 'the DB constraint is 24h');
+test('but any real total bills at least a quarter', () => {
+  assert.equal(roundBillableMinutes(1), 15);
+  assert.equal(roundBillableMinutes(7), 15);
 });
 
-test('an imported row is stored rounded', () => {
-  // 09:00 → 12:07 is 187 minutes on the clock, 180 on the invoice.
+test('no 24h cap — this rounds a period, not an entry', () => {
+  // A week's total is expected to exceed MAX_MINUTES; capping it would silently
+  // truncate anyone working more than a single day in the period.
+  assert.equal(roundBillableMinutes(MAX_MINUTES * 3), MAX_MINUTES * 3);
+  assert.equal(roundBillableMinutes(2402), 2400);
+});
+
+test('rounding the total beats rounding each entry — the regression this fixes', () => {
+  // Reconstructs the reported case: a fortnight of 14 entries totalling 938
+  // minutes (15.63 h). Rounded individually and then summed they came to 915
+  // (15.25 h) — 23 minutes of worked time lost to accumulated rounding. What 938
+  // minutes actually rounds to is 945 (15.75 h), and that is now what bills.
+  const perEntry = (m) => Math.max(15, Math.round(m / 15) * 15);
+  const entries = [52, 52, 52, 62, 75, 75, 75, 75, 75, 75, 75, 75, 60, 60];
+  const raw = entries.reduce((a, b) => a + b, 0);
+  assert.equal(entries.length, 14);
+  assert.equal(raw, 938, 'fixture must reproduce the reported total');
+  assert.equal(entries.map(perEntry).reduce((a, b) => a + b, 0), 915, 'the old behaviour');
+  assert.equal(roundBillableMinutes(raw), 945, 'what 938 minutes actually rounds to');
+});
+
+test('the loss from per-entry rounding grows with the entry count', () => {
+  // Why this is a design flaw and not a rounding curiosity: each entry can lose
+  // up to 7 minutes, and nothing brings them back.
+  const perEntry = (m) => Math.max(15, Math.round(m / 15) * 15);
+  const drift = (n) => {
+    const es = Array.from({ length: n }, () => 22);          // each loses 7
+    const raw = es.reduce((a, b) => a + b, 0);
+    return es.map(perEntry).reduce((a, b) => a + b, 0) - roundBillableMinutes(raw);
+  };
+  assert.ok(Math.abs(drift(40)) > Math.abs(drift(10)), 'more entries, more drift');
+});
+
+test('an imported row is stored EXACT — rounding is not its job', () => {
+  // 09:00 → 12:07 is 187 minutes on the clock and 187 in the database.
   const out = validateImportRow(row({ ended_at: '2026-08-24T12:07:00.000Z' }), ctxFor(false));
-  assert.equal(out.minutes, 180);
-  assert.equal(out.ended_at, '2026-08-24T12:07:00.000Z',
-    'the true finish instant is kept — only the billable quantity rounds');
+  assert.equal(out.minutes, 187);
+  assert.equal(out.ended_at, '2026-08-24T12:07:00.000Z');
 });
 
-test('a 2-minute import row survives as a quarter hour', () => {
+test('a 2-minute import row keeps its 2 minutes', () => {
   const out = validateImportRow(row({ ended_at: '2026-08-24T09:02:00.000Z' }), ctxFor(false));
-  assert.equal(out.minutes, 15);
+  assert.equal(out.minutes, 2);
 });
 
-test('rounding is applied after validation, not before', () => {
-  // A 1-minute entry is legal and becomes 15. A 0-minute entry is refused on its
-  // real length rather than being floored into existence.
+test('a zero-length row is still refused', () => {
   assert.throws(() => validateImportRow(row({ ended_at: row().started_at }), ctxFor(false)),
     /not after the start/);
 });
