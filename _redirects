@@ -23,6 +23,7 @@
 /Contacts/*                  200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
 /cashflow/*                  200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
 /enrollment/*                200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
+/field-budget/*              200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
 /field-media/*               200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
 /flight-programs/*           200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed
 /flights/*                   200!    Role=admin,admissions,outreach,programs,operations,flights,unearthed

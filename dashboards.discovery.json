@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T01:34:47.845Z",
+  "generatedAt": "2026-09-01T23:33:17.737Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -53,6 +53,26 @@
         "operations"
       ],
       "url": "/enrollment/"
+    },
+    {
+      "slug": "field-budget",
+      "title": "Field Budget",
+      "description": "Programme budgets for the instructor field expense app — set category allocations in the currency instructors actually spend in, assign instructors by email, watch spend against allocation, and export the ledger for reconciliation. Replaces the on-the-ground Google Sheet.",
+      "category": "Finance",
+      "icon": "🧾",
+      "owner": "",
+      "pinned": false,
+      "order": 25,
+      "colors": [
+        "#14584a",
+        "#6ee7b7"
+      ],
+      "allowedRoles": [
+        "admin",
+        "programs",
+        "operations"
+      ],
+      "url": "/field-budget/"
     },
     {
       "slug": "field-media",
