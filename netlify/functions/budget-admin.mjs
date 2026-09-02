@@ -22,6 +22,8 @@
 //   GET   entries     ?budget=<id>  -> { entries }
 //   GET   export      ?budget=<id>  -> text/csv, for reconciliation
 //   POST  create      { name, currency, default_rate, categories[], emails[] }
+//   POST  update      { budget_id, name?, default_rate?, starts_on?, ends_on?,
+//                       funded_base?, categories?: [{id?, name, allocated}] }
 //   POST  assign      { budget_id, emails[] }
 //   POST  unassign    { budget_id, email }
 //   POST  set-status  { budget_id, status }  active | closed
@@ -207,6 +209,70 @@ async function handleCreate(body) {
   return json(201, { id, assigned });
 }
 
+async function handleUpdate(body) {
+  const db = sql();
+  const id = body.budget_id;
+  if (!id) return json(400, { error: "budget_id is required" });
+
+  const [budget] = await db`select * from budgets where id = ${id}`;
+  if (!budget) return json(404, { error: "No such budget" });
+
+  // Currency is deliberately not editable. Entries already carry amounts and
+  // frozen conversions in the old currency; changing it would silently
+  // reinterpret every historic figure.
+  const name = body.name === undefined ? budget.name : String(body.name).trim();
+  if (!name) return json(400, { error: "Name can't be empty." });
+
+  await db`
+    update budgets set
+      name         = ${name},
+      default_rate = ${body.default_rate === undefined ? budget.default_rate : Number(body.default_rate) || 1},
+      starts_on    = ${body.starts_on === undefined ? budget.starts_on : (body.starts_on || null)},
+      ends_on      = ${body.ends_on === undefined ? budget.ends_on : (body.ends_on || null)},
+      funded_base  = ${body.funded_base === undefined
+                        ? budget.funded_base
+                        : (body.funded_base === null || body.funded_base === ""
+                            ? null : Math.round(Number(body.funded_base)))},
+      updated_at   = now()
+    where id = ${id}`;
+
+  if (!Array.isArray(body.categories)) return json(200, { id, categories: null });
+
+  const existing = await db`select id from categories where budget_id = ${id}`;
+  const keep = new Set(body.categories.map((c) => c.id).filter(Boolean));
+  const removing = existing.map((c) => c.id).filter((cid) => !keep.has(cid));
+
+  // A category with entries against it can't be deleted — the ledger is
+  // append-only and orphaning rows would make historic spend unattributable.
+  if (removing.length) {
+    const used = await db`
+      select category_id, count(*)::int as n from entries
+       where category_id = any(${removing}) group by category_id`;
+    if (used.length) {
+      const names = await db`select id, name from categories where id = any(${used.map((u) => u.category_id)})`;
+      return json(409, {
+        error: `Can't remove ${names.map((n) => n.name).join(", ")} — spend is already logged against ${names.length === 1 ? "it" : "them"}. Set the allocation to 0 instead.`,
+      });
+    }
+    await db`delete from categories where id = any(${removing})`;
+  }
+
+  for (const [i, c] of body.categories.entries()) {
+    const cname = (c.name || "").trim();
+    if (!cname) continue;
+    const allocated = Math.round(Number(c.allocated) || 0);
+    if (c.id) {
+      await db`update categories set name = ${cname}, allocated = ${allocated}, sort_order = ${i + 1}
+                where id = ${c.id} and budget_id = ${id}`;
+    } else {
+      await db`insert into categories (id, budget_id, name, allocated, sort_order)
+               values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${cname}, ${allocated}, ${i + 1})`;
+    }
+  }
+
+  return json(200, { id, categories: body.categories.length });
+}
+
 async function handleAssign(body) {
   const db = sql();
   if (!body.budget_id) return json(400, { error: "budget_id is required" });
@@ -269,6 +335,7 @@ export default async (req) => {
         return json(403, { error: "Your role can't change programme budgets." });
       }
       if (action === "create") return await handleCreate(body);
+      if (action === "update") return await handleUpdate(body);
       if (action === "assign") return await handleAssign(body);
       if (action === "unassign") return await handleUnassign(body);
       if (action === "set-status") return await handleSetStatus(body);

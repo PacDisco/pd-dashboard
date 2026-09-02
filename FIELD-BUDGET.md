@@ -94,6 +94,21 @@ field app. An admin typing `Katie.Smith@` matching a Google account of
 `katie.smith@` is otherwise a silent empty state: the instructor signs in fine
 and sees no budgets, with nothing to explain why.
 
+## Editing
+
+The **Edit** button on each budget reopens the same dialog in edit mode. Name,
+dates, planning rate, and every category allocation can be changed; categories
+can be added or removed.
+
+Two things are deliberately locked:
+
+**Currency.** Entries carry amounts and frozen conversions denominated in it.
+Changing it would silently reinterpret every historic figure.
+
+**Categories with spend against them.** Deleting one would orphan ledger rows and
+make historic spend unattributable, so the API returns a 409 naming the
+categories involved and suggests setting the allocation to 0 instead.
+
 ## Known gaps
 
 - **No correction UI.** The `correction` entry type exists but nothing writes
@@ -101,9 +116,6 @@ and sees no budgets, with nothing to explain why.
 - **Unbudgeted spend is flagged but not alerted.** A category with zero
   allocation and non-zero spend shows a red "unbudgeted" label here. Nothing
   emails anyone.
-- **Category allocations can't be edited after creation** — only set at create
-  time. Adding an "adjust allocation" action is a small change to
-  `budget-admin.mjs`.
 - **One `default_rate` per budget** can't be right for more than one foreign
   currency. PEN per USD is 3.34; PEN per EUR is nearer 4.05. The field app shows
   the converted figure on its save button so a wrong rate is visible before

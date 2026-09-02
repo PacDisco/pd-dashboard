@@ -28,11 +28,28 @@
   .catrow input { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 9px; font-size: 14px; }
   .catrow input:focus { outline: 2px solid #14584a; outline-offset: -1px; }
   dialog::backdrop { background: rgba(15,23,42,.45); }
+
+  /* Tailwind 2.2.19 ships no `emerald` in its default palette, so utility
+     classes for it silently produce nothing. Brand colours live here. */
+  .btn-primary { background:#14584a; color:#fff; font-weight:500; }
+  .btn-primary:hover { background:#0f4539; }
+  .btn-quiet { background:#fff; border:1px solid #d1d5db; color:#374151; }
+  .btn-quiet:hover { background:#f9fafb; }
+  .lnk { color:#14584a; font-weight:500; }
+  .lnk:hover { text-decoration:underline; }
+  .back {
+    display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:500;
+    color:#374151; background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+    text-decoration:none; padding:6px 14px; box-shadow:0 1px 2px rgba(0,0,0,.05);
+  }
+  .back:hover { background:#f9fafb; }
 </style>
 </head>
 <body class="text-gray-800">
 
 <div class="max-w-6xl mx-auto px-4 py-6">
+
+  <a class="back mb-4" href="/">&larr; Back to dashboards</a>
 
   <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
     <div>
@@ -43,8 +60,8 @@
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <button id="newBtn" class="bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-medium px-4 py-2 rounded-lg">New budget</button>
-      <button id="refreshBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-sm px-3 py-2 rounded-lg">Refresh</button>
+      <button id="newBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">New budget</button>
+      <button id="refreshBtn" class="btn-quiet text-sm px-3 py-2 rounded-lg">Refresh</button>
     </div>
   </div>
 
@@ -57,7 +74,7 @@
 <!-- New budget -->
 <dialog id="newDlg" class="rounded-xl p-0 w-full max-w-lg">
   <div class="p-6">
-    <h2 class="text-lg font-semibold mb-4">New budget</h2>
+    <h2 id="dlgTitle" class="text-lg font-semibold mb-4">New budget</h2>
 
     <label class="block text-xs font-medium text-gray-500 mb-1">Name</label>
     <input id="f-name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Peru — Feb 2026">
@@ -65,7 +82,7 @@
     <div class="grid grid-cols-2 gap-3 mt-3">
       <div>
         <label class="block text-xs font-medium text-gray-500 mb-1">Budget currency</label>
-        <select id="f-cur" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <select id="f-cur" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500">
           <option>PEN</option><option>USD</option><option>EUR</option>
           <option>NZD</option><option>AUD</option><option>THB</option>
         </select>
@@ -75,7 +92,7 @@
         <input id="f-rate" type="number" step="0.0001" value="3.34" class="num w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
       </div>
     </div>
-    <p class="text-xs text-gray-500 mt-1">
+    <p id="curNote" class="text-xs text-gray-500 mt-1">
       Prefilled when an instructor logs a foreign-currency spend. They can override it per entry.
     </p>
 
@@ -92,22 +109,24 @@
 
     <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Categories</label>
     <div id="f-cats" class="space-y-2"></div>
-    <button id="addCat" class="mt-2 text-sm text-emerald-800 font-medium">+ Add category</button>
+    <button id="addCat" class="mt-2 text-sm lnk">+ Add category</button>
     <div class="flex justify-between border-t border-gray-200 mt-3 pt-2 text-sm font-semibold">
       <span>Total allocated</span><span id="f-total" class="num">—</span>
     </div>
 
-    <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Instructors</label>
-    <input id="f-emails" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="katie@…, manuel@…">
-    <p class="text-xs text-gray-500 mt-1">
-      Comma separated. Must match the address they sign in with — case and +tags are normalised automatically.
-    </p>
+    <div id="emailBlock">
+      <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Instructors</label>
+      <input id="f-emails" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="katie@…, manuel@…">
+      <p class="text-xs text-gray-500 mt-1">
+        Comma separated. Must match the address they sign in with — case and +tags are normalised automatically.
+      </p>
+    </div>
 
     <p id="f-err" class="hidden text-sm text-red-700 mt-3"></p>
 
     <div class="flex justify-end gap-2 mt-5">
       <button id="cancelNew" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Cancel</button>
-      <button id="saveNew" class="px-4 py-2 text-sm rounded-lg bg-emerald-800 text-white font-medium">Create budget</button>
+      <button id="saveNew" class="btn-primary px-4 py-2 text-sm rounded-lg">Create budget</button>
     </div>
   </div>
 </dialog>
@@ -229,6 +248,7 @@ function render() {
         <div class="flex gap-2 flex-wrap items-center">
           <input data-assign-input class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[200px]" placeholder="Add instructor emails, comma separated">
           <button data-assign class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">Assign</button>
+          <button data-edit class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">Edit</button>
           <button data-ledger class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">View entries</button>
           <button data-status="${b.status === 'active' ? 'closed' : 'active'}" class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">
             ${b.status === 'active' ? 'Close' : 'Reopen'}
@@ -278,6 +298,7 @@ $('list').addEventListener('click', async (ev) => {
       return load();
     }
 
+    if (ev.target.matches('[data-edit]')) return openEdit(budgetId);
     if (ev.target.matches('[data-ledger]')) return openLedger(budgetId);
   } catch (e) {
     showErr(e.message);
@@ -315,7 +336,7 @@ async function openLedger(budgetId) {
         <td class="num text-right whitespace-nowrap">${
           e.entry_type === 'expense' ? fmt(e.budget_amount, b.currency) : '<span class="text-gray-400">—</span>'}</td>
         <td class="text-center">${e.receipt_link
-          ? `<a href="${esc(e.receipt_link)}" target="_blank" rel="noopener" class="text-emerald-800">view</a>`
+          ? `<a href="${esc(e.receipt_link)}" target="_blank" rel="noopener" class="lnk">view</a>`
           : '<span class="text-gray-300">—</span>'}</td>
       </tr>`).join('')}</tbody></table>`;
   } catch (e) {
@@ -328,15 +349,53 @@ $('closeLedger').addEventListener('click', () => $('ledgerDlg').close());
 
 const DEFAULT_CATS = ['Food', 'Transport', 'Gratuities', 'Activities', 'Misc', 'First aid'];
 
-function addCatRow(name = '', amount = '') {
+let EDITING = null; // budget id when the dialog is in edit mode, else null
+
+function addCatRow(name = '', amount = '', id = '') {
   const row = document.createElement('div');
   row.className = 'catrow flex gap-2';
+  row.dataset.catId = id;
   row.innerHTML = `<input class="flex-1" placeholder="Category" value="${esc(name)}">
     <input type="number" step="0.01" class="w-32 num text-right" placeholder="0.00" value="${esc(amount)}">
-    <button class="w-9 border border-gray-300 rounded-lg text-gray-400 hover:text-red-700">×</button>`;
+    <button class="w-9 border border-gray-300 rounded-lg text-gray-400 hover:text-red-700" title="Remove">×</button>`;
   row.querySelector('button').addEventListener('click', () => { row.remove(); total(); });
   row.querySelectorAll('input').forEach((i) => i.addEventListener('input', total));
   $('f-cats').append(row);
+}
+
+function readCats() {
+  return [...$('f-cats').querySelectorAll('.catrow')].map((r) => {
+    const i = r.querySelectorAll('input');
+    const c = { name: i[0].value.trim(), allocated: Math.round((Number(i[1].value) || 0) * 100) };
+    if (r.dataset.catId) c.id = r.dataset.catId;
+    return c;
+  }).filter((c) => c.name);
+}
+
+function openEdit(budgetId) {
+  const b = DATA.budgets.find((x) => x.id === budgetId);
+  const cats = DATA.categories.filter((c) => c.budget_id === budgetId);
+  EDITING = budgetId;
+
+  $('dlgTitle').textContent = `Edit ${b.name}`;
+  $('f-name').value = b.name;
+  $('f-cur').value = b.currency;
+  // Locked: entries carry amounts and frozen conversions in this currency.
+  // Changing it would silently reinterpret every historic figure.
+  $('f-cur').disabled = true;
+  $('curNote').textContent = 'Currency is fixed once entries exist — historic conversions are stored against it.';
+  $('f-rate').value = b.default_rate;
+  $('f-start').value = b.starts_on ? String(b.starts_on).slice(0, 10) : '';
+  $('f-end').value = b.ends_on ? String(b.ends_on).slice(0, 10) : '';
+
+  $('f-cats').innerHTML = '';
+  cats.forEach((c) => addCatRow(c.name, (c.allocated / 100).toFixed(2), c.id));
+  total();
+
+  $('emailBlock').classList.add('hidden');   // assignment is inline on the card
+  $('saveNew').textContent = 'Save changes';
+  $('f-err').classList.add('hidden');
+  $('newDlg').showModal();
 }
 
 function total() {
@@ -347,9 +406,18 @@ function total() {
 }
 
 $('newBtn').addEventListener('click', () => {
+  EDITING = null;
+  $('dlgTitle').textContent = 'New budget';
+  $('f-name').value = ''; $('f-emails').value = '';
+  $('f-cur').disabled = false;
+  $('curNote').textContent = 'Prefilled when an instructor logs a foreign-currency spend. They can override it per entry.';
+  $('f-rate').value = '3.34';
+  $('f-start').value = ''; $('f-end').value = '';
   $('f-cats').innerHTML = '';
   DEFAULT_CATS.forEach((n) => addCatRow(n));
   total();
+  $('emailBlock').classList.remove('hidden');
+  $('saveNew').textContent = 'Create budget';
   $('f-err').classList.add('hidden');
   $('newDlg').showModal();
 });
@@ -360,26 +428,32 @@ $('refreshBtn').addEventListener('click', load);
 
 $('saveNew').addEventListener('click', async () => {
   const fe = $('f-err');
-  const categories = [...$('f-cats').querySelectorAll('.catrow')].map((r) => {
-    const i = r.querySelectorAll('input');
-    return { name: i[0].value.trim(), allocated: Math.round((Number(i[1].value) || 0) * 100) };
-  }).filter((c) => c.name);
+  const categories = readCats();
+  const common = {
+    name: $('f-name').value.trim(),
+    default_rate: Number($('f-rate').value) || 1,
+    starts_on: $('f-start').value || null,
+    ends_on: $('f-end').value || null,
+    categories,
+  };
 
   try {
-    await api('?action=create', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: $('f-name').value.trim(),
-        currency: $('f-cur').value,
-        default_rate: Number($('f-rate').value) || 1,
-        starts_on: $('f-start').value || null,
-        ends_on: $('f-end').value || null,
-        categories,
-        emails: $('f-emails').value.split(',').map((s) => s.trim()).filter(Boolean),
-      }),
-    });
+    if (EDITING) {
+      await api('?action=update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget_id: EDITING, ...common }),
+      });
+    } else {
+      await api('?action=create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...common,
+          currency: $('f-cur').value,
+          emails: $('f-emails').value.split(',').map((s) => s.trim()).filter(Boolean),
+        }),
+      });
+    }
     $('newDlg').close();
-    $('f-name').value = ''; $('f-emails').value = '';
     load();
   } catch (e) {
     fe.textContent = e.message; fe.classList.remove('hidden');
