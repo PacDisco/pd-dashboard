@@ -27,6 +27,12 @@
 
   .catrow input { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 9px; font-size: 14px; }
   .catrow input:focus { outline: 2px solid #14584a; outline-offset: -1px; }
+  .catrow.child { margin-left: 26px; }
+  .catrow .nest { width: 30px; flex: none; border: 1px solid #d1d5db; border-radius: 6px; color: #9ca3af; font-size: 13px; }
+  .catrow .nest:hover { color: #14584a; border-color: #14584a; }
+  .catrow.child .nest { color: #14584a; border-color: #14584a; background: #ecfdf5; }
+  .gauge.sub { margin-left: 18px; }
+  .gauge.sub .fill { background: #4b9b87; }
   dialog::backdrop { background: rgba(15,23,42,.45); }
 
   /* Tailwind 2.2.19 ships no `emerald` in its default palette, so utility
@@ -109,6 +115,7 @@
 
     <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Categories</label>
     <div id="f-cats" class="space-y-2"></div>
+    <p class="text-xs text-gray-500 mt-1">↳ turns a row into a subcategory of the one above. Parent totals include their subcategories.</p>
     <button id="addCat" class="mt-2 text-sm lnk">+ Add category</button>
     <div class="flex justify-between border-t border-gray-200 mt-3 pt-2 text-sm font-semibold">
       <span>Total allocated</span><span id="f-total" class="num">—</span>
@@ -207,19 +214,27 @@ function render() {
     const allocated = cats.reduce((n, c) => n + c.allocated, 0);
     const spent = cats.reduce((n, c) => n + (spentBy[c.id] || 0), 0);
 
-    const rows = cats.map((c) => {
-      const s = spentBy[c.id] || 0;
-      const pct = c.allocated > 0 ? Math.min(100, (s / c.allocated) * 100) : (s > 0 ? 100 : 0);
-      const over = s > c.allocated;
-      return `<div class="gauge ${over ? 'over' : ''}">
+    // Totals roll up: a parent's figures include its subcategories'.
+    const parents = cats.filter((c) => !c.parent_id);
+    const kidsOf = (pid) => cats.filter((c) => c.parent_id === pid);
+
+    const gauge = (c, isSub) => {
+      const kids = isSub ? [] : kidsOf(c.id);
+      const alloc = c.allocated + kids.reduce((n, k) => n + k.allocated, 0);
+      const s = (spentBy[c.id] || 0) + kids.reduce((n, k) => n + (spentBy[k.id] || 0), 0);
+      const pct = alloc > 0 ? Math.min(100, (s / alloc) * 100) : (s > 0 ? 100 : 0);
+      return `<div class="gauge ${isSub ? 'sub' : ''} ${s > alloc ? 'over' : ''}">
         <div class="flex justify-between text-sm">
-          <span>${esc(c.name)}${c.allocated === 0 && s > 0 ? ' <span class="text-red-700 text-xs font-medium">unbudgeted</span>' : ''}</span>
-          <span class="num font-medium remaining">${fmt(c.allocated - s, b.currency)}</span>
+          <span>${esc(c.name)}${alloc === 0 && s > 0 ? ' <span class="text-red-700 text-xs font-medium">unbudgeted</span>' : ''}</span>
+          <span class="num font-medium remaining">${fmt(alloc - s, b.currency)}</span>
         </div>
-        <div class="num text-xs text-gray-500">${fmt(s, b.currency)} of ${fmt(c.allocated, b.currency)}</div>
+        <div class="num text-xs text-gray-500">${fmt(s, b.currency)} of ${fmt(alloc, b.currency)}</div>
         <div class="track"><div class="fill" style="width:${pct}%"></div></div>
       </div>`;
-    }).join('');
+    };
+
+    const rows = parents.map((p) =>
+      gauge(p, false) + kidsOf(p.id).map((k) => gauge(k, true)).join('')).join('');
 
     return `<section class="bg-white border border-gray-200 rounded-xl p-5" data-budget="${esc(b.id)}">
       <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
@@ -351,25 +366,74 @@ const DEFAULT_CATS = ['Food', 'Transport', 'Gratuities', 'Activities', 'Misc', '
 
 let EDITING = null; // budget id when the dialog is in edit mode, else null
 
-function addCatRow(name = '', amount = '', id = '') {
+function addCatRow(name = '', amount = '', id = '', isChild = false) {
   const row = document.createElement('div');
-  row.className = 'catrow flex gap-2';
+  row.className = `catrow flex gap-2${isChild ? ' child' : ''}`;
   row.dataset.catId = id;
-  row.innerHTML = `<input class="flex-1" placeholder="Category" value="${esc(name)}">
+  row.innerHTML = `<button class="nest" title="Make this a subcategory of the row above">\u21b3</button>
+    <input class="flex-1" placeholder="Category" value="${esc(name)}">
     <input type="number" step="0.01" class="w-32 num text-right" placeholder="0.00" value="${esc(amount)}">
-    <button class="w-9 border border-gray-300 rounded-lg text-gray-400 hover:text-red-700" title="Remove">×</button>`;
-  row.querySelector('button').addEventListener('click', () => { row.remove(); total(); });
+    <button class="w-9 border border-gray-300 rounded-lg text-gray-400 hover:text-red-700" title="Remove">\u00d7</button>`;
+
+  const [nestBtn, removeBtn] = row.querySelectorAll('button');
+
+  nestBtn.addEventListener('click', () => {
+    if (!row.classList.contains('child')) {
+      // One level only: the row directly above must itself be top level.
+      const prev = row.previousElementSibling;
+      if (!prev || prev.classList.contains('child')) {
+        return flash('A subcategory needs a top-level category directly above it.');
+      }
+      row.classList.add('child');
+    } else {
+      row.classList.remove('child');
+    }
+    total();
+  });
+
+  removeBtn.addEventListener('click', () => {
+    // Removing a parent takes its subcategories with it, so say so first.
+    const kids = [];
+    let n = row.nextElementSibling;
+    while (n && n.classList.contains('child')) { kids.push(n); n = n.nextElementSibling; }
+    if (kids.length && !confirm(`Remove this category and its ${kids.length} subcategor${kids.length === 1 ? 'y' : 'ies'}?`)) return;
+    kids.forEach((k) => k.remove());
+    row.remove();
+    total();
+  });
+
   row.querySelectorAll('input').forEach((i) => i.addEventListener('input', total));
   $('f-cats').append(row);
 }
 
+function flash(msg) {
+  const fe = $('f-err');
+  fe.textContent = msg; fe.classList.remove('hidden');
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => fe.classList.add('hidden'), 3500);
+}
+
 function readCats() {
-  return [...$('f-cats').querySelectorAll('.catrow')].map((r) => {
-    const i = r.querySelectorAll('input');
-    const c = { name: i[0].value.trim(), allocated: Math.round((Number(i[1].value) || 0) * 100) };
+  const out = [];
+  let lastParentIndex = null;
+  [...$('f-cats').querySelectorAll('.catrow')].forEach((r) => {
+    const inputs = r.querySelectorAll('input');
+    const name = inputs[0].value.trim();
+    if (!name) return;
+    const c = { name, allocated: Math.round((Number(inputs[1].value) || 0) * 100) };
     if (r.dataset.catId) c.id = r.dataset.catId;
-    return c;
-  }).filter((c) => c.name);
+    if (r.classList.contains('child') && lastParentIndex !== null) {
+      const parent = out[lastParentIndex];
+      // Existing parents are referenced by id. One created in this same save has
+      // no id yet, so send its position and let the API resolve it.
+      if (parent.id) c.parent_id = parent.id;
+      else c.parent_index = lastParentIndex;
+    } else {
+      lastParentIndex = out.length;
+    }
+    out.push(c);
+  });
+  return out;
 }
 
 function openEdit(budgetId) {
@@ -389,7 +453,11 @@ function openEdit(budgetId) {
   $('f-end').value = b.ends_on ? String(b.ends_on).slice(0, 10) : '';
 
   $('f-cats').innerHTML = '';
-  cats.forEach((c) => addCatRow(c.name, (c.allocated / 100).toFixed(2), c.id));
+  cats.filter((c) => !c.parent_id).forEach((p) => {
+    addCatRow(p.name, (p.allocated / 100).toFixed(2), p.id, false);
+    cats.filter((k) => k.parent_id === p.id)
+        .forEach((k) => addCatRow(k.name, (k.allocated / 100).toFixed(2), k.id, true));
+  });
   total();
 
   $('emailBlock').classList.add('hidden');   // assignment is inline on the card

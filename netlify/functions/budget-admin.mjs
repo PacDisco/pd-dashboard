@@ -23,7 +23,12 @@
 //   GET   export      ?budget=<id>  -> text/csv, for reconciliation
 //   POST  create      { name, currency, default_rate, categories[], emails[] }
 //   POST  update      { budget_id, name?, default_rate?, starts_on?, ends_on?,
-//                       funded_base?, categories?: [{id?, name, allocated}] }
+//                       funded_base?, categories?: [{id?, name, allocated, parent_id?}] }
+//
+// Categories are one level deep. Allocation sits on any node: a parent may hold
+// its own alongside children with theirs, and totals roll up. The database
+// enforces the single level with a trigger — see
+// MIGRATION-field-budget-subcategories.sql.
 //   POST  assign      { budget_id, emails[] }
 //   POST  unassign    { budget_id, email }
 //   POST  set-status  { budget_id, status }  active | closed
@@ -81,7 +86,7 @@ async function handleList() {
   const db = sql();
   const [budgets, categories, assignments, spend, receipts] = await Promise.all([
     db`select * from budgets order by created_at desc`,
-    db`select * from categories order by sort_order`,
+    db`select * from categories order by coalesce(parent_id, id), parent_id nulls first, sort_order`,
     db`select * from assignments order by email`,
     db`select budget_id, category_id, sum(budget_amount)::bigint as spent, count(*)::int as n
          from entries where entry_type in ('expense','correction')
@@ -179,7 +184,11 @@ async function handleCreate(body) {
   if (!/^[A-Z]{3}$/.test(currency)) return json(400, { error: "Currency must be a 3-letter code." });
 
   const rows = (body.categories || [])
-    .map((c) => ({ name: (c.name || "").trim(), allocated: Math.round(Number(c.allocated) || 0) }))
+    .map((c) => ({
+      name: (c.name || "").trim(),
+      allocated: Math.round(Number(c.allocated) || 0),
+      parent_index: c.parent_index ?? null,
+    }))
     .filter((c) => c.name);
   if (!rows.length) return json(400, { error: "Add at least one category." });
 
@@ -191,10 +200,25 @@ async function handleCreate(body) {
             ${body.funded_base ? Math.round(Number(body.funded_base)) : null},
             ${body.starts_on || null}, ${body.ends_on || null})`;
 
+  // The page sends children as { parent_index } because nothing has an id yet.
+  // Parents are inserted first so the reference resolves.
+  const ids = [];
   for (const [i, c] of rows.entries()) {
+    ids[i] = `cat_${crypto.randomUUID().slice(0, 8)}`;
+  }
+  for (const [i, c] of rows.entries()) {
+    if (c.parent_index !== null && c.parent_index !== undefined) continue;
     await db`
       insert into categories (id, budget_id, name, allocated, sort_order)
-      values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${c.name}, ${c.allocated}, ${i + 1})`;
+      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${i + 1})`;
+  }
+  for (const [i, c] of rows.entries()) {
+    if (c.parent_index === null || c.parent_index === undefined) continue;
+    const parent = ids[c.parent_index];
+    if (!parent) continue;
+    await db`
+      insert into categories (id, budget_id, name, allocated, sort_order, parent_id)
+      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${i + 1}, ${parent})`;
   }
 
   const assigned = [];
@@ -245,9 +269,12 @@ async function handleUpdate(body) {
   // A category with entries against it can't be deleted — the ledger is
   // append-only and orphaning rows would make historic spend unattributable.
   if (removing.length) {
+    // A parent's children cascade on delete, so their spend blocks removal too.
+    const kids = await db`select id from categories where parent_id = any(${removing})`;
+    const affected = [...removing, ...kids.map((k) => k.id)];
     const used = await db`
       select category_id, count(*)::int as n from entries
-       where category_id = any(${removing}) group by category_id`;
+       where category_id = any(${affected}) group by category_id`;
     if (used.length) {
       const names = await db`select id, name from categories where id = any(${used.map((u) => u.category_id)})`;
       return json(409, {
@@ -257,16 +284,43 @@ async function handleUpdate(body) {
     await db`delete from categories where id = any(${removing})`;
   }
 
+  // Two passes: parents first so a brand-new parent exists before its brand-new
+  // child references it. Rows carry either parent_id (existing) or parent_index
+  // (a parent created in this same save).
+  const resolved = [];
+  for (const [i, c] of body.categories.entries()) {
+    const cname = (c.name || "").trim();
+    if (!cname) { resolved[i] = null; continue; }
+    const isChild = c.parent_id != null || c.parent_index != null;
+    if (isChild) { resolved[i] = c.id || null; continue; }
+    const allocated = Math.round(Number(c.allocated) || 0);
+    if (c.id) {
+      await db`update categories set name = ${cname}, allocated = ${allocated},
+                 sort_order = ${i + 1}, parent_id = null
+                where id = ${c.id} and budget_id = ${id}`;
+      resolved[i] = c.id;
+    } else {
+      const nid = `cat_${crypto.randomUUID().slice(0, 8)}`;
+      await db`insert into categories (id, budget_id, name, allocated, sort_order)
+               values (${nid}, ${id}, ${cname}, ${allocated}, ${i + 1})`;
+      resolved[i] = nid;
+    }
+  }
+
   for (const [i, c] of body.categories.entries()) {
     const cname = (c.name || "").trim();
     if (!cname) continue;
+    if (c.parent_id == null && c.parent_index == null) continue;
+    const parent = c.parent_id ?? resolved[c.parent_index];
+    if (!parent) continue;
     const allocated = Math.round(Number(c.allocated) || 0);
     if (c.id) {
-      await db`update categories set name = ${cname}, allocated = ${allocated}, sort_order = ${i + 1}
+      await db`update categories set name = ${cname}, allocated = ${allocated},
+                 sort_order = ${i + 1}, parent_id = ${parent}
                 where id = ${c.id} and budget_id = ${id}`;
     } else {
-      await db`insert into categories (id, budget_id, name, allocated, sort_order)
-               values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${cname}, ${allocated}, ${i + 1})`;
+      await db`insert into categories (id, budget_id, name, allocated, sort_order, parent_id)
+               values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${cname}, ${allocated}, ${i + 1}, ${parent})`;
     }
   }
 

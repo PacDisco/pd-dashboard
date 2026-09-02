@@ -109,6 +109,27 @@ Changing it would silently reinterpret every historic figure.
 make historic spend unattributable, so the API returns a 409 naming the
 categories involved and suggests setting the allocation to 0 instead.
 
+## Subcategories
+
+Categories are one level deep: Food → Groceries, Restaurants. Deeper trees get
+slow to navigate on a phone at a market stall, which is where this has to work,
+so a database trigger enforces the single level rather than trusting callers.
+
+**Allocation sits on any node.** A parent can hold its own allocation, for spend
+logged directly to it, alongside children with theirs. Displayed totals are own
+plus children, and spend rolls up the same way. A category with no children
+behaves exactly as it did before.
+
+In the field app the parent stays selectable as "Food (general)" — not every
+meal belongs to a subcategory, and forcing the choice slows the common case.
+
+In the editor, ↳ turns a row into a subcategory of the row above. Removing a
+parent takes its children, which the page confirms and the API blocks if any of
+them have spend against them.
+
+Run `MIGRATION-field-budget-subcategories.sql` once against the Field Budget
+database. It is additive — existing budgets are unaffected.
+
 ## Known gaps
 
 - **No correction UI.** The `correction` entry type exists but nothing writes
