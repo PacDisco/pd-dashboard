@@ -100,15 +100,19 @@ async function handleList() {
   const db = sql();
   const [budgets, categories, assignments, spend, receipts] = await Promise.all([
     db`select * from budgets order by created_at desc`,
-    // Order by the PARENT's position, then parent-before-children, then the
-    // child's own position. Grouping on coalesce(parent_id, id) looks right but
+    // A recursive materialised path, so ordering holds at any depth. A join to
+    // the parent only sorts two levels, and grouping on coalesce(parent_id, id)
     // sorts on a random id string, which silently discards sort_order.
-    db`select c.* from categories c
-         left join categories p on p.id = c.parent_id
-        order by coalesce(p.sort_order, c.sort_order),
-                 (c.parent_id is not null),
-                 c.sort_order,
-                 c.id`,
+    db`with recursive tree as (
+         select c.*, 1 as depth, lpad(c.sort_order::text, 6, '0') as path
+           from categories c
+          where c.parent_id is null
+         union all
+         select c.*, t.depth + 1, t.path || '.' || lpad(c.sort_order::text, 6, '0')
+           from categories c
+           join tree t on c.parent_id = t.id
+       )
+       select * from tree order by path, id`,
     db`select * from assignments order by email`,
     db`select budget_id, category_id, sum(budget_amount)::bigint as spent, count(*)::int as n
          from entries where entry_type in ('expense','correction')
@@ -124,7 +128,12 @@ async function handleList() {
       default_rate: Number(b.default_rate),
       rates: b.rates || {},
     })),
-    categories: categories.map((c) => ({ ...c, allocated: money(c.allocated) })),
+    categories: categories.map((c) => ({
+      ...c,
+      allocated: money(c.allocated),
+      rates: c.rates || {},
+      depth: Number(c.depth),
+    })),
     assignments,
     spend: spend.map((s) => ({ ...s, spent: money(s.spent) })),
     receipts,
@@ -159,8 +168,16 @@ async function handleExport(budgetId) {
   const db = sql();
   const [[budget], rows] = await Promise.all([
     db`select * from budgets where id = ${budgetId}`,
-    db`select e.*, c.name as category_name
-         from entries e left join categories c on c.id = e.category_id
+    // Walk up to the leg so each row carries the leg it belongs to and the
+    // currency its budget_amount is denominated in.
+    db`select e.*, c.name as category_name,
+              coalesce(l1.name, l2.name, c.name) as leg_name,
+              coalesce(l1.currency, l2.currency, c.currency) as leg_currency
+         from entries e
+         left join categories c  on c.id  = e.category_id
+         left join categories p  on p.id  = c.parent_id
+         left join categories l1 on l1.id = p.parent_id
+         left join categories l2 on l2.id = c.parent_id
         where e.budget_id = ${budgetId}
         order by e.spent_on, e.created_at`,
   ]);
@@ -171,16 +188,17 @@ async function handleExport(budgetId) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const head = [
-    "date", "type", "instructor", "category", "description", "method",
-    "amount", "currency", "rate", `budget_amount_${budget.currency}`,
-    "actual_nzd", "receipt",
+    "date", "leg", "type", "instructor", "category", "description", "method",
+    "amount", "currency", "rate", "amount_in_leg_currency", "leg_currency",
+    `actual_${(budget.base_currency || "NZD").toLowerCase()}`, "receipt",
   ];
   const lines = [head.join(",")];
   for (const e of rows) {
     lines.push([
-      e.spent_on, e.entry_type, e.email, e.category_name || "", e.description,
-      e.payment_method, (Number(e.amount) / 100).toFixed(2), e.currency,
-      Number(e.rate), (Number(e.budget_amount) / 100).toFixed(2),
+      e.spent_on, e.leg_name || "", e.entry_type, e.email, e.category_name || "",
+      e.description, e.payment_method,
+      (Number(e.amount) / 100).toFixed(2), e.currency, Number(e.rate),
+      (Number(e.budget_amount) / 100).toFixed(2), e.leg_currency || "",
       e.actual_base === null ? "" : (Number(e.actual_base) / 100).toFixed(2),
       e.receipt_link || "",
     ].map(esc).join(","));
@@ -199,71 +217,115 @@ async function handleExport(budgetId) {
 
 /* --------------------------------------------------------------- writes --- */
 
+// A leg tree arrives as:
+//   legs: [{ id?, name, currency, rates{}, categories: [
+//            { id?, name, allocated, children: [{ id?, name, allocated }] } ] }]
+//
+// Flattened here into category rows. sort_order is a position among siblings, so
+// legs count 1..n and each node's children count 1..m independently.
+function flattenLegs(legs) {
+  const rows = [];
+  let legPos = 0;
+  (legs || []).forEach((leg, i) => {
+    const name = (leg.name || '').trim();
+    if (!name) return;
+    const legRef = `L${i}`;
+    legPos += 1;
+    rows.push({
+      ref: legRef, parentRef: null, depth: 0, id: leg.id || null, name,
+      currency: String(leg.currency || '').trim().toUpperCase(),
+      rates: cleanRates(leg.rates),
+      allocated: 0, sort: legPos,
+    });
+    (leg.categories || []).forEach((cat, j) => {
+      const cname = (cat.name || '').trim();
+      if (!cname) return;
+      const catRef = `${legRef}C${j}`;
+      const kids = (cat.children || []).filter((k) => (k.name || '').trim());
+      rows.push({
+        ref: catRef, parentRef: legRef, depth: 1, id: cat.id || null, name: cname,
+        currency: null, rates: {},
+        // A node with children is the sum of them and stores 0, so there is one
+        // place each figure is set.
+        allocated: kids.length ? 0 : Math.round(Number(cat.allocated) || 0),
+        sort: j + 1,
+      });
+      kids.forEach((kid, k) => {
+        rows.push({
+          ref: `${catRef}S${k}`, parentRef: catRef, depth: 2, id: kid.id || null,
+          name: kid.name.trim(), currency: null, rates: {},
+          allocated: Math.round(Number(kid.allocated) || 0), sort: k + 1,
+        });
+      });
+    });
+  });
+  return rows;
+}
+
+function validateLegs(rows) {
+  const legs = rows.filter((r) => !r.parentRef);
+  if (!legs.length) return 'Add at least one leg with a currency.';
+  for (const leg of legs) {
+    if (!/^[A-Z]{3}$/.test(leg.currency)) {
+      return `"${leg.name}" needs a 3-letter currency code.`;
+    }
+  }
+  return null;
+}
+
+// Writes the tree parent-first, so a brand-new child always has a real parent id
+// to reference by the time it is inserted.
+async function writeTree(db, budgetId, rows) {
+  const idByRef = {};
+  for (const depth of [0, 1, 2]) {
+    for (const r of rows) {
+      if (r.depth !== depth) continue;
+      const parentId = r.parentRef ? idByRef[r.parentRef] : null;
+      if (r.parentRef && !parentId) continue;
+      const cid = r.id || `cat_${crypto.randomUUID().slice(0, 8)}`;
+      idByRef[r.ref] = cid;
+      if (r.id) {
+        await db`update categories set name = ${r.name}, allocated = ${r.allocated},
+                   sort_order = ${r.sort}, parent_id = ${parentId},
+                   currency = ${r.currency}, rates = ${JSON.stringify(r.rates)}
+                  where id = ${r.id} and budget_id = ${budgetId}`;
+      } else {
+        await db`insert into categories
+                   (id, budget_id, name, allocated, sort_order, parent_id, currency, rates)
+                 values (${cid}, ${budgetId}, ${r.name}, ${r.allocated}, ${r.sort},
+                         ${parentId}, ${r.currency}, ${JSON.stringify(r.rates)})`;
+      }
+    }
+  }
+  // Any node that has children stores 0 — its figure is the sum of them.
+  await db`update categories set allocated = 0
+            where budget_id = ${budgetId}
+              and id in (select distinct parent_id from categories
+                          where budget_id = ${budgetId} and parent_id is not null)`;
+  return idByRef;
+}
+
 async function handleCreate(body) {
   const db = sql();
-  const name = (body.name || "").trim();
-  const currency = (body.currency || "").trim().toUpperCase();
-  if (!name) return json(400, { error: "Give the budget a name." });
-  if (!/^[A-Z]{3}$/.test(currency)) return json(400, { error: "Currency must be a 3-letter code." });
+  const name = (body.name || '').trim();
+  if (!name) return json(400, { error: 'Give the budget a name.' });
 
-  const rows = (body.categories || [])
-    .map((c) => ({
-      name: (c.name || "").trim(),
-      allocated: Math.round(Number(c.allocated) || 0),
-      parent_index: c.parent_index ?? null,
-    }))
-    .filter((c) => c.name);
-  if (!rows.length) return json(400, { error: "Add at least one category." });
+  const base = (body.base_currency || 'NZD').trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(base)) return json(400, { error: 'Base currency must be a 3-letter code.' });
+
+  const rows = flattenLegs(body.legs);
+  const bad = validateLegs(rows);
+  if (bad) return json(400, { error: bad });
 
   const id = body.id || `bud_${crypto.randomUUID().slice(0, 8)}`;
-  const base = (body.base_currency || "NZD").trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(base)) return json(400, { error: "Base currency must be a 3-letter code." });
-  const rates = cleanRates(body.rates);
-  // default_rate stays populated as a fallback for anything reading the old
-  // single-rate field.
-  const fallback = rates[base] || Number(body.default_rate) || 1;
-
   await db`
-    insert into budgets (id, name, currency, base_currency, default_rate, rates, funded_base, starts_on, ends_on)
-    values (${id}, ${name}, ${currency}, ${base},
-            ${fallback}, ${JSON.stringify(rates)},
-            ${body.funded_base ? Math.round(Number(body.funded_base)) : null},
+    insert into budgets (id, name, base_currency, funded_base, starts_on, ends_on)
+    values (${id}, ${name}, ${base},
+            ${body.funded_base === null || body.funded_base === undefined || body.funded_base === ''
+                ? null : Math.round(Number(body.funded_base))},
             ${body.starts_on || null}, ${body.ends_on || null})`;
 
-  // The page sends children as { parent_index } because nothing has an id yet.
-  // Parents are inserted first so the reference resolves.
-  const ids = [];
-  for (const [i, c] of rows.entries()) {
-    ids[i] = `cat_${crypto.randomUUID().slice(0, 8)}`;
-  }
-  // sort_order is a position among siblings, so parents count 1..n and each
-  // parent's children count 1..m independently.
-  let parentPos = 0;
-  for (const [i, c] of rows.entries()) {
-    if (c.parent_index !== null && c.parent_index !== undefined) continue;
-    parentPos += 1;
-    await db`
-      insert into categories (id, budget_id, name, allocated, sort_order)
-      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${parentPos})`;
-  }
-  const childPos = {};
-  for (const [i, c] of rows.entries()) {
-    if (c.parent_index === null || c.parent_index === undefined) continue;
-    const parent = ids[c.parent_index];
-    if (!parent) continue;
-    childPos[parent] = (childPos[parent] || 0) + 1;
-    await db`
-      insert into categories (id, budget_id, name, allocated, sort_order, parent_id)
-      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${childPos[parent]}, ${parent})`;
-  }
-
-  // A category that gained children stores 0: its displayed figure is the sum
-  // of those children. Without this, an amount typed before the subcategories
-  // were added would quietly inflate the total.
-  await db`update categories set allocated = 0
-            where budget_id = ${id}
-              and id in (select distinct parent_id from categories
-                          where budget_id = ${id} and parent_id is not null)`;
+  await writeTree(db, id, rows);
 
   const assigned = [];
   for (const raw of body.emails || []) {
@@ -273,123 +335,73 @@ async function handleCreate(body) {
              on conflict do nothing`;
     assigned.push(em);
   }
-
   return json(201, { id, assigned });
 }
 
 async function handleUpdate(body) {
   const db = sql();
   const id = body.budget_id;
-  if (!id) return json(400, { error: "budget_id is required" });
+  if (!id) return json(400, { error: 'budget_id is required' });
 
   const [budget] = await db`select * from budgets where id = ${id}`;
-  if (!budget) return json(404, { error: "No such budget" });
+  if (!budget) return json(404, { error: 'No such budget' });
 
-  // Currency is deliberately not editable. Entries already carry amounts and
-  // frozen conversions in the old currency; changing it would silently
-  // reinterpret every historic figure.
   const name = body.name === undefined ? budget.name : String(body.name).trim();
   if (!name) return json(400, { error: "Name can't be empty." });
 
   const base = body.base_currency === undefined
     ? budget.base_currency
     : String(body.base_currency).trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(base)) return json(400, { error: "Base currency must be a 3-letter code." });
-
-  const rates = body.rates === undefined ? (budget.rates || {}) : cleanRates(body.rates);
-  const fallback = rates[base] || Number(budget.default_rate) || 1;
+  if (!/^[A-Z]{3}$/.test(base)) return json(400, { error: 'Base currency must be a 3-letter code.' });
 
   await db`
     update budgets set
       name          = ${name},
       base_currency = ${base},
-      rates         = ${JSON.stringify(rates)},
-      default_rate  = ${fallback},
-      starts_on    = ${body.starts_on === undefined ? budget.starts_on : (body.starts_on || null)},
-      ends_on      = ${body.ends_on === undefined ? budget.ends_on : (body.ends_on || null)},
-      funded_base  = ${body.funded_base === undefined
-                        ? budget.funded_base
-                        : (body.funded_base === null || body.funded_base === ""
-                            ? null : Math.round(Number(body.funded_base)))},
-      updated_at   = now()
+      starts_on     = ${body.starts_on === undefined ? budget.starts_on : (body.starts_on || null)},
+      ends_on       = ${body.ends_on === undefined ? budget.ends_on : (body.ends_on || null)},
+      funded_base   = ${body.funded_base === undefined
+                          ? budget.funded_base
+                          : (body.funded_base === null || body.funded_base === ''
+                              ? null : Math.round(Number(body.funded_base)))},
+      updated_at    = now()
     where id = ${id}`;
 
-  if (!Array.isArray(body.categories)) return json(200, { id, categories: null });
+  if (!Array.isArray(body.legs)) return json(200, { id, categories: null });
 
+  const rows = flattenLegs(body.legs);
+  const bad = validateLegs(rows);
+  if (bad) return json(400, { error: bad });
+
+  // Removals first, so a rename-and-reparent in the same save can't collide
+  // with a row that is about to disappear.
   const existing = await db`select id from categories where budget_id = ${id}`;
-  const keep = new Set(body.categories.map((c) => c.id).filter(Boolean));
+  const keep = new Set(rows.map((r) => r.id).filter(Boolean));
   const removing = existing.map((c) => c.id).filter((cid) => !keep.has(cid));
 
-  // A category with entries against it can't be deleted — the ledger is
-  // append-only and orphaning rows would make historic spend unattributable.
   if (removing.length) {
-    // A parent's children cascade on delete, so their spend blocks removal too.
-    const kids = await db`select id from categories where parent_id = any(${removing})`;
-    const affected = [...removing, ...kids.map((k) => k.id)];
+    // Descendants cascade on delete, so their spend blocks removal too.
+    const desc = await db`
+      with recursive sub as (
+        select id from categories where id = any(${removing})
+        union all
+        select c.id from categories c join sub on c.parent_id = sub.id
+      ) select id from sub`;
+    const affected = desc.map((d) => d.id);
     const used = await db`
       select category_id, count(*)::int as n from entries
        where category_id = any(${affected}) group by category_id`;
     if (used.length) {
       const names = await db`select id, name from categories where id = any(${used.map((u) => u.category_id)})`;
       return json(409, {
-        error: `Can't remove ${names.map((n) => n.name).join(", ")} — spend is already logged against ${names.length === 1 ? "it" : "them"}. Set the allocation to 0 instead.`,
+        error: `Can't remove ${names.map((n) => n.name).join(', ')} — spend is already logged against ${names.length === 1 ? 'it' : 'them'}. Set the allocation to 0 instead.`,
       });
     }
     await db`delete from categories where id = any(${removing})`;
   }
 
-  // Two passes: parents first so a brand-new parent exists before its brand-new
-  // child references it. Rows carry either parent_id (existing) or parent_index
-  // (a parent created in this same save).
-  const resolved = [];
-  let parentPos = 0;
-  for (const [i, c] of body.categories.entries()) {
-    const cname = (c.name || "").trim();
-    if (!cname) { resolved[i] = null; continue; }
-    const isChild = c.parent_id != null || c.parent_index != null;
-    if (isChild) { resolved[i] = c.id || null; continue; }
-    parentPos += 1;
-    const allocated = Math.round(Number(c.allocated) || 0);
-    if (c.id) {
-      await db`update categories set name = ${cname}, allocated = ${allocated},
-                 sort_order = ${parentPos}, parent_id = null
-                where id = ${c.id} and budget_id = ${id}`;
-      resolved[i] = c.id;
-    } else {
-      const nid = `cat_${crypto.randomUUID().slice(0, 8)}`;
-      await db`insert into categories (id, budget_id, name, allocated, sort_order)
-               values (${nid}, ${id}, ${cname}, ${allocated}, ${parentPos})`;
-      resolved[i] = nid;
-    }
-  }
-
-  // sort_order is a position among siblings, so children count from 1 within
-  // each parent rather than continuing the flat index.
-  const childPos = {};
-  for (const [i, c] of body.categories.entries()) {
-    const cname = (c.name || "").trim();
-    if (!cname) continue;
-    if (c.parent_id == null && c.parent_index == null) continue;
-    const parent = c.parent_id ?? resolved[c.parent_index];
-    if (!parent) continue;
-    childPos[parent] = (childPos[parent] || 0) + 1;
-    const allocated = Math.round(Number(c.allocated) || 0);
-    if (c.id) {
-      await db`update categories set name = ${cname}, allocated = ${allocated},
-                 sort_order = ${childPos[parent]}, parent_id = ${parent}
-                where id = ${c.id} and budget_id = ${id}`;
-    } else {
-      await db`insert into categories (id, budget_id, name, allocated, sort_order, parent_id)
-               values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${cname}, ${allocated}, ${childPos[parent]}, ${parent})`;
-    }
-  }
-
-  await db`update categories set allocated = 0
-            where budget_id = ${id}
-              and id in (select distinct parent_id from categories
-                          where budget_id = ${id} and parent_id is not null)`;
-
-  return json(200, { id, categories: body.categories.length });
+  await writeTree(db, id, rows);
+  return json(200, { id, categories: rows.length });
 }
 
 async function handleAssign(body) {

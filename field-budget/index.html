@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Field Budget</title>
-<meta name="description" content="Programme budgets for the instructor field expense app — set category allocations in local currency, assign instructors, and track spend against them.">
+<meta name="description" content="Programme budgets for the instructor field expense app — legs set the currency, categories and subcategories roll up, and instructors log against them.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,6 +22,7 @@
     --ink: #4a4a4a;
     --over: #b02a37;
   }
+  * { box-sizing: border-box; }
   body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f7f7f7; color: var(--ink); }
   h1, h2, .serif { font-family: 'DM Serif Display', Times, serif; font-weight: 400; }
   /* Poppins figures are proportional and it has no tnum feature, so money is
@@ -30,14 +31,27 @@
   .spinner { border: 4px solid #e5e7eb; border-top: 4px solid var(--topaz); border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Each category row is a fuel gauge — the bar is the row's own bottom edge,
-     so remaining reads without a legend. Same visual language the instructors
-     see in the field app. */
-  .gauge { position: relative; padding-bottom: 10px; }
-  .track { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: #d1d5db; border-radius: 2px; }
-  .fill { height: 100%; background: var(--topaz-dark); border-radius: 2px; transition: width .3s ease; }
-  .over .fill { background: var(--over); }
-  .over .remaining { color: var(--over); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px 80px; }
+  .lede { color: #797979; margin: 0 0 24px; max-width: 64ch; font-size: 14px; }
+
+  .back {
+    display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:500;
+    color:var(--ink); background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+    text-decoration:none; padding:6px 14px; box-shadow:0 1px 2px rgba(0,0,0,.05);
+  }
+  .back:hover { background:#f9fafb; }
+
+  .btn-primary {
+    background:var(--topaz-dark); color:#fff; font-weight:500;
+    border:2px solid var(--topaz-dark); border-radius:70px;
+  }
+  .btn-primary:hover { background:var(--topaz-darker); border-color:var(--topaz-darker); }
+  .btn-quiet {
+    background:#fff; border:2px solid #dee2e6; color:var(--ink); border-radius:70px;
+  }
+  .btn-quiet:hover { background:#f9fafb; border-color:var(--topaz); }
+  .lnk { color:var(--topaz-dark); font-weight:500; }
+  .lnk:hover { text-decoration:underline; }
 
   /* Accordion. <details> gives keyboard support and open/close semantics for
      free; only the marker needs replacing. */
@@ -60,66 +74,92 @@
   .minibar.over span { background:var(--over); }
   .warn { color:var(--over); font-size:11px; font-weight:600; white-space:nowrap; }
 
-  .pill { display: inline-flex; align-items: center; gap: 6px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 9999px; padding: 3px 10px; font-size: 12px; margin: 0 6px 6px 0; }
-  .pill button { color: #9ca3af; font-weight: 700; line-height: 1; }
-  .pill button:hover { color: var(--over); }
+  /* Leg block inside an expanded budget. */
+  .leg { margin-top: 18px; }
+  .leg:first-of-type { margin-top: 8px; }
+  .leg-head {
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    padding-bottom:8px; border-bottom:2px solid var(--topaz-soft); margin-bottom:10px;
+  }
+  .leg-name { font-weight:600; }
+  .leg-cur {
+    font-size:11px; font-weight:600; color:var(--topaz-dark); background:var(--topaz-soft);
+    border-radius:9999px; padding:2px 9px; margin-left:8px;
+  }
 
-  .catrow input { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 9px; font-size: 14px; }
-  .catrow input:focus { outline: 2px solid var(--topaz-dark); outline-offset: -1px; }
-  .catrow input.computed { background:#f3f4f6; color:#6b7280; cursor:not-allowed; }
-  .raterow { display:flex; gap:8px; }
-  .raterow select { flex:1; border:1px solid #d1d5db; border-radius:8px; padding:7px 9px; font-size:14px; }
-  .raterow input { flex:1; border:1px solid #d1d5db; border-radius:8px; padding:7px 9px; font-size:14px;
-                   text-align:right; font-variant-numeric:tabular-nums; }
-  .raterow input:focus, .raterow select:focus { outline:2px solid var(--topaz-dark); outline-offset:-1px; }
-  .catrow.child { margin-left: 26px; }
-  .catrow .nest { width: 30px; flex: none; border: 1px solid #d1d5db; border-radius: 6px; color: #9ca3af; font-size: 13px; }
-  .catrow .nest:hover { color: var(--topaz-dark); border-color: var(--topaz-dark); }
-  .catrow.child .nest { color: var(--topaz-dark); border-color: var(--topaz-dark); background: var(--topaz-soft); }
-  .catrow .addsub {
-    width: 30px; flex: none; border: 1px dashed #d1d5db; border-radius: 6px;
-    color: #9ca3af; font-size: 15px; line-height: 1;
-  }
-  .catrow .addsub:hover { color: var(--topaz-dark); border-color: var(--topaz-dark); background: var(--topaz-soft); }
-  .catrow.child .addsub { visibility: hidden; pointer-events: none; }
-  .catrow .grip {
-    width: 26px; flex: none; border: 1px solid transparent; border-radius: 6px;
-    color: #d1d5db; cursor: grab; font-size: 15px; line-height: 1; user-select: none;
-  }
-  .catrow .grip:hover { color: #6b7280; background: #f3f4f6; }
-  .catrow .grip:focus { outline: 2px solid var(--topaz-dark); outline-offset: -1px; color: #6b7280; }
-  .catrow.dragging { opacity: .4; }
-  .catrow.dragging .grip { cursor: grabbing; }
-  #f-cats.dropping { background: #f9fafb; border-radius: 8px; }
-  .gauge.sub { margin-left: 18px; }
-  .gauge.sub .fill { background: #4b9b87; }
-  dialog::backdrop { background: rgba(15,23,42,.45); }
+  /* Each row is a fuel gauge; the bar is the row's own bottom edge, so the
+     remaining balance reads without a legend. */
+  .row { position:relative; padding:9px 2px 12px; }
+  .row.d2 { padding-left:14px; }
+  .row.d3 { padding-left:30px; }
+  .row.d3 .row-top { font-size:13px; }
+  .row-top { display:flex; justify-content:space-between; gap:12px; font-size:14px; }
+  .row-meta { font-size:11.5px; color:#797979; }
+  .track { position:absolute; left:0; right:0; bottom:0; height:4px; background:#e5e7eb; border-radius:2px; }
+  .row.d2 .track { left:14px; }
+  .row.d3 .track { left:30px; }
+  .fill { height:100%; background:var(--topaz); border-radius:2px; }
+  .row.over .fill { background:var(--over); }
+  .row.over .row-top span:last-child { color:var(--over); }
 
-  /* Tailwind 2.2.19 ships no `emerald` in its default palette, so utility
-     classes for it silently produce nothing. Brand colours live here. */
-  .btn-primary {
-    background:var(--topaz-dark); color:#fff; font-weight:500;
-    border:2px solid var(--topaz-dark); border-radius:70px;
+  .people { margin-top:16px; padding-top:14px; border-top:1px solid #e5e7eb; }
+  .pill {
+    display:inline-flex; align-items:center; gap:6px; background:#f7f7f7;
+    border:1px solid #e5e7eb; border-radius:9999px; padding:4px 11px;
+    font-size:12px; margin:0 6px 6px 0;
   }
-  .btn-primary:hover { background:var(--topaz-darker); border-color:var(--topaz-darker); }
-  .btn-quiet {
-    background:#fff; border:2px solid #dee2e6; color:var(--ink); border-radius:70px;
+  .pill button { color:#9ca3af; font-weight:700; line-height:1; }
+  .pill button:hover { color:var(--over); }
+
+  label { display:block; margin:14px 0 5px; font-size:12px; font-weight:500; color:#797979; }
+  input, select { width:100%; font:inherit; color:var(--ink); background:#fff;
+    border:1px solid #d1d5db; border-radius:8px; padding:9px 10px; font-size:14px; }
+  input:focus, select:focus { outline:2px solid var(--topaz-dark); outline-offset:-1px; }
+  input:read-only { background:#f3f4f6; color:#6b7280; cursor:not-allowed; }
+  .two { display:flex; gap:10px; } .two > div { flex:1; min-width:0; }
+
+  /* ---- editor: one card per leg ---- */
+  .legcard { border:1px solid #dee2e6; border-radius:10px; padding:14px; margin-bottom:12px; background:#fdfdfd; }
+  .legcard-top { display:flex; gap:8px; align-items:flex-start; }
+  .legcard-top .legname { flex:2; }
+  .legcard-top .legcur { flex:1; min-width:92px; }
+  .legtools { display:flex; gap:4px; flex:none; padding-top:1px; }
+  .icon {
+    width:30px; height:36px; flex:none; border:1px solid #d1d5db; border-radius:8px;
+    background:#fff; color:#9ca3af; font:inherit; font-size:14px; line-height:1; cursor:pointer;
   }
-  .btn-quiet:hover { background:#f9fafb; border-color:var(--topaz); }
-  .lnk { color:var(--topaz-dark); font-weight:500; }
-  .lnk:hover { text-decoration:underline; }
-  .back {
-    display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:500;
-    color:#374151; background:#fff; border:1px solid #e5e7eb; border-radius:8px;
-    text-decoration:none; padding:6px 14px; box-shadow:0 1px 2px rgba(0,0,0,.05);
-  }
-  .back:hover { background:#f9fafb; }
+  .icon:hover { color:var(--topaz-dark); border-color:var(--topaz); background:var(--topaz-soft); }
+  .icon.danger:hover { color:var(--over); border-color:var(--over); background:#fbeaec; }
+
+  .subhead { font-size:11px; font-weight:600; color:#797979; text-transform:uppercase;
+             letter-spacing:.05em; margin:14px 0 6px; }
+
+  .raterow { display:flex; gap:8px; margin-bottom:6px; }
+  .raterow select { flex:1; } .raterow input { flex:1; text-align:right; font-variant-numeric:tabular-nums; }
+
+  .catrow { display:flex; gap:8px; margin-bottom:6px; align-items:center; }
+  .catrow.child { margin-left:26px; }
+  .catrow .cname { flex:2; min-width:0; }
+  .catrow .camt { flex:1; min-width:84px; text-align:right; font-variant-numeric:tabular-nums; }
+  .catrow .grip { color:#d1d5db; cursor:grab; }
+  .catrow .grip:hover { color:#6b7280; background:#f3f4f6; }
+  .catrow.dragging { opacity:.4; }
+  .catlist.dropping { background:#f9fafb; border-radius:8px; }
+  .catrow.child .addsub { visibility:hidden; pointer-events:none; }
+
+  .total { display:flex; justify-content:space-between; margin-top:10px; padding-top:8px;
+           border-top:1px solid #dee2e6; font-weight:600; font-size:13px; }
+  .hint { font-size:11.5px; color:#797979; margin-top:5px; }
+  .err { font-size:13px; color:var(--over); margin-top:8px; }
+  .empty { color:#797979; font-size:14px; padding:22px; border:1px dashed #dee2e6;
+           border-radius:12px; background:#fff; }
+  dialog { border:0; }
+  dialog::backdrop { background: rgba(74,74,74,.45); }
 </style>
 </head>
-<body class="text-gray-800">
+<body>
 
-<div class="max-w-6xl mx-auto px-4 py-6">
-
+<div class="wrap">
   <a class="back mb-4" href="/">&larr; Back to dashboards</a>
 
   <img src="https://www.pacificdiscovery.org/graphics/logo.png"
@@ -128,10 +168,11 @@
 
   <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
     <div>
-      <h1 class="text-2xl font-semibold">Field Budget</h1>
-      <p class="text-sm text-gray-500 mt-1 max-w-2xl">
-        Programme budgets for the instructor expense app. Allocations are set in the
-        currency instructors actually spend in; NZD is attached at reconciliation.
+      <h1 class="text-2xl">Field Budget</h1>
+      <p class="lede">
+        Each budget holds one or more legs. A leg sets the currency instructors spend in;
+        its categories and subcategories roll up into it. Totals convert to the base
+        currency for reporting.
       </p>
     </div>
     <div class="flex items-center gap-2">
@@ -147,90 +188,52 @@
   <div id="list" class="mt-6 space-y-3"></div>
 </div>
 
-<!-- New budget -->
-<dialog id="newDlg" class="rounded-xl p-0 w-full max-w-lg">
+<!-- Budget editor, shared by new and edit -->
+<dialog id="dlg" class="rounded-xl p-0 w-full max-w-2xl">
   <div class="p-6">
-    <h2 id="dlgTitle" class="text-lg font-semibold mb-4">New budget</h2>
+    <h2 id="dlgTitle" class="text-lg mb-4">New budget</h2>
 
-    <label class="block text-xs font-medium text-gray-500 mb-1">Name</label>
-    <input id="f-name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Peru — Feb 2026">
+    <label for="f-name">Name</label>
+    <input id="f-name" placeholder="Fall 2026 — South America">
 
-    <div class="grid grid-cols-2 gap-3 mt-3">
+    <div class="two mt-3">
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Budget currency</label>
-        <select id="f-cur" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500">
-          <option>PEN</option><option>USD</option><option>EUR</option>
-          <option>NZD</option><option>AUD</option><option>THB</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Base currency</label>
-        <select id="f-base" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <label for="f-base">Base currency</label>
+        <select id="f-base">
           <option selected>NZD</option><option>USD</option><option>AUD</option><option>EUR</option>
         </select>
-      </div>
-    </div>
-    <p id="curNote" class="text-xs text-gray-500 mt-1">
-      Budget currency is what instructors spend in. Base currency is what finance reports in.
-    </p>
-
-    <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Approved amount (base currency)</label>
-    <input id="f-funded" type="number" step="0.01" placeholder="0.00"
-           class="num w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right">
-    <p class="text-xs text-gray-500 mt-1">
-      Optional. What was signed off, to compare against the reconciled figure later.
-    </p>
-
-    <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Planning rates</label>
-    <div id="f-rates" class="space-y-2"></div>
-    <button id="addRate" class="mt-2 text-sm lnk">+ Add currency</button>
-    <p class="text-xs text-gray-500 mt-2">
-      One row per currency an instructor might pay in, expressed in
-      <strong id="rateUnit">budget currency</strong> per 1 unit. Prefilled on their
-      form; they can override per entry.
-    </p>
-
-    <div class="grid grid-cols-2 gap-3 mt-3">
-      <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Starts</label>
-        <input id="f-start" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <p class="hint">What finance reports in. Instructors never see it.</p>
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Ends</label>
-        <input id="f-end" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <label for="f-funded">Approved amount</label>
+        <input id="f-funded" type="number" step="0.01" placeholder="0.00" class="num text-right">
+        <p class="hint">Optional, in base currency.</p>
       </div>
     </div>
 
-    <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Categories</label>
-    <div id="f-cats" class="space-y-2"></div>
-    <p class="text-xs text-gray-500 mt-1">↳ turns a row into a subcategory of the one above. Parent totals include their subcategories.</p>
-    <button id="addCat" class="mt-2 text-sm lnk">+ Add category</button>
-    <p class="text-xs text-gray-500 mt-2">
-      <strong>+</strong> adds a subcategory under that category — click it repeatedly to add several.
-      ☰ drags to reorder (or focus it and use ↑ ↓); a category brings its subcategories with it.
-      ↳ turns an existing row into a subcategory of the one above.
-    </p>
-    <div class="flex justify-between border-t border-gray-200 mt-3 pt-2 text-sm font-semibold">
-      <span>Total allocated</span><span id="f-total" class="num">—</span>
+    <div class="two mt-3">
+      <div><label for="f-start">Starts</label><input id="f-start" type="date"></div>
+      <div><label for="f-end">Ends</label><input id="f-end" type="date"></div>
     </div>
-    <p class="text-xs text-gray-500 mt-1">
-      A category with subcategories totals them automatically — its own amount box
-      is locked, and instructors log against the subcategories rather than the parent.
-    </p>
+
+    <div class="subhead">Legs</div>
+    <div id="f-legs"></div>
+    <button id="addLeg" class="mt-1 text-sm lnk">+ Add leg</button>
+
+    <div class="total"><span>Total, base currency</span><span id="f-total" class="num">—</span></div>
+    <p class="hint" id="f-totalNote"></p>
 
     <div id="emailBlock">
-      <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Instructors</label>
-      <input id="f-emails" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="katie@…, manuel@…">
-      <p class="text-xs text-gray-500 mt-1">
-        Comma separated. Must match the address they sign in with — case and +tags are normalised automatically.
-      </p>
+      <label for="f-emails">Instructors</label>
+      <input id="f-emails" placeholder="katie@…, manuel@…">
+      <p class="hint">Comma separated. Case and +tags are normalised automatically.</p>
     </div>
 
-    <p id="f-err" class="hidden text-sm text-red-700 mt-3"></p>
+    <p id="f-err" class="err hidden"></p>
 
     <div class="flex justify-end gap-2 mt-5">
-      <button id="cancelNew" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Cancel</button>
-      <button id="saveNew" class="btn-primary px-5 py-2 text-sm">Create budget</button>
+      <button id="cancelBtn" class="btn-quiet px-4 py-2 text-sm">Cancel</button>
+      <button id="saveBtn" class="btn-primary px-5 py-2 text-sm">Create budget</button>
     </div>
   </div>
 </dialog>
@@ -239,27 +242,29 @@
 <dialog id="ledgerDlg" class="rounded-xl p-0 w-full max-w-4xl">
   <div class="p-6">
     <div class="flex items-center justify-between mb-4">
-      <h2 id="ledgerTitle" class="text-lg font-semibold">Entries</h2>
+      <h2 id="ledgerTitle" class="text-lg">Entries</h2>
       <div class="flex gap-2">
-        <a id="csvLink" class="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50" href="#">Download CSV</a>
-        <button id="closeLedger" class="px-3 py-2 text-sm rounded-lg border border-gray-300">Close</button>
+        <a id="csvLink" class="btn-quiet px-4 py-2 text-sm" href="#">Download CSV</a>
+        <button id="closeLedger" class="btn-quiet px-4 py-2 text-sm">Close</button>
       </div>
     </div>
-    <div id="ledgerBody" class="overflow-x-auto max-h-[65vh]"></div>
+    <div id="ledgerBody" class="overflow-x-auto" style="max-height:65vh"></div>
   </div>
 </dialog>
 
 <script>
 const API = '/api/budget-admin';
+const CURRENCIES = ['NZD','USD','EUR','AUD','GBP','PEN','THB','IDR','FJD','CRC','MXN','CRC'];
 let DATA = null;
-const OPEN = new Set();   // which budget cards are expanded, kept across refreshes
+let EDITING = null;              // budget id in edit mode, else null
+const OPEN = new Set();          // expanded budget cards, kept across refreshes
+let DRAGGING = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-
 const fmt = (minor, cur) => new Intl.NumberFormat('en-NZ',
-  { style: 'currency', currency: cur, currencyDisplay: 'code' }).format((minor || 0) / 100);
+  { style: 'currency', currency: cur || 'NZD', currencyDisplay: 'code' }).format((minor || 0) / 100);
 
 function showErr(msg) {
   const el = $('err');
@@ -268,7 +273,7 @@ function showErr(msg) {
 }
 
 async function api(path, opts) {
-  const res = await fetch(`${API}${path}`, opts);
+  const res = await fetch(`${API}${path}`, { credentials: 'include', ...opts });
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
     throw new Error(j.error || `Request failed (${res.status})`);
@@ -276,15 +281,44 @@ async function api(path, opts) {
   return res.json();
 }
 
-/* ------------------------------------------------------------------ list */
+/* ---------------------------------------------------------------- tree ---
+   Allocation lives on leaves, recursively: a node with children is the sum of
+   its children, one without children holds its own figure. Same rule at every
+   level, so a leg is the sum of its categories and a category is the sum of its
+   subcategories — unless it has none. */
+
+function treeFor(budgetId) {
+  const all = DATA.categories.filter((c) => c.budget_id === budgetId);
+  const kidsOf = (id) => all.filter((c) => c.parent_id === id);
+  const spentBy = Object.fromEntries(
+    DATA.spend.filter((s) => s.budget_id === budgetId).map((s) => [s.category_id, s.spent]));
+
+  const shape = (node, depth) => {
+    const kids = kidsOf(node.id).map((k) => shape(k, depth + 1));
+    const allocated = kids.length
+      ? kids.reduce((n, k) => n + k.allocated, 0)
+      : (node.allocated || 0);
+    const spent = (spentBy[node.id] || 0) + kids.reduce((n, k) => n + k.spent, 0);
+    return { ...node, depth, kids, allocated, spent, over: spent > allocated };
+  };
+  return all.filter((c) => !c.parent_id).map((leg) => shape(leg, 1));
+}
+
+// A leg's rates map is expressed in LEG-currency units per 1 unit of the other
+// currency, so converting the leg's own total into base means dividing.
+function toBase(amount, leg, base) {
+  if (!leg.currency || leg.currency === base) return amount;
+  const r = Number((leg.rates || {})[base]);
+  return Number.isFinite(r) && r > 0 ? Math.round(amount / r) : null;
+}
+
+/* ---------------------------------------------------------------- list --- */
 
 async function load() {
   showErr(null);
   $('loading').classList.remove('hidden');
   try {
     DATA = await api('?action=list');
-    // First load with a single budget: open it. Otherwise everything starts
-    // collapsed, which is the point of the accordion.
     if (!OPEN.size && DATA.budgets.length === 1) OPEN.add(DATA.budgets[0].id);
     render();
   } catch (e) {
@@ -296,58 +330,62 @@ async function load() {
 }
 
 function render() {
-  const { budgets, categories, assignments, spend, receipts } = DATA;
   const wrap = $('list');
-
-  if (!budgets.length) {
-    wrap.innerHTML = `<div class="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500 text-sm">
-      No budgets yet. Create one and it appears in the instructors' field app straight away.</div>`;
+  if (!DATA.budgets.length) {
+    wrap.innerHTML = `<div class="empty">No budgets yet. Create one and it appears in the instructors' field app straight away.</div>`;
     return;
   }
 
-  wrap.innerHTML = budgets.map((b) => {
-    const cats = categories.filter((c) => c.budget_id === b.id);
-    const spentBy = Object.fromEntries(
-      spend.filter((s) => s.budget_id === b.id).map((s) => [s.category_id, s.spent]));
-    const people = assignments.filter((a) => a.budget_id === b.id);
-    const nReceipts = (receipts.find((r) => r.budget_id === b.id) || {}).n || 0;
+  wrap.innerHTML = DATA.budgets.map((b) => {
+    const base = b.base_currency || 'NZD';
+    const legs = treeFor(b.id);
+    const people = DATA.assignments.filter((a) => a.budget_id === b.id);
+    const nReceipts = (DATA.receipts.find((r) => r.budget_id === b.id) || {}).n || 0;
 
-    const parents = cats.filter((c) => !c.parent_id);
-    const kidsOf = (pid) => cats.filter((c) => c.parent_id === pid);
+    // Roll up to base. A leg with no base rate can't be converted, and that is
+    // said out loud rather than silently dropped from the total.
+    let allocBase = 0, spentBase = 0, unconverted = [];
+    for (const leg of legs) {
+      const a = toBase(leg.allocated, leg, base);
+      const s = toBase(leg.spent, leg, base);
+      if (a === null) { unconverted.push(leg.name); continue; }
+      allocBase += a; spentBase += s || 0;
+    }
+    const pct = allocBase > 0 ? Math.min(100, (spentBase / allocBase) * 100) : (spentBase > 0 ? 100 : 0);
+    const overCount = legs.reduce((n, leg) =>
+      n + (leg.over ? 1 : 0) + leg.kids.filter((k) => k.over).length, 0);
 
-    // Sum over leaves only. Summing every row would double-count any parent
-    // that still had a stale figure on it.
-    const leaves = cats.filter((c) => !kidsOf(c.id).length);
-    const allocated = leaves.reduce((n, c) => n + c.allocated, 0);
-    const spent = cats.reduce((n, c) => n + (spentBy[c.id] || 0), 0);
-
-    const gauge = (c, isSub) => {
-      const kids = isSub ? [] : kidsOf(c.id);
-      // A parent with subcategories is the sum of them, not the sum plus its
-      // own figure — it has no figure of its own.
-      const alloc = kids.length ? kids.reduce((n, k) => n + k.allocated, 0) : c.allocated;
-      const s = (spentBy[c.id] || 0) + kids.reduce((n, k) => n + (spentBy[k.id] || 0), 0);
-      const pct = alloc > 0 ? Math.min(100, (s / alloc) * 100) : (s > 0 ? 100 : 0);
-      return `<div class="gauge ${isSub ? 'sub' : ''} ${s > alloc ? 'over' : ''}">
-        <div class="flex justify-between text-sm">
-          <span>${esc(c.name)}${alloc === 0 && s > 0 ? ' <span class="text-red-700 text-xs font-medium">unbudgeted</span>' : ''}</span>
-          <span class="num font-medium remaining">${fmt(alloc - s, b.currency)}</span>
-        </div>
-        <div class="num text-xs text-gray-500">${fmt(s, b.currency)} of ${fmt(alloc, b.currency)}</div>
-        <div class="track"><div class="fill" style="width:${pct}%"></div></div>
-      </div>`;
+    const gauge = (n) => {
+      const p = n.allocated > 0 ? Math.min(100, (n.spent / n.allocated) * 100) : (n.spent > 0 ? 100 : 0);
+      const unbudgeted = n.allocated === 0 && n.spent > 0;
+      return `<div class="row d${n.depth} ${n.over ? 'over' : ''}">
+          <div class="row-top">
+            <span>${esc(n.name)}${unbudgeted ? ' <span class="warn">unbudgeted</span>' : ''}</span>
+            <span class="num">${fmt(n.allocated - n.spent, n.legCurrency)}</span>
+          </div>
+          <div class="row-meta num">${fmt(n.spent, n.legCurrency)} of ${fmt(n.allocated, n.legCurrency)}</div>
+          <div class="track"><div class="fill" style="width:${p}%"></div></div>
+        </div>${n.kids.map(gauge).join('')}`;
     };
+    // Stamp the leg currency down the tree so every gauge formats correctly.
+    const stamp = (n, cur) => { n.legCurrency = cur; n.kids.forEach((k) => stamp(k, cur)); };
+    legs.forEach((leg) => stamp(leg, leg.currency));
 
-    const rows = parents.map((p) =>
-      gauge(p, false) + kidsOf(p.id).map((k) => gauge(k, true)).join('')).join('');
-
-    const pctAll = allocated > 0 ? Math.min(100, (spent / allocated) * 100) : (spent > 0 ? 100 : 0);
-    const overCount = parents.reduce((n, p) => {
-      const kids = kidsOf(p.id);
-      const a = kids.length ? kids.reduce((x, k) => x + k.allocated, 0) : p.allocated;
-      const sp = (spentBy[p.id] || 0) + kids.reduce((x, k) => x + (spentBy[k.id] || 0), 0);
-      return n + (sp > a ? 1 : 0);
-    }, 0);
+    const legBlocks = legs.map((leg) => {
+      const nzd = toBase(leg.allocated - leg.spent, leg, base);
+      return `<section class="leg">
+        <div class="leg-head">
+          <span><span class="leg-name">${esc(leg.name)}</span><span class="leg-cur">${esc(leg.currency || '—')}</span></span>
+          <span class="text-right">
+            <span class="num font-semibold">${fmt(leg.allocated - leg.spent, leg.currency)}</span>
+            ${nzd !== null && leg.currency !== base
+              ? `<span class="block text-xs" style="color:#797979">≈ ${fmt(nzd, base)}</span>`
+              : (nzd === null ? `<span class="block text-xs warn">no ${base} rate</span>` : '')}
+          </span>
+        </div>
+        ${leg.kids.map(gauge).join('') || '<p class="hint">No categories in this leg yet.</p>'}
+      </section>`;
+    }).join('');
 
     return `<details class="bcard" data-budget="${esc(b.id)}" ${OPEN.has(b.id) ? 'open' : ''}>
       <summary>
@@ -356,48 +394,48 @@ function render() {
         </svg>
         <span class="flex-1 min-w-0">
           <span class="font-semibold">${esc(b.name)}</span>
-          ${b.status === 'closed' ? '<span class="text-xs font-normal text-gray-500 ml-2">closed</span>' : ''}
+          ${b.status === 'closed' ? '<span class="text-xs ml-2" style="color:#797979">closed</span>' : ''}
           ${overCount ? `<span class="warn ml-2">${overCount} over</span>` : ''}
-          <span class="block text-xs text-gray-500 mt-0.5">
-            ${esc(b.currency)} → ${esc(b.base_currency || 'NZD')} · ${people.length} instructor${people.length === 1 ? '' : 's'} · ${nReceipts} receipt${nReceipts === 1 ? '' : 's'}
+          ${unconverted.length ? `<span class="warn ml-2">${unconverted.length} leg without ${base} rate</span>` : ''}
+          <span class="block text-xs mt-0.5" style="color:#797979">
+            ${legs.length} leg${legs.length === 1 ? '' : 's'} · ${
+              legs.map((l) => l.currency).filter(Boolean).join(', ') || 'no currency'} → ${esc(base)} · ${
+              people.length} instructor${people.length === 1 ? '' : 's'} · ${nReceipts} receipt${nReceipts === 1 ? '' : 's'}
           </span>
         </span>
-        <span class="minibar ${spent > allocated ? 'over' : ''}" title="${Math.round(pctAll)}% spent">
-          <span style="width:${pctAll}%"></span>
+        <span class="minibar ${spentBase > allocBase ? 'over' : ''}" title="${Math.round(pct)}% spent">
+          <span style="width:${pct}%"></span>
         </span>
         <span class="text-right">
-          <span class="num font-semibold block">${fmt(allocated - spent, b.currency)}</span>
-          <span class="text-xs text-gray-500">of ${fmt(allocated, b.currency)}</span>
+          <span class="num font-semibold block">${fmt(allocBase - spentBase, base)}</span>
+          <span class="text-xs" style="color:#797979">of ${fmt(allocBase, base)}</span>
         </span>
       </summary>
 
       <div class="bcard-body">
-      <p class="text-xs text-gray-500 mb-3">base ${esc(b.base_currency || 'NZD')}${
-        b.funded_base ? ` · approved ${fmt(b.funded_base, b.base_currency || 'NZD')}` : ''} · rates ${
-        Object.keys(b.rates || {}).length
-          ? Object.entries(b.rates).map(([c, r]) => `${c} ${r}`).join(', ')
-          : `${b.base_currency || 'NZD'} ${b.default_rate}`} · ${
-        b.starts_on ? String(b.starts_on).slice(0, 10) : '—'} to ${
-        b.ends_on ? String(b.ends_on).slice(0, 10) : '—'}</p>
+        <p class="text-xs mb-1" style="color:#797979">
+          ${b.funded_base ? `approved ${fmt(b.funded_base, base)} · ` : ''}${
+            b.starts_on ? String(b.starts_on).slice(0, 10) : '—'} to ${
+            b.ends_on ? String(b.ends_on).slice(0, 10) : '—'}
+        </p>
+        ${legBlocks || '<p class="hint">No legs yet — edit this budget to add one.</p>'}
 
-      <div class="space-y-3">${rows}</div>
-
-      <div class="border-t border-gray-200 mt-4 pt-3">
-        <div class="mb-2">
-          ${people.length
-            ? people.map((p) => `<span class="pill">${esc(p.email)}<button data-unassign="${esc(p.email)}" title="Remove">×</button></span>`).join('')
-            : '<span class="text-xs text-gray-500">No instructors assigned — nobody can log against this yet.</span>'}
+        <div class="people">
+          <div class="mb-2">
+            ${people.length
+              ? people.map((p) => `<span class="pill">${esc(p.email)}<button data-unassign="${esc(p.email)}" title="Remove">×</button></span>`).join('')
+              : '<span class="hint">No instructors assigned — nobody can log against this yet.</span>'}
+          </div>
+          <div class="flex gap-2 flex-wrap items-center">
+            <input data-assign-input placeholder="Add instructor emails, comma separated" style="flex:1;min-width:220px">
+            <button data-assign class="btn-quiet text-sm px-4 py-1.5">Assign</button>
+            <button data-edit class="btn-quiet text-sm px-4 py-1.5">Edit</button>
+            <button data-ledger class="btn-quiet text-sm px-4 py-1.5">View entries</button>
+            <button data-status="${b.status === 'active' ? 'closed' : 'active'}" class="btn-quiet text-sm px-4 py-1.5">
+              ${b.status === 'active' ? 'Close' : 'Reopen'}
+            </button>
+          </div>
         </div>
-        <div class="flex gap-2 flex-wrap items-center">
-          <input data-assign-input class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[200px]" placeholder="Add instructor emails, comma separated">
-          <button data-assign class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">Assign</button>
-          <button data-edit class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">Edit</button>
-          <button data-ledger class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">View entries</button>
-          <button data-status="${b.status === 'active' ? 'closed' : 'active'}" class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">
-            ${b.status === 'active' ? 'Close' : 'Reopen'}
-          </button>
-        </div>
-      </div>
       </div>
     </details>`;
   }).join('');
@@ -411,13 +449,12 @@ function render() {
   });
 }
 
-/* --------------------------------------------------------------- actions */
+/* -------------------------------------------------------------- actions --- */
 
 $('list').addEventListener('click', async (ev) => {
   const section = ev.target.closest('[data-budget]');
   if (!section) return;
   const budgetId = section.dataset.budget;
-
   try {
     if (ev.target.matches('[data-unassign]')) {
       const email = ev.target.dataset.unassign;
@@ -428,7 +465,6 @@ $('list').addEventListener('click', async (ev) => {
       });
       return load();
     }
-
     if (ev.target.matches('[data-assign]')) {
       const input = section.querySelector('[data-assign-input]');
       const emails = input.value.split(',').map((s) => s.trim()).filter(Boolean);
@@ -441,7 +477,6 @@ $('list').addEventListener('click', async (ev) => {
       input.value = '';
       return load();
     }
-
     if (ev.target.matches('[data-status]')) {
       await api('?action=set-status', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -449,15 +484,12 @@ $('list').addEventListener('click', async (ev) => {
       });
       return load();
     }
-
     if (ev.target.matches('[data-edit]')) return openEdit(budgetId);
     if (ev.target.matches('[data-ledger]')) return openLedger(budgetId);
-  } catch (e) {
-    showErr(e.message);
-  }
+  } catch (e) { showErr(e.message); }
 });
 
-/* ---------------------------------------------------------------- ledger */
+/* --------------------------------------------------------------- ledger --- */
 
 async function openLedger(budgetId) {
   const b = DATA.budgets.find((x) => x.id === budgetId);
@@ -465,92 +497,136 @@ async function openLedger(budgetId) {
   $('csvLink').href = `${API}?action=export&budget=${encodeURIComponent(budgetId)}`;
   $('ledgerBody').innerHTML = '<div class="flex justify-center py-10"><div class="spinner"></div></div>';
   $('ledgerDlg').showModal();
-
   try {
     const { entries } = await api(`?action=entries&budget=${encodeURIComponent(budgetId)}`);
     if (!entries.length) {
-      $('ledgerBody').innerHTML = '<p class="text-sm text-gray-500 py-6">Nothing logged yet.</p>';
+      $('ledgerBody').innerHTML = '<p class="hint py-6">Nothing logged yet.</p>';
       return;
     }
     $('ledgerBody').innerHTML = `<table class="w-full text-sm">
-      <thead class="text-xs text-gray-500 border-b border-gray-200">
+      <thead class="text-xs border-b" style="color:#797979">
         <tr><th class="text-left py-2">Date</th><th class="text-left">Who</th>
         <th class="text-left">Category</th><th class="text-left">Description</th>
         <th class="text-right">Paid</th><th class="text-right">Against budget</th>
         <th class="text-center">Receipt</th></tr>
       </thead>
-      <tbody>${entries.map((e) => `<tr class="border-b border-gray-100">
-        <td class="py-2 num whitespace-nowrap">${esc(e.spent_on)}</td>
-        <td class="text-gray-600">${esc((e.email || '').split('@')[0])}</td>
+      <tbody>${entries.map((e) => `<tr class="border-b" style="border-color:#f3f4f6">
+        <td class="py-2 num whitespace-nowrap">${esc(String(e.spent_on).slice(0, 10))}</td>
+        <td style="color:#797979">${esc((e.email || '').split('@')[0])}</td>
         <td>${esc(e.category_name || e.entry_type)}</td>
-        <td class="text-gray-600">${esc(e.description)}</td>
+        <td style="color:#797979">${esc(e.description)}</td>
         <td class="num text-right whitespace-nowrap">${fmt(e.amount, e.currency)}</td>
         <td class="num text-right whitespace-nowrap">${
-          e.entry_type === 'expense' ? fmt(e.budget_amount, b.currency) : '<span class="text-gray-400">—</span>'}</td>
+          e.entry_type === 'expense' ? fmt(e.budget_amount, e.currency) : '<span style="color:#d1d5db">—</span>'}</td>
         <td class="text-center">${e.receipt_link
           ? `<a href="${esc(e.receipt_link)}" target="_blank" rel="noopener" class="lnk">view</a>`
-          : '<span class="text-gray-300">—</span>'}</td>
+          : '<span style="color:#d1d5db">—</span>'}</td>
       </tr>`).join('')}</tbody></table>`;
   } catch (e) {
-    $('ledgerBody').innerHTML = `<p class="text-sm text-red-700 py-6">${esc(e.message)}</p>`;
+    $('ledgerBody').innerHTML = `<p class="err py-6">${esc(e.message)}</p>`;
   }
 }
 $('closeLedger').addEventListener('click', () => $('ledgerDlg').close());
 
-/* ------------------------------------------------------------ new budget */
+/* --------------------------------------------------------------- editor ---
+   One card per leg: name, currency, its planning rates, and its categories
+   nested two deep inside it. A flat three-level indented list would technically
+   work but is miserable to arrange. */
 
 const DEFAULT_CATS = ['Food', 'Transport', 'Gratuities', 'Activities', 'Misc', 'First aid'];
-const RATE_CURRENCIES = ['NZD', 'USD', 'EUR', 'AUD', 'GBP', 'PEN', 'THB', 'IDR', 'FJD', 'CRC'];
 
-/* ---- planning rates ----
-   One default_rate could only ever be right for one foreign currency: PEN per
-   NZD is ~2.2, per USD ~3.34, per EUR ~4.05. A map keyed by currency lets the
-   instructor's form prefill the correct one for whatever they actually paid in. */
+function curOptions(sel) {
+  return [...new Set(CURRENCIES)].map((c) =>
+    `<option ${c === sel ? 'selected' : ''}>${c}</option>`).join('');
+}
 
-function addRateRow(code = '', rate = '') {
+function addRateRow(container, code = '', rate = '') {
   const row = document.createElement('div');
   row.className = 'raterow';
-  row.innerHTML = `<select>${RATE_CURRENCIES
-      .map((c) => `<option ${c === code ? 'selected' : ''}>${c}</option>`).join('')}</select>
+  row.innerHTML = `<select>${curOptions(code)}</select>
     <input type="number" step="0.000001" placeholder="0.0000" value="${esc(rate)}">
-    <button class="x" type="button" title="Remove">×</button>`;
-  row.querySelector('button').addEventListener('click', () => row.remove());
-  $('f-rates').append(row);
+    <button class="icon danger" type="button" title="Remove">×</button>`;
+  row.querySelector('button').addEventListener('click', () => { row.remove(); recalcTotal(); });
+  row.querySelectorAll('select,input').forEach((i) => i.addEventListener('input', recalcTotal));
+  container.append(row);
   return row;
 }
 
-function readRates() {
-  const out = {};
-  [...$('f-rates').querySelectorAll('.raterow')].forEach((r) => {
-    const code = r.querySelector('select').value;
-    const n = Number(r.querySelector('input').value);
-    if (code && Number.isFinite(n) && n > 0) out[code] = n;
+function addCatRow(list, name = '', amount = '', id = '', isChild = false, after = null) {
+  const row = document.createElement('div');
+  row.className = 'catrow' + (isChild ? ' child' : '');
+  row.dataset.catId = id;
+  row.innerHTML = `<button class="icon grip" type="button" title="Drag to reorder, or focus and use ↑ ↓">☰</button>
+    <button class="icon nest" type="button" title="Make this a subcategory of the row above">↳</button>
+    <input class="cname" placeholder="Category" value="${esc(name)}">
+    <input class="camt" type="number" step="0.01" placeholder="0.00" value="${esc(amount)}">
+    <button class="icon addsub" type="button" title="Add a subcategory under this one">+</button>
+    <button class="icon danger" type="button" title="Remove">×</button>`;
+
+  const [grip, nest, addsub, remove] = row.querySelectorAll('button');
+
+  remove.addEventListener('click', () => {
+    if (!row.classList.contains('child')) {
+      let n = row.nextElementSibling;
+      const kids = [];
+      while (n && n.classList.contains('child')) { kids.push(n); n = n.nextElementSibling; }
+      if (kids.length && !confirm(`Remove "${row.querySelector('.cname').value || 'this category'}" and its ${kids.length} subcategor${kids.length === 1 ? 'y' : 'ies'}?`)) return;
+      kids.forEach((k) => k.remove());
+    }
+    row.remove(); recalcTotal();
   });
-  return out;
+
+  nest.addEventListener('click', () => {
+    if (row.classList.contains('child')) { row.classList.remove('child'); }
+    else {
+      const prev = row.previousElementSibling;
+      if (!prev || prev.classList.contains('child')) {
+        return flash('A subcategory needs a category directly above it.');
+      }
+      row.classList.add('child');
+    }
+    normalise(list); recalcTotal();
+  });
+
+  // Adds a child directly beneath this category's existing children, so a group
+  // can be built in place instead of appending to the bottom and dragging up.
+  addsub.addEventListener('click', () => {
+    if (row.classList.contains('child')) return;
+    let last = row;
+    while (last.nextElementSibling && last.nextElementSibling.classList.contains('child')) {
+      last = last.nextElementSibling;
+    }
+    addCatRow(list, '', '', '', true, last).querySelector('.cname').focus();
+    recalcTotal();
+  });
+
+  grip.addEventListener('mousedown', () => { row.draggable = true; });
+  grip.addEventListener('mouseup', () => { row.draggable = false; });
+  grip.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    ev.preventDefault();
+    moveBlock(list, row, ev.key === 'ArrowUp' ? -1 : 1);
+    grip.focus();
+  });
+  row.addEventListener('dragstart', (ev) => {
+    DRAGGING = row; row.classList.add('dragging');
+    ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', '');
+  });
+  row.addEventListener('dragend', () => {
+    row.classList.remove('dragging'); row.draggable = false; DRAGGING = null;
+    list.classList.remove('dropping'); normalise(list); recalcTotal();
+  });
+
+  row.querySelectorAll('input').forEach((i) => i.addEventListener('input', recalcTotal));
+
+  if (after && after.parentNode === list) after.after(row);
+  else list.append(row);
+  return row;
 }
 
-// The budget currency needs no rate against itself, and showing one invites
-// somebody to enter 3.34 for PEN in a PEN budget.
-function syncRateUnit() {
-  const unit = $('rateUnit');
-  if (unit) unit.textContent = $('f-cur').value || 'budget currency';
-  [...$('f-rates').querySelectorAll('.raterow')].forEach((r) => {
-    const same = r.querySelector('select').value === $('f-cur').value;
-    r.style.display = same ? 'none' : '';
-  });
-}
-
-let EDITING = null;   // budget id when the dialog is in edit mode, else null
-let DRAGGING = null;  // the row currently being dragged
-
-/* ---- reordering -------------------------------------------------------
-   Order is simply DOM order — readCats walks siblings and the API writes
-   sort_order from that. So reordering is a pure DOM operation.
-
-   A parent moves as a block with its subcategories. Valid drop positions
-   therefore differ by what is being dragged: a parent can only land on a
-   top-level boundary, or it would wedge itself between another parent and
-   its children and silently adopt them. */
+/* ---- reordering. A category moves as a block with its subcategories, so a
+   category can only land on a category boundary — otherwise it would wedge
+   itself between another category and its children and adopt them. ---- */
 
 function blockOf(row) {
   const rows = [row];
@@ -560,309 +636,263 @@ function blockOf(row) {
   }
   return rows;
 }
-
-function dropTargets(dragged) {
-  const all = [...$('f-cats').querySelectorAll('.catrow')];
+function dropTargets(list, dragged) {
   const block = new Set(blockOf(dragged));
-  const rest = all.filter((r) => !block.has(r));
-  // Dragging a parent: only before another top-level row. Dragging a child:
-  // before any row, since it can slot anywhere inside a group.
-  return dragged.classList.contains('child')
-    ? rest
-    : rest.filter((r) => !r.classList.contains('child'));
+  const rest = [...list.querySelectorAll('.catrow')].filter((r) => !block.has(r));
+  return dragged.classList.contains('child') ? rest : rest.filter((r) => !r.classList.contains('child'));
 }
-
-function insertBlockBefore(block, target) {
-  const list = $('f-cats');
+function insertBlockBefore(list, block, target) {
   block.forEach((r) => (target ? list.insertBefore(r, target) : list.appendChild(r)));
 }
-
-// A child at the very top has no parent, so promote it rather than leaving a
-// row the API would have to guess about.
-function normaliseRows() {
-  const first = $('f-cats').querySelector('.catrow');
+function normalise(list) {
+  const first = list.querySelector('.catrow');
   if (first && first.classList.contains('child')) first.classList.remove('child');
-  total();
 }
-
-function moveBlock(row, dir) {
+function moveBlock(list, row, dir) {
   const block = blockOf(row);
-  const targets = dropTargets(row);
+  const targets = dropTargets(list, row);
   if (!targets.length) return;
-
   if (dir < 0) {
     const before = targets.filter((t) => t.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
     if (!before.length) return;
-    insertBlockBefore(block, before[before.length - 1]);
+    insertBlockBefore(list, block, before[before.length - 1]);
   } else {
     const after = targets.filter((t) => t.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_PRECEDING);
     if (!after.length) return;
-    // Step past the whole next block, not just its first row.
-    const next = after[0];
-    const nextBlock = blockOf(next);
-    insertBlockBefore(block, nextBlock[nextBlock.length - 1].nextElementSibling);
+    const nb = blockOf(after[0]);
+    insertBlockBefore(list, block, nb[nb.length - 1].nextElementSibling);
   }
-  normaliseRows();
+  normalise(list);
 }
-
-// Live reorder on dragover, the way sortable lists behave — the row follows the
-// cursor, so drop needs no separate calculation.
-function wireDropZone() {
-  const list = $('f-cats');
+function wireDropZone(list) {
   if (list.dataset.wired) return;
   list.dataset.wired = '1';
-
   list.addEventListener('dragover', (ev) => {
-    if (!DRAGGING) return;
-    ev.preventDefault();
-    ev.dataTransfer.dropEffect = 'move';
+    if (!DRAGGING || !list.contains(DRAGGING)) return;
+    ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
     list.classList.add('dropping');
-
-    const targets = dropTargets(DRAGGING);
+    const targets = dropTargets(list, DRAGGING);
     const after = targets.find((t) => {
       const box = t.getBoundingClientRect();
       return ev.clientY < box.top + box.height / 2;
     });
     const block = blockOf(DRAGGING);
-    if (after !== block[0]) insertBlockBefore(block, after || null);
+    if (after !== block[0]) insertBlockBefore(list, block, after || null);
   });
-
   list.addEventListener('drop', (ev) => ev.preventDefault());
   list.addEventListener('dragleave', (ev) => {
     if (!list.contains(ev.relatedTarget)) list.classList.remove('dropping');
   });
 }
 
-function addCatRow(name = '', amount = '', id = '', isChild = false, insertAfter = null) {
-  const row = document.createElement('div');
-  row.className = `catrow flex gap-2${isChild ? ' child' : ''}`;
-  row.dataset.catId = id;
-  row.innerHTML = `<button class="grip" title="Drag to reorder, or focus and use \u2191 \u2193" aria-label="Reorder">\u2630</button>
-    <button class="nest" title="Make this a subcategory of the row above">\u21b3</button>
-    <input class="flex-1" placeholder="Category" value="${esc(name)}">
-    <input type="number" step="0.01" class="w-32 num text-right" placeholder="0.00" value="${esc(amount)}">
-    <button class="addsub" title="Add a subcategory under this one">+</button>
-    <button class="w-9 border border-gray-300 rounded-lg text-gray-400 hover:text-red-700" title="Remove">\u00d7</button>`;
+/* ---- leg cards ---- */
 
-  const [gripBtn, nestBtn, addSubBtn, removeBtn] = row.querySelectorAll('button');
+function addLegCard(leg = null) {
+  const card = document.createElement('div');
+  card.className = 'legcard';
+  card.innerHTML = `
+    <div class="legcard-top">
+      <input class="legname" placeholder="Leg name, e.g. Peru" value="${esc(leg?.name || '')}">
+      <select class="legcur">${curOptions(leg?.currency || 'PEN')}</select>
+      <div class="legtools">
+        <button class="icon legup" type="button" title="Move leg up">↑</button>
+        <button class="icon legdown" type="button" title="Move leg down">↓</button>
+        <button class="icon danger legdel" type="button" title="Remove leg">×</button>
+      </div>
+    </div>
 
-  // Adds a child directly beneath this category's existing children, so you can
-  // build out a group in place instead of appending to the bottom of the list
-  // and dragging each one up.
-  addSubBtn.addEventListener('click', () => {
-    if (row.classList.contains('child')) return;
-    // Spend already logged directly to this category stays pointing at it, but
-    // the category is about to stop holding an allocation of its own — so that
-    // spend would read as unbudgeted. Better said out loud than discovered.
-    const cid = row.dataset.catId;
-    const already = cid && EDITING
-      ? (DATA.spend || []).find((x) => x.category_id === cid && x.budget_id === EDITING)
-      : null;
-    if (already && !row.dataset.warned) {
-      row.dataset.warned = '1';
-      flash(`${already.n} entr${already.n === 1 ? 'y is' : 'ies are'} logged directly to this category. Once it has subcategories it holds no allocation of its own, so that spend will show as unbudgeted.`);
-    }
-    let last = row;
-    while (last.nextElementSibling && last.nextElementSibling.classList.contains('child')) {
-      last = last.nextElementSibling;
-    }
-    const fresh = addCatRow('', '', '', true, last);
-    fresh.querySelector('input').focus();
-    total();
+    <div class="subhead">Planning rates <span class="legcurlabel"></span></div>
+    <div class="rates"></div>
+    <button class="mt-1 text-sm lnk addrate" type="button">+ Add currency</button>
+    <p class="hint rateNote"></p>
+
+    <div class="subhead">Categories</div>
+    <div class="catlist"></div>
+    <button class="mt-1 text-sm lnk addcat" type="button">+ Add category</button>
+    <div class="total"><span>Leg total</span><span class="legtotal num">—</span></div>`;
+
+  card.dataset.legId = leg?.id || '';
+  const catlist = card.querySelector('.catlist');
+  const rates = card.querySelector('.rates');
+  const cur = card.querySelector('.legcur');
+
+  const syncCur = () => {
+    card.querySelector('.legcurlabel').textContent = '';
+    card.querySelector('.rateNote').innerHTML =
+      `In <strong>${esc(cur.value)}</strong> per 1 unit. The ${esc($('f-base').value)} row is ` +
+      `what converts this leg into the base currency for reporting.`;
+    // A rate against the leg's own currency is meaningless and invites someone
+    // to type 3.34 for PEN in a PEN leg.
+    [...rates.querySelectorAll('.raterow')].forEach((r) => {
+      r.style.display = r.querySelector('select').value === cur.value ? 'none' : '';
+    });
+    recalcTotal();
+  };
+  cur.addEventListener('change', syncCur);
+
+  card.querySelector('.addrate').addEventListener('click', () => { addRateRow(rates); syncCur(); });
+  card.querySelector('.addcat').addEventListener('click', () => {
+    addCatRow(catlist).querySelector('.cname').focus();
+  });
+  card.querySelector('.legdel').addEventListener('click', () => {
+    if (!confirm('Remove this leg and all its categories?')) return;
+    card.remove(); recalcTotal();
+  });
+  card.querySelector('.legup').addEventListener('click', () => {
+    const prev = card.previousElementSibling;
+    if (prev) { $('f-legs').insertBefore(card, prev); recalcTotal(); }
+  });
+  card.querySelector('.legdown').addEventListener('click', () => {
+    const next = card.nextElementSibling;
+    if (next) { $('f-legs').insertBefore(next, card); recalcTotal(); }
   });
 
-  // Drag from the grip only, so a click into a text field never starts a drag.
-  gripBtn.addEventListener('mousedown', () => { row.draggable = true; });
-  gripBtn.addEventListener('mouseup', () => { row.draggable = false; });
-  row.addEventListener('dragstart', (ev) => {
-    DRAGGING = row;
-    row.classList.add('dragging');
-    ev.dataTransfer.effectAllowed = 'move';
-    ev.dataTransfer.setData('text/plain', '');
-  });
-  row.addEventListener('dragend', () => {
-    row.classList.remove('dragging');
-    row.draggable = false;
-    DRAGGING = null;
-    $('f-cats').classList.remove('dropping');
-    normaliseRows();
-  });
+  $('f-legs').append(card);
+  wireDropZone(catlist);
 
-  // Keyboard equivalent — a reorder control that needs a mouse is no control.
-  gripBtn.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
-    ev.preventDefault();
-    moveBlock(row, ev.key === 'ArrowUp' ? -1 : 1);
-    gripBtn.focus();
-  });
+  if (leg) {
+    Object.entries(leg.rates || {}).forEach(([c, r]) => addRateRow(rates, c, r));
+    (leg.kids || []).forEach((cat) => {
+      addCatRow(catlist, cat.name, cat.kids.length ? '' : (cat.allocated / 100).toFixed(2), cat.id, false);
+      cat.kids.forEach((k) => addCatRow(catlist, k.name, (k.allocated / 100).toFixed(2), k.id, true));
+    });
+  } else {
+    addRateRow(rates, $('f-base').value, '');
+    addRateRow(rates, 'USD', '');
+    DEFAULT_CATS.forEach((n) => addCatRow(catlist, n));
+  }
+  syncCur();
+  return card;
+}
 
-  nestBtn.addEventListener('click', () => {
-    if (!row.classList.contains('child')) {
-      // One level only: the row directly above must itself be top level.
-      const prev = row.previousElementSibling;
-      if (!prev || prev.classList.contains('child')) {
-        return flash('A subcategory needs a top-level category directly above it.');
+/* ---- read the form back out ---- */
+
+function readLegs() {
+  return [...$('f-legs').querySelectorAll('.legcard')].map((card) => {
+    const rates = {};
+    [...card.querySelectorAll('.raterow')].forEach((r) => {
+      const code = r.querySelector('select').value;
+      const n = Number(r.querySelector('input').value);
+      if (code && Number.isFinite(n) && n > 0) rates[code] = n;
+    });
+
+    const categories = [];
+    [...card.querySelectorAll('.catrow')].forEach((r) => {
+      const name = r.querySelector('.cname').value.trim();
+      if (!name) return;
+      const allocated = Math.round((Number(r.querySelector('.camt').value) || 0) * 100);
+      const node = { name, allocated };
+      if (r.dataset.catId) node.id = r.dataset.catId;
+      if (r.classList.contains('child') && categories.length) {
+        const parent = categories[categories.length - 1];
+        (parent.children ||= []).push(node);
+      } else {
+        categories.push(node);
       }
-      row.classList.add('child');
-    } else {
-      row.classList.remove('child');
-    }
-    normaliseRows();
+    });
+
+    const leg = {
+      name: card.querySelector('.legname').value.trim(),
+      currency: card.querySelector('.legcur').value,
+      rates, categories,
+    };
+    if (card.dataset.legId) leg.id = card.dataset.legId;
+    return leg;
+  });
+}
+
+// A parent's amount box mirrors its children, so it is read-only and recomputed
+// on every edit — there is one place each figure is set.
+function recalcTotal() {
+  const base = $('f-base').value;
+  let total = 0;
+  const missing = [];
+
+  [...$('f-legs').querySelectorAll('.legcard')].forEach((card) => {
+    const cur = card.querySelector('.legcur').value;
+    const rows = [...card.querySelectorAll('.catrow')];
+    let legSum = 0;
+
+    rows.forEach((r, i) => {
+      const amt = r.querySelector('.camt');
+      if (r.classList.contains('child')) { amt.readOnly = false; return; }
+      const kids = [];
+      for (let n = rows[i + 1]; n && n.classList.contains('child'); n = n.nextElementSibling) kids.push(n);
+      if (!kids.length) { amt.readOnly = false; return; }
+      const sum = kids.reduce((t, k) => t + (Number(k.querySelector('.camt').value) || 0), 0);
+      amt.value = sum ? sum.toFixed(2) : '';
+      amt.readOnly = true;
+    });
+
+    // Leaves only — a parent's box mirrors its children, so counting both doubles it.
+    legSum = rows.filter((r) => !r.querySelector('.camt').readOnly)
+      .reduce((t, r) => t + (Number(r.querySelector('.camt').value) || 0), 0);
+
+    card.querySelector('.legtotal').textContent = fmt(Math.round(legSum * 100), cur);
+
+    if (cur === base) { total += legSum; return; }
+    const rateRow = [...card.querySelectorAll('.raterow')]
+      .find((r) => r.querySelector('select').value === base);
+    const rate = rateRow ? Number(rateRow.querySelector('input').value) : 0;
+    if (rate > 0) total += legSum / rate;
+    else missing.push(card.querySelector('.legname').value.trim() || 'unnamed leg');
   });
 
-  removeBtn.addEventListener('click', () => {
-    // Removing a parent takes its subcategories with it, so say so first.
-    const kids = [];
-    let n = row.nextElementSibling;
-    while (n && n.classList.contains('child')) { kids.push(n); n = n.nextElementSibling; }
-    if (kids.length && !confirm(`Remove this category and its ${kids.length} subcategor${kids.length === 1 ? 'y' : 'ies'}?`)) return;
-    kids.forEach((k) => k.remove());
-    row.remove();
-    total();
-  });
-
-  row.querySelectorAll('input').forEach((i) => i.addEventListener('input', total));
-
-  if (insertAfter && insertAfter.parentNode) insertAfter.after(row);
-  else $('f-cats').append(row);
-  return row;
+  $('f-total').textContent = fmt(Math.round(total * 100), base);
+  $('f-totalNote').textContent = missing.length
+    ? `Excludes ${missing.join(', ')} — no ${base} rate set, so it can't be converted.`
+    : '';
 }
 
 function flash(msg) {
   const fe = $('f-err');
   fe.textContent = msg; fe.classList.remove('hidden');
   clearTimeout(flash._t);
-  flash._t = setTimeout(() => fe.classList.add('hidden'), 3500);
+  flash._t = setTimeout(() => fe.classList.add('hidden'), 5000);
 }
 
-function readCats() {
-  const out = [];
-  let lastParentIndex = null;
-  [...$('f-cats').querySelectorAll('.catrow')].forEach((r) => {
-    const inputs = r.querySelectorAll('input');
-    const name = inputs[0].value.trim();
-    if (!name) return;
-    const c = { name, allocated: Math.round((Number(inputs[1].value) || 0) * 100) };
-    if (r.dataset.catId) c.id = r.dataset.catId;
-    if (r.classList.contains('child') && lastParentIndex !== null) {
-      const parent = out[lastParentIndex];
-      // Existing parents are referenced by id. One created in this same save has
-      // no id yet, so send its position and let the API resolve it.
-      if (parent.id) c.parent_id = parent.id;
-      else c.parent_index = lastParentIndex;
-    } else {
-      lastParentIndex = out.length;
-    }
-    out.push(c);
-  });
-  return out;
-}
-
-function openEdit(budgetId) {
-  const b = DATA.budgets.find((x) => x.id === budgetId);
-  const cats = DATA.categories.filter((c) => c.budget_id === budgetId);
-  EDITING = budgetId;
-
-  $('dlgTitle').textContent = `Edit ${b.name}`;
-  $('f-name').value = b.name;
-  $('f-cur').value = b.currency;
-  // Locked: entries carry amounts and frozen conversions in this currency.
-  // Changing it would silently reinterpret every historic figure.
-  $('f-cur').disabled = true;
-  $('curNote').textContent = 'Currency is fixed once entries exist — historic conversions are stored against it.';
-  $('f-base').value = b.base_currency || 'NZD';
-  $('f-funded').value = b.funded_base ? (b.funded_base / 100).toFixed(2) : '';
-  $('f-rates').innerHTML = '';
-  const rates = b.rates && Object.keys(b.rates).length
-    ? b.rates
-    : { [b.base_currency || 'NZD']: b.default_rate };
-  Object.entries(rates).forEach(([c, r]) => addRateRow(c, r));
-  if (!Object.keys(rates).length) addRateRow('NZD', '');
-  syncRateUnit();
-  $('f-start').value = b.starts_on ? String(b.starts_on).slice(0, 10) : '';
-  $('f-end').value = b.ends_on ? String(b.ends_on).slice(0, 10) : '';
-
-  $('f-cats').innerHTML = '';
-  cats.filter((c) => !c.parent_id).forEach((p) => {
-    addCatRow(p.name, (p.allocated / 100).toFixed(2), p.id, false);
-    cats.filter((k) => k.parent_id === p.id)
-        .forEach((k) => addCatRow(k.name, (k.allocated / 100).toFixed(2), k.id, true));
-  });
-  wireDropZone();
-  total();
-
-  $('emailBlock').classList.add('hidden');   // assignment is inline on the card
-  $('saveNew').textContent = 'Save changes';
-  $('f-err').classList.add('hidden');
-  $('newDlg').showModal();
-}
-
-// A parent's amount box is computed, never typed. Recalculated on every edit so
-// the number is always the sum of what is beneath it.
-function refreshParentTotals() {
-  const rows = [...$('f-cats').querySelectorAll('.catrow')];
-  rows.forEach((r, i) => {
-    if (r.classList.contains('child')) return;
-    const kids = [];
-    for (let n = rows[i + 1]; n && n.classList.contains('child'); n = n.nextElementSibling) kids.push(n);
-    const amt = r.querySelectorAll('input')[1];
-    if (!kids.length) {
-      amt.readOnly = false;
-      amt.classList.remove('computed');
-      amt.title = '';
-      return;
-    }
-    const sum = kids.reduce((n, k) => n + (Number(k.querySelectorAll('input')[1].value) || 0), 0);
-    amt.value = sum ? sum.toFixed(2) : '';
-    amt.readOnly = true;
-    amt.classList.add('computed');
-    amt.title = 'Total of its subcategories';
-  });
-}
-
-function total() {
-  refreshParentTotals();
-  const cur = $('f-cur').value;
-  // Leaves only — a parent's box now mirrors its children, so counting both
-  // would double it.
-  const sum = [...$('f-cats').querySelectorAll('.catrow')]
-    .filter((r) => !(r.querySelectorAll('input')[1].readOnly))
-    .reduce((n, r) => n + (Number(r.querySelectorAll('input')[1].value) || 0), 0);
-  $('f-total').textContent = fmt(Math.round(sum * 100), cur);
-}
+/* ---- open / save ---- */
 
 $('newBtn').addEventListener('click', () => {
   EDITING = null;
   $('dlgTitle').textContent = 'New budget';
-  $('f-name').value = ''; $('f-emails').value = '';
-  $('f-cur').disabled = false;
-  $('curNote').textContent = 'Budget currency is what instructors spend in. Base currency is what finance reports in.';
+  $('f-name').value = ''; $('f-emails').value = ''; $('f-funded').value = '';
   $('f-base').value = 'NZD';
-  $('f-base').disabled = false;
-  $('f-funded').value = '';
-  $('f-rates').innerHTML = '';
-  addRateRow('NZD', '');
-  addRateRow('USD', '');
-  syncRateUnit();
   $('f-start').value = ''; $('f-end').value = '';
-  $('f-cats').innerHTML = '';
-  DEFAULT_CATS.forEach((n) => addCatRow(n));
-  wireDropZone();
-  total();
+  $('f-legs').innerHTML = '';
+  addLegCard();
   $('emailBlock').classList.remove('hidden');
-  $('saveNew').textContent = 'Create budget';
+  $('saveBtn').textContent = 'Create budget';
   $('f-err').classList.add('hidden');
-  $('newDlg').showModal();
+  recalcTotal();
+  $('dlg').showModal();
 });
-$('addRate').addEventListener('click', () => { addRateRow(); syncRateUnit(); });
-$('f-cur').addEventListener('change', syncRateUnit);
 
-$('addCat').addEventListener('click', () => {
-  const row = addCatRow();
-  row.querySelector('input').focus();
+function openEdit(budgetId) {
+  const b = DATA.budgets.find((x) => x.id === budgetId);
+  EDITING = budgetId;
+  $('dlgTitle').textContent = `Edit ${b.name}`;
+  $('f-name').value = b.name;
+  $('f-base').value = b.base_currency || 'NZD';
+  $('f-funded').value = b.funded_base ? (b.funded_base / 100).toFixed(2) : '';
+  $('f-start').value = b.starts_on ? String(b.starts_on).slice(0, 10) : '';
+  $('f-end').value = b.ends_on ? String(b.ends_on).slice(0, 10) : '';
+  $('f-legs').innerHTML = '';
+  treeFor(budgetId).forEach((leg) => addLegCard(leg));
+  if (!$('f-legs').children.length) addLegCard();
+  $('emailBlock').classList.add('hidden');   // assignment is inline on the card
+  $('saveBtn').textContent = 'Save changes';
+  $('f-err').classList.add('hidden');
+  recalcTotal();
+  $('dlg').showModal();
+}
+
+$('addLeg').addEventListener('click', () => {
+  addLegCard().querySelector('.legname').focus();
+  recalcTotal();
 });
-$('cancelNew').addEventListener('click', () => $('newDlg').close());
-$('f-cur').addEventListener('change', total);
+$('f-base').addEventListener('change', recalcTotal);
+$('cancelBtn').addEventListener('click', () => $('dlg').close());
 $('refreshBtn').addEventListener('click', load);
 
 $('toggleAllBtn').addEventListener('click', () => {
@@ -873,20 +903,16 @@ $('toggleAllBtn').addEventListener('click', () => {
   render();
 });
 
-$('saveNew').addEventListener('click', async () => {
-  const fe = $('f-err');
-  const categories = readCats();
+$('saveBtn').addEventListener('click', async () => {
   const funded = $('f-funded').value.trim();
   const common = {
     name: $('f-name').value.trim(),
     base_currency: $('f-base').value,
-    rates: readRates(),
     funded_base: funded === '' ? null : Math.round(Number(funded) * 100),
     starts_on: $('f-start').value || null,
     ends_on: $('f-end').value || null,
-    categories,
+    legs: readLegs(),
   };
-
   try {
     if (EDITING) {
       await api('?action=update', {
@@ -898,16 +924,13 @@ $('saveNew').addEventListener('click', async () => {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...common,
-          currency: $('f-cur').value,
           emails: $('f-emails').value.split(',').map((s) => s.trim()).filter(Boolean),
         }),
       });
     }
-    $('newDlg').close();
+    $('dlg').close();
     load();
-  } catch (e) {
-    fe.textContent = e.message; fe.classList.remove('hidden');
-  }
+  } catch (e) { flash(e.message); }
 });
 
 load();

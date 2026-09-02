@@ -96,18 +96,18 @@ and sees no budgets, with nothing to explain why.
 
 ## Editing
 
-The **Edit** button on each budget reopens the same dialog in edit mode. Name,
-dates, planning rate, and every category allocation can be changed; categories
-can be added or removed.
+**Edit** reopens the dialog with one card per leg: leg name, currency, its
+planning rates, and its categories nested two deep inside it. A flat three-level
+indented list would technically work but is miserable to arrange.
 
-Two things are deliberately locked:
+Categories drag to reorder within a leg, or focus the ☰ handle and use ↑ ↓. A
+category moves as a block with its subcategories. Legs reorder with ↑ ↓ on the
+leg card.
 
-**Currency.** Entries carry amounts and frozen conversions denominated in it.
-Changing it would silently reinterpret every historic figure.
-
-**Categories with spend against them.** Deleting one would orphan ledger rows and
-make historic spend unattributable, so the API returns a 409 naming the
-categories involved and suggests setting the allocation to 0 instead.
+**Categories with spend against them can't be deleted.** Removal would orphan
+ledger rows and make historic spend unattributable, so the API returns a 409
+naming them — including descendants, since children cascade on delete — and
+suggests setting the allocation to 0 instead.
 
 ## Subcategories
 
@@ -130,31 +130,57 @@ them have spend against them.
 Run `MIGRATION-field-budget-subcategories.sql` once against the Field Budget
 database. It is additive — existing budgets are unaffected.
 
+## Category tree
+
+Three levels.
+
+**Level 1 is a programme leg** and carries the currency and the planning rates.
+One budget holds `Peru` in PEN and `Ecuador` in USD — which is what the original
+spreadsheet actually did, two country legs with a rollover between them.
+
+**Level 2 is a category** — Food, Transport, Activities.
+
+**Level 3 is a subcategory** — Days 1-7, Days 8-14.
+
+Allocation lives on leaves, recursively: a node with children is the sum of its
+children; one without children holds its own figure. So a leg is the sum of its
+categories, and a category is the sum of its subcategories unless it has none,
+in which case it holds the allocation itself. Only leaves are selectable in the
+instructor's form — logging against a roll-up would always read as unbudgeted.
+
+`budgets.currency` is retired. The column remains, nullable, so nothing breaks,
+but nothing reads it.
+
 ## Currencies
 
 Three layers, and only two ever reach an instructor.
 
-**Budget currency** is what instructors spend in — PEN for the Peru leg, USD for
-Ecuador. Allocations and every gauge are denominated in it. Fixed once entries
-exist, since entries carry frozen conversions against it.
+**Leg currency** is what instructors spend in. Allocations and gauges are
+denominated in it.
 
-**Base currency** is what finance reports in — NZD. Instructors never see it. It
-sets what `funded_base` (the approved amount) and the reconciled `actual_base`
-figures mean.
+**Base currency** is what finance reports in — NZD. Instructors never see it.
 
-**Entry currency** is whatever was actually handed over. Converted at entry using
-the planning rate for that currency, and the result frozen on the row.
+**Entry currency** is whatever was actually handed over, converted at entry using
+the leg's planning rate for that currency, and the result frozen on the row.
 
-`rates` on each budget maps a currency to budget-currency units per 1 unit of it,
-e.g. a PEN budget: `{"NZD": 2.20, "USD": 3.34, "EUR": 4.05}`. This replaced a
-single `default_rate`, which could only ever be right for one of them —
-whichever value was stored, the other currencies prefilled wrong on the
-instructor's form. `default_rate` is still written as a fallback for anything
-reading the old field.
+A leg's `rates` maps a currency code to leg-currency units per 1 unit of it, e.g.
+a PEN leg: `{"NZD": 2.10, "USD": 3.34}`. The base-currency entry does double duty:
+it is also how the leg rolls up for reporting, since
+`baseAmount = legAmount / rates[base]`. A leg with no base rate can't be
+converted, and the card says so rather than silently dropping it from the total.
 
-Run `MIGRATION-field-budget-rates.sql` before deploying. It carries the existing
-single rate across as the base-currency rate so budgets already in flight don't
-regress.
+## Migrations, in order
+
+```
+MIGRATION-field-budget.sql               base tables
+MIGRATION-field-budget-subcategories.sql parent_id
+MIGRATION-field-budget-rates.sql         rates map
+MIGRATION-field-budget-3-levels.sql      currency on the leg, depth 3
+```
+
+Each is safe to re-run. The last one carries every budget's currency and rates
+down to its top-level categories, so existing categories become legs denominated
+exactly as before.
 
 ## Known gaps
 
