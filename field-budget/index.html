@@ -170,7 +170,7 @@
         </select>
       </div>
     </div>
-    <p class="text-xs text-gray-500 mt-1">
+    <p id="curNote" class="text-xs text-gray-500 mt-1">
       Budget currency is what instructors spend in. Base currency is what finance reports in.
     </p>
 
@@ -184,7 +184,7 @@
     <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Planning rates</label>
     <div id="f-rates" class="space-y-2"></div>
     <button id="addRate" class="mt-2 text-sm lnk">+ Add currency</button>
-    <p id="curNote" class="text-xs text-gray-500 mt-2">
+    <p class="text-xs text-gray-500 mt-2">
       One row per currency an instructor might pay in, expressed in
       <strong id="rateUnit">budget currency</strong> per 1 unit. Prefilled on their
       form; they can override per entry.
@@ -532,7 +532,8 @@ function readRates() {
 // The budget currency needs no rate against itself, and showing one invites
 // somebody to enter 3.34 for PEN in a PEN budget.
 function syncRateUnit() {
-  $('rateUnit').textContent = $('f-cur').value || 'budget currency';
+  const unit = $('rateUnit');
+  if (unit) unit.textContent = $('f-cur').value || 'budget currency';
   [...$('f-rates').querySelectorAll('.raterow')].forEach((r) => {
     const same = r.querySelector('select').value === $('f-cur').value;
     r.style.display = same ? 'none' : '';
@@ -835,7 +836,7 @@ $('newBtn').addEventListener('click', () => {
   $('dlgTitle').textContent = 'New budget';
   $('f-name').value = ''; $('f-emails').value = '';
   $('f-cur').disabled = false;
-  $('curNote').textContent = 'Prefilled when an instructor logs a foreign-currency spend. They can override it per entry.';
+  $('curNote').textContent = 'Budget currency is what instructors spend in. Base currency is what finance reports in.';
   $('f-base').value = 'NZD';
   $('f-base').disabled = false;
   $('f-funded').value = '';
