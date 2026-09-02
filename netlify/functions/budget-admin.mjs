@@ -86,7 +86,15 @@ async function handleList() {
   const db = sql();
   const [budgets, categories, assignments, spend, receipts] = await Promise.all([
     db`select * from budgets order by created_at desc`,
-    db`select * from categories order by coalesce(parent_id, id), parent_id nulls first, sort_order`,
+    // Order by the PARENT's position, then parent-before-children, then the
+    // child's own position. Grouping on coalesce(parent_id, id) looks right but
+    // sorts on a random id string, which silently discards sort_order.
+    db`select c.* from categories c
+         left join categories p on p.id = c.parent_id
+        order by coalesce(p.sort_order, c.sort_order),
+                 (c.parent_id is not null),
+                 c.sort_order,
+                 c.id`,
     db`select * from assignments order by email`,
     db`select budget_id, category_id, sum(budget_amount)::bigint as spent, count(*)::int as n
          from entries where entry_type in ('expense','correction')
@@ -206,19 +214,25 @@ async function handleCreate(body) {
   for (const [i, c] of rows.entries()) {
     ids[i] = `cat_${crypto.randomUUID().slice(0, 8)}`;
   }
+  // sort_order is a position among siblings, so parents count 1..n and each
+  // parent's children count 1..m independently.
+  let parentPos = 0;
   for (const [i, c] of rows.entries()) {
     if (c.parent_index !== null && c.parent_index !== undefined) continue;
+    parentPos += 1;
     await db`
       insert into categories (id, budget_id, name, allocated, sort_order)
-      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${i + 1})`;
+      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${parentPos})`;
   }
+  const childPos = {};
   for (const [i, c] of rows.entries()) {
     if (c.parent_index === null || c.parent_index === undefined) continue;
     const parent = ids[c.parent_index];
     if (!parent) continue;
+    childPos[parent] = (childPos[parent] || 0) + 1;
     await db`
       insert into categories (id, budget_id, name, allocated, sort_order, parent_id)
-      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${i + 1}, ${parent})`;
+      values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${childPos[parent]}, ${parent})`;
   }
 
   // A category that gained children stores 0: its displayed figure is the sum
@@ -296,39 +310,45 @@ async function handleUpdate(body) {
   // child references it. Rows carry either parent_id (existing) or parent_index
   // (a parent created in this same save).
   const resolved = [];
+  let parentPos = 0;
   for (const [i, c] of body.categories.entries()) {
     const cname = (c.name || "").trim();
     if (!cname) { resolved[i] = null; continue; }
     const isChild = c.parent_id != null || c.parent_index != null;
     if (isChild) { resolved[i] = c.id || null; continue; }
+    parentPos += 1;
     const allocated = Math.round(Number(c.allocated) || 0);
     if (c.id) {
       await db`update categories set name = ${cname}, allocated = ${allocated},
-                 sort_order = ${i + 1}, parent_id = null
+                 sort_order = ${parentPos}, parent_id = null
                 where id = ${c.id} and budget_id = ${id}`;
       resolved[i] = c.id;
     } else {
       const nid = `cat_${crypto.randomUUID().slice(0, 8)}`;
       await db`insert into categories (id, budget_id, name, allocated, sort_order)
-               values (${nid}, ${id}, ${cname}, ${allocated}, ${i + 1})`;
+               values (${nid}, ${id}, ${cname}, ${allocated}, ${parentPos})`;
       resolved[i] = nid;
     }
   }
 
+  // sort_order is a position among siblings, so children count from 1 within
+  // each parent rather than continuing the flat index.
+  const childPos = {};
   for (const [i, c] of body.categories.entries()) {
     const cname = (c.name || "").trim();
     if (!cname) continue;
     if (c.parent_id == null && c.parent_index == null) continue;
     const parent = c.parent_id ?? resolved[c.parent_index];
     if (!parent) continue;
+    childPos[parent] = (childPos[parent] || 0) + 1;
     const allocated = Math.round(Number(c.allocated) || 0);
     if (c.id) {
       await db`update categories set name = ${cname}, allocated = ${allocated},
-                 sort_order = ${i + 1}, parent_id = ${parent}
+                 sort_order = ${childPos[parent]}, parent_id = ${parent}
                 where id = ${c.id} and budget_id = ${id}`;
     } else {
       await db`insert into categories (id, budget_id, name, allocated, sort_order, parent_id)
-               values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${cname}, ${allocated}, ${i + 1}, ${parent})`;
+               values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${cname}, ${allocated}, ${childPos[parent]}, ${parent})`;
     }
   }
 
