@@ -221,6 +221,14 @@ async function handleCreate(body) {
       values (${ids[i]}, ${id}, ${c.name}, ${c.allocated}, ${i + 1}, ${parent})`;
   }
 
+  // A category that gained children stores 0: its displayed figure is the sum
+  // of those children. Without this, an amount typed before the subcategories
+  // were added would quietly inflate the total.
+  await db`update categories set allocated = 0
+            where budget_id = ${id}
+              and id in (select distinct parent_id from categories
+                          where budget_id = ${id} and parent_id is not null)`;
+
   const assigned = [];
   for (const raw of body.emails || []) {
     const em = normaliseEmail(raw);
@@ -323,6 +331,11 @@ async function handleUpdate(body) {
                values (${`cat_${crypto.randomUUID().slice(0, 8)}`}, ${id}, ${cname}, ${allocated}, ${i + 1}, ${parent})`;
     }
   }
+
+  await db`update categories set allocated = 0
+            where budget_id = ${id}
+              and id in (select distinct parent_id from categories
+                          where budget_id = ${id} and parent_id is not null)`;
 
   return json(200, { id, categories: body.categories.length });
 }

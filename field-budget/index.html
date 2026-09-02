@@ -48,6 +48,7 @@
 
   .catrow input { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 9px; font-size: 14px; }
   .catrow input:focus { outline: 2px solid #14584a; outline-offset: -1px; }
+  .catrow input.computed { background:#f3f4f6; color:#6b7280; cursor:not-allowed; }
   .catrow.child { margin-left: 26px; }
   .catrow .nest { width: 30px; flex: none; border: 1px solid #d1d5db; border-radius: 6px; color: #9ca3af; font-size: 13px; }
   .catrow .nest:hover { color: #14584a; border-color: #14584a; }
@@ -163,8 +164,8 @@
       <span>Total allocated</span><span id="f-total" class="num">—</span>
     </div>
     <p class="text-xs text-gray-500 mt-1">
-      A category's own amount covers spend logged straight to it; subcategory amounts
-      add on top. Leave the parent at 0 if everything should be logged to a subcategory.
+      A category with subcategories totals them automatically — its own amount box
+      is locked, and instructors log against the subcategories rather than the parent.
     </p>
 
     <div id="emailBlock">
@@ -261,16 +262,20 @@ function render() {
     const people = assignments.filter((a) => a.budget_id === b.id);
     const nReceipts = (receipts.find((r) => r.budget_id === b.id) || {}).n || 0;
 
-    const allocated = cats.reduce((n, c) => n + c.allocated, 0);
-    const spent = cats.reduce((n, c) => n + (spentBy[c.id] || 0), 0);
-
-    // Totals roll up: a parent's figures include its subcategories'.
     const parents = cats.filter((c) => !c.parent_id);
     const kidsOf = (pid) => cats.filter((c) => c.parent_id === pid);
 
+    // Sum over leaves only. Summing every row would double-count any parent
+    // that still had a stale figure on it.
+    const leaves = cats.filter((c) => !kidsOf(c.id).length);
+    const allocated = leaves.reduce((n, c) => n + c.allocated, 0);
+    const spent = cats.reduce((n, c) => n + (spentBy[c.id] || 0), 0);
+
     const gauge = (c, isSub) => {
       const kids = isSub ? [] : kidsOf(c.id);
-      const alloc = c.allocated + kids.reduce((n, k) => n + k.allocated, 0);
+      // A parent with subcategories is the sum of them, not the sum plus its
+      // own figure — it has no figure of its own.
+      const alloc = kids.length ? kids.reduce((n, k) => n + k.allocated, 0) : c.allocated;
       const s = (spentBy[c.id] || 0) + kids.reduce((n, k) => n + (spentBy[k.id] || 0), 0);
       const pct = alloc > 0 ? Math.min(100, (s / alloc) * 100) : (s > 0 ? 100 : 0);
       return `<div class="gauge ${isSub ? 'sub' : ''} ${s > alloc ? 'over' : ''}">
@@ -289,7 +294,7 @@ function render() {
     const pctAll = allocated > 0 ? Math.min(100, (spent / allocated) * 100) : (spent > 0 ? 100 : 0);
     const overCount = parents.reduce((n, p) => {
       const kids = kidsOf(p.id);
-      const a = p.allocated + kids.reduce((x, k) => x + k.allocated, 0);
+      const a = kids.length ? kids.reduce((x, k) => x + k.allocated, 0) : p.allocated;
       const sp = (spentBy[p.id] || 0) + kids.reduce((x, k) => x + (spentBy[k.id] || 0), 0);
       return n + (sp > a ? 1 : 0);
     }, 0);
@@ -553,6 +558,17 @@ function addCatRow(name = '', amount = '', id = '', isChild = false, insertAfter
   // and dragging each one up.
   addSubBtn.addEventListener('click', () => {
     if (row.classList.contains('child')) return;
+    // Spend already logged directly to this category stays pointing at it, but
+    // the category is about to stop holding an allocation of its own — so that
+    // spend would read as unbudgeted. Better said out loud than discovered.
+    const cid = row.dataset.catId;
+    const already = cid && EDITING
+      ? (DATA.spend || []).find((x) => x.category_id === cid && x.budget_id === EDITING)
+      : null;
+    if (already && !row.dataset.warned) {
+      row.dataset.warned = '1';
+      flash(`${already.n} entr${already.n === 1 ? 'y is' : 'ies are'} logged directly to this category. Once it has subcategories it holds no allocation of its own, so that spend will show as unbudgeted.`);
+    }
     let last = row;
     while (last.nextElementSibling && last.nextElementSibling.classList.contains('child')) {
       last = last.nextElementSibling;
@@ -680,9 +696,36 @@ function openEdit(budgetId) {
   $('newDlg').showModal();
 }
 
+// A parent's amount box is computed, never typed. Recalculated on every edit so
+// the number is always the sum of what is beneath it.
+function refreshParentTotals() {
+  const rows = [...$('f-cats').querySelectorAll('.catrow')];
+  rows.forEach((r, i) => {
+    if (r.classList.contains('child')) return;
+    const kids = [];
+    for (let n = rows[i + 1]; n && n.classList.contains('child'); n = n.nextElementSibling) kids.push(n);
+    const amt = r.querySelectorAll('input')[1];
+    if (!kids.length) {
+      amt.readOnly = false;
+      amt.classList.remove('computed');
+      amt.title = '';
+      return;
+    }
+    const sum = kids.reduce((n, k) => n + (Number(k.querySelectorAll('input')[1].value) || 0), 0);
+    amt.value = sum ? sum.toFixed(2) : '';
+    amt.readOnly = true;
+    amt.classList.add('computed');
+    amt.title = 'Total of its subcategories';
+  });
+}
+
 function total() {
+  refreshParentTotals();
   const cur = $('f-cur').value;
+  // Leaves only — a parent's box now mirrors its children, so counting both
+  // would double it.
   const sum = [...$('f-cats').querySelectorAll('.catrow')]
+    .filter((r) => !(r.querySelectorAll('input')[1].readOnly))
     .reduce((n, r) => n + (Number(r.querySelectorAll('input')[1].value) || 0), 0);
   $('f-total').textContent = fmt(Math.round(sum * 100), cur);
 }
