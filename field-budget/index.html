@@ -67,6 +67,11 @@
   .catrow input { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 9px; font-size: 14px; }
   .catrow input:focus { outline: 2px solid var(--topaz-dark); outline-offset: -1px; }
   .catrow input.computed { background:#f3f4f6; color:#6b7280; cursor:not-allowed; }
+  .raterow { display:flex; gap:8px; }
+  .raterow select { flex:1; border:1px solid #d1d5db; border-radius:8px; padding:7px 9px; font-size:14px; }
+  .raterow input { flex:1; border:1px solid #d1d5db; border-radius:8px; padding:7px 9px; font-size:14px;
+                   text-align:right; font-variant-numeric:tabular-nums; }
+  .raterow input:focus, .raterow select:focus { outline:2px solid var(--topaz-dark); outline-offset:-1px; }
   .catrow.child { margin-left: 26px; }
   .catrow .nest { width: 30px; flex: none; border: 1px solid #d1d5db; border-radius: 6px; color: #9ca3af; font-size: 13px; }
   .catrow .nest:hover { color: var(--topaz-dark); border-color: var(--topaz-dark); }
@@ -159,12 +164,30 @@
         </select>
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Rate per 1 USD</label>
-        <input id="f-rate" type="number" step="0.0001" value="3.34" class="num w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <label class="block text-xs font-medium text-gray-500 mb-1">Base currency</label>
+        <select id="f-base" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option selected>NZD</option><option>USD</option><option>AUD</option><option>EUR</option>
+        </select>
       </div>
     </div>
-    <p id="curNote" class="text-xs text-gray-500 mt-1">
-      Prefilled when an instructor logs a foreign-currency spend. They can override it per entry.
+    <p class="text-xs text-gray-500 mt-1">
+      Budget currency is what instructors spend in. Base currency is what finance reports in.
+    </p>
+
+    <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Approved amount (base currency)</label>
+    <input id="f-funded" type="number" step="0.01" placeholder="0.00"
+           class="num w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right">
+    <p class="text-xs text-gray-500 mt-1">
+      Optional. What was signed off, to compare against the reconciled figure later.
+    </p>
+
+    <label class="block text-xs font-medium text-gray-500 mt-4 mb-1">Planning rates</label>
+    <div id="f-rates" class="space-y-2"></div>
+    <button id="addRate" class="mt-2 text-sm lnk">+ Add currency</button>
+    <p id="curNote" class="text-xs text-gray-500 mt-2">
+      One row per currency an instructor might pay in, expressed in
+      <strong id="rateUnit">budget currency</strong> per 1 unit. Prefilled on their
+      form; they can override per entry.
     </p>
 
     <div class="grid grid-cols-2 gap-3 mt-3">
@@ -336,7 +359,7 @@ function render() {
           ${b.status === 'closed' ? '<span class="text-xs font-normal text-gray-500 ml-2">closed</span>' : ''}
           ${overCount ? `<span class="warn ml-2">${overCount} over</span>` : ''}
           <span class="block text-xs text-gray-500 mt-0.5">
-            ${esc(b.currency)} · ${people.length} instructor${people.length === 1 ? '' : 's'} · ${nReceipts} receipt${nReceipts === 1 ? '' : 's'}
+            ${esc(b.currency)} → ${esc(b.base_currency || 'NZD')} · ${people.length} instructor${people.length === 1 ? '' : 's'} · ${nReceipts} receipt${nReceipts === 1 ? '' : 's'}
           </span>
         </span>
         <span class="minibar ${spent > allocated ? 'over' : ''}" title="${Math.round(pctAll)}% spent">
@@ -349,7 +372,11 @@ function render() {
       </summary>
 
       <div class="bcard-body">
-      <p class="text-xs text-gray-500 mb-3">rate ${b.default_rate} · ${
+      <p class="text-xs text-gray-500 mb-3">base ${esc(b.base_currency || 'NZD')}${
+        b.funded_base ? ` · approved ${fmt(b.funded_base, b.base_currency || 'NZD')}` : ''} · rates ${
+        Object.keys(b.rates || {}).length
+          ? Object.entries(b.rates).map(([c, r]) => `${c} ${r}`).join(', ')
+          : `${b.base_currency || 'NZD'} ${b.default_rate}`} · ${
         b.starts_on ? String(b.starts_on).slice(0, 10) : '—'} to ${
         b.ends_on ? String(b.ends_on).slice(0, 10) : '—'}</p>
 
@@ -473,6 +500,44 @@ $('closeLedger').addEventListener('click', () => $('ledgerDlg').close());
 /* ------------------------------------------------------------ new budget */
 
 const DEFAULT_CATS = ['Food', 'Transport', 'Gratuities', 'Activities', 'Misc', 'First aid'];
+const RATE_CURRENCIES = ['NZD', 'USD', 'EUR', 'AUD', 'GBP', 'PEN', 'THB', 'IDR', 'FJD', 'CRC'];
+
+/* ---- planning rates ----
+   One default_rate could only ever be right for one foreign currency: PEN per
+   NZD is ~2.2, per USD ~3.34, per EUR ~4.05. A map keyed by currency lets the
+   instructor's form prefill the correct one for whatever they actually paid in. */
+
+function addRateRow(code = '', rate = '') {
+  const row = document.createElement('div');
+  row.className = 'raterow';
+  row.innerHTML = `<select>${RATE_CURRENCIES
+      .map((c) => `<option ${c === code ? 'selected' : ''}>${c}</option>`).join('')}</select>
+    <input type="number" step="0.000001" placeholder="0.0000" value="${esc(rate)}">
+    <button class="x" type="button" title="Remove">×</button>`;
+  row.querySelector('button').addEventListener('click', () => row.remove());
+  $('f-rates').append(row);
+  return row;
+}
+
+function readRates() {
+  const out = {};
+  [...$('f-rates').querySelectorAll('.raterow')].forEach((r) => {
+    const code = r.querySelector('select').value;
+    const n = Number(r.querySelector('input').value);
+    if (code && Number.isFinite(n) && n > 0) out[code] = n;
+  });
+  return out;
+}
+
+// The budget currency needs no rate against itself, and showing one invites
+// somebody to enter 3.34 for PEN in a PEN budget.
+function syncRateUnit() {
+  $('rateUnit').textContent = $('f-cur').value || 'budget currency';
+  [...$('f-rates').querySelectorAll('.raterow')].forEach((r) => {
+    const same = r.querySelector('select').value === $('f-cur').value;
+    r.style.display = same ? 'none' : '';
+  });
+}
 
 let EDITING = null;   // budget id when the dialog is in edit mode, else null
 let DRAGGING = null;  // the row currently being dragged
@@ -704,7 +769,15 @@ function openEdit(budgetId) {
   // Changing it would silently reinterpret every historic figure.
   $('f-cur').disabled = true;
   $('curNote').textContent = 'Currency is fixed once entries exist — historic conversions are stored against it.';
-  $('f-rate').value = b.default_rate;
+  $('f-base').value = b.base_currency || 'NZD';
+  $('f-funded').value = b.funded_base ? (b.funded_base / 100).toFixed(2) : '';
+  $('f-rates').innerHTML = '';
+  const rates = b.rates && Object.keys(b.rates).length
+    ? b.rates
+    : { [b.base_currency || 'NZD']: b.default_rate };
+  Object.entries(rates).forEach(([c, r]) => addRateRow(c, r));
+  if (!Object.keys(rates).length) addRateRow('NZD', '');
+  syncRateUnit();
   $('f-start').value = b.starts_on ? String(b.starts_on).slice(0, 10) : '';
   $('f-end').value = b.ends_on ? String(b.ends_on).slice(0, 10) : '';
 
@@ -763,7 +836,13 @@ $('newBtn').addEventListener('click', () => {
   $('f-name').value = ''; $('f-emails').value = '';
   $('f-cur').disabled = false;
   $('curNote').textContent = 'Prefilled when an instructor logs a foreign-currency spend. They can override it per entry.';
-  $('f-rate').value = '3.34';
+  $('f-base').value = 'NZD';
+  $('f-base').disabled = false;
+  $('f-funded').value = '';
+  $('f-rates').innerHTML = '';
+  addRateRow('NZD', '');
+  addRateRow('USD', '');
+  syncRateUnit();
   $('f-start').value = ''; $('f-end').value = '';
   $('f-cats').innerHTML = '';
   DEFAULT_CATS.forEach((n) => addCatRow(n));
@@ -774,6 +853,9 @@ $('newBtn').addEventListener('click', () => {
   $('f-err').classList.add('hidden');
   $('newDlg').showModal();
 });
+$('addRate').addEventListener('click', () => { addRateRow(); syncRateUnit(); });
+$('f-cur').addEventListener('change', syncRateUnit);
+
 $('addCat').addEventListener('click', () => {
   const row = addCatRow();
   row.querySelector('input').focus();
@@ -793,9 +875,12 @@ $('toggleAllBtn').addEventListener('click', () => {
 $('saveNew').addEventListener('click', async () => {
   const fe = $('f-err');
   const categories = readCats();
+  const funded = $('f-funded').value.trim();
   const common = {
     name: $('f-name').value.trim(),
-    default_rate: Number($('f-rate').value) || 1,
+    base_currency: $('f-base').value,
+    rates: readRates(),
+    funded_base: funded === '' ? null : Math.round(Number(funded) * 100),
     starts_on: $('f-start').value || null,
     ends_on: $('f-end').value || null,
     categories,

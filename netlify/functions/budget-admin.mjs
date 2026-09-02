@@ -80,6 +80,20 @@ function normaliseEmail(raw) {
 // boundary rather than scattering Number() through the page.
 const money = (v) => (v === null || v === undefined ? null : Number(v));
 
+// Keep only well-formed { CUR: positiveNumber } pairs. A bad rate silently
+// mis-converts every entry made against it, so a junk value is dropped rather
+// than stored.
+function cleanRates(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [code, value] of Object.entries(raw)) {
+    const cur = String(code).trim().toUpperCase();
+    const n = Number(value);
+    if (/^[A-Z]{3}$/.test(cur) && Number.isFinite(n) && n > 0) out[cur] = n;
+  }
+  return out;
+}
+
 /* ---------------------------------------------------------------- reads --- */
 
 async function handleList() {
@@ -108,6 +122,7 @@ async function handleList() {
       ...b,
       funded_base: money(b.funded_base),
       default_rate: Number(b.default_rate),
+      rates: b.rates || {},
     })),
     categories: categories.map((c) => ({ ...c, allocated: money(c.allocated) })),
     assignments,
@@ -201,10 +216,17 @@ async function handleCreate(body) {
   if (!rows.length) return json(400, { error: "Add at least one category." });
 
   const id = body.id || `bud_${crypto.randomUUID().slice(0, 8)}`;
+  const base = (body.base_currency || "NZD").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(base)) return json(400, { error: "Base currency must be a 3-letter code." });
+  const rates = cleanRates(body.rates);
+  // default_rate stays populated as a fallback for anything reading the old
+  // single-rate field.
+  const fallback = rates[base] || Number(body.default_rate) || 1;
+
   await db`
-    insert into budgets (id, name, currency, base_currency, default_rate, funded_base, starts_on, ends_on)
-    values (${id}, ${name}, ${currency}, ${body.base_currency || "NZD"},
-            ${Number(body.default_rate) || 1},
+    insert into budgets (id, name, currency, base_currency, default_rate, rates, funded_base, starts_on, ends_on)
+    values (${id}, ${name}, ${currency}, ${base},
+            ${fallback}, ${JSON.stringify(rates)},
             ${body.funded_base ? Math.round(Number(body.funded_base)) : null},
             ${body.starts_on || null}, ${body.ends_on || null})`;
 
@@ -269,10 +291,20 @@ async function handleUpdate(body) {
   const name = body.name === undefined ? budget.name : String(body.name).trim();
   if (!name) return json(400, { error: "Name can't be empty." });
 
+  const base = body.base_currency === undefined
+    ? budget.base_currency
+    : String(body.base_currency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(base)) return json(400, { error: "Base currency must be a 3-letter code." });
+
+  const rates = body.rates === undefined ? (budget.rates || {}) : cleanRates(body.rates);
+  const fallback = rates[base] || Number(budget.default_rate) || 1;
+
   await db`
     update budgets set
-      name         = ${name},
-      default_rate = ${body.default_rate === undefined ? budget.default_rate : Number(body.default_rate) || 1},
+      name          = ${name},
+      base_currency = ${base},
+      rates         = ${JSON.stringify(rates)},
+      default_rate  = ${fallback},
       starts_on    = ${body.starts_on === undefined ? budget.starts_on : (body.starts_on || null)},
       ends_on      = ${body.ends_on === undefined ? budget.ends_on : (body.ends_on || null)},
       funded_base  = ${body.funded_base === undefined

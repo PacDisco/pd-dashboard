@@ -130,6 +130,32 @@ them have spend against them.
 Run `MIGRATION-field-budget-subcategories.sql` once against the Field Budget
 database. It is additive — existing budgets are unaffected.
 
+## Currencies
+
+Three layers, and only two ever reach an instructor.
+
+**Budget currency** is what instructors spend in — PEN for the Peru leg, USD for
+Ecuador. Allocations and every gauge are denominated in it. Fixed once entries
+exist, since entries carry frozen conversions against it.
+
+**Base currency** is what finance reports in — NZD. Instructors never see it. It
+sets what `funded_base` (the approved amount) and the reconciled `actual_base`
+figures mean.
+
+**Entry currency** is whatever was actually handed over. Converted at entry using
+the planning rate for that currency, and the result frozen on the row.
+
+`rates` on each budget maps a currency to budget-currency units per 1 unit of it,
+e.g. a PEN budget: `{"NZD": 2.20, "USD": 3.34, "EUR": 4.05}`. This replaced a
+single `default_rate`, which could only ever be right for one of them —
+whichever value was stored, the other currencies prefilled wrong on the
+instructor's form. `default_rate` is still written as a fallback for anything
+reading the old field.
+
+Run `MIGRATION-field-budget-rates.sql` before deploying. It carries the existing
+single rate across as the base-currency rate so budgets already in flight don't
+regress.
+
 ## Known gaps
 
 - **No correction UI.** The `correction` entry type exists but nothing writes
