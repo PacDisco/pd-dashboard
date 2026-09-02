@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T23:33:17.737Z",
+  "generatedAt": "2026-09-02T09:03:15.545Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -64,8 +64,8 @@
       "pinned": false,
       "order": 25,
       "colors": [
-        "#14584a",
-        "#6ee7b7"
+        "#55bbd2",
+        "#81c243"
       ],
       "allowedRoles": [
         "admin",

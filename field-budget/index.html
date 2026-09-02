@@ -6,10 +6,28 @@
 <title>Field Budget</title>
 <meta name="description" content="Programme budgets for the instructor field expense app — set category allocations in local currency, assign instructors, and track spend against them.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
-  .num { font-variant-numeric: tabular-nums; }
-  .spinner { border: 4px solid #e5e7eb; border-top: 4px solid #14584a; border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
+  /* Pacific Discovery brand: topaz #55bbd2, secondary green #81c243, body grey
+     #4a4a4a, Poppins for UI and DM Serif Display for headings. */
+  :root {
+    --topaz: #55bbd2;
+    --topaz-dark: #288195;   /* darkened along the brand hue to clear 4.5:1 with
+                                white text; brand topaz alone is only 2.2:1 */
+    --topaz-darker: #1e6a7a;
+    --topaz-soft: #eaf7fa;
+    --green: #81c243;
+    --ink: #4a4a4a;
+    --over: #b02a37;
+  }
+  body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f7f7f7; color: var(--ink); }
+  h1, h2, .serif { font-family: 'DM Serif Display', Times, serif; font-weight: 400; }
+  /* Poppins figures are proportional and it has no tnum feature, so money is
+     right-aligned to keep the decimal flush. */
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .spinner { border: 4px solid #e5e7eb; border-top: 4px solid var(--topaz); border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* Each category row is a fuel gauge — the bar is the row's own bottom edge,
@@ -17,9 +35,9 @@
      see in the field app. */
   .gauge { position: relative; padding-bottom: 10px; }
   .track { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: #d1d5db; border-radius: 2px; }
-  .fill { height: 100%; background: #14584a; border-radius: 2px; transition: width .3s ease; }
-  .over .fill { background: #b91c1c; }
-  .over .remaining { color: #b91c1c; }
+  .fill { height: 100%; background: var(--topaz-dark); border-radius: 2px; transition: width .3s ease; }
+  .over .fill { background: var(--over); }
+  .over .remaining { color: var(--over); }
 
   /* Accordion. <details> gives keyboard support and open/close semantics for
      free; only the marker needs replacing. */
@@ -30,7 +48,7 @@
   }
   .bcard > summary::-webkit-details-marker { display: none; }
   .bcard > summary:hover { background: #fafafa; }
-  .bcard > summary:focus-visible { outline: 2px solid #14584a; outline-offset: -2px; }
+  .bcard > summary:focus-visible { outline: 2px solid var(--topaz-dark); outline-offset: -2px; }
   .chev { flex: none; width: 16px; color: #9ca3af; transition: transform .15s ease; }
   .bcard[open] .chev { transform: rotate(90deg); }
   .bcard[open] > summary { border-bottom: 1px solid #f3f4f6; }
@@ -38,33 +56,33 @@
 
   /* Enough signal while collapsed to spot a problem without opening anything. */
   .minibar { width: 120px; height: 4px; background:#e5e7eb; border-radius:2px; overflow:hidden; }
-  .minibar span { display:block; height:100%; background:#14584a; }
-  .minibar.over span { background:#b91c1c; }
-  .warn { color:#b91c1c; font-size:11px; font-weight:600; white-space:nowrap; }
+  .minibar span { display:block; height:100%; background:var(--topaz); }
+  .minibar.over span { background:var(--over); }
+  .warn { color:var(--over); font-size:11px; font-weight:600; white-space:nowrap; }
 
   .pill { display: inline-flex; align-items: center; gap: 6px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 9999px; padding: 3px 10px; font-size: 12px; margin: 0 6px 6px 0; }
   .pill button { color: #9ca3af; font-weight: 700; line-height: 1; }
-  .pill button:hover { color: #b91c1c; }
+  .pill button:hover { color: var(--over); }
 
   .catrow input { border: 1px solid #d1d5db; border-radius: 6px; padding: 7px 9px; font-size: 14px; }
-  .catrow input:focus { outline: 2px solid #14584a; outline-offset: -1px; }
+  .catrow input:focus { outline: 2px solid var(--topaz-dark); outline-offset: -1px; }
   .catrow input.computed { background:#f3f4f6; color:#6b7280; cursor:not-allowed; }
   .catrow.child { margin-left: 26px; }
   .catrow .nest { width: 30px; flex: none; border: 1px solid #d1d5db; border-radius: 6px; color: #9ca3af; font-size: 13px; }
-  .catrow .nest:hover { color: #14584a; border-color: #14584a; }
-  .catrow.child .nest { color: #14584a; border-color: #14584a; background: #ecfdf5; }
+  .catrow .nest:hover { color: var(--topaz-dark); border-color: var(--topaz-dark); }
+  .catrow.child .nest { color: var(--topaz-dark); border-color: var(--topaz-dark); background: var(--topaz-soft); }
   .catrow .addsub {
     width: 30px; flex: none; border: 1px dashed #d1d5db; border-radius: 6px;
     color: #9ca3af; font-size: 15px; line-height: 1;
   }
-  .catrow .addsub:hover { color: #14584a; border-color: #14584a; background: #ecfdf5; }
+  .catrow .addsub:hover { color: var(--topaz-dark); border-color: var(--topaz-dark); background: var(--topaz-soft); }
   .catrow.child .addsub { visibility: hidden; pointer-events: none; }
   .catrow .grip {
     width: 26px; flex: none; border: 1px solid transparent; border-radius: 6px;
     color: #d1d5db; cursor: grab; font-size: 15px; line-height: 1; user-select: none;
   }
   .catrow .grip:hover { color: #6b7280; background: #f3f4f6; }
-  .catrow .grip:focus { outline: 2px solid #14584a; outline-offset: -1px; color: #6b7280; }
+  .catrow .grip:focus { outline: 2px solid var(--topaz-dark); outline-offset: -1px; color: #6b7280; }
   .catrow.dragging { opacity: .4; }
   .catrow.dragging .grip { cursor: grabbing; }
   #f-cats.dropping { background: #f9fafb; border-radius: 8px; }
@@ -74,11 +92,16 @@
 
   /* Tailwind 2.2.19 ships no `emerald` in its default palette, so utility
      classes for it silently produce nothing. Brand colours live here. */
-  .btn-primary { background:#14584a; color:#fff; font-weight:500; }
-  .btn-primary:hover { background:#0f4539; }
-  .btn-quiet { background:#fff; border:1px solid #d1d5db; color:#374151; }
-  .btn-quiet:hover { background:#f9fafb; }
-  .lnk { color:#14584a; font-weight:500; }
+  .btn-primary {
+    background:var(--topaz-dark); color:#fff; font-weight:500;
+    border:2px solid var(--topaz-dark); border-radius:70px;
+  }
+  .btn-primary:hover { background:var(--topaz-darker); border-color:var(--topaz-darker); }
+  .btn-quiet {
+    background:#fff; border:2px solid #dee2e6; color:var(--ink); border-radius:70px;
+  }
+  .btn-quiet:hover { background:#f9fafb; border-color:var(--topaz); }
+  .lnk { color:var(--topaz-dark); font-weight:500; }
   .lnk:hover { text-decoration:underline; }
   .back {
     display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:500;
@@ -94,6 +117,10 @@
 
   <a class="back mb-4" href="/">&larr; Back to dashboards</a>
 
+  <img src="https://www.pacificdiscovery.org/graphics/logo.png"
+       alt="Pacific Discovery" width="314" height="84"
+       style="height:26px;width:auto;display:block;margin:6px 0 14px">
+
   <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
     <div>
       <h1 class="text-2xl font-semibold">Field Budget</h1>
@@ -103,9 +130,9 @@
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <button id="newBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">New budget</button>
-      <button id="toggleAllBtn" class="btn-quiet text-sm px-3 py-2 rounded-lg">Expand all</button>
-      <button id="refreshBtn" class="btn-quiet text-sm px-3 py-2 rounded-lg">Refresh</button>
+      <button id="newBtn" class="btn-primary text-sm px-5 py-2">New budget</button>
+      <button id="toggleAllBtn" class="btn-quiet text-sm px-4 py-2">Expand all</button>
+      <button id="refreshBtn" class="btn-quiet text-sm px-4 py-2">Refresh</button>
     </div>
   </div>
 
@@ -180,7 +207,7 @@
 
     <div class="flex justify-end gap-2 mt-5">
       <button id="cancelNew" class="px-4 py-2 text-sm rounded-lg border border-gray-300">Cancel</button>
-      <button id="saveNew" class="btn-primary px-4 py-2 text-sm rounded-lg">Create budget</button>
+      <button id="saveNew" class="btn-primary px-5 py-2 text-sm">Create budget</button>
     </div>
   </div>
 </dialog>
