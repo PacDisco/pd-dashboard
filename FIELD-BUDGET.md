@@ -53,7 +53,34 @@ This is a different pattern from `instructor-checklist.js`, which uses the
 Identity session available. Here the dashboard is the authenticated caller, so
 Identity is the natural gate.
 
-## Auth
+## Instructor sign-in
+
+Instructors sign in with their email address and an access code an admin sets
+from the pill next to their name on the budget card.
+
+The code is a password and is handled as one. It is hashed server-side with
+PBKDF2-SHA256, 210,000 iterations, and a per-user salt, so two instructors with
+the same code get different hashes and a database leak doesn't hand over
+credentials. It is never returned by the API — the dashboard only ever sees
+whether a code exists, when it was set, and when that person last signed in. An
+admin who forgets what they set has to set a new one.
+
+Online guessing is the realistic attack on a short code, so five wrong attempts
+lock the account for fifteen minutes. An unknown address does the same hashing
+work as a known one and returns the same message, so the response can't be used
+to find out who has an account.
+
+**Setting a new code does not end existing sessions.** Sessions are signed JWTs
+that run to their own 30-day expiry. Revoke removes the code so no new sign-in
+is possible, but a phone already signed in stays signed in until its session
+lapses. If you need someone out immediately, unassign them from the budget —
+`/api/me` then returns nothing.
+
+Google sign-in and magic links still work and appear below the code form when
+`GOOGLE_CLIENT_ID` is configured. Leave it unset and the screen is just email and
+code.
+
+## Admin auth
 
 Reads are gated as well as writes, which differs from `marketing-spend.mjs`.
 `/api/*` sits outside the edge auth gate, and this payload contains instructor

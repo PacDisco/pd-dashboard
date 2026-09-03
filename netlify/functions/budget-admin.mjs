@@ -32,6 +32,8 @@
 //   POST  assign      { budget_id, emails[] }
 //   POST  unassign    { budget_id, email }
 //   POST  set-status  { budget_id, status }  active | closed
+//   POST  set-code    { email, code }   set an instructor's sign-in code
+//   POST  clear-code  { email }         revoke it
 //
 // Unlike marketing-spend.mjs, READS are gated here too. /api/* sits outside the
 // edge auth gate, and this payload contains instructor email addresses — staff
@@ -44,6 +46,7 @@
 
 import { neon } from "@neondatabase/serverless";
 import { verifiedUser } from "./_shared/identity.mjs";
+import { hashCode, codeProblem } from "./_shared/access-code.mjs";
 
 const WRITE_ROLES = ["admin", "programs", "operations"];
 
@@ -98,7 +101,7 @@ function cleanRates(raw) {
 
 async function handleList() {
   const db = sql();
-  const [budgets, categories, assignments, spend, receipts] = await Promise.all([
+  const [budgets, categories, assignments, spend, receipts, codes] = await Promise.all([
     db`select * from budgets order by created_at desc`,
     // A recursive materialised path, so ordering holds at any depth. A join to
     // the parent only sorts two levels, and grouping on coalesce(parent_id, id)
@@ -119,6 +122,8 @@ async function handleList() {
          group by budget_id, category_id`,
     db`select budget_id, count(*)::int as n
          from entries where receipt_file_id is not null group by budget_id`,
+    // Never the hash — only whether a code exists and when it was set.
+    db`select email, code_set_at, last_login_at, locked_until from instructor_codes`,
   ]);
 
   return json(200, {
@@ -137,6 +142,7 @@ async function handleList() {
     assignments,
     spend: spend.map((s) => ({ ...s, spent: money(s.spent) })),
     receipts,
+    codes,
     generatedAt: new Date().toISOString(),
   });
 }
@@ -428,6 +434,44 @@ async function handleUnassign(body) {
   return json(200, { removed: em });
 }
 
+async function handleSetCode(body, adminEmail) {
+  const email = normaliseEmail(body.email);
+  if (!email) return json(400, { error: "A valid email is required." });
+
+  const bad = codeProblem(body.code);
+  if (bad) return json(400, { error: bad });
+
+  // Only someone already assigned to a budget gets a code — otherwise this is a
+  // way to mint credentials for an address nobody put on a programme.
+  const known = await sql()`select 1 from assignments where email = ${email} limit 1`;
+  if (!known.length) {
+    return json(400, { error: `${email} isn't assigned to any budget yet. Assign them first.` });
+  }
+
+  const hash = await hashCode(body.code);
+  await sql()`
+    insert into instructor_codes (email, code_hash, set_by, failed_attempts, locked_until)
+    values (${email}, ${hash}, ${adminEmail}, 0, null)
+    on conflict (email) do update
+      set code_hash = excluded.code_hash,
+          code_set_at = now(),
+          set_by = excluded.set_by,
+          failed_attempts = 0,
+          locked_until = null`;
+
+  // Setting a new code invalidates nothing already issued — existing sessions
+  // are signed JWTs and run to their own expiry. Say so rather than implying
+  // this locks someone out immediately.
+  return json(200, { email, set: true });
+}
+
+async function handleClearCode(body) {
+  const email = normaliseEmail(body.email);
+  if (!email) return json(400, { error: "A valid email is required." });
+  await sql()`delete from instructor_codes where email = ${email}`;
+  return json(200, { email, cleared: true });
+}
+
 async function handleSetStatus(body) {
   if (!body.budget_id || !["active", "closed"].includes(body.status)) {
     return json(400, { error: "budget_id and status (active|closed) are required" });
@@ -470,6 +514,8 @@ export default async (req) => {
       if (action === "assign") return await handleAssign(body);
       if (action === "unassign") return await handleUnassign(body);
       if (action === "set-status") return await handleSetStatus(body);
+      if (action === "set-code") return await handleSetCode(body, user.email);
+      if (action === "clear-code") return await handleClearCode(body);
       return json(400, { error: `Unknown action "${action}".` });
     }
 
