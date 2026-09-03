@@ -503,6 +503,9 @@ async function openLedger(budgetId) {
       $('ledgerBody').innerHTML = '<p class="hint py-6">Nothing logged yet.</p>';
       return;
     }
+    // An entry with a correction against it stays in the ledger — that is the
+    // point of an append-only record — but must not read as live spend.
+    const voided = new Set(entries.filter((e) => e.corrects_id).map((e) => e.corrects_id));
     $('ledgerBody').innerHTML = `<table class="w-full text-sm">
       <thead class="text-xs border-b" style="color:#797979">
         <tr><th class="text-left py-2">Date</th><th class="text-left">Who</th>
@@ -510,10 +513,13 @@ async function openLedger(budgetId) {
         <th class="text-right">Paid</th><th class="text-right">Against budget</th>
         <th class="text-center">Receipt</th></tr>
       </thead>
-      <tbody>${entries.map((e) => `<tr class="border-b" style="border-color:#f3f4f6">
+      <tbody>${entries.map((e) => `<tr class="border-b" style="border-color:#f3f4f6${
+        voided.has(e.id) ? ';opacity:.5;text-decoration:line-through' : ''}">
         <td class="py-2 num whitespace-nowrap">${esc(String(e.spent_on).slice(0, 10))}</td>
         <td style="color:#797979">${esc((e.email || '').split('@')[0])}</td>
-        <td>${esc(e.category_name || e.entry_type)}</td>
+        <td>${esc(e.category_name || e.entry_type)}${
+          e.entry_type === 'correction' ? ' <span class="warn">correction</span>' : ''}${
+          voided.has(e.id) ? ' <span class="warn">corrected</span>' : ''}</td>
         <td style="color:#797979">${esc(e.description)}</td>
         <td class="num text-right whitespace-nowrap">${fmt(e.amount, e.currency)}</td>
         <td class="num text-right whitespace-nowrap">${

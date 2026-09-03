@@ -182,10 +182,33 @@ Each is safe to re-run. The last one carries every budget's currency and rates
 down to its top-level categories, so existing categories become legs denominated
 exactly as before.
 
+## Corrections
+
+Instructors can change or remove an entry from the History sheet. Which path
+applies depends on whether it has synced.
+
+**Not synced** — the entry exists only in that device's IndexedDB, so it is
+rewritten or deleted in place. No correction row, no clutter: a typo caught ten
+seconds later shouldn't leave a permanent trail.
+
+**Already synced** — the row is immutable. A change writes a `correction` that
+voids the original plus a fresh entry with the new values; a removal writes just
+the correction. Both share a `group_id`. The correction is the original with
+every signed figure negated, so category balances and the cash float net back.
+
+The ledger shows corrected rows struck through and labels the correction, so the
+history is visible without reading as double spending. The instructor's History
+hides correction rows entirely and strikes the entry they void — two rows that
+look like duplicate spend is worse than one that looks settled.
+
+`/api/sync` rejects a correction whose `corrects_id` doesn't name an entry in the
+same budget, so a malformed client can't void a row in someone else's programme.
+
+Cash movements can be removed but not edited — an exchange is two linked rows,
+and editing one half in isolation would leave the float wrong.
+
 ## Known gaps
 
-- **No correction UI.** The `correction` entry type exists but nothing writes
-  one, so a mistyped amount has no in-app fix yet.
 - **Unbudgeted spend is flagged but not alerted.** A category with zero
   allocation and non-zero spend shows a red "unbudgeted" label here. Nothing
   emails anyone.
