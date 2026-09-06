@@ -83,6 +83,17 @@ function normaliseEmail(raw) {
 // boundary rather than scattering Number() through the page.
 const money = (v) => (v === null || v === undefined ? null : Number(v));
 
+// Not every currency has 100 minor units: VND, JPY and CLP have none, a few Gulf
+// currencies use 1000. Only matters where figures leave the system as decimals.
+const ZERO_DECIMAL = new Set(["BIF","CLP","DJF","GNF","ISK","JPY","KMF","KRW",
+  "PYG","RWF","UGX","VND","VUV","XAF","XOF","XPF"]);
+const THREE_DECIMAL = new Set(["BHD","IQD","JOD","KWD","LYD","OMR","TND"]);
+const decimals = (cur) => ZERO_DECIMAL.has(cur) ? 0 : (THREE_DECIMAL.has(cur) ? 3 : 2);
+const asDecimal = (minorAmount, cur) => {
+  const d = decimals(cur);
+  return (Number(minorAmount) / Math.pow(10, d)).toFixed(d);
+};
+
 // Keep only well-formed { CUR: positiveNumber } pairs. A bad rate silently
 // mis-converts every entry made against it, so a junk value is dropped rather
 // than stored.
@@ -203,9 +214,9 @@ async function handleExport(budgetId) {
     lines.push([
       e.spent_on, e.leg_name || "", e.entry_type, e.email, e.category_name || "",
       e.description, e.payment_method,
-      (Number(e.amount) / 100).toFixed(2), e.currency, Number(e.rate),
-      (Number(e.budget_amount) / 100).toFixed(2), e.leg_currency || "",
-      e.actual_base === null ? "" : (Number(e.actual_base) / 100).toFixed(2),
+      asDecimal(e.amount, e.currency), e.currency, Number(e.rate),
+      asDecimal(e.budget_amount, e.leg_currency || e.currency), e.leg_currency || "",
+      e.actual_base === null ? "" : asDecimal(e.actual_base, budget.base_currency || "NZD"),
       e.receipt_link || "",
     ].map(esc).join(","));
   }

@@ -135,7 +135,10 @@
              letter-spacing:.05em; margin:14px 0 6px; }
 
   .raterow { display:flex; gap:8px; margin-bottom:6px; }
-  .raterow select { flex:1; } .raterow input { flex:1; text-align:right; font-variant-numeric:tabular-nums; }
+  .raterow .rateval { flex:1; text-align:right; font-variant-numeric:tabular-nums; }
+  .curfield { text-transform:uppercase; letter-spacing:.06em; font-weight:500; }
+  .raterow .ratecur { flex:0 0 88px; text-align:left; }
+  .legcard-top .legcur { flex:0 0 92px; }
 
   .catrow { display:flex; gap:8px; margin-bottom:6px; align-items:center; }
   .catrow.child { margin-left:26px; }
@@ -187,6 +190,8 @@
   <div id="loading" class="flex justify-center py-16"><div class="spinner"></div></div>
   <div id="list" class="mt-6 space-y-3"></div>
 </div>
+
+<datalist id="curlist"></datalist>
 
 <!-- Budget editor, shared by new and edit -->
 <dialog id="dlg" class="rounded-xl p-0 w-full max-w-2xl">
@@ -284,17 +289,47 @@
 
 <script>
 const API = '/api/budget-admin';
-const CURRENCIES = ['NZD','USD','EUR','AUD','GBP','PEN','THB','IDR','FJD','CRC','MXN','CRC'];
+// Suggestions, not a whitelist — any three-letter ISO 4217 code can be typed.
+// Programme destinations first, then the currencies budgets are funded in.
+const CURRENCIES = [
+  'NZD', 'USD', 'AUD', 'EUR', 'GBP',
+  'PEN', 'CLP', 'ARS', 'BOB', 'COP', 'BRL', 'GTQ', 'CRC', 'MXN', 'BZD',
+  'THB', 'VND', 'KHR', 'LAK', 'IDR', 'MYR', 'PHP', 'INR', 'NPR', 'LKR', 'JPY',
+  'FJD', 'WST', 'TOP', 'VUV', 'PGK', 'SBD',
+  'ZAR', 'TZS', 'KES', 'MAD', 'NAD', 'BWP',
+  'CAD', 'CHF', 'NOK', 'SEK', 'ISK', 'TRY', 'MNT', 'GEL',
+];
 let DATA = null;
 let EDITING = null;              // budget id in edit mode, else null
 const OPEN = new Set();          // expanded budget cards, kept across refreshes
 let DRAGGING = null;
 
 const $ = (id) => document.getElementById(id);
+const normCur = (v) => String(v || '').trim().toUpperCase().slice(0, 3);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-const fmt = (minor, cur) => new Intl.NumberFormat('en-NZ',
-  { style: 'currency', currency: cur || 'NZD', currencyDisplay: 'code' }).format((minor || 0) / 100);
+// Not every currency has 100 minor units — VND, JPY and CLP have none, a few
+// Gulf currencies use 1000. Storing everything as "cents" would be a
+// hundredfold error on those.
+const ZERO_DECIMAL = new Set(['BIF','CLP','DJF','GNF','ISK','JPY','KMF','KRW',
+  'PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']);
+const THREE_DECIMAL = new Set(['BHD','IQD','JOD','KWD','LYD','OMR','TND']);
+const decimals = (cur) => ZERO_DECIMAL.has(cur) ? 0 : (THREE_DECIMAL.has(cur) ? 3 : 2);
+const minorUnits = (cur) => Math.pow(10, decimals(cur));
+
+const fmt = (m, cur) => {
+  const c = cur || 'NZD';
+  const d = decimals(c);
+  const v = (m || 0) / minorUnits(c);
+  try {
+    return new Intl.NumberFormat('en-NZ', {
+      style: 'currency', currency: c, currencyDisplay: 'code',
+      minimumFractionDigits: d, maximumFractionDigits: d,
+    }).format(v);
+  } catch {
+    return `${c} ${v.toFixed(d)}`;
+  }
+};
 
 function showErr(msg) {
   const el = $('err');
@@ -648,19 +683,29 @@ $('closeLedger').addEventListener('click', () => $('ledgerDlg').close());
 
 const DEFAULT_CATS = ['Food', 'Transport', 'Gratuities', 'Activities', 'Misc', 'First aid'];
 
-function curOptions(sel) {
-  return [...new Set(CURRENCIES)].map((c) =>
-    `<option ${c === sel ? 'selected' : ''}>${c}</option>`).join('');
+function curDatalist() {
+  return [...new Set(CURRENCIES)].map((c) => `<option value="${c}">`).join('');
+}
+
+// An input plus datalist rather than a select: the list covers the destinations
+// we run, and anything else is typed rather than waiting on a code change.
+function curInput(cls, value) {
+  return `<input class="${cls} curfield" list="curlist" value="${esc(value || '')}"
+    placeholder="CUR" maxlength="3" autocapitalize="characters" spellcheck="false"
+    inputmode="text" title="Three-letter currency code">`;
 }
 
 function addRateRow(container, code = '', rate = '') {
   const row = document.createElement('div');
   row.className = 'raterow';
-  row.innerHTML = `<select>${curOptions(code)}</select>
-    <input type="number" step="0.000001" placeholder="0.0000" value="${esc(rate)}">
+  row.innerHTML = `${curInput('ratecur', code)}
+    <input class="rateval" type="number" step="0.000001" placeholder="0.0000" value="${esc(rate)}">
     <button class="icon danger" type="button" title="Remove">×</button>`;
   row.querySelector('button').addEventListener('click', () => { row.remove(); recalcTotal(); });
-  row.querySelectorAll('select,input').forEach((i) => i.addEventListener('input', recalcTotal));
+  row.querySelectorAll('input').forEach((i) => i.addEventListener('input', recalcTotal));
+  row.querySelector('.ratecur').addEventListener('blur', (ev) => {
+    ev.target.value = normCur(ev.target.value); recalcTotal();
+  });
   container.append(row);
   return row;
 }
@@ -806,7 +851,7 @@ function addLegCard(leg = null) {
   card.innerHTML = `
     <div class="legcard-top">
       <input class="legname" placeholder="Leg name, e.g. Peru" value="${esc(leg?.name || '')}">
-      <select class="legcur">${curOptions(leg?.currency || 'PEN')}</select>
+      ${curInput('legcur', leg?.currency || 'PEN')}
       <div class="legtools">
         <button class="icon legup" type="button" title="Move leg up">↑</button>
         <button class="icon legdown" type="button" title="Move leg down">↓</button>
@@ -832,16 +877,17 @@ function addLegCard(leg = null) {
   const syncCur = () => {
     card.querySelector('.legcurlabel').textContent = '';
     card.querySelector('.rateNote').innerHTML =
-      `In <strong>${esc(cur.value)}</strong> per 1 unit. The ${esc($('f-base').value)} row is ` +
+      `In <strong>${esc(normCur(cur.value) || 'the leg currency')}</strong> per 1 unit. The ${esc($('f-base').value)} row is ` +
       `what converts this leg into the base currency for reporting.`;
     // A rate against the leg's own currency is meaningless and invites someone
     // to type 3.34 for PEN in a PEN leg.
     [...rates.querySelectorAll('.raterow')].forEach((r) => {
-      r.style.display = r.querySelector('select').value === cur.value ? 'none' : '';
+      r.style.display = normCur(r.querySelector('.ratecur').value) === normCur(cur.value) ? 'none' : '';
     });
     recalcTotal();
   };
-  cur.addEventListener('change', syncCur);
+  cur.addEventListener('input', syncCur);
+  cur.addEventListener('blur', () => { cur.value = normCur(cur.value); syncCur(); });
 
   card.querySelector('.addrate').addEventListener('click', () => { addRateRow(rates); syncCur(); });
   card.querySelector('.addcat').addEventListener('click', () => {
@@ -866,8 +912,9 @@ function addLegCard(leg = null) {
   if (leg) {
     Object.entries(leg.rates || {}).forEach(([c, r]) => addRateRow(rates, c, r));
     (leg.kids || []).forEach((cat) => {
-      addCatRow(catlist, cat.name, cat.kids.length ? '' : (cat.allocated / 100).toFixed(2), cat.id, false);
-      cat.kids.forEach((k) => addCatRow(catlist, k.name, (k.allocated / 100).toFixed(2), k.id, true));
+      const lc = leg.currency || 'NZD';
+      addCatRow(catlist, cat.name, cat.kids.length ? '' : (cat.allocated / minorUnits(lc)).toFixed(decimals(lc)), cat.id, false);
+      cat.kids.forEach((k) => addCatRow(catlist, k.name, (k.allocated / minorUnits(lc)).toFixed(decimals(lc)), k.id, true));
     });
   } else {
     addRateRow(rates, $('f-base').value, '');
@@ -884,8 +931,8 @@ function readLegs() {
   return [...$('f-legs').querySelectorAll('.legcard')].map((card) => {
     const rates = {};
     [...card.querySelectorAll('.raterow')].forEach((r) => {
-      const code = r.querySelector('select').value;
-      const n = Number(r.querySelector('input').value);
+      const code = normCur(r.querySelector('.ratecur').value);
+      const n = Number(r.querySelector('.rateval').value);
       if (code && Number.isFinite(n) && n > 0) rates[code] = n;
     });
 
@@ -893,7 +940,8 @@ function readLegs() {
     [...card.querySelectorAll('.catrow')].forEach((r) => {
       const name = r.querySelector('.cname').value.trim();
       if (!name) return;
-      const allocated = Math.round((Number(r.querySelector('.camt').value) || 0) * 100);
+      const legCur = normCur(card.querySelector('.legcur').value);
+      const allocated = Math.round((Number(r.querySelector('.camt').value) || 0) * minorUnits(legCur));
       const node = { name, allocated };
       if (r.dataset.catId) node.id = r.dataset.catId;
       if (r.classList.contains('child') && categories.length) {
@@ -906,7 +954,7 @@ function readLegs() {
 
     const leg = {
       name: card.querySelector('.legname').value.trim(),
-      currency: card.querySelector('.legcur').value,
+      currency: normCur(card.querySelector('.legcur').value),
       rates, categories,
     };
     if (card.dataset.legId) leg.id = card.dataset.legId;
@@ -922,7 +970,7 @@ function recalcTotal() {
   const missing = [];
 
   [...$('f-legs').querySelectorAll('.legcard')].forEach((card) => {
-    const cur = card.querySelector('.legcur').value;
+    const cur = normCur(card.querySelector('.legcur').value);
     const rows = [...card.querySelectorAll('.catrow')];
     let legSum = 0;
 
@@ -941,17 +989,17 @@ function recalcTotal() {
     legSum = rows.filter((r) => !r.querySelector('.camt').readOnly)
       .reduce((t, r) => t + (Number(r.querySelector('.camt').value) || 0), 0);
 
-    card.querySelector('.legtotal').textContent = fmt(Math.round(legSum * 100), cur);
+    card.querySelector('.legtotal').textContent = fmt(Math.round(legSum * minorUnits(cur)), cur);
 
     if (cur === base) { total += legSum; return; }
     const rateRow = [...card.querySelectorAll('.raterow')]
-      .find((r) => r.querySelector('select').value === base);
-    const rate = rateRow ? Number(rateRow.querySelector('input').value) : 0;
+      .find((r) => normCur(r.querySelector('.ratecur').value) === base);
+    const rate = rateRow ? Number(rateRow.querySelector('.rateval').value) : 0;
     if (rate > 0) total += legSum / rate;
     else missing.push(card.querySelector('.legname').value.trim() || 'unnamed leg');
   });
 
-  $('f-total').textContent = fmt(Math.round(total * 100), base);
+  $('f-total').textContent = fmt(Math.round(total * minorUnits(base)), base);
   $('f-totalNote').textContent = missing.length
     ? `Excludes ${missing.join(', ')} — no ${base} rate set, so it can't be converted.`
     : '';
@@ -987,7 +1035,9 @@ function openEdit(budgetId) {
   $('dlgTitle').textContent = `Edit ${b.name}`;
   $('f-name').value = b.name;
   $('f-base').value = b.base_currency || 'NZD';
-  $('f-funded').value = b.funded_base ? (b.funded_base / 100).toFixed(2) : '';
+  $('f-funded').value = b.funded_base
+    ? (b.funded_base / minorUnits(b.base_currency || 'NZD')).toFixed(decimals(b.base_currency || 'NZD'))
+    : '';
   $('f-start').value = b.starts_on ? String(b.starts_on).slice(0, 10) : '';
   $('f-end').value = b.ends_on ? String(b.ends_on).slice(0, 10) : '';
   $('f-legs').innerHTML = '';
@@ -1021,7 +1071,7 @@ $('saveBtn').addEventListener('click', async () => {
   const common = {
     name: $('f-name').value.trim(),
     base_currency: $('f-base').value,
-    funded_base: funded === '' ? null : Math.round(Number(funded) * 100),
+    funded_base: funded === '' ? null : Math.round(Number(funded) * minorUnits($('f-base').value)),
     starts_on: $('f-start').value || null,
     ends_on: $('f-end').value || null,
     legs: readLegs(),
@@ -1046,6 +1096,7 @@ $('saveBtn').addEventListener('click', async () => {
   } catch (e) { flash(e.message); }
 });
 
+$('curlist').innerHTML = curDatalist();
 load();
 </script>
 </body>
