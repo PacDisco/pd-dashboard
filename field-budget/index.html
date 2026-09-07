@@ -28,6 +28,12 @@
   /* Poppins figures are proportional and it has no tnum feature, so money is
      right-aligned to keep the decimal flush. */
   .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .btn-spin {
+    display:inline-block; width:13px; height:13px; margin-right:8px;
+    vertical-align:-2px; border:2px solid currentColor; border-top-color:transparent;
+    border-radius:50%; animation:spin .7s linear infinite;
+  }
+  button:disabled { opacity:.75; cursor:progress; }
   .spinner { border: 4px solid #e5e7eb; border-top: 4px solid var(--topaz); border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -337,6 +343,24 @@ function showErr(msg) {
   el.textContent = msg; el.classList.remove('hidden');
 }
 
+// Disables a button and shows a spinner inside it for the duration. Saving a
+// budget writes every category, so it is slow enough that an undisabled button
+// invites a second click and a duplicate write.
+async function busy(btn, label, fn) {
+  if (btn.dataset.busy) return;
+  const original = btn.innerHTML;
+  btn.dataset.busy = '1';
+  btn.disabled = true;
+  btn.innerHTML = `<span class="btn-spin" aria-hidden="true"></span>${label}`;
+  try {
+    return await fn();
+  } finally {
+    delete btn.dataset.busy;
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
 async function api(path, opts) {
   const res = await fetch(`${API}${path}`, { credentials: 'include', ...opts });
   if (!res.ok) {
@@ -542,6 +566,7 @@ $('list').addEventListener('click', async (ev) => {
       const input = section.querySelector('[data-assign-input]');
       const emails = input.value.split(',').map((s) => s.trim()).filter(Boolean);
       if (!emails.length) return;
+      return busy(ev.target, 'Assigning…', async () => {
       const r = await api('?action=assign', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ budget_id: budgetId, emails }),
@@ -549,6 +574,7 @@ $('list').addEventListener('click', async (ev) => {
       if (r.skipped?.length) showErr(`Not valid email addresses, skipped: ${r.skipped.join(', ')}`);
       input.value = '';
       return load();
+      });
     }
     if (ev.target.matches('[data-status]')) {
       await api('?action=set-status', {
@@ -605,7 +631,7 @@ $('c-show').addEventListener('click', () => {
 });
 $('c-cancel').addEventListener('click', () => { $('c-code').value = ''; $('codeDlg').close(); });
 
-$('c-save').addEventListener('click', async () => {
+$('c-save').addEventListener('click', () => busy($('c-save'), 'Setting…', async () => {
   const err = $('c-err');
   try {
     await api('?action=set-code', {
@@ -615,9 +641,9 @@ $('c-save').addEventListener('click', async () => {
     $('c-ok').textContent = 'Code set. It is not recoverable — make sure you have it written down.';
     $('c-ok').classList.remove('hidden');
     err.classList.add('hidden');
-    load();
+    await load();
   } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
-});
+}));
 
 $('c-clear').addEventListener('click', async () => {
   if (!confirm(`Revoke the access code for ${CODE_EMAIL}? They won't be able to sign in again until you set a new one.`)) return;
@@ -1056,7 +1082,7 @@ $('addLeg').addEventListener('click', () => {
 });
 $('f-base').addEventListener('change', recalcTotal);
 $('cancelBtn').addEventListener('click', () => $('dlg').close());
-$('refreshBtn').addEventListener('click', load);
+$('refreshBtn').addEventListener('click', () => busy($('refreshBtn'), 'Loading…', load));
 
 $('toggleAllBtn').addEventListener('click', () => {
   const expanding = OPEN.size < (DATA?.budgets.length || 0);
@@ -1066,7 +1092,7 @@ $('toggleAllBtn').addEventListener('click', () => {
   render();
 });
 
-$('saveBtn').addEventListener('click', async () => {
+$('saveBtn').addEventListener('click', () => busy($('saveBtn'), 'Saving…', async () => {
   const funded = $('f-funded').value.trim();
   const common = {
     name: $('f-name').value.trim(),
@@ -1092,9 +1118,9 @@ $('saveBtn').addEventListener('click', async () => {
       });
     }
     $('dlg').close();
-    load();
+    await load();
   } catch (e) { flash(e.message); }
-});
+}));
 
 $('curlist').innerHTML = curDatalist();
 load();

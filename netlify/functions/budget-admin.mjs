@@ -293,25 +293,42 @@ function validateLegs(rows) {
 // Writes the tree parent-first, so a brand-new child always has a real parent id
 // to reference by the time it is inserted.
 async function writeTree(db, budgetId, rows) {
+  // Neon's HTTP driver sends one request per statement, so a 30-category budget
+  // was 30 sequential round trips — the reason saving felt slow. Siblings at the
+  // same depth don't depend on each other, so each level goes out in parallel;
+  // levels stay ordered because a child needs its parent's id to exist.
+  const CONCURRENCY = 10;
   const idByRef = {};
+
   for (const depth of [0, 1, 2]) {
-    for (const r of rows) {
-      if (r.depth !== depth) continue;
-      const parentId = r.parentRef ? idByRef[r.parentRef] : null;
-      if (r.parentRef && !parentId) continue;
-      const cid = r.id || `cat_${crypto.randomUUID().slice(0, 8)}`;
-      idByRef[r.ref] = cid;
-      if (r.id) {
-        await db`update categories set name = ${r.name}, allocated = ${r.allocated},
-                   sort_order = ${r.sort}, parent_id = ${parentId},
-                   currency = ${r.currency}, rates = ${JSON.stringify(r.rates)}
-                  where id = ${r.id} and budget_id = ${budgetId}`;
-      } else {
-        await db`insert into categories
-                   (id, budget_id, name, allocated, sort_order, parent_id, currency, rates)
-                 values (${cid}, ${budgetId}, ${r.name}, ${r.allocated}, ${r.sort},
-                         ${parentId}, ${r.currency}, ${JSON.stringify(r.rates)})`;
-      }
+    const level = rows.filter((r) => r.depth === depth);
+
+    // Ids are assigned up front so a child can reference its parent without
+    // waiting for the insert to come back.
+    for (const r of level) {
+      if (r.parentRef && !idByRef[r.parentRef]) continue;
+      idByRef[r.ref] = r.id || `cat_${crypto.randomUUID().slice(0, 8)}`;
+    }
+
+    const work = level
+      .filter((r) => idByRef[r.ref] && (!r.parentRef || idByRef[r.parentRef]))
+      .map((r) => () => {
+        const parentId = r.parentRef ? idByRef[r.parentRef] : null;
+        return r.id
+          ? db`update categories set name = ${r.name}, allocated = ${r.allocated},
+                 sort_order = ${r.sort}, parent_id = ${parentId},
+                 currency = ${r.currency}, rates = ${JSON.stringify(r.rates)}
+                where id = ${r.id} and budget_id = ${budgetId}`
+          : db`insert into categories
+                 (id, budget_id, name, allocated, sort_order, parent_id, currency, rates)
+               values (${idByRef[r.ref]}, ${budgetId}, ${r.name}, ${r.allocated},
+                       ${r.sort}, ${parentId}, ${r.currency}, ${JSON.stringify(r.rates)})`;
+      });
+
+    // Chunked rather than all at once: a 200-category budget firing 200
+    // simultaneous requests is its own problem.
+    for (let i = 0; i < work.length; i += CONCURRENCY) {
+      await Promise.all(work.slice(i, i + CONCURRENCY).map((fn) => fn()));
     }
   }
   // Any node that has children stores 0 — its figure is the sum of them.
