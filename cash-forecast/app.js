@@ -114,7 +114,7 @@ function topBar(f) {
   return `
     <header class="top">
       <div class="title">
-        <h1>Group cash flow</h1>
+        <h1>Pacific Discovery cash flow</h1>
         <span class="fy">FY ${fy}/${String(fy + 1).slice(2)} · Apr–Mar</span>
       </div>
       <div class="tiles">
@@ -266,7 +266,7 @@ function actualsPanel() {
           </tbody>
         </table>
       </div>
-      <p class="foot">Totals are shown per organisation and per currency. They are deliberately not summed across currencies.</p>
+      <p class="foot">One row per connected Xero organisation, in that organisation's own currency. Figures are never summed across currencies. If an entity you do not expect appears here, it has been authorised on the Xero app — pin the ones you want with XERO_TENANTS.</p>
     </section>`;
 }
 
