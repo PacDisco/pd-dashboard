@@ -113,6 +113,18 @@ export default async (_req, _context) => {
         errors: orgs.filter((o) => o.error).map((o) => ({ name: o.name, error: o.error })),
         durationMs: Date.now() - started,
     };
+    console.log(
+      `[cash-xero-sync] orgs=${orgs.length} ` +
+        `ok=${orgs.filter((o) => !o.error).length} ` +
+        `errors=${payload.errors.length} ` +
+        `tokenDays=${health?.daysRemaining ?? "?"} ` +
+        `durationMs=${payload.durationMs} ` +
+        `closingByCurrency=${JSON.stringify(byCurrency)}`,
+    );
+    for (const e of payload.errors) {
+      console.error(`[cash-xero-sync] ${e.name}: ${e.error}`);
+    }
+
     await getStore({ name: "cash-xero" }).setJSON("latest", payload);
     // Keep a dated snapshot so you can chart actual vs forecast over time
     // instead of only ever seeing "now".
