@@ -218,7 +218,7 @@ function forecastView(f) {
       <figcaption>NZD account by month, with the total position including unconverted USD behind it. The dashed red line is zero.</figcaption>
     </figure>
     <div class="scroll">
-      <table class="grid">
+      <table class="cftable">
         <thead><tr><th class="lab"></th>${f.months.map((m) => `<th>${m.label}</th>`).join("")}</tr></thead>
         <tbody>
           ${rows.map(([label, get, cls]) => `
@@ -251,7 +251,7 @@ function actualsPanel() {
     <section class="actuals">
       <h2>Xero actuals <span class="stamp">as at ${escapeHtml(state.actuals.asAt || "")}</span></h2>
       <div class="scroll">
-        <table class="grid tight">
+        <table class="cftable tight">
           <thead><tr><th class="lab">Organisation</th><th>Bank</th><th>Receivables</th><th>Payables</th><th>In MTD</th><th>Out MTD</th></tr></thead>
           <tbody>
             ${state.actuals.orgs.map((o) => `
@@ -277,7 +277,7 @@ function programsView(f) {
   const ro = !state.canEdit;
   return `
     <div class="scroll">
-      <table class="grid edit">
+      <table class="cftable edit">
         <thead><tr>
           <th class="lab">Program</th><th>Season</th><th>Departs</th><th>Returns</th>
           <th>Price</th><th>Sells in</th><th>Pax</th>
@@ -397,7 +397,7 @@ function ratePanel(ro) {
         <input type="number" data-fx="${escapeAttr(cur)}" value="${a.fxRates[cur] ?? 1}" step="0.001" ${ro ? "disabled" : ""}></label>` : ""}
     <h2 style="margin-top:1rem">Rate sensitivity</h2>
     <p class="foot">The year re-run at the low and high of the observed 90-day range, holding everything else constant.</p>
-    <table class="grid tight sens">
+    <table class="cftable tight sens">
       <thead><tr><th class="lab"></th><th>Rate</th><th>Lowest NZD</th><th>Total position</th></tr></thead>
       <tbody>
         <tr><th class="lab">90-day low</th><td>${fx.low90.toFixed(4)}</td>
@@ -432,7 +432,7 @@ function overheadsView() {
           <input type="number" data-open="${escapeAttr(cur)}" value="${state.assumptions.openingBalances?.[cur] ?? 0}" step="1000" ${ro ? "disabled" : ""}></label>`).join("")}
     </div>
     <div class="scroll">
-      <table class="grid edit">
+      <table class="cftable edit">
         <thead><tr><th class="lab"></th>${labels.map((l) => `<th>${l}</th>`).join("")}<th>Total</th></tr></thead>
         <tbody>
           ${rows.map(([label, key]) => `
