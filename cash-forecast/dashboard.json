@@ -1,6 +1,6 @@
 {
   "title": "Cash Forecast",
-  "description": "Driver-based group cash flow — set programs, pax and payment rules; actuals sync from Xero.",
+  "description": "Driver-based cash flow for Pacific Discovery — set programs, pax and payment rules; actuals sync from Xero.",
   "category": "Finance",
   "icon": "📈",
   "colors": ["#288195", "#55bbd2"],
