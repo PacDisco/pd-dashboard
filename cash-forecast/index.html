@@ -88,36 +88,41 @@
     flex-direction: column; gap: 5px; background: var(--warn-soft);
     border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; font-size: 13.5px; }
 
-  /* tables */
+  /* tables
+     NOTE: this class is `cftable`, not `grid`. Tailwind 2 ships a `.grid`
+     utility that sets `display: grid`, which overrides a <table>'s display,
+     turns <thead> into a block, and destroys the shared column model — header
+     cells then size independently of body cells and the columns visibly drift
+     apart. Any class name here must not collide with a Tailwind utility. */
   .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-  table.grid { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
-  .grid th, .grid td { padding: 7px 11px; text-align: right; white-space: nowrap;
+  table.cftable { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .cftable th, .cftable td { padding: 7px 11px; text-align: right; white-space: nowrap;
     border-bottom: 1px solid var(--line); }
-  .grid thead th { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  .cftable thead th { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
     color: #8a94a3; background: var(--sunk); position: sticky; top: 0; }
-  .grid th.lab { text-align: left; font-weight: 400; color: #6b7280;
+  .cftable th.lab { text-align: left; font-weight: 400; color: #6b7280;
     position: sticky; left: 0; background: #fff; z-index: 1; }
-  .grid thead th.lab { background: var(--sunk); z-index: 2; }
-  .grid tbody tr:last-child th, .grid tbody tr:last-child td { border-bottom: none; }
-  .grid tr.strong td, .grid tr.strong th.lab { font-weight: 600; color: #2c2c2c; }
-  .grid tr.rule td, .grid tr.rule th.lab { border-top: 2px solid #cfd6e0; font-weight: 600; color: #2c2c2c; }
-  .grid tr.muted td, .grid tr.muted th.lab { color: #98a2b3; font-size: 12px; }
-  .grid tr.sep th.lab { font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .1em;
+  .cftable thead th.lab { background: var(--sunk); z-index: 2; }
+  .cftable tbody tr:last-child th, .cftable tbody tr:last-child td { border-bottom: none; }
+  .cftable tr.strong td, .cftable tr.strong th.lab { font-weight: 600; color: #2c2c2c; }
+  .cftable tr.rule td, .cftable tr.rule th.lab { border-top: 2px solid #cfd6e0; font-weight: 600; color: #2c2c2c; }
+  .cftable tr.muted td, .cftable tr.muted th.lab { color: #98a2b3; font-size: 12px; }
+  .cftable tr.sep th.lab { font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .1em;
     text-transform: uppercase; color: #b0b8c4; padding-top: 14px; }
-  .grid tr.sep td { border-bottom-color: transparent; }
+  .cftable tr.sep td { border-bottom-color: transparent; }
   .calc { color: #6b7280; background: var(--sunk); }
 
-  .grid.edit th, .grid.edit td { padding: 6px 7px; }
-  .grid.edit input, .grid.edit select { width: 100%; min-width: 4.4rem; font: inherit; font-size: 12.5px;
+  .cftable.edit th, .cftable.edit td { padding: 6px 7px; }
+  .cftable.edit input, .cftable.edit select { width: 100%; min-width: 4.4rem; font: inherit; font-size: 12.5px;
     text-align: right; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px;
     background: transparent; color: var(--ink); font-variant-numeric: tabular-nums; }
-  .grid.edit select { min-width: 6rem; text-align: left; }
-  .grid.edit input[type=date] { min-width: 8.6rem; }
-  .grid.edit th.lab input { text-align: left; min-width: 7.5rem; }
-  .grid.edit input:hover:not(:disabled), .grid.edit select:hover:not(:disabled) { border-color: var(--line); }
-  .grid.edit input:focus, .grid.edit select:focus { background: #fff; border-color: var(--topaz); }
-  .grid.edit input:disabled, .grid.edit select:disabled { color: #6b7280; opacity: 1; }
+  .cftable.edit select { min-width: 6rem; text-align: left; }
+  .cftable.edit input[type=date] { min-width: 8.6rem; }
+  .cftable.edit th.lab input { text-align: left; min-width: 7.5rem; }
+  .cftable.edit input:hover:not(:disabled), .cftable.edit select:hover:not(:disabled) { border-color: var(--line); }
+  .cftable.edit input:focus, .cftable.edit select:focus { background: #fff; border-color: var(--topaz); }
+  .cftable.edit input:disabled, .cftable.edit select:disabled { color: #6b7280; opacity: 1; }
   /* No sticky-right here. An earlier attempt pinned the Contribution column
      with `td.calc:last-of-type`, which matches nothing — :last-of-type picks the
      last <td> (the delete button), and that has no .calc class. The header's
@@ -164,7 +169,7 @@
   .actuals { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
   .actuals .scroll { border: none; border-radius: 0; }
   .cur { font-family: ui-monospace, monospace; font-size: 10.5px; color: #98a2b3; }
-  .grid tr.off { opacity: .45; }
+  .cftable tr.off { opacity: .45; }
 
   .empty { background: #fff; border: 1px solid var(--topaz); border-left-width: 3px;
     border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column;
