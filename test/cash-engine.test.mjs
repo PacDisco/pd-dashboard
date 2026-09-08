@@ -1,0 +1,263 @@
+import assert from "node:assert/strict";
+import { buildForecast, recognitionMonthFor, fiscalSlotToDate, dateToFiscalSlot, } from "../cash-forecast/engine.mjs";
+import { defaultAssumptions } from "../cash-forecast/model.mjs";
+const near = (a, b, tol = 0.01, msg) => assert.ok(Math.abs(a - b) < tol, msg ?? `expected ${b}, got ${a}`);
+/* ---------- fiscal calendar ---------- */
+assert.deepEqual(fiscalSlotToDate(2026, 0), { year: 2026, month: 4 }, "slot 0 = Apr 2026");
+assert.deepEqual(fiscalSlotToDate(2026, 8), { year: 2026, month: 12 }, "slot 8 = Dec 2026");
+assert.deepEqual(fiscalSlotToDate(2026, 9), { year: 2027, month: 1 }, "slot 9 = Jan 2027");
+assert.deepEqual(fiscalSlotToDate(2026, 11), { year: 2027, month: 3 }, "slot 11 = Mar 2027");
+assert.equal(dateToFiscalSlot(2026, 2026, 4), 0);
+assert.equal(dateToFiscalSlot(2026, 2027, 3), 11);
+assert.equal(dateToFiscalSlot(2026, 2026, 3), null, "Mar 2026 is the prior fiscal year");
+assert.equal(dateToFiscalSlot(2026, 2027, 4), null, "Apr 2027 is the next fiscal year");
+console.log("✓ fiscal calendar");
+/* ---------- recognition timing ---------- */
+const rec = { Fall: 9, Spring: 1, Summer: 6 };
+const prog = (over) => ({
+    id: "p", name: "TEST", season: "Fall", startDate: "2026-10-05", endDate: "2026-12-10",
+    price: 15500, currency: "NZD", costCurrency: "NZD",
+    fixedCost: 100000, variableCostPerPax: 5000,
+    paxForecast: 10, active: true, ...over,
+});
+assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-10-05" }), rec), { year: 2026, month: 9 }, "Fall departing Oct 26 recognises Sept 26");
+assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-12-01" }), rec), { year: 2026, month: 9 }, "later Fall departure still recognises Sept 26");
+assert.deepEqual(recognitionMonthFor(prog({ season: "Spring", startDate: "2027-02-10" }), rec), { year: 2027, month: 1 }, "Spring departing Feb 27 recognises Jan 27");
+assert.deepEqual(recognitionMonthFor(prog({ season: "Summer", startDate: "2026-07-01" }), rec), { year: 2026, month: 6 }, "Summer departing Jul 26 recognises Jun 26");
+// Edge: a program departing IN its own recognition month must look back a year,
+// not recognise in the month it departs.
+assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-09-15" }), rec), { year: 2025, month: 9 }, "departure in the recognition month looks back 12 months");
+console.log("✓ recognition timing");
+/* ---------- cash: deposits and balances ---------- */
+function base() {
+    const a = defaultAssumptions(2026);
+    a.openingBalances = { NZD: 0, USD: 0 };
+    a.baseMinimumBuffer = 0;
+    a.defaultPaymentRules = {
+        deposit: 1000,
+        balanceDueDaysBeforeDeparture: 60,
+        // Everyone books exactly 6 months out — makes the arithmetic checkable.
+        bookingCurve: [{ monthsBefore: 6, share: 1 }],
+    };
+    // All program cost paid in the departure month.
+    a.costPhasing = { offsets: [{ monthOffset: 0, share: 1 }] };
+    return a;
+}
+{
+    const a = base();
+    a.programs = [prog({
+            id: "nza", name: "NZA", season: "Fall",
+            startDate: "2026-10-01", endDate: "2026-12-01",
+            price: 15500, paxForecast: 20, fixedCost: 142113, variableCostPerPax: 3557,
+        })];
+    const f = buildForecast(a);
+    const by = (k) => f.months.find((m) => m.key === k);
+    // Bookings 6 months before Oct 2026 = April 2026 → 20 × 1000 deposits.
+    near(by("2026-04").depositsIn, 20_000, 0.01, "deposits land in the booking month");
+    // Balance due 60 days before 1 Oct = 2 Aug 2026 → 20 × 14,500.
+    near(by("2026-08").balancesIn, 290_000, 0.01, "balances land 60 days pre-departure");
+    // Total cash in must equal pax × price exactly. Nothing leaks.
+    near(f.totals.cashIn, 20 * 15500, 0.01, "cash in = pax × price");
+    // Cost: 142,113 + 20 × 3,557 = 213,253, all in October.
+    near(by("2026-10").programCostsOut, 213_253, 0.01, "program cost in the departure month");
+    // Recognition: all of it in September, none of it spread.
+    near(by("2026-09").recognisedRevenue, 310_000, 0.01, "recognised in Sept");
+    near(f.totals.recognisedRevenue, 310_000, 0.01);
+    assert.equal(f.months.filter((m) => m.recognisedRevenue > 0).length, 1, "recognition is a single event, not a spread");
+    console.log("✓ deposit / balance / cost / recognition placement");
+    // Deferred revenue: rises as cash arrives, drops to zero on recognition.
+    near(by("2026-04").deferredRevenueBalance, 20_000, 0.01, "deferred after deposits");
+    near(by("2026-08").deferredRevenueBalance, 310_000, 0.01, "deferred peaks pre-recognition");
+    near(by("2026-09").deferredRevenueBalance, 0, 0.01, "deferred clears on recognition");
+    near(by("2027-03").deferredRevenueBalance, 0, 0.01, "stays clear");
+    console.log("✓ deferred revenue behaviour");
+    // Roll-forward integrity: closing must chain, with no gaps.
+    let running = a.openingBalances.NZD;
+    for (const m of f.months) {
+        assert.equal(m.opening, running, `${m.label} opening must equal prior closing`);
+        running += m.net;
+        near(m.closing, running, 0.01, `${m.label} closing`);
+    }
+    console.log("✓ balance chain has no breaks");
+}
+/* ---------- FX is a single source ---------- */
+{
+    const a = base();
+    a.fxRates = { NZD: 1, USD: 1.65 };
+    a.programs = [prog({
+            id: "usd", name: "USDPROG", currency: "USD",
+            price: 10_000, paxForecast: 10, fixedCost: 0, variableCostPerPax: 0,
+            startDate: "2026-10-01",
+        })];
+    const f = buildForecast(a);
+    near(f.totals.cashIn, 10 * 10_000 * 1.65, 0.01, "USD converted at the single stored rate");
+    // A missing rate must exclude the program loudly, not silently treat it as 1:1.
+    const b = base();
+    b.fxRates = { NZD: 1 };
+    b.programs = [prog({ id: "eur", name: "EURPROG", currency: "EUR", startDate: "2026-10-01" })];
+    const g = buildForecast(b);
+    near(g.totals.cashIn, 0, 0.01, "unknown currency contributes nothing");
+    assert.ok(g.warnings.some((w) => w.includes("EUR")), "and says so");
+    console.log("✓ FX single source + missing-rate guard");
+}
+/* ---------- cash collected before the year opens ---------- */
+{
+    const a = base();
+    // Departs Apr 2026 — the first month of the year. Bookings 6 months out
+    // (Oct 2025) and balance 60 days out (Feb 2026) both precede the year.
+    a.programs = [prog({
+            id: "early", name: "EARLY", season: "Summer",
+            startDate: "2026-04-15", endDate: "2026-05-15",
+            price: 10_000, paxForecast: 10, fixedCost: 0, variableCostPerPax: 0,
+        })];
+    const f = buildForecast(a);
+    near(f.totals.cashIn, 0, 0.01, "no cash inside the year — it all arrived earlier");
+    // Recognition (June 2025, prior year) also precedes the year, so the opening
+    // deferred balance nets to zero rather than showing phantom liability.
+    near(f.months[0].deferredRevenueBalance, 0, 0.01, "prior-year cash and recognition net off");
+    console.log("✓ pre-fiscal-year collection handled");
+}
+/* ---------- normalisation and guards ---------- */
+{
+    const a = base();
+    // Deliberately broken curve, like the workbook's Fall Mini at 101%.
+    a.defaultPaymentRules.bookingCurve = [
+        { monthsBefore: 6, share: 0.6 },
+        { monthsBefore: 3, share: 0.41 },
+    ];
+    a.programs = [prog({
+            id: "n", name: "NORM", price: 10_000, paxForecast: 10,
+            fixedCost: 0, variableCostPerPax: 0, startDate: "2026-10-01",
+        })];
+    const f = buildForecast(a);
+    near(f.totals.cashIn, 100_000, 0.01, "curve normalised — revenue still totals correctly");
+    assert.ok(f.warnings.some((w) => w.includes("101")), "and the 101% is surfaced, not hidden");
+    // Deposit larger than price must not manufacture cash.
+    const b = base();
+    b.defaultPaymentRules.deposit = 99_999;
+    b.programs = [prog({
+            id: "d", name: "DEP", price: 10_000, paxForecast: 10,
+            fixedCost: 0, variableCostPerPax: 0, startDate: "2026-10-01",
+        })];
+    const g = buildForecast(b);
+    near(g.totals.cashIn, 100_000, 0.01, "over-large deposit capped at price");
+    assert.ok(g.warnings.some((w) => w.includes("deposit")), "and warned");
+    console.log("✓ normalisation and guards");
+}
+/* ---------- negative cash is surfaced ---------- */
+{
+    const a = base();
+    a.openingBalances = { NZD: -50_000, USD: 0 };
+    a.monthlyOverheads = Array(12).fill(60_000);
+    const f = buildForecast(a);
+    assert.ok(f.warnings.some((w) => w.includes("negative")), "negative cash warned");
+    assert.ok(f.totals.lowestClosing < 0);
+    assert.equal(f.totals.lowestMonth, "Mar 27", "lowest point identified");
+    console.log("✓ negative cash surfaced");
+}
+console.log("\nAll engine tests passed.");
+/* ---------- price and cost currencies are independent ---------- */
+{
+    const a = base();
+    a.fxRates = { NZD: 1, USD: 1.65 };
+    // Pacific Discovery's real shape: sells in USD, pays suppliers in NZD.
+    a.programs = [prog({
+            id: "split", name: "SPLIT",
+            currency: "USD", price: 15_500,
+            costCurrency: "NZD", fixedCost: 142_113, variableCostPerPax: 3_557,
+            paxForecast: 10, startDate: "2026-10-01",
+        })];
+    const f = buildForecast(a);
+    near(f.totals.cashIn, 10 * 15_500 * 1.65, 0.01, "price converts at the USD rate");
+    const c = f.programs[0];
+    near(c.totalCost, 142_113 + 10 * 3_557, 0.01, "NZD costs are NOT multiplied by the USD rate");
+    near(c.contribution, 10 * 15_500 * 1.65 - (142_113 + 10 * 3_557), 0.01, "margin uses both correctly");
+    // The bug this guards against: one currency field applied to both would have
+    // inflated costs by 65% and understated contribution by ~119k on this program.
+    const wrongCost = (142_113 + 10 * 3_557) * 1.65;
+    assert.ok(Math.abs(c.totalCost - wrongCost) > 100_000, "costs must not take the price's rate");
+    console.log("✓ price and cost currencies convert independently");
+}
+console.log("\nAll engine tests passed (including split-currency).");
+/* ---------- treasury: USD collected, converted only as NZD is needed ---------- */
+{
+    const a = base();
+    a.baseCurrency = "NZD";
+    a.settlementCurrency = "USD";
+    a.fxRates = { NZD: 1, USD: 1.70 };
+    a.openingBalances = { NZD: 100_000, USD: 0 };
+    a.baseMinimumBuffer = 0;
+    // 10 pax at USD 10,000, departing Oct. Costs NZD, all in the departure month.
+    a.programs = [prog({
+            id: "t", name: "TREASURY",
+            currency: "USD", price: 10_000,
+            costCurrency: "NZD", fixedCost: 0, variableCostPerPax: 0,
+            paxForecast: 10, startDate: "2026-10-01",
+        })];
+    a.monthlyOverheads = Array(12).fill(20_000);
+    const f = buildForecast(a);
+    const by = (k) => f.months.find((m) => m.key === k);
+    // Receipts are USD and must NOT appear in the NZD account.
+    near(by("2026-04").fxIn, 10 * 1_000, 0.01, "deposits land in the USD account");
+    near(by("2026-04").baseIn, 0, 0.01, "and not in the NZD account");
+    near(by("2026-08").fxIn, 10 * 9_000, 0.01, "balances land in USD too");
+    // April: NZD 100,000 opening less 20,000 overheads = 80,000, still above the
+    // zero buffer, so nothing should be sold even though USD is sitting there.
+    near(by("2026-04").fxConverted, 0, 0.01, "no conversion while NZD covers costs");
+    near(by("2026-04").baseClosing, 80_000, 0.01);
+    near(by("2026-04").fxClosing, 10_000, 0.01, "USD accumulates untouched");
+    // NZD runs out during the year; conversions must appear exactly then.
+    const firstConversion = f.months.find((m) => m.fxConverted > 0);
+    assert.ok(firstConversion, "a conversion happens once NZD is exhausted");
+    assert.equal(firstConversion.label, "Sep 26", "NZD lasts five months at 20k/mo from 100k");
+    // Conversion must be sized to the shortfall, not the whole balance.
+    near(firstConversion.baseClosing, 0, 0.01, "converts exactly enough to reach the buffer");
+    near(firstConversion.baseFromConversion, firstConversion.fxConverted * 1.70, 0.01, "NZD received = USD sold × rate");
+    assert.ok(firstConversion.fxClosing > 0, "and leaves the rest in USD");
+    console.log("✓ conversion happens on demand and is sized to the shortfall");
+    // Conservation: every USD received is either still held or was converted.
+    const usdIn = f.months.reduce((s, m) => s + m.fxIn, 0);
+    const usdConverted = f.months.reduce((s, m) => s + m.fxConverted, 0);
+    near(usdIn - usdConverted, f.months[11].fxClosing, 0.01, "USD conserved across the year");
+    console.log("✓ USD conserved");
+    // The combined position must equal NZD cash plus USD marked at the rate.
+    for (const m of f.months) {
+        near(m.closing, m.baseClosing + m.fxClosing * 1.70, 0.01, `${m.label} combined position`);
+    }
+    console.log("✓ combined position is NZD cash + USD at the planning rate");
+}
+/* ---------- treasury: buffer is respected, shortfall is not hidden ---------- */
+{
+    const a = base();
+    a.fxRates = { NZD: 1, USD: 1.70 };
+    a.openingBalances = { NZD: 0, USD: 0 };
+    a.baseMinimumBuffer = 50_000;
+    a.monthlyOverheads = Array(12).fill(10_000);
+    a.programs = [];
+    const f = buildForecast(a);
+    // No USD to sell, so the NZD account simply goes negative. It must NOT be
+    // quietly floored at the buffer — that would be the workbook's plug problem
+    // reinvented.
+    near(f.months[0].baseClosing, -10_000, 0.01, "shortfall with no USD is left visible");
+    near(f.months[0].fxConverted, 0, 0.01);
+    assert.ok(f.warnings.some((w) => w.includes("negative")), "and is warned");
+    console.log("✓ shortfall with nothing to convert stays visible");
+}
+/* ---------- treasury: buffer triggers conversion early ---------- */
+{
+    const a = base();
+    a.fxRates = { NZD: 1, USD: 2.0 }; // round number keeps the arithmetic obvious
+    a.openingBalances = { NZD: 60_000, USD: 100_000 };
+    a.baseMinimumBuffer = 50_000;
+    a.monthlyOverheads = [20_000, ...Array(11).fill(0)];
+    a.programs = [];
+    const f = buildForecast(a);
+    const apr = f.months[0];
+    // 60,000 − 20,000 = 40,000, which is 10,000 below the 50,000 buffer.
+    // At 2.0, restoring it costs exactly 5,000 USD.
+    near(apr.fxConverted, 5_000, 0.01, "converts exactly the buffer shortfall");
+    near(apr.baseClosing, 50_000, 0.01, "buffer restored, not exceeded");
+    near(apr.fxClosing, 95_000, 0.01, "rest of the USD left alone");
+    console.log("✓ buffer sizing is exact");
+}
+console.log("\nAll treasury tests passed.");
