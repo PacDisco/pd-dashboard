@@ -1,6 +1,6 @@
 # Cash Forecast
 
-Driver-based group cash flow at `/cash-forecast/`. Programs, pax, costs and
+Driver-based cash flow for Pacific Discovery at `/cash-forecast/`. Programs, pax, costs and
 payment rules are editable variables; the twelve-month position is recomputed
 from them. Actuals sync from Xero.
 
@@ -77,8 +77,13 @@ Two independent gates, and both are needed:
 The second is not belt-and-braces. `/api/*` is excluded from `auth-gate.js` (see
 the warning block in `_redirects`), so nothing checks a role before a request
 reaches these functions. Reads are gated as well as writes: this payload is
-group bank balances across all four entities, which is more sensitive than the
+bank balances, receivables and payables, which is more sensitive than the
 instructor emails that made `budget-admin.mjs` gate its reads.
+
+Scope is deliberately **Pacific Discovery only** — one Xero organisation. The
+forecast models PD programs, so PD-only actuals keep forecast-vs-actual
+comparable. `XERO_TENANTS` pins this; without it the sync would pull every
+organisation ever authorised on the Xero app.
 
 Callers outside `READ_ROLES` get **404, not 403** — someone in `admissions`
 poking at endpoints shouldn't learn a group cash API exists here.
@@ -178,7 +183,7 @@ minutes.
 ## First run
 
 1. Deploy. `npm run build` regenerates the manifests and `_redirects`.
-2. Visit once, signed in to Xero as someone who can see all four organisations:
+2. Visit once, signed in to Xero as someone who can see Pacific Discovery:
    `https://<site>/.netlify/functions/cash-xero-auth?key=YOUR_SETUP_KEY`
    **Tick every organisation on the consent screen** — one consent covers all of
    them, and missing one means running the flow again.

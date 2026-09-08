@@ -93,7 +93,41 @@ export default async (_req, _context) => {
     for (const c of connections) {
         orgs.push(await pullOrg(token, c.tenantId, c.tenantName, from, to));
     }
-    const health = await refreshTokenHealth();
+    /* ---- monthly history, for replacing closed months with what happened ----
+   *
+   * One Bank Summary call per month is wasteful at an hourly cadence, and a
+   * closed month does not change. So months already stored are skipped, except
+   * the current one and the one before it — late supplier invoices and bank
+   * feeds landing a few days after month end are exactly the case that would
+   * otherwise be missed. Steady state is 2 extra calls per run, not 12. */
+  const monthStore = getStore({ name: "cash-xero-months", consistency: "strong" });
+  const fy = currentFiscalYear();
+  const primary = connections[0];
+  let monthsFetched = 0;
+  let monthsCached = 0;
+
+  if (primary) {
+    try {
+      const currency = await getBankAccountCurrencies(token, primary.tenantId, "NZD");
+      const keys = fiscalMonthKeys(fy);
+      const alwaysRefresh = keys.slice(-2);   // current month and the one before
+
+      for (const key of keys) {
+        const blobKey = `${primary.tenantId}/${key}`;
+        if (!alwaysRefresh.includes(key) && (await monthStore.get(blobKey))) {
+          monthsCached++;
+          continue;
+        }
+        const actuals = await fetchMonthActuals(token, primary.tenantId, key, currency);
+        await monthStore.setJSON(blobKey, actuals);
+        monthsFetched++;
+      }
+    } catch (err) {
+      console.error(`[cash-xero-sync] monthly history failed: ${err.message}`);
+    }
+  }
+
+  const health = await refreshTokenHealth();
     // Group total is only meaningful where currencies match. Anything else is
     // reported per currency — do NOT silently add NZD and USD together.
     const byCurrency = {};
@@ -118,6 +152,7 @@ export default async (_req, _context) => {
         `ok=${orgs.filter((o) => !o.error).length} ` +
         `errors=${payload.errors.length} ` +
         `tokenDays=${health?.daysRemaining ?? "?"} ` +
+        `months=${monthsFetched}fetched/${monthsCached}cached ` +
         `durationMs=${payload.durationMs} ` +
         `closingByCurrency=${JSON.stringify(byCurrency)}`,
     );

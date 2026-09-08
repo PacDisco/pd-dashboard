@@ -21,6 +21,7 @@ import {
   currentFiscalYear,
 } from "./_shared/cash-store.mjs";
 import { loadRateSummary, planningRate } from "./_shared/cash-fx.mjs";
+import { fiscalMonthKeys } from "./_shared/cash-xero.mjs";
 import { buildForecast } from "../../cash-forecast/engine.mjs";
 
 export default async (req) => {
@@ -47,10 +48,32 @@ export default async (req) => {
     assumptions.fxRates?.[settlement] ?? 1,
   );
 
-  const forecast = buildForecast({
+  // Stored monthly figures, so closed months can show what happened and the
+  // rest of the year can re-base onto the real closing balance.
+  const actualsByMonth = {};
+  try {
+    const monthStore = getStore({ name: "cash-xero-months" });
+    const latest = await getStore({ name: "cash-xero" }).get("latest", { type: "json" });
+    const tenantId = latest?.orgs?.[0]?.tenantId;
+    if (tenantId) {
+      for (const key of fiscalMonthKeys(fy, new Date(`${fy + 1}-03-31T00:00:00Z`))) {
+        const m = await monthStore.get(`${tenantId}/${key}`, { type: "json" });
+        if (m) actualsByMonth[key] = m;
+      }
+    }
+  } catch (err) {
+    console.warn("[cash-forecast] monthly actuals read failed:", err.message);
+  }
+
+  const effective = {
     ...assumptions,
     fxRates: { ...assumptions.fxRates, [settlement]: effectiveRate },
-  });
+  };
+
+  const forecast = buildForecast(effective, actualsByMonth);
+  // The same year with no actuals applied, so the UI can show variance for
+  // closed months without a second round trip.
+  const forecastOnly = buildForecast(effective, {});
 
   // Actuals come from whatever the last sync wrote. If it has never run, the
   // dashboard still works — it shows forecast only, and says so.
@@ -66,6 +89,8 @@ export default async (req) => {
     fiscalYearStartYear: fy,
     assumptions,
     forecast,
+    forecastOnly,
+    actualMonthsAvailable: Object.keys(actualsByMonth).sort(),
     fx,
     effectiveRate,
     actuals,

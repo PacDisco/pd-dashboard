@@ -261,3 +261,108 @@ console.log("\nAll engine tests passed (including split-currency).");
     console.log("✓ buffer sizing is exact");
 }
 console.log("\nAll treasury tests passed.");
+
+/* ---------- actuals overlay: closed months replace forecast, and re-base it ---------- */
+
+{
+  const a = base();
+  a.fxRates = { NZD: 1, USD: 2.0 };          // round rate keeps arithmetic checkable
+  a.openingBalances = { NZD: 100_000, USD: 0 };
+  a.baseMinimumBuffer = 0;
+  a.monthlyOverheads = Array(12).fill(10_000);
+  a.programs = [prog({
+    id: "p1", name: "P1", currency: "USD", price: 10_000,
+    costCurrency: "NZD", fixedCost: 0, variableCostPerPax: 0,
+    paxForecast: 10, startDate: "2026-10-01",
+  })];
+
+  const pure = buildForecast(a);
+
+  // April actually went differently: more cash in, and the bank ended somewhere
+  // the forecast never predicted.
+  const actuals = {
+    "2026-04": {
+      source: "Xero Bank Summary",
+      byCurrency: {
+        NZD: { received: 5_000, spent: 25_000, closing: 80_000 },
+        USD: { received: 40_000, spent: 0, closing: 40_000 },
+      },
+    },
+  };
+
+  // Not locked yet → actuals must be ignored entirely.
+  const unlocked = buildForecast(a, actuals);
+  near(unlocked.months[0].baseClosing, pure.months[0].baseClosing, 0.01,
+    "actuals must not apply until the month is locked");
+  assert.equal(unlocked.months[0].isActual, false);
+  assert.equal(unlocked.totals.actualMonths, 0);
+  console.log("✓ actuals ignored until locked");
+
+  a.actualsThroughMonth = "2026-04";
+  const f = buildForecast(a, actuals);
+  const apr = f.months[0], may = f.months[1];
+
+  assert.equal(apr.isActual, true, "April is actual");
+  assert.equal(may.isActual, false, "May is still forecast");
+  assert.equal(f.totals.actualMonths, 1);
+
+  near(apr.baseIn, 5_000, 0.01, "NZD received comes from Xero");
+  near(apr.fxIn, 40_000, 0.01, "USD received comes from Xero");
+  near(apr.baseOut, 25_000, 0.01, "NZD spent comes from Xero");
+  near(apr.cashIn, 5_000 + 40_000 * 2.0, 0.01, "headline cash in is base-stated");
+  near(apr.baseClosing, 80_000, 0.01, "closing is the real bank balance");
+  near(apr.fxClosing, 40_000, 0.01);
+  near(apr.closing, 80_000 + 40_000 * 2.0, 0.01, "combined position uses real balances");
+  console.log("✓ closed month shows Xero figures, not forecast");
+
+  // The conversion split is NOT derivable from a bank summary, so it must be
+  // null rather than a plausible-looking number.
+  assert.equal(apr.fxConverted, null, "conversion is unknowable from a bank summary");
+  assert.equal(apr.baseFromConversion, null);
+  console.log("✓ underivable rows are null, not invented");
+
+  // THE POINT: May must start from April's ACTUAL closing, not the forecast one.
+  near(may.baseOpening, 80_000, 0.01, "May re-bases onto the actual NZD closing");
+  near(may.fxOpening, 40_000, 0.01, "and the actual USD closing");
+  assert.ok(Math.abs(pure.months[1].baseOpening - 80_000) > 1,
+    "test is meaningful: the pure forecast opened somewhere else");
+  console.log("✓ forecast re-bases onto reality after a closed month");
+
+  // Everything downstream shifts by the same amount the actual differed by.
+  const delta = f.months[11].closing - pure.months[11].closing;
+  assert.ok(Math.abs(delta) > 1, "the whole tail moves when reality differs");
+  console.log("✓ the re-base carries through to March");
+}
+
+/* ---------- locking a month with no stored actuals must not fail silently ---------- */
+
+{
+  const a = base();
+  a.programs = [];
+  a.actualsThroughMonth = "2026-05";
+  const f = buildForecast(a, { "2026-04": { byCurrency: { NZD: { received: 0, spent: 0, closing: 1 } } } });
+
+  assert.equal(f.months[0].isActual, true, "April has figures");
+  assert.equal(f.months[1].isActual, false, "May has none");
+  assert.ok(f.warnings.some((w) => w.includes("May 26") && w.includes("no Xero figures")),
+    "a locked month with no data must be called out");
+  console.log("✓ locked-but-missing months are warned, not silently forecast");
+}
+
+/* ---------- a closed month with no closing balance falls back to movement ---------- */
+
+{
+  const a = base();
+  a.programs = [];
+  a.openingBalances = { NZD: 10_000, USD: 0 };
+  a.monthlyOverheads = Array(12).fill(0);
+  a.actualsThroughMonth = "2026-04";
+  const f = buildForecast(a, {
+    "2026-04": { byCurrency: { NZD: { received: 3_000, spent: 1_000 } } },  // no closing
+  });
+  near(f.months[0].baseClosing, 12_000, 0.01,
+    "without a closing balance, opening + received − spent is used");
+  console.log("✓ missing closing balance degrades sensibly");
+}
+
+console.log("\nAll actuals-overlay tests passed.");

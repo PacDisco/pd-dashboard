@@ -57,9 +57,10 @@ function seasonDates(fy) {
  * in month, 25% after, 5% the month after that. Invented. Replace with your
  * actual supplier payment terms.
  *
- * Also placeholder: the deposit (1,000) and balance-due days (60), and the
- * booking curve, which is a plausible shape rather than a measured one. The
- * HubSpot deal data could give you the real curve.
+ * The deposit and balance-due days are REAL (2,500 / 90 days). The booking
+ * curve is still a plausible shape rather than a measured one — HubSpot deal
+ * data could give you the real distribution, and it matters more now that the
+ * deposit is 2,500 rather than 1,000.
  */
 export function seedAssumptions(fiscalYearStartYear) {
   const fy = fiscalYearStartYear;
@@ -98,8 +99,11 @@ export function seedAssumptions(fiscalYearStartYear) {
     })),
 
     defaultPaymentRules: {
-      deposit: 1000,
-      balanceDueDaysBeforeDeparture: 60,
+      // Real rules, confirmed Sept 2026: 2,500 deposit at booking, balance due
+      // within 90 days of the program. Deposit is in the program's currency —
+      // USD, same as the price — so it is ~NZD 4,100 at current rates.
+      deposit: 2500,
+      balanceDueDaysBeforeDeparture: 90,
       bookingCurve: [
         { monthsBefore: 12, share: 0.04 },
         { monthsBefore: 11, share: 0.05 },

@@ -54,6 +54,9 @@ export const DEFAULT_COST_PHASING = {
 export function defaultAssumptions(fiscalYearStartYear) {
     return {
         fiscalYearStartYear,
+        // "YYYY-MM" of the last month closed off. Months at or before this show
+        // Xero actuals; everything after is forecast. Null = all forecast.
+        actualsThroughMonth: null,
         openingBalances: { NZD: 0, USD: 0 },
         baseCurrency: "NZD",
         settlementCurrency: "USD",

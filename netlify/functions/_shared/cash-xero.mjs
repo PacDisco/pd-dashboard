@@ -357,3 +357,88 @@ export function parseDeferredRevenue(balanceSheet, accountNamePattern) {
 export function fiscalYearBounds(fyStartYear) {
     return { from: `${fyStartYear}-04-01`, to: `${fyStartYear + 1}-03-31` };
 }
+
+
+/* ------------------------------------------------------------------ *
+ * Monthly history
+ *
+ * The dashboard replaces closed months with what actually happened, so it needs
+ * a Bank Summary per month rather than one for the current month. Closed months
+ * do not change, so they are cached and re-fetched only while still recent.
+ * ------------------------------------------------------------------ */
+
+/** ["2026-04", "2026-05", ...] from the fiscal year start up to `upTo` (inclusive). */
+export function fiscalMonthKeys(fyStartYear, upTo = new Date()) {
+    const keys = [];
+    const cutoff = `${upTo.getUTCFullYear()}-${String(upTo.getUTCMonth() + 1).padStart(2, "0")}`;
+    for (let i = 0; i < 12; i++) {
+        const abs = 3 + i; // April is calendar month index 3
+        const y = fyStartYear + Math.floor(abs / 12);
+        const m = (abs % 12) + 1;
+        const key = `${y}-${String(m).padStart(2, "0")}`;
+        if (key > cutoff) break;
+        keys.push(key);
+    }
+    return keys;
+}
+
+/** First and last day of a "YYYY-MM" key. */
+export function monthRange(key) {
+    const [y, m] = key.split("-").map(Number);
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { from: `${key}-01`, to: `${key}-${String(last).padStart(2, "0")}` };
+}
+
+/**
+ * Bank Summary for one month, reduced to per-currency received / spent /
+ * closing. Accounts are grouped by the currency of the account, which is what
+ * lets the dashboard show a real NZD balance and a real USD balance rather than
+ * one blended figure.
+ */
+export async function fetchMonthActuals(accessToken, tenantId, key, accountCurrency) {
+    const { from, to } = monthRange(key);
+    const report = await xeroGet(accessToken, tenantId, "Reports/BankSummary", {
+        fromDate: from,
+        toDate: to,
+    });
+    const parsed = parseBankSummary(report);
+
+    const byCurrency = {};
+    for (const acc of parsed.accounts) {
+        const cur = accountCurrency(acc.name);
+        const c = (byCurrency[cur] ||= { received: 0, spent: 0, closing: 0, opening: 0 });
+        c.opening += acc.opening;
+        c.received += acc.received;
+        // Xero reports "Cash Spent" as a positive magnitude in this column.
+        c.spent += Math.abs(acc.spent);
+        c.closing += acc.closing;
+    }
+
+    return {
+        month: key,
+        byCurrency,
+        accounts: parsed.accounts,
+        source: "Xero Bank Summary",
+        fetchedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Bank accounts and their currencies, so a month's figures can be split by the
+ * currency actually held rather than assumed.
+ */
+export async function getBankAccountCurrencies(accessToken, tenantId, baseCurrency = "NZD") {
+    const map = new Map();
+    try {
+        const json = await xeroGet(accessToken, tenantId, "Accounts", {
+            where: 'Type=="BANK"',
+        });
+        for (const a of json?.Accounts ?? []) {
+            if (a.Name) map.set(a.Name.trim().toLowerCase(), a.CurrencyCode || baseCurrency);
+        }
+    } catch {
+        // Without the account list every balance falls back to the base
+        // currency. Better a stated assumption than a guessed split.
+    }
+    return (name) => map.get(String(name).trim().toLowerCase()) || baseCurrency;
+}

@@ -21,6 +21,7 @@ const state = {
   email: "",
   fx: null,
   effectiveRate: null,
+  actualMonthsAvailable: [],
   dirty: false,
   tab: "forecast",
   saving: false,
@@ -57,8 +58,11 @@ async function boot() {
     state.assumptions = data.assumptions;
     state.actuals = data.actuals;
     state.fx = data.fx ?? null;
+    state.actualMonthsAvailable = data.actualMonthsAvailable ?? [];
     state.effectiveRate = data.effectiveRate ?? null;
     state.canEdit = data.canEdit;
+    state.serverForecast = data.forecast ?? null;
+    state.forecastOnly = data.forecastOnly ?? null;
     state.email = data.email;
   } catch (err) {
     return showGate(err.message);
@@ -82,6 +86,33 @@ function resolvedRate() {
            avg90: state.fx.avg90, current: state.fx.current }[src] ?? a.fxRates[cur];
 }
 
+/**
+ * Overlay the server's closed months onto a locally recomputed forecast.
+ *
+ * The engine re-bases the forecast onto each actual closing balance, which the
+ * browser cannot do without the Xero figures. So while editing, months after the
+ * lock are marked provisional rather than pretending to be re-based — better a
+ * visible "recalculating" state than a confidently wrong tail.
+ */
+function withServerActuals(local) {
+  const server = state.serverForecast;
+  if (!server || !state.assumptions.actualsThroughMonth) return local;
+
+  const byKey = Object.fromEntries(server.months.map((m) => [m.key, m]));
+  let sawActual = false;
+  local.months = local.months.map((m) => {
+    const s = byKey[m.key];
+    if (s?.isActual) { sawActual = true; return s; }
+    return { ...m, provisional: sawActual && state.dirty };
+  });
+  local.totals = { ...local.totals, actualMonths: server.totals.actualMonths };
+  if (state.dirty && sawActual) {
+    local.warnings = [...local.warnings,
+      "Months after the last closed month will re-base onto the real balance when you save."];
+  }
+  return local;
+}
+
 /** Assumptions with the planning rate applied — never mutates state. */
 function effectiveAssumptions() {
   const a = state.assumptions;
@@ -90,7 +121,11 @@ function effectiveAssumptions() {
 }
 
 function render() {
-  const f = buildForecast(effectiveAssumptions());
+  // The browser recomputes for instant feedback while editing, but it does not
+  // hold the Xero monthly figures — so a locked month would silently revert to
+  // forecast here. Recompute only the forecast side and splice the server's
+  // actual months back over the top.
+  const f = withServerActuals(buildForecast(effectiveAssumptions()));
   el("app").innerHTML = `
     ${topBar(f)}
     ${emptyState()}
@@ -190,26 +225,32 @@ function tabs() {
 /* ---------------- forecast ---------------- */
 
 function forecastView(f) {
+  // [label, getter, class, realWhenClosed]
+  // Xero's Bank Summary gives totals received and spent, not a split across
+  // program costs / overheads / capital. So in a closed month the totals are
+  // real and the components are still forecast — and they must LOOK different,
+  // or the column silently fails to add up.
   const rows = [
-    ["Deposits in", (m) => m.depositsIn],
-    ["Balances in", (m) => m.balancesIn],
-    ["Cash in", (m) => m.cashIn, "strong"],
-    ["Program costs", (m) => -m.programCostsOut],
-    ["Overheads", (m) => -m.overheads],
-    ["Capital", (m) => -m.capital],
-    ["Tax", (m) => -m.tax],
-    ["Net movement", (m) => m.net, "strong"],
+    ["Deposits in", (m) => m.depositsIn, "", false],
+    ["Balances in", (m) => m.balancesIn, "", false],
+    ["Cash in", (m) => m.cashIn, "strong", true],
+    ["Program costs", (m) => -m.programCostsOut, "", false],
+    ["Overheads", (m) => -m.overheads, "", false],
+    ["Capital", (m) => -m.capital, "", false],
+    ["Tax", (m) => -m.tax, "", false],
+    ["Cash out", (m) => -m.cashOut, "strong", true],
+    ["Net movement", (m) => m.net, "strong", true],
   ];
 
   const treasuryRows = [
-    ["USD received", (m) => m.fxIn],
-    ["USD converted", (m) => -m.fxConverted],
-    ["USD balance", (m) => m.fxClosing, "strong"],
-    ["NZD from conversion", (m) => m.baseFromConversion],
-    ["NZD account", (m) => m.baseClosing, "rule"],
-    ["Total position (NZD)", (m) => m.closing, "muted"],
-    ["Revenue recognised", (m) => m.recognisedRevenue, "muted"],
-    ["Deferred revenue", (m) => m.deferredRevenueBalance, "muted"],
+    ["USD received", (m) => m.fxIn, "", true],
+    ["USD converted", (m) => m.fxConverted === null ? null : -m.fxConverted, "", true],
+    ["USD balance", (m) => m.fxClosing, "strong", true],
+    ["NZD from conversion", (m) => m.baseFromConversion, "", true],
+    ["NZD account", (m) => m.baseClosing, "rule", true],
+    ["Total position (NZD)", (m) => m.closing, "muted", true],
+    ["Revenue recognised", (m) => m.recognisedRevenue, "muted", false],
+    ["Deferred revenue", (m) => m.deferredRevenueBalance, "muted", false],
   ];
 
   return `
@@ -219,30 +260,75 @@ function forecastView(f) {
     </figure>
     <div class="scroll">
       <table class="cftable">
-        <thead><tr><th class="lab"></th>${f.months.map((m) => `<th>${m.label}</th>`).join("")}</tr></thead>
+        <thead><tr><th class="lab"></th>${f.months.map((m) =>
+          `<th class="${m.isActual ? "actualcol" : ""}${m.provisional ? " provisional" : ""}">${m.label}${
+            m.isActual ? '<span class="amark">actual</span>' : ""}</th>`).join("")}</tr></thead>
         <tbody>
-          ${rows.map(([label, get, cls]) => `
+          ${rows.map(([label, get, cls, real]) => `
             <tr class="${cls || ""}">
               <th class="lab">${label}</th>
-              ${f.months.map((m) => {
-                const v = get(m);
-                return `<td class="${v <= -0.5 ? "neg" : ""}">${Math.abs(v) < 0.5 ? "—" : money(v)}</td>`;
-              }).join("")}
+              ${f.months.map((m) => cell(get(m), m, real)).join("")}
             </tr>`).join("")}
           <tr class="sep"><th class="lab">Treasury</th>${f.months.map(() => "<td></td>").join("")}</tr>
-          ${treasuryRows.map(([label, get, cls]) => `
+          ${treasuryRows.map(([label, get, cls, real]) => `
             <tr class="${cls || ""}">
               <th class="lab">${label}</th>
-              ${f.months.map((m) => {
-                const v = get(m);
-                return `<td class="${v <= -0.5 ? "neg" : ""}">${Math.abs(v) < 0.5 ? "—" : money(v)}</td>`;
-              }).join("")}
+              ${f.months.map((m) => cell(get(m), m, real)).join("")}
             </tr>`).join("")}
+          ${varianceRow(f)}
         </tbody>
       </table>
     </div>
+    ${f.totals.actualMonths ? `<p class="foot"><b>Closed months</b> (tinted) show Xero figures for the totals — cash in, cash out, and the balances. The category split below them is <span class="stillfc-key">still forecast</span>, because a bank summary gives a month's totals and not how the spend divided. Rows marked <i>n/a</i> cannot be derived at all: a conversion and a customer payment both look like money arriving.</p>` : ""}
     <p class="foot">Funds are collected in USD and converted only when the NZD account would fall below the buffer. <b>NZD account</b> is the row that says whether you can pay a supplier; <b>Total position</b> values unconverted USD at the planning rate and is a mark-to-market figure, not spendable cash.</p>
     ${actualsPanel()}`;
+}
+
+/**
+ * One table cell. Three states worth distinguishing, and they are not the same
+ * thing: a real zero, a figure that cannot be derived from a bank summary
+ * (null — conversions, for instance), and a normal number.
+ */
+function cell(v, m, realWhenClosed = true) {
+  // In a closed month, a figure that is still forecast must not look like one
+  // that came from the bank.
+  const stillForecast = m.isActual && !realWhenClosed;
+  const cls = [
+    m.isActual ? "actualcol" : "",
+    m.provisional ? "provisional" : "",
+    stillForecast ? "stillfc" : "",
+    typeof v === "number" && v <= -0.5 ? "neg" : "",
+  ].filter(Boolean).join(" ");
+
+  if (v === null || v === undefined) {
+    return `<td class="${cls} na" title="Not derivable from a bank summary">n/a</td>`;
+  }
+  const title = stillForecast
+    ? ' title="Still forecast — Xero gives the month total, not the split across categories"'
+    : "";
+  return `<td class="${cls}"${title}>${Math.abs(v) < 0.5 ? "—" : money(v)}</td>`;
+}
+
+/**
+ * Forecast versus actual on the closing NZD balance, for closed months only.
+ * This is the row that says whether the model is any good — and the one the old
+ * workbook could never show, because its "adjustments" absorbed the difference
+ * before anyone could see it.
+ */
+function varianceRow(f) {
+  if (!f.totals.actualMonths || !state.forecastOnly) return "";
+  const byKey = Object.fromEntries(state.forecastOnly.months.map((m) => [m.key, m]));
+  return `<tr class="sep"><th class="lab">Variance</th>${f.months.map(() => "<td></td>").join("")}</tr>
+    <tr class="var">
+      <th class="lab">NZD vs forecast</th>
+      ${f.months.map((m) => {
+        if (!m.isActual || !byKey[m.key]) return `<td class="na">—</td>`;
+        const d = m.baseClosing - byKey[m.key].baseClosing;
+        const sign = d > 0 ? "+" : "";
+        return `<td class="actualcol ${d < -0.5 ? "neg" : d > 0.5 ? "pos" : ""}" title="Actual ${money(m.baseClosing)} vs forecast ${money(byKey[m.key].baseClosing)}">${
+          Math.abs(d) < 0.5 ? "—" : sign + money(d)}</td>`;
+      }).join("")}
+    </tr>`;
 }
 
 function actualsPanel() {
@@ -350,6 +436,40 @@ function paymentsView() {
     </div>`;
 }
 
+/**
+ * Locking a month is a deliberate act, not a date calculation. Month-end close
+ * is not instant — late supplier invoices and bank feeds land days afterwards —
+ * so a month shows as actual only once someone says it is done.
+ */
+function closeControl() {
+  const a = state.assumptions;
+  const ro = !state.canEdit;
+  const labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
+  const fy = a.fiscalYearStartYear;
+  const options = labels.map((l, i) => {
+    const abs = 3 + i;
+    const y = fy + Math.floor(abs / 12);
+    const key = `${y}-${String((abs % 12) + 1).padStart(2, "0")}`;
+    return { key, label: `${l} ${String(y).slice(2)}`, has: state.actualMonthsAvailable.includes(key) };
+  });
+  const current = a.actualsThroughMonth || "";
+
+  return `<section class="closebox">
+    <h2>Month-end close</h2>
+    <p class="foot">Months up to and including your choice show what actually happened, pulled from Xero. Everything after stays forecast, and re-bases onto the real closing balance.</p>
+    <label class="field wide"><span>Actuals through</span>
+      <select id="closethru" ${ro ? "disabled" : ""}>
+        <option value="">Nothing closed — all forecast</option>
+        ${options.map((o) => `<option value="${o.key}" ${current === o.key ? "selected" : ""} ${o.has ? "" : "disabled"}>${o.label}${o.has ? "" : " — no Xero data"}</option>`).join("")}
+      </select></label>
+    <p class="foot">${
+      state.actualMonthsAvailable.length
+        ? `Xero figures stored for ${state.actualMonthsAvailable.length} month${state.actualMonthsAvailable.length === 1 ? "" : "s"}.`
+        : `No Xero months stored yet — run the Xero sync before closing anything.`
+    }</p>
+  </section>`;
+}
+
 function ratePanel(ro) {
   const fx = state.fx;
   const a = state.assumptions;
@@ -426,6 +546,7 @@ function overheadsView() {
     ["Tax", "monthlyTax"],
   ];
   return `
+    ${closeControl()}
     <div class="openings">
       ${["NZD", state.assumptions.settlementCurrency || "USD"].map((cur) => `
         <label class="field wide"><span>Opening ${escapeHtml(cur)} balance at 1 April</span>
@@ -487,6 +608,11 @@ function wire() {
       };
       touch();
     }));
+
+  el("closethru")?.addEventListener("change", (e) => {
+    state.assumptions.actualsThroughMonth = e.target.value || null;
+    touch();
+  });
 
   el("buffer")?.addEventListener("change", (e) => {
     state.assumptions.baseMinimumBuffer = Number(e.target.value); touch();

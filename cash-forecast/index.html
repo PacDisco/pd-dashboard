@@ -162,6 +162,27 @@
   .bar { height: 6px; background: #eef1f5; border-radius: 3px; overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--topaz); }
 
+  /* Closed months. Tinted rather than boxed, so a twelve-column table doesn't
+     turn into two visually separate tables. */
+  .cftable .actualcol { background: #f2f8fa; }
+  .cftable thead th.actualcol { background: #e4f1f5; color: var(--topaz-darker); }
+  .cftable thead th.actualcol .amark { display: block; font-size: 8.5px; letter-spacing: .09em;
+    color: var(--topaz-dark); font-weight: 600; margin-top: 1px; }
+  .cftable td.na { color: #b8c0cb; font-style: italic; }
+  /* A forecast figure sitting inside a closed month. Must not read as banked. */
+  .cftable td.stillfc { color: #9aa6b4; font-style: italic; }
+  .cftable td.stillfc.neg { color: #d09a95; }
+  .stillfc-key { color: #9aa6b4; font-style: italic; }
+  .cftable .provisional { opacity: .55; }
+  .cftable tr.var td { font-weight: 600; }
+  .pos { color: #2f7d32; }
+
+  .closebox { background: #fff; border: 1px solid var(--topaz); border-left-width: 3px;
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 4px; }
+  .closebox h2 { margin-bottom: 4px; }
+  .closebox select { font: inherit; font-size: 13.5px; padding: 5px 9px; border: 1px solid var(--line);
+    border-radius: 7px; background: var(--sunk); color: var(--ink); min-width: 16rem; }
+
   .pc { color: #98a2b3; }
   .sens { margin-top: 6px; }
   .sens th.lab { white-space: nowrap; }

@@ -102,7 +102,13 @@ function normalise(items) {
     return items.map((i) => ({ ...i, share: i.share / total }));
 }
 /* ------------------------------------------------------------------ */
-export function buildForecast(assumptions) {
+/**
+ * @param assumptions  the editable model
+ * @param actualsByMonth  { "2026-04": { byCurrency: { NZD: {received,spent,closing}, ... } } }
+ *        Months at or before `assumptions.actualsThroughMonth` are replaced with
+ *        these figures and the forecast re-bases onto the real closing balance.
+ */
+export function buildForecast(assumptions, actualsByMonth = {}) {
     const fy = assumptions.fiscalYearStartYear;
     const warnings = [];
     const months = Array.from({ length: 12 }, (_, slot) => {
@@ -121,7 +127,8 @@ export function buildForecast(assumptions) {
             tax: 0,
             cashOut: 0,
             net: 0,
-            fxOpening: 0, fxIn: 0, fxConverted: 0, fxClosing: 0,
+            fxOpening: 0, fxIn: 0, fxOut: 0, fxConverted: 0, fxClosing: 0,
+            isActual: false, actualSource: null,
             baseOpening: 0, baseIn: 0, baseFromConversion: 0, baseOut: 0, baseClosing: 0,
             opening: 0,
             closing: 0,
@@ -257,6 +264,11 @@ export function buildForecast(assumptions) {
     if (!(rate > 0)) {
         warnings.push(`No usable ${fxCur}/${baseCur} rate — conversions are disabled and the ${baseCur} position will look worse than it is.`);
     }
+    // Months at or before this are replaced with what actually happened. Null or
+    // absent means the whole year is forecast.
+    const actualsThrough = assumptions.actualsThroughMonth || null;
+    const isClosed = (key) => Boolean(actualsThrough) && key <= actualsThrough;
+
     for (const row of months) {
         row.cashIn = row.depositsIn + row.balancesIn;
         row.cashOut = row.programCostsOut + row.overheads + row.capital + row.tax;
@@ -266,28 +278,89 @@ export function buildForecast(assumptions) {
         row.fxOpening = fxBalance;
         row.baseOpening = baseBalance;
         row.opening = baseBalance + fxBalance * rate;
-        // Receipts land first, then the month's payments are made.
-        fxBalance += row.fxIn;
-        baseBalance += row.baseIn - row.baseOut;
-        // Convert only what is needed to restore the buffer, and only as much as
-        // there is to convert. Anything still short stays short — that shortfall is
-        // the number worth seeing, so it is never papered over with a plug.
-        let converted = 0;
-        if (rate > 0 && baseBalance < buffer && fxBalance > 0) {
-            const baseNeeded = buffer - baseBalance;
-            const fxRequired = baseNeeded / rate;
-            converted = Math.min(fxRequired, fxBalance);
-            fxBalance -= converted;
-            baseBalance += converted * rate;
+
+        const actual = isClosed(row.key) ? actualsByMonth[row.key] : null;
+
+        if (actual) {
+            /* ---- a closed month: what happened, not what was predicted ----
+             *
+             * Bank Summary gives received, spent and closing per bank account.
+             * That is enough for the balances and the totals, and NOT enough to
+             * split spend across program costs / overheads / capital, or to say
+             * how much of the NZD received was a conversion rather than a
+             * customer payment. Those rows keep their forecast values and are
+             * marked as such rather than being given invented precision.
+             *
+             * Crucially the closing balances become the next month's opening, so
+             * the remaining forecast re-bases onto reality instead of carrying a
+             * stale predicted balance forward for the rest of the year. */
+            const b = actual.byCurrency || {};
+            const baseA = b[baseCur] || { received: 0, spent: 0, closing: null };
+            const fxA = b[fxCur] || { received: 0, spent: 0, closing: null };
+
+            row.isActual = true;
+            row.actualSource = actual.source || "Xero Bank Summary";
+
+            row.baseIn = baseA.received || 0;
+            row.fxIn = fxA.received || 0;
+            row.baseOut = baseA.spent || 0;
+            row.fxOut = fxA.spent || 0;
+
+            // Headline rows, base-stated, so the column still adds up.
+            row.cashIn = row.baseIn + row.fxIn * rate;
+            row.cashOut = row.baseOut + row.fxOut * rate;
+            row.net = row.cashIn - row.cashOut;
+
+            // Not derivable from a bank summary — a conversion and a customer
+            // payment both look like money arriving in the NZD account.
+            row.fxConverted = null;
+            row.baseFromConversion = null;
+
+            baseBalance = baseA.closing !== null && baseA.closing !== undefined
+                ? baseA.closing
+                : baseBalance + row.baseIn - row.baseOut;
+            fxBalance = fxA.closing !== null && fxA.closing !== undefined
+                ? fxA.closing
+                : fxBalance + row.fxIn - row.fxOut;
         }
-        row.fxConverted = converted;
-        row.baseFromConversion = converted * rate;
+        else {
+            // Receipts land first, then the month's payments are made.
+            fxBalance += row.fxIn;
+            baseBalance += row.baseIn - row.baseOut;
+            // Convert only what is needed to restore the buffer, and only as much as
+            // there is to convert. Anything still short stays short — that shortfall is
+            // the number worth seeing, so it is never papered over with a plug.
+            let converted = 0;
+            if (rate > 0 && baseBalance < buffer && fxBalance > 0) {
+                const baseNeeded = buffer - baseBalance;
+                const fxRequired = baseNeeded / rate;
+                converted = Math.min(fxRequired, fxBalance);
+                fxBalance -= converted;
+                baseBalance += converted * rate;
+            }
+            row.fxConverted = converted;
+            row.baseFromConversion = converted * rate;
+        }
+
         row.fxClosing = fxBalance;
         row.baseClosing = baseBalance;
         row.closing = baseBalance + fxBalance * rate;
-        // Deferred revenue is an accounting balance, stated in base currency.
+
+        // Deferred revenue is an accounting balance in base currency. For a
+        // closed month it uses the real receipts, so it stays meaningful.
         deferred += row.fxIn * rate + row.baseIn - row.recognisedRevenue;
         row.deferredRevenueBalance = deferred;
+    }
+
+    // A month marked closed with no stored figures is a silent hole — the row
+    // would quietly show forecast while the header claims actual.
+    if (actualsThrough) {
+        const missing = months
+            .filter((m) => isClosed(m.key) && !actualsByMonth[m.key])
+            .map((m) => m.label);
+        if (missing.length) {
+            warnings.push(`Locked as actual but no Xero figures stored for ${missing.join(", ")} — those months are still showing forecast. Run the Xero sync.`);
+        }
     }
     const lowest = months.reduce((min, r) => (r.closing < min.closing ? r : min), months[0]);
     const lowestBase = months.reduce((min, r) => (r.baseClosing < min.baseClosing ? r : min), months[0]);
@@ -323,6 +396,8 @@ export function buildForecast(assumptions) {
             lowestBaseClosing: lowestBase.baseClosing,
             lowestBaseMonth: lowestBase.label,
             planningRate: rate,
+            actualMonths: months.filter((m) => m.isActual).length,
+            actualsThroughMonth: assumptions.actualsThroughMonth || null,
         },
         warnings,
     };

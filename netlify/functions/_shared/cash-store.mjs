@@ -138,6 +138,10 @@ export function validateAssumptions(input) {
     return { ok: false, error: "baseMinimumBuffer must be a number of at least 0" };
   }
 
+  if (input.actualsThroughMonth != null && !/^\d{4}-\d{2}$/.test(input.actualsThroughMonth)) {
+    return { ok: false, error: "actualsThroughMonth must be YYYY-MM or null" };
+  }
+
   const sources = ["manual", "avg30", "avg60", "avg90", "current"];
   if (input.planningRateSource && !sources.includes(input.planningRateSource)) {
     return { ok: false, error: `planningRateSource must be one of ${sources.join(", ")}` };

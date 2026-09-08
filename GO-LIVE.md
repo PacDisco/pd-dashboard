@@ -92,27 +92,27 @@ Also confirm now, before anyone else sees it:
 
 ## 4. Xero consent — the one-shot step
 
-Open in a browser, signed in to Xero as a user who can see **all four**
-organisations:
+Open in a browser, signed in to Xero as a user who can see Pacific Discovery:
 
 ```
 $S/.netlify/functions/cash-xero-auth?key=$KEY
 ```
 
-On the Xero consent screen, **tick every organisation you want on the
-dashboard**. One consent covers all of them.
+On the Xero consent screen, **tick Pacific Discovery only**.
 
-The callback returns plain text listing the organisations and their tenant IDs.
-**Keep that output** — it's where `XERO_TENANTS` values come from if you later
-want to pin which orgs sync and in what order.
+The callback returns plain text listing the organisation and its tenant ID.
+**Copy that tenant ID and set it as `XERO_TENANTS`.** Without it the sync pulls
+every organisation ever authorised on the Xero app, so a future consent — or
+someone else's — would silently widen what the dashboard shows.
 
 - **"State mismatch"** → start again from the auth URL rather than re-loading
   the callback. The state is single-use by design.
 - **`redirect_uri` / `unauthorized_client` error from Xero** → `XERO_REDIRECT_URI`
   doesn't match what's registered on the Xero app, character for character.
   Trailing slashes count.
-- **Missed an organisation** → just run the auth URL again and re-tick. Xero
-  adds newly consented tenants to the existing connection.
+- **Want to add an entity later** → run the auth URL again, tick it, and add its
+  tenant ID to `XERO_TENANTS`. Xero adds newly consented tenants to the existing
+  connection, so the pin is what actually controls scope.
 
 ---
 
@@ -144,9 +144,11 @@ Or just read the Xero actuals panel at the bottom of the Cash flow tab.
 1. **Bank balance per account** matches Xero's own Bank Summary report for the
    current month. This is the number everything else rests on.
 2. **Receivables and payables** match the Balance Sheet.
-3. **`byProgram`** lists your real program names. Empty or wrong grouping →
+3. **Only Pacific Discovery appears** in the actuals panel. A second entity
+   means `XERO_TENANTS` isn't pinned.
+4. **`byProgram`** lists your real program names. Empty or wrong grouping →
    set `XERO_PROGRAM_CATEGORY` to the exact name of your tracking category.
-4. **`tokenHealth.daysRemaining`** reads about 60.
+5. **`tokenHealth.daysRemaining`** reads about 60.
 
 If 1 or 2 are wrong, that's a parser problem and the fixtures in
 `test/cash-xero-parsers.test.mjs` need updating against your real shape.
