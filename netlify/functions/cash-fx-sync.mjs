@@ -16,6 +16,17 @@ import { fetchRateSummary, saveRateSummary } from "./_shared/cash-fx.mjs";
 export default async (_req, _context) => {
     const summary = await fetchRateSummary("USD", "NZD");
     await saveRateSummary(summary);
+
+    // Scheduled functions return into the void — nothing renders the response
+    // body in the Netlify log. This line is the only durable record that the
+    // run happened and what it stored, so keep it.
+    console.log(
+      `[cash-fx-sync] ${summary.pair} current=${summary.current} ` +
+        `avg30=${summary.avg30} avg60=${summary.avg60} avg90=${summary.avg90} ` +
+        `range=${summary.low90}-${summary.high90} obs=${summary.observations} ` +
+        `asOf=${summary.asOf} source="${summary.source}"` +
+        (summary.degraded ? " DEGRADED=spot-only" : ""),
+    );
     return Response.json({
         ok: true,
         pair: summary.pair,
