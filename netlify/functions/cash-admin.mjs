@@ -7,16 +7,20 @@
 // Routes (POST, JSON body with { action }):
 //   save     { assumptions }              -> replace the assumptions for its year
 //   restore  { fiscalYearStartYear, at }  -> roll back to a saved version
+//   seed     { fiscalYearStartYear }      -> load the workbook starting values,
+//                                            ONLY into an empty year
 //
 // Every save writes a timestamped copy alongside the current one, so a bad
 // change is recoverable without anyone hunting for the last emailed workbook.
 
 import { requireCashRole, json } from "./_shared/cash-access.mjs";
 import {
+  loadAssumptions,
   loadVersion,
   saveAssumptions,
   validateAssumptions,
 } from "./_shared/cash-store.mjs";
+import { seedAssumptions } from "../../cash-forecast/seed.mjs";
 
 export default async (req) => {
   const user = await requireCashRole(req, "write", "cash-admin");
@@ -41,6 +45,30 @@ export default async (req) => {
 
     const saved = await saveAssumptions(checked.value, user.email || "unknown");
     return json({ assumptions: saved });
+  }
+
+  if (action === "seed") {
+    const fy = Number(body.fiscalYearStartYear);
+    if (!Number.isInteger(fy)) {
+      return json({ error: "seed needs fiscalYearStartYear" }, 400);
+    }
+
+    // Refuse if there is anything to lose. Seeding is a first-run convenience,
+    // not a reset — someone who has spent an afternoon entering real pax should
+    // not be one mis-click from having it replaced by placeholders.
+    const existing = await loadAssumptions(fy);
+    if (existing.programs?.length) {
+      return json({
+        error: `FY ${fy} already has ${existing.programs.length} programs. ` +
+               `Seeding only works on an empty year — delete the programs first if you really want to start over.`,
+      }, 409);
+    }
+
+    const checked = validateAssumptions(seedAssumptions(fy));
+    if (!checked.ok) return json({ error: `Seed data is invalid: ${checked.error}` }, 500);
+
+    const saved = await saveAssumptions(checked.value, user.email || "unknown");
+    return json({ assumptions: saved, seeded: true });
   }
 
   if (action === "restore") {

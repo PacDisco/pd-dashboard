@@ -93,6 +93,7 @@ function render() {
   const f = buildForecast(effectiveAssumptions());
   el("app").innerHTML = `
     ${topBar(f)}
+    ${emptyState()}
     ${warnings(f)}
     ${tabs()}
     <div class="panel">${
@@ -143,6 +144,25 @@ function topBar(f) {
         <span class="email">${escapeHtml(state.email)}</span>
       </div>
     </header>`;
+}
+
+/**
+ * An empty model renders a page full of zeros, which reads as broken rather
+ * than as "nothing entered yet". Say so plainly, and offer the starting values
+ * so nobody hand-types ten programs into a web form.
+ */
+function emptyState() {
+  if (state.assumptions.programs?.length) return "";
+  return `<div class="empty">
+    <h2>No programs yet</h2>
+    <p>The forecast is showing zeros because nothing has been entered. ${
+      state.canEdit
+        ? `Load the starting values from the 26/27 workbook and edit from there, or add programs one at a time on the <b>Programs &amp; pax</b> tab.`
+        : `An administrator needs to set up the model.`
+    }</p>
+    ${state.canEdit ? `<button id="seed" class="btn-primary">Load 26/27 starting values</button>` : ""}
+    <p class="foot">Costs and season pax totals come from the workbook. Per-program pax, departure dates and supplier cost phasing are placeholders you will need to replace — the numbers mean nothing until you do.</p>
+  </div>`;
 }
 
 function warnings(f) {
@@ -434,6 +454,7 @@ function wire() {
     b.addEventListener("click", () => { state.tab = b.dataset.tab; render(); }));
 
   el("save")?.addEventListener("click", save);
+  el("seed")?.addEventListener("click", seed);
   el("addprog")?.addEventListener("click", addProgram);
 
   document.querySelectorAll("tr[data-i] [data-f]").forEach((input) =>
@@ -518,6 +539,27 @@ function addProgram() {
     active: true,
   });
   touch();
+}
+
+async function seed() {
+  const btn = el("seed");
+  if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+  try {
+    const data = await api("/cash-admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "seed",
+        fiscalYearStartYear: state.assumptions.fiscalYearStartYear,
+      }),
+    });
+    state.assumptions = data.assumptions;
+    state.dirty = false;
+    state.tab = "programs";   // land where the placeholders need attention
+  } catch (err) {
+    state.error = err.message;
+  }
+  render();
 }
 
 async function save() {

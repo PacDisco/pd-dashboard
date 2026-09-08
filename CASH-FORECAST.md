@@ -46,7 +46,7 @@ netlify/functions/
   cash-forecast.mjs        GET  /api/cash-forecast   read model + actuals
   cash-admin.mjs           POST /api/cash-admin      save / restore
   cash-xero-sync.mjs       hourly     pulls each org
-  cash-fx-sync.mjs         daily 06:00 UTC, refreshes USD/NZD
+  cash-fx-sync.mjs         daily 20:00 UTC (8am NZ), refreshes USD/NZD
   cash-xero-auth.mjs       one-time consent kickoff
   cash-xero-callback.mjs   catches the code, stores tokens
   _shared/cash-access.mjs  role gate
@@ -153,19 +153,24 @@ XERO_SETUP_KEY=              # openssl rand -hex 24; gates the one-time auth URL
 # XERO_PROGRAM_CATEGORY=     # optional: Xero tracking category holding programs
 ```
 
-Scopes to request on the Xero app — read-only, granular (broad scopes work until
-September 2027 but are deprecated):
+Scopes are **not** configured in the Xero portal for an Auth Code app — they are
+requested in the authorize URL at runtime, and `_shared/cash-xero.mjs` holds the
+list in `SCOPES`. (Portal-side scope selection is how Custom Connections work,
+which is a different app type.) For reference, what it asks for is read-only:
 
 ```
-offline_access
+openid  profile  email  offline_access
 accounting.reports.banksummary.read
-accounting.reports.balancesheet.read
 accounting.reports.profitandloss.read
+accounting.reports.balancesheet.read
 accounting.reports.aged.read
 accounting.banktransactions.read
 accounting.invoices.read
 accounting.settings.read
 ```
+
+To change what the integration can see, edit `SCOPES` and re-run the consent
+flow — a new scope does not apply to an existing token.
 
 Without `offline_access` there is no refresh token and the sync dies after 30
 minutes.
