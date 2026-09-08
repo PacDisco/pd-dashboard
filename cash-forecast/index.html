@@ -118,8 +118,12 @@
   .grid.edit input:hover:not(:disabled), .grid.edit select:hover:not(:disabled) { border-color: var(--line); }
   .grid.edit input:focus, .grid.edit select:focus { background: #fff; border-color: var(--topaz); }
   .grid.edit input:disabled, .grid.edit select:disabled { color: #6b7280; opacity: 1; }
-  /* Contribution is the output people came for — keep it in view. */
-  .grid.edit td.calc:last-of-type { position: sticky; right: 2.2rem; box-shadow: -1px 0 0 var(--line); }
+  /* No sticky-right here. An earlier attempt pinned the Contribution column
+     with `td.calc:last-of-type`, which matches nothing — :last-of-type picks the
+     last <td> (the delete button), and that has no .calc class. The header's
+     counterpart selector DID match, so one row had a sticky cell and the other
+     did not, and the columns drifted apart. The table scrolls in .scroll; that
+     is enough. */
   .cur-in { min-width: 3.8rem !important; text-transform: uppercase; }
   .del { border: none; background: none; color: #b0b8c4; padding: 2px 7px; font-size: 16px; line-height: 1; }
   .del:hover:not(:disabled) { color: var(--over); }
