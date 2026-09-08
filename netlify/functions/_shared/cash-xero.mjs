@@ -395,8 +395,14 @@ export function monthRange(key) {
  * lets the dashboard show a real NZD balance and a real USD balance rather than
  * one blended figure.
  */
-export async function fetchMonthActuals(accessToken, tenantId, key, accountCurrency) {
+export async function fetchMonthActuals(accessToken, tenantId, key, accountCurrency, now = new Date()) {
     const { from, to } = monthRange(key);
+    // A month that has not finished yet still returns a Bank Summary — Xero is
+    // happy to report the first eight days of September. Storing it is useful
+    // (the dashboard can show progress), but presenting it as a closed month
+    // would understate every figure and re-base the rest of the year onto a
+    // balance that is a week old. Flag it so nothing downstream can close on it.
+    const partial = new Date(`${to}T23:59:59Z`).getTime() > now.getTime();
     const report = await xeroGet(accessToken, tenantId, "Reports/BankSummary", {
         fromDate: from,
         toDate: to,
@@ -418,6 +424,7 @@ export async function fetchMonthActuals(accessToken, tenantId, key, accountCurre
         month: key,
         byCurrency,
         accounts: parsed.accounts,
+        partial,
         source: "Xero Bank Summary",
         fetchedAt: new Date().toISOString(),
     };

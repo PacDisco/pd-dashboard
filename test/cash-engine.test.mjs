@@ -349,6 +349,33 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ locked-but-missing months are warned, not silently forecast");
 }
 
+/* ---------- a month that has not finished must not pass as closed ---------- */
+
+{
+  // Xero will happily report the first eight days of September. If that lands
+  // in a closed month the total is understated and, worse, every later month
+  // re-bases onto a balance that is three weeks stale.
+  const a = base();
+  a.programs = [];
+  a.actualsThroughMonth = "2026-04";
+  const f = buildForecast(a, {
+    "2026-04": { partial: true, byCurrency: { NZD: { received: 5_000, spent: 1_000, closing: 4_000 } } },
+  });
+
+  assert.ok(f.warnings.some((w) => w.includes("Apr 26") && w.includes("has not finished")),
+    "a part-month locked as actual must be called out");
+  console.log("✓ a part-month locked as actual is warned about");
+
+  // The same figures without the flag must NOT trip the warning, or the check
+  // is just noise on every closed month.
+  const clean = buildForecast(a, {
+    "2026-04": { byCurrency: { NZD: { received: 5_000, spent: 1_000, closing: 4_000 } } },
+  });
+  assert.ok(!clean.warnings.some((w) => w.includes("has not finished")),
+    "a finished month must not be warned about");
+  console.log("✓ finished months are not warned about");
+}
+
 /* ---------- a closed month with no closing balance falls back to movement ---------- */
 
 {

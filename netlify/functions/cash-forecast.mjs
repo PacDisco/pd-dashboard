@@ -51,6 +51,7 @@ export default async (req) => {
   // Stored monthly figures, so closed months can show what happened and the
   // rest of the year can re-base onto the real closing balance.
   const actualsByMonth = {};
+  let partialMonth = null;
   try {
     const monthStore = getStore({ name: "cash-xero-months" });
     const latest = await getStore({ name: "cash-xero" }).get("latest", { type: "json" });
@@ -64,6 +65,16 @@ export default async (req) => {
   } catch (err) {
     console.warn("[cash-forecast] monthly actuals read failed:", err.message);
   }
+
+  // A month still in progress is stored, but must never be offered as closable —
+  // eight days of September presented as a closed month would understate the
+  // month and re-base every month after it onto a stale balance.
+  const closable = [];
+  for (const [key, m] of Object.entries(actualsByMonth)) {
+    if (m.partial) partialMonth = key;
+    else closable.push(key);
+  }
+  closable.sort();
 
   const effective = {
     ...assumptions,
@@ -90,7 +101,8 @@ export default async (req) => {
     assumptions,
     forecast,
     forecastOnly,
-    actualMonthsAvailable: Object.keys(actualsByMonth).sort(),
+    actualMonthsAvailable: closable,
+    partialMonth,
     fx,
     effectiveRate,
     actuals,

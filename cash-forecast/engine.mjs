@@ -361,6 +361,16 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         if (missing.length) {
             warnings.push(`Locked as actual but no Xero figures stored for ${missing.join(", ")} — those months are still showing forecast. Run the Xero sync.`);
         }
+        // Belt and braces: the UI will not offer an unfinished month, but the
+        // lock is stored data and could be set by an older client or a direct
+        // POST. A part-month shown as actual understates the month AND re-bases
+        // every month after it onto a balance that is days old.
+        const partial = months
+            .filter((m) => isClosed(m.key) && actualsByMonth[m.key]?.partial)
+            .map((m) => m.label);
+        if (partial.length) {
+            warnings.push(`${partial.join(", ")} is locked as actual but the month has not finished — the Xero figures cover part of it only, so the total is understated and every month after it is re-based on it.`);
+        }
     }
     const lowest = months.reduce((min, r) => (r.closing < min.closing ? r : min), months[0]);
     const lowestBase = months.reduce((min, r) => (r.baseClosing < min.baseClosing ? r : min), months[0]);

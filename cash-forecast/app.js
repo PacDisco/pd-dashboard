@@ -22,6 +22,7 @@ const state = {
   fx: null,
   effectiveRate: null,
   actualMonthsAvailable: [],
+  partialMonth: null,
   dirty: false,
   tab: "forecast",
   saving: false,
@@ -59,6 +60,7 @@ async function boot() {
     state.actuals = data.actuals;
     state.fx = data.fx ?? null;
     state.actualMonthsAvailable = data.actualMonthsAvailable ?? [];
+    state.partialMonth = data.partialMonth ?? null;
     state.effectiveRate = data.effectiveRate ?? null;
     state.canEdit = data.canEdit;
     state.serverForecast = data.forecast ?? null;
@@ -450,7 +452,12 @@ function closeControl() {
     const abs = 3 + i;
     const y = fy + Math.floor(abs / 12);
     const key = `${y}-${String((abs % 12) + 1).padStart(2, "0")}`;
-    return { key, label: `${l} ${String(y).slice(2)}`, has: state.actualMonthsAvailable.includes(key) };
+    return {
+      key,
+      label: `${l} ${String(y).slice(2)}`,
+      has: state.actualMonthsAvailable.includes(key),
+      partial: state.partialMonth === key,
+    };
   });
   const current = a.actualsThroughMonth || "";
 
@@ -460,11 +467,11 @@ function closeControl() {
     <label class="field wide"><span>Actuals through</span>
       <select id="closethru" ${ro ? "disabled" : ""}>
         <option value="">Nothing closed — all forecast</option>
-        ${options.map((o) => `<option value="${o.key}" ${current === o.key ? "selected" : ""} ${o.has ? "" : "disabled"}>${o.label}${o.has ? "" : " — no Xero data"}</option>`).join("")}
+        ${options.map((o) => `<option value="${o.key}" ${current === o.key ? "selected" : ""} ${o.has ? "" : "disabled"}>${o.label}${o.has ? "" : (o.partial ? " — month still running" : " — no Xero data")}</option>`).join("")}
       </select></label>
     <p class="foot">${
       state.actualMonthsAvailable.length
-        ? `Xero figures stored for ${state.actualMonthsAvailable.length} month${state.actualMonthsAvailable.length === 1 ? "" : "s"}.`
+        ? `Xero figures stored for ${state.actualMonthsAvailable.length} closed month${state.actualMonthsAvailable.length === 1 ? "" : "s"}.${state.partialMonth ? " The current month is syncing too, but cannot be closed until it ends." : ""}`
         : `No Xero months stored yet — run the Xero sync before closing anything.`
     }</p>
   </section>`;
