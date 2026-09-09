@@ -108,6 +108,18 @@ function normalise(items) {
  *        Months at or before `assumptions.actualsThroughMonth` are replaced with
  *        these figures and the forecast re-bases onto the real closing balance.
  */
+/**
+ * Add a receipt to a month's season bucket.
+ *
+ * Kept as a helper rather than inlined twice because deposits and balances are
+ * accumulated in two different places, and a season silently missing from one
+ * of them would be invisible — the month total would still be right.
+ */
+function addSeasonReceipt(row, season, amountInBase) {
+    if (!season || !amountInBase)
+        return;
+    row.receiptsBySeason[season] = (row.receiptsBySeason[season] || 0) + amountInBase;
+}
 export function buildForecast(assumptions, actualsByMonth = {}) {
     const fy = assumptions.fiscalYearStartYear;
     const warnings = [];
@@ -120,6 +132,12 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             month,
             depositsIn: 0,
             balancesIn: 0,
+            // Receipts split by season, base currency. The actuals side can only
+            // report a season total — one part-paid invoice per student means
+            // nothing on a payment says whether it was the deposit or the
+            // balance — so the forecast has to offer a comparable shape or the
+            // two can never be set against each other.
+            receiptsBySeason: {},
             cashIn: 0,
             programCostsOut: 0,
             overheads: 0,
@@ -190,6 +208,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 // Headline rows are stated in base currency so they can be added up.
                 // The treasury rows below stay in the currency actually received.
                 months[bookingSlot].depositsIn += depositInBase;
+                addSeasonReceipt(months[bookingSlot], program.season, depositInBase);
                 if (receiptsAreFx)
                     months[bookingSlot].fxIn += depositCash;
                 else
@@ -208,6 +227,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             const balanceInBase = balanceCash * receiptRate;
             if (balanceSlot !== null) {
                 months[balanceSlot].balancesIn += balanceInBase;
+                addSeasonReceipt(months[balanceSlot], program.season, balanceInBase);
                 if (receiptsAreFx)
                     months[balanceSlot].fxIn += balanceCash;
                 else
@@ -397,6 +417,12 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         totals: {
             cashIn: months.reduce((s, m) => s + m.cashIn, 0),
             cashOut: months.reduce((s, m) => s + m.cashOut, 0),
+            receiptsBySeason: months.reduce((acc, m) => {
+                for (const [season, v] of Object.entries(m.receiptsBySeason)) {
+                    acc[season] = (acc[season] || 0) + v;
+                }
+                return acc;
+            }, {}),
             recognisedRevenue: months.reduce((s, m) => s + m.recognisedRevenue, 0),
             closingBalance: months[11].closing,
             lowestClosing: lowest.closing,

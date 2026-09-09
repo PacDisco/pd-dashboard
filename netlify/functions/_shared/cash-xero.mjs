@@ -29,7 +29,10 @@ export const SCOPES = [
     "accounting.reports.profitandloss.read",
     "accounting.reports.balancesheet.read",
     "accounting.reports.aged.read",
-    "accounting.banktransactions.read",
+    // Receivable receipts: Payments carries the payment, Invoices carries the
+    // line-item tracking that says which program (and so which season) it was
+    // for. accounting.banktransactions.read was dropped — nothing reads it.
+    "accounting.payments.read",
     "accounting.invoices.read",
     "accounting.settings.read",
 ].join(" ");

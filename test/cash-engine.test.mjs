@@ -392,4 +392,44 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ missing closing balance degrades sensibly");
 }
 
+/* ---------- receipts split by season, so actuals have something to meet ---------- */
+
+{
+  // The actuals side can only ever report a season total: one part-paid invoice
+  // per student means no payment says whether it was the deposit or the balance.
+  // So the forecast must offer the same shape, and it must reconcile exactly —
+  // a season breakdown that does not add back to cash in is worse than none.
+  const a = base();
+  const f = buildForecast(a);
+
+  for (const m of f.months) {
+    const summed = Object.values(m.receiptsBySeason).reduce((s, v) => s + v, 0);
+    near(summed, m.cashIn, 0.01, `${m.label}: season receipts reconcile to cash in`);
+  }
+  console.log("✓ every month's season split adds back to cash in");
+
+  const yearSum = Object.values(f.totals.receiptsBySeason).reduce((s, v) => s + v, 0);
+  near(yearSum, f.totals.cashIn, 0.01, "year totals reconcile");
+  console.log("✓ the year's season totals reconcile to total cash in");
+
+  // Deposits and balances are accumulated in two separate places in the engine.
+  // A season present in one and missing from the other would leave the month
+  // total correct and the split wrong, which is why this is checked by season
+  // rather than only in aggregate.
+  const seasons = new Set(a.programs.filter((p) => p.active).map((p) => p.season));
+  for (const season of seasons) {
+    assert.ok(f.totals.receiptsBySeason[season] > 0,
+      `${season} must contribute receipts somewhere in the year`);
+  }
+  console.log("✓ every active season appears in the split");
+
+  // A program with no pax must not invent a season bucket.
+  const b = base();
+  b.programs = b.programs.map((p) => ({ ...p, paxForecast: p.season === "Summer" ? 0 : p.paxForecast }));
+  const g = buildForecast(b);
+  assert.equal(g.totals.receiptsBySeason.Summer, undefined,
+    "a season with no pax contributes no bucket, rather than a zero row");
+  console.log("✓ an empty season does not create a phantom row");
+}
+
 console.log("\nAll actuals-overlay tests passed.");
