@@ -58,6 +58,13 @@ export function defaultAssumptions(fiscalYearStartYear) {
         // Xero actuals; everything after is forecast. Null = all forecast.
         actualsThroughMonth: null,
         openingBalances: { NZD: 0, USD: 0 },
+        // Where the 1 April balances come from. "xero" reads them off the stored
+        // April bank summary — the opening column, which is the balance at the
+        // first of the month and so is valid even while April is still running.
+        // "manual" pins whatever is typed above. Per-currency fallback to the
+        // typed figure applies either way: a currency Xero has no account for
+        // must not silently become zero.
+        openingBalanceSource: "xero",
         baseCurrency: "NZD",
         settlementCurrency: "USD",
         baseMinimumBuffer: 50_000,

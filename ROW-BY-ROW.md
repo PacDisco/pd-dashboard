@@ -160,7 +160,9 @@ after receipts and payments:
         USD to sell = min(NZD needed ÷ rate, USD available)
 ```
 
-**Apr:** opening NZD −501,125, less 82,449 of costs = −583,574. To reach the
+**Apr:** opening NZD −501,125, less 82,449 of costs = −583,574. (That opening is
+now read from April's own bank summary once Xero has synced it — the figure here
+is the workbook's blended one, which the Xero split replaces.) To reach the
 50,000 buffer needs 633,574 NZD, or 384,590 USD. Only 12,000 USD exists, so it
 converts all of it and stays short. **The shortfall is left visible** — it is not
 floored at the buffer.
@@ -246,6 +248,7 @@ The old workbook had no equivalent signal.
   reality you would be selling Fall 2027 through those months. **The last two
   months of the forecast are understated** until next season's programs are added.
 - **Per-program pax, departure dates and cost phasing are placeholders.** The
-  July trough moves with all three.
+  July trough moves with all three. The 1 April opening balances are no longer
+  among them — they come from Xero, per currency, unless pinned.
 - **No GST, no PAYE.** The Tax row is structurally present and numerically empty.
 - **No refunds or withdrawals.** Every forecast student is assumed to pay in full.

@@ -23,6 +23,7 @@ const state = {
   effectiveRate: null,
   actualMonthsAvailable: [],
   partialMonth: null,
+  openings: null,
   dirty: false,
   tab: "forecast",
   saving: false,
@@ -61,6 +62,7 @@ async function boot() {
     state.fx = data.fx ?? null;
     state.actualMonthsAvailable = data.actualMonthsAvailable ?? [];
     state.partialMonth = data.partialMonth ?? null;
+    state.openings = data.openings ?? null;
     state.effectiveRate = data.effectiveRate ?? null;
     state.canEdit = data.canEdit;
     state.serverForecast = data.forecast ?? null;
@@ -119,7 +121,13 @@ function withServerActuals(local) {
 function effectiveAssumptions() {
   const a = state.assumptions;
   const cur = a.settlementCurrency || "USD";
-  return { ...a, fxRates: { ...a.fxRates, [cur]: resolvedRate() } };
+  // The server resolves the 1 April balances against Xero; the browser has to
+  // use the same ones or the local preview quietly disagrees with the saved
+  // forecast by the size of the opening — which is every month, not just one.
+  const openings = (a.openingBalanceSource ?? "xero") === "xero" && state.openings?.source === "xero"
+    ? state.openings.inUse
+    : a.openingBalances;
+  return { ...a, openingBalances: openings, fxRates: { ...a.fxRates, [cur]: resolvedRate() } };
 }
 
 function render() {
@@ -439,6 +447,59 @@ function paymentsView() {
 }
 
 /**
+ * The 1 April balances.
+ *
+ * These flow through all twelve months untouched, so a wrong NZD/USD split
+ * converts at the wrong times for the entire year. That makes it the one input
+ * most worth taking from the bank rather than from a number typed once — but
+ * the source has to be visible, because a figure that silently changed itself
+ * is worse than a wrong one somebody chose.
+ */
+function openingsControl(ro) {
+  const o = state.openings;
+  const a = state.assumptions;
+  const want = a.openingBalanceSource ?? "xero";
+  const live = want === "xero" && o?.source === "xero";
+  const currencies = ["NZD", a.settlementCurrency || "USD"];
+
+  const stamp = !o ? ""
+    : o.source === "xero"
+      ? `<span class="stamp">from Xero${o.mixed ? " — partly" : ""}</span>`
+      : o.source === "manual-no-data"
+        ? `<span class="stamp warn">no April data yet</span>`
+        : `<span class="stamp">typed</span>`;
+
+  return `<section class="closebox">
+    <h2>Opening balances at 1 April ${stamp}</h2>
+    <div class="rates" style="margin-bottom:10px">
+      ${[["xero", "From Xero"], ["manual", "Typed below"]].map(([id, label]) => `
+        <label class="rateopt ${want === id ? "on" : ""}">
+          <input type="radio" name="opensrc" value="${id}" ${want === id ? "checked" : ""} ${ro ? "disabled" : ""}>
+          <span class="rl">${label}</span>
+          <span class="rv">${id === "xero" && o?.fromXero
+            ? currencies.map((c) => o.fromXero[c] != null ? money(o.fromXero[c]) : "—").join(" / ")
+            : currencies.map((c) => money(o?.typed?.[c] ?? 0)).join(" / ")}</span>
+        </label>`).join("")}
+    </div>
+    <div class="openings">
+      ${currencies.map((cur) => `
+        <label class="field wide"><span>Opening ${escapeHtml(cur)} balance at 1 April</span>
+          <input type="number" data-open="${escapeAttr(cur)}" value="${a.openingBalances?.[cur] ?? 0}"
+            step="1000" ${ro || live ? "disabled" : ""}></label>`).join("")}
+    </div>
+    <p class="foot">${
+      o?.source === "manual-no-data" && want === "xero"
+        ? `Set to read from Xero, but April has not been synced yet — the typed figures are being used until it has.`
+      : live && o.mixed
+        ? `Some currencies came from Xero and some did not. A currency with no Xero bank account keeps its typed figure rather than becoming zero — check the ones showing a dash above.`
+      : live
+        ? `Read from April's bank summary. This is the opening column — the balance at the first of the month — so it is right even while April is still running.`
+        : `Typed figures are in use. The workbook's single blended balance is almost certainly the wrong NZD/USD split.`
+    }</p>
+  </section>`;
+}
+
+/**
  * Locking a month is a deliberate act, not a date calculation. Month-end close
  * is not instant — late supplier invoices and bank feeds land days afterwards —
  * so a month shows as actual only once someone says it is done.
@@ -554,11 +615,7 @@ function overheadsView() {
   ];
   return `
     ${closeControl()}
-    <div class="openings">
-      ${["NZD", state.assumptions.settlementCurrency || "USD"].map((cur) => `
-        <label class="field wide"><span>Opening ${escapeHtml(cur)} balance at 1 April</span>
-          <input type="number" data-open="${escapeAttr(cur)}" value="${state.assumptions.openingBalances?.[cur] ?? 0}" step="1000" ${ro ? "disabled" : ""}></label>`).join("")}
-    </div>
+    ${openingsControl(ro)}
     <div class="scroll">
       <table class="cftable edit">
         <thead><tr><th class="lab"></th>${labels.map((l) => `<th>${l}</th>`).join("")}<th>Total</th></tr></thead>
@@ -614,6 +671,11 @@ function wire() {
         [e.target.dataset.open]: Number(e.target.value),
       };
       touch();
+    }));
+
+  document.querySelectorAll("input[name=opensrc]").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      state.assumptions.openingBalanceSource = e.target.value; touch();
     }));
 
   el("closethru")?.addEventListener("change", (e) => {

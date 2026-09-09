@@ -19,6 +19,7 @@ import {
   loadAssumptions,
   listVersions,
   currentFiscalYear,
+  resolveOpeningBalances,
 } from "./_shared/cash-store.mjs";
 import { loadRateSummary, planningRate } from "./_shared/cash-fx.mjs";
 import { fiscalMonthKeys } from "./_shared/cash-xero.mjs";
@@ -76,8 +77,14 @@ export default async (req) => {
   }
   closable.sort();
 
+  // The 1 April balances come off April's own bank summary unless pinned. Done
+  // here rather than in the engine so the engine keeps taking plain numbers and
+  // never has to know Xero exists.
+  const openings = resolveOpeningBalances(assumptions, actualsByMonth[`${fy}-04`]);
+
   const effective = {
     ...assumptions,
+    openingBalances: openings.balances,
     fxRates: { ...assumptions.fxRates, [settlement]: effectiveRate },
   };
 
@@ -103,6 +110,13 @@ export default async (req) => {
     forecastOnly,
     actualMonthsAvailable: closable,
     partialMonth,
+    openings: {
+      source: openings.source,
+      fromXero: openings.fromXero,
+      typed: openings.typed,
+      mixed: openings.mixed,
+      inUse: openings.balances,
+    },
     fx,
     effectiveRate,
     actuals,

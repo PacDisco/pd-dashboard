@@ -67,6 +67,75 @@ export async function loadVersion(fiscalYearStartYear, at) {
 }
 
 /**
+ * Decide the 1 April opening balances the forecast should actually run from.
+ *
+ * The year's opening flows through all twelve months untouched, so a wrong
+ * NZD/USD split converts at the wrong times for the whole year — which is why
+ * this is worth taking from the bank rather than from a number typed once.
+ *
+ * April's `opening` is the balance at the FIRST of the month, so unlike a
+ * closing balance it is trustworthy even while April is still in progress.
+ *
+ * Falls back per currency, not wholesale: if Xero has no account in a currency,
+ * that currency keeps its typed figure. Zeroing a real USD balance because no
+ * USD account was found in Xero would be a silent, expensive lie.
+ *
+ * Pure — no I/O, so it is testable without Blobs or Xero.
+ *
+ * @param {object} assumptions
+ * @param {object|null} aprilRecord  the stored `{fy}-04` month, or null
+ * @returns {{balances: object, source: string, fromXero: object, typed: object, mixed: boolean}}
+ */
+export function resolveOpeningBalances(assumptions, aprilRecord) {
+  const typed = { ...(assumptions.openingBalances ?? {}) };
+  const want = assumptions.openingBalanceSource ?? "xero";
+
+  const byCurrency = aprilRecord?.byCurrency ?? null;
+  if (want !== "xero" || !byCurrency) {
+    return {
+      balances: typed,
+      source: want === "xero" ? "manual-no-data" : "manual",
+      fromXero: null,
+      typed,
+      mixed: false,
+    };
+  }
+
+  const fromXero = {};
+  const balances = { ...typed };
+  let usedXero = 0;
+  let usedTyped = 0;
+
+  for (const cur of Object.keys(typed)) {
+    const opening = byCurrency[cur]?.opening;
+    if (Number.isFinite(opening)) {
+      fromXero[cur] = opening;
+      balances[cur] = opening;
+      usedXero++;
+    } else {
+      usedTyped++;
+    }
+  }
+  // A currency Xero knows about that the model does not is worth surfacing —
+  // it usually means a real account nobody put in the model.
+  for (const [cur, v] of Object.entries(byCurrency)) {
+    if (!(cur in balances) && Number.isFinite(v?.opening)) {
+      fromXero[cur] = v.opening;
+      balances[cur] = v.opening;
+      usedXero++;
+    }
+  }
+
+  return {
+    balances,
+    source: usedXero === 0 ? "manual-no-data" : "xero",
+    fromXero: usedXero ? fromXero : null,
+    typed,
+    mixed: usedXero > 0 && usedTyped > 0,
+  };
+}
+
+/**
  * Reject anything that would corrupt the model before it reaches storage.
  *
  * The UI validates too, but the UI is not the only thing that can POST here —
@@ -140,6 +209,11 @@ export function validateAssumptions(input) {
 
   if (input.actualsThroughMonth != null && !/^\d{4}-\d{2}$/.test(input.actualsThroughMonth)) {
     return { ok: false, error: "actualsThroughMonth must be YYYY-MM or null" };
+  }
+
+  if (input.openingBalanceSource != null
+      && !["xero", "manual"].includes(input.openingBalanceSource)) {
+    return { ok: false, error: "openingBalanceSource must be xero or manual" };
   }
 
   const sources = ["manual", "avg30", "avg60", "avg90", "current"];

@@ -71,7 +71,10 @@ export function seedAssumptions(fiscalYearStartYear) {
 
     // The workbook's single -501,125 opening, all attributed to NZD because it
     // has no USD/NZD split. Replace with the real 1 April balance of each account.
+    // Overridden by April's bank summary once it has synced — this is only the
+    // fallback for a year Xero has no April for.
     openingBalances: { NZD: -501_125, USD: 0 },
+    openingBalanceSource: "xero",
     baseCurrency: "NZD",
     settlementCurrency: "USD",
     baseMinimumBuffer: 50_000,

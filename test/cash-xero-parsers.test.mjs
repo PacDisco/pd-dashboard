@@ -13,6 +13,7 @@
  */
 
 import { parseBankSummary, parseBalanceSheet, findReportLine, monthBounds } from "../netlify/functions/_shared/cash-xero.mjs";
+import { resolveOpeningBalances } from "../netlify/functions/_shared/cash-store.mjs";
 import assert from "node:assert/strict";
 // Realistic Xero BankSummary shape: top-level Header row, then a Section
 // containing detail Rows and a SummaryRow.
@@ -149,3 +150,65 @@ assert.deepEqual(monthBounds(new Date("2026-12-31T00:00:00Z")), {
 });
 console.log("✓ monthBounds");
 console.log("\nAll parser tests passed.");
+
+/* ---------- 1 April opening balances, sourced from Xero ---------- */
+
+const april = (byCurrency) => ({ month: "2026-04", byCurrency });
+const typed = { openingBalances: { NZD: -501_125, USD: 0 }, openingBalanceSource: "xero" };
+
+{
+  const r = resolveOpeningBalances(typed, april({
+    NZD: { opening: -418_300, closing: 1 },
+    USD: { opening: 62_400, closing: 1 },
+  }));
+  assert.equal(r.source, "xero");
+  assert.equal(r.balances.NZD, -418_300);
+  assert.equal(r.balances.USD, 62_400, "the USD split the workbook never had");
+  assert.equal(r.mixed, false);
+  console.log("✓ openings come from April's opening column");
+}
+
+{
+  // THE ONE THAT MATTERS. Xero has no USD bank account, so there is no USD
+  // opening. Taking that as zero would silently delete a real balance and
+  // change every conversion decision for the year.
+  const r = resolveOpeningBalances(typed, april({ NZD: { opening: -418_300 } }));
+  assert.equal(r.balances.NZD, -418_300, "NZD still comes from Xero");
+  assert.equal(r.balances.USD, 0, "USD falls back to the typed figure, not to a Xero zero");
+  assert.equal(r.mixed, true, "a partial source must be flagged so the UI can say so");
+  console.log("✓ a currency Xero has no account for keeps its typed figure");
+
+  const withUsd = resolveOpeningBalances(
+    { ...typed, openingBalances: { NZD: -501_125, USD: 40_000 } },
+    april({ NZD: { opening: -418_300 } }));
+  assert.equal(withUsd.balances.USD, 40_000, "a real typed USD balance survives");
+}
+
+{
+  const r = resolveOpeningBalances(typed, null);
+  assert.equal(r.source, "manual-no-data", "no April synced yet is its own state, not silent success");
+  assert.equal(r.balances.NZD, -501_125);
+  assert.equal(r.fromXero, null);
+  console.log("✓ no April data falls back and says so");
+}
+
+{
+  const r = resolveOpeningBalances(
+    { ...typed, openingBalanceSource: "manual" },
+    april({ NZD: { opening: -418_300 }, USD: { opening: 62_400 } }));
+  assert.equal(r.source, "manual");
+  assert.equal(r.balances.NZD, -501_125, "pinning manual beats available Xero data");
+  console.log("✓ manual pinning wins over available Xero data");
+}
+
+{
+  // A bank account in a currency the model does not know about is money that
+  // exists and would otherwise be invisible.
+  const r = resolveOpeningBalances(typed, april({
+    NZD: { opening: -418_300 }, USD: { opening: 62_400 }, AUD: { opening: 11_000 },
+  }));
+  assert.equal(r.balances.AUD, 11_000, "an unmodelled currency is surfaced, not dropped");
+  console.log("✓ a currency Xero has that the model does not is carried through");
+}
+
+console.log("\nAll opening balance tests passed.");
