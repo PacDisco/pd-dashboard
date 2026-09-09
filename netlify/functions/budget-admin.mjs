@@ -89,6 +89,12 @@ const ZERO_DECIMAL = new Set(["BIF","CLP","DJF","GNF","ISK","JPY","KMF","KRW",
   "PYG","RWF","UGX","VND","VUV","XAF","XOF","XPF"]);
 const THREE_DECIMAL = new Set(["BHD","IQD","JOD","KWD","LYD","OMR","TND"]);
 const decimals = (cur) => ZERO_DECIMAL.has(cur) ? 0 : (THREE_DECIMAL.has(cur) ? 3 : 2);
+const asDay = (v) => {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).slice(0, 10);
+};
+
 const asDecimal = (minorAmount, cur) => {
   const d = decimals(cur);
   return (Number(minorAmount) / Math.pow(10, d)).toFixed(d);
@@ -160,10 +166,18 @@ async function handleList() {
 
 async function handleEntries(budgetId) {
   if (!budgetId) return json(400, { error: "budget is required" });
+  // Walk up to the leg: budget_amount is denominated in the LEG's currency, not
+  // the entry's, and labelling it with the entry currency reads as a wrong
+  // conversion (USD 68 showing as "USD 94.52").
   const rows = await sql()`
-    select e.*, c.name as category_name
+    select e.*, c.name as category_name,
+           coalesce(l1.currency, l2.currency, c.currency) as leg_currency,
+           coalesce(l1.name, l2.name, c.name) as leg_name
       from entries e
-      left join categories c on c.id = e.category_id
+      left join categories c  on c.id  = e.category_id
+      left join categories p  on p.id  = c.parent_id
+      left join categories l1 on l1.id = p.parent_id
+      left join categories l2 on l2.id = c.parent_id
      where e.budget_id = ${budgetId}
      order by e.spent_on desc, e.created_at desc
      limit 1000`;
@@ -174,6 +188,7 @@ async function handleEntries(budgetId) {
       budget_amount: money(e.budget_amount),
       actual_base: money(e.actual_base),
       rate: Number(e.rate),
+      spent_on: asDay(e.spent_on),
     })),
   });
 }
