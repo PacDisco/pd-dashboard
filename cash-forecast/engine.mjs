@@ -424,6 +424,10 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 return acc;
             }, {}),
             recognisedRevenue: months.reduce((s, m) => s + m.recognisedRevenue, 0),
+            // Cash collected before 1 April for programs departing inside this
+            // year. Exposed because when the deferred row misbehaves this is the
+            // first place to look, and it is otherwise invisible.
+            deferredOpening,
             closingBalance: months[11].closing,
             lowestClosing: lowest.closing,
             lowestMonth: lowest.label,

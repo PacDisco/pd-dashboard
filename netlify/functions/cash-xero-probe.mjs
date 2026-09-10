@@ -20,7 +20,7 @@
 
 import { requireCashRole, json } from "./_shared/cash-access.mjs";
 import { getAccessToken, getConnections } from "./_shared/cash-xero.mjs";
-import { loadAssumptions, currentFiscalYear } from "./_shared/cash-store.mjs";
+import { loadAssumptions, currentFiscalYear, resolveOpeningBalances } from "./_shared/cash-store.mjs";
 import {
   fetchPayments,
   fetchInvoicesByIds,
@@ -43,6 +43,68 @@ function shapeOf(obj, keep = []) {
   return out;
 }
 
+/**
+ * What the bank side actually produced for a month.
+ *
+ * The forecast shows one number per currency per month; this shows the account
+ * rows behind it, the currency each was assigned, and the opening balances the
+ * engine started the year from. When the NZD account row reads zero all year,
+ * the answer is in exactly one of those three places, and guessing which costs
+ * more than one call.
+ *
+ * Reads the STORED blob, not Xero, so it shows what the forecast is really
+ * using rather than what a fresh pull would say.
+ */
+async function bankReport(fy, month) {
+  const { getStore } = await import("@netlify/blobs");
+  const latest = await getStore({ name: "cash-xero" }).get("latest", { type: "json" });
+  const tenantId = latest?.orgs?.[0]?.tenantId;
+  if (!tenantId) return { error: "No synced organisation yet." };
+
+  const monthStore = getStore({ name: "cash-xero-months" });
+  const record = await monthStore.get(`${tenantId}/${month}`, { type: "json" });
+  const assumptions = await loadAssumptions(fy);
+  const april = await monthStore.get(`${tenantId}/${fy}-04`, { type: "json" });
+
+  const baseCur = assumptions.baseCurrency || "NZD";
+  const fxCur = assumptions.settlementCurrency || "USD";
+  const b = record?.byCurrency ?? {};
+
+  return {
+    month,
+    stored: Boolean(record),
+    partial: record?.partial ?? null,
+    fetchedAt: record?.fetchedAt ?? null,
+
+    // The rows Xero returned, with the currency each was classified as. If the
+    // classification is wrong, every figure downstream is wrong in the same way.
+    accounts: (record?.accounts ?? []).map((a) => ({
+      name: a.name,
+      opening: a.opening,
+      received: a.received,
+      spent: a.spent,
+      closing: a.closing,
+    })),
+    currenciesFound: Object.keys(b),
+    byCurrency: b,
+
+    // The two buckets the engine actually reads, named explicitly, because a
+    // missing bucket and a zero bucket look identical in the table.
+    engineReads: {
+      baseCurrency: baseCur,
+      settlementCurrency: fxCur,
+      basePresent: Object.prototype.hasOwnProperty.call(b, baseCur),
+      fxPresent: Object.prototype.hasOwnProperty.call(b, fxCur),
+      baseClosing: b[baseCur]?.closing ?? null,
+      fxClosing: b[fxCur]?.closing ?? null,
+    },
+
+    openings: resolveOpeningBalances(assumptions, april),
+    openingBalanceSource: assumptions.openingBalanceSource ?? "xero",
+    actualsThroughMonth: assumptions.actualsThroughMonth ?? null,
+  };
+}
+
 export default async (req) => {
   const user = await requireCashRole(req, "write", "cash-xero-probe");
   if (user instanceof Response) return user;
@@ -51,6 +113,11 @@ export default async (req) => {
   const month = url.searchParams.get("month");
   if (!/^\d{4}-\d{2}$/.test(month ?? "")) {
     return json({ error: "Pass ?month=YYYY-MM, e.g. ?month=2026-08" }, 400);
+  }
+
+  // ?report=bank needs no new scope — it reads what the sync already stored.
+  if (url.searchParams.get("report") === "bank") {
+    return json(await bankReport(currentFiscalYear(), month));
   }
 
   const started = Date.now();
