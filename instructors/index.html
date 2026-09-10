@@ -166,6 +166,18 @@ function toast(msg,isErr){ var t=$('toast'); t.textContent=msg; t.className='sho
 function arr(v){ return Array.isArray(v)?v.filter(Boolean):[]; }
 function fmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d)?'':d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
 function fileNameUrl(u){ try{ return decodeURIComponent(String(u).split('/').pop().split('?')[0]); }catch(e){ return String(u).split('/').pop(); } }
+// Jotform-hosted files sit behind a Jotform login. Route them through
+// /jotform-file, which injects the API key server-side, so the team opens them
+// with their dashboard session alone. Non-Jotform URLs pass through untouched —
+// the proxy rejects them by design and must not become an open relay.
+var JF_FILE_PROXY = '/.netlify/functions/jotform-file';
+function isJotformUrl(u){
+  try{ var h=new URL(u,location.origin).hostname.toLowerCase();
+       return h==='jotform.com' || /\.jotform\.com$/.test(h); }catch(e){ return false; }
+}
+function jfProxy(u){
+  return isJotformUrl(u) ? JF_FILE_PROXY+'?url='+encodeURIComponent(u) : u;
+}
 // Some Jotform answers (file uploads, signatures) arrive as raw HTML anchor
 // markup or bare upload URLs. Render those as safe clickable links; strip any
 // stray tags from everything else so nothing shows as literal HTML.
@@ -176,13 +188,13 @@ function renderAnswer(a){
     while((m=re.exec(v))){
       var url=m[1], titleM=/title\s*=\s*"([^"]+)"/i.exec(m[2]||'');
       var name=titleM?titleM[1]:fileNameUrl(url);
-      links.push('<a href="'+esc(url)+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(name)+'</a>');
+      links.push('<a href="'+esc(jfProxy(url))+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(name)+'</a>');
     }
     if(links.length) return links.join('<br>');
   }
   if(/^https?:\/\/\S+$/i.test(v.trim())){
     var u=v.trim();
-    return '<a href="'+esc(u)+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(fileNameUrl(u))+'</a>';
+    return '<a href="'+esc(jfProxy(u))+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(fileNameUrl(u))+'</a>';
   }
   // Convert Jotform's <br> / block tags to line breaks (readable), strip the
   // rest, then re-emit as safe <br> so nothing shows as literal HTML.
@@ -331,7 +343,7 @@ function renderDrawer(d){
   // Jotform API key server-side — so the team opens a passport scan or a signed
   // contract without needing a Jotform login. Linking file_url directly (as
   // this used to) sends them to a Jotform sign-in wall.
-  var FILE_PROXY = '/.netlify/functions/jotform-file';
+  var FILE_PROXY = JF_FILE_PROXY;
   function docLink(x, download){
     var u = FILE_PROXY+'?url='+encodeURIComponent(x.file_url||'');
     // Pass the real filename: a generatePDF URL's last path segment is

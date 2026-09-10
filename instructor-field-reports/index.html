@@ -737,6 +737,32 @@
     });
   }
 
+  // Jotform-hosted files (photo uploads, signature images) are behind a
+  // Jotform login. Stream them through /jotform-file instead, which injects
+  // the API key server-side — so anyone with a dashboard role can open them
+  // without a Jotform account. Non-Jotform URLs are left alone; the proxy
+  // rejects them by design and must not become an open relay.
+  const FILE_PROXY = "/.netlify/functions/jotform-file";
+  function isJotformUrl(u) {
+    try {
+      const h = new URL(u).hostname.toLowerCase();
+      return h === "jotform.com" || h.endsWith(".jotform.com");
+    } catch { return false; }
+  }
+  function proxiedFileUrl(rawUrl, opts = {}) {
+    if (!isJotformUrl(rawUrl)) return rawUrl;
+    let u = `${FILE_PROXY}?url=${encodeURIComponent(rawUrl)}`;
+    if (opts.download) {
+      u += "&download=1";
+      if (opts.name) u += `&name=${encodeURIComponent(opts.name)}`;
+    }
+    return u;
+  }
+  function fileNameFromUrl(u) {
+    try { return decodeURIComponent(String(u).split("/").pop().split("?")[0]) || "file"; }
+    catch { return String(u).split("/").pop() || "file"; }
+  }
+
   function showDetail(id) {
     const sub = allSubmissions.find(s => s.id === id);
     if (!sub) return;
@@ -764,9 +790,14 @@
       const txt = answerText(a.answer);
       let val;
       if (a.type === "control_fileupload" && Array.isArray(a.answer)) {
-        val = a.answer.map(u => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(u.split("/").pop())}</a>`).join("<br>");
+        val = a.answer.map(u => {
+          const name = fileNameFromUrl(u);
+          return `<a href="${escapeHtml(proxiedFileUrl(u))}" target="_blank" rel="noopener">${escapeHtml(name)}</a>` +
+                 ` <a href="${escapeHtml(proxiedFileUrl(u, { download: true, name }))}" ` +
+                 `style="color:var(--muted);font-size:12px;margin-left:6px;">⬇ download</a>`;
+        }).join("<br>");
       } else if (a.type === "control_signature" && typeof a.answer === "string" && a.answer.startsWith("http")) {
-        val = `<a href="${escapeHtml(a.answer)}" target="_blank" rel="noopener">View signature</a>`;
+        val = `<a href="${escapeHtml(proxiedFileUrl(a.answer))}" target="_blank" rel="noopener">View signature</a>`;
       } else {
         val = escapeHtml(txt);
       }

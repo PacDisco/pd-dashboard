@@ -704,9 +704,20 @@
       </div>`).join("") || `<div class="detail-value" style="color:var(--muted)">No field data.</div>`;
     $("modal").classList.add("show");
   }
+  // Jotform-hosted files (uploads, signature images) need the API key, which
+  // /jotform-file injects server-side — link the proxy so the team isn't sent
+  // to a Jotform sign-in wall. Other URLs are linked as-is; the proxy refuses
+  // non-Jotform hosts by design and must not become an open relay.
+  const JF_FILE_PROXY = "/.netlify/functions/jotform-file";
+  function jfProxy(u) {
+    let h = "";
+    try { h = new URL(u).hostname.toLowerCase(); } catch { return u; }
+    if (h !== "jotform.com" && !h.endsWith(".jotform.com")) return u;
+    return `${JF_FILE_PROXY}?url=${encodeURIComponent(u)}`;
+  }
   function linkify(v) {
     const s = escapeHtml(v);
-    if (/^https?:\/\//i.test(v)) return `<a href="${s}" target="_blank" rel="noopener">${s}</a>`;
+    if (/^https?:\/\//i.test(v)) return `<a href="${escapeHtml(jfProxy(v))}" target="_blank" rel="noopener">${s}</a>`;
     if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return `<a href="mailto:${s}">${s}</a>`;
     return s;
   }
