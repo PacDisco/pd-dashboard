@@ -211,6 +211,25 @@ export function validateAssumptions(input) {
     return { ok: false, error: "actualsThroughMonth must be YYYY-MM or null" };
   }
 
+  // A wrong recognition month can move an entire season's revenue out of the
+  // fiscal year, so this is checked rather than trusted.
+  if (input.recognitionMonths != null) {
+    if (typeof input.recognitionMonths !== "object") {
+      return { ok: false, error: "recognitionMonths must be an object keyed by season" };
+    }
+    for (const [season, month] of Object.entries(input.recognitionMonths)) {
+      const m = Number(month);
+      if (!Number.isInteger(m) || m < 1 || m > 12) {
+        return { ok: false, error: `recognition month for ${season} must be a month number 1-12` };
+      }
+    }
+    for (const season of ["Fall", "Spring", "Summer"]) {
+      if (input.recognitionMonths[season] == null) {
+        return { ok: false, error: `recognitionMonths is missing ${season}` };
+      }
+    }
+  }
+
   if (input.openingBalanceSource != null
       && !["xero", "manual"].includes(input.openingBalanceSource)) {
     return { ok: false, error: "openingBalanceSource must be xero or manual" };

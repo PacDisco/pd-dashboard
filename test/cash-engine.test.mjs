@@ -24,9 +24,15 @@ assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-10-
 assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-12-01" }), rec), { year: 2026, month: 9 }, "later Fall departure still recognises Sept 26");
 assert.deepEqual(recognitionMonthFor(prog({ season: "Spring", startDate: "2027-02-10" }), rec), { year: 2027, month: 1 }, "Spring departing Feb 27 recognises Jan 27");
 assert.deepEqual(recognitionMonthFor(prog({ season: "Summer", startDate: "2026-07-01" }), rec), { year: 2026, month: 6 }, "Summer departing Jul 26 recognises Jun 26");
-// Edge: a program departing IN its own recognition month must look back a year,
-// not recognise in the month it departs.
-assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-09-15" }), rec), { year: 2025, month: 9 }, "departure in the recognition month looks back 12 months");
+// Edge: a program departing IN its own recognition month recognises THAT month.
+//
+// This assertion previously demanded the opposite — a look-back of twelve months
+// — on the reasoning that recognition is "the month before the season starts".
+// That reasoning is wrong at the boundary, and the test defended the bug: a Fall
+// cohort departing in September had its revenue recognised in September of the
+// PREVIOUS year, which put it outside the fiscal year altogether and dragged
+// deferred revenue negative by the whole cohort's value to compensate.
+assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-09-15" }), rec), { year: 2026, month: 9 }, "departure in the recognition month recognises that month");
 console.log("✓ recognition timing");
 /* ---------- cash: deposits and balances ---------- */
 function base() {
@@ -45,6 +51,12 @@ function base() {
 }
 {
     const a = base();
+    // Set recognition explicitly rather than inheriting the default. The default
+    // is Pacific Discovery's — Fall recognises in August, because their Fall
+    // departs 1 September. This fixture departs in October, so September is its
+    // month before. Pinning it here keeps the test about the MECHANICS of
+    // recognition rather than about one organisation's calendar.
+    a.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
     a.programs = [prog({
             id: "nza", name: "NZA", season: "Fall",
             startDate: "2026-10-01", endDate: "2026-12-01",
@@ -430,6 +442,118 @@ console.log("\nAll treasury tests passed.");
   assert.equal(g.totals.receiptsBySeason.Summer, undefined,
     "a season with no pax contributes no bucket, rather than a zero row");
   console.log("✓ an empty season does not create a phantom row");
+}
+
+/* ---------- a program departing in its own recognition month ---------- */
+
+{
+  // The bug this catches cost a full year of Fall revenue. Searching back from
+  // the month BEFORE departure means a Fall program departing 1 September skips
+  // September 2026 and matches September 2025 — the revenue leaves the fiscal
+  // year entirely, and deferred revenue goes negative by the same amount to
+  // balance. The table looks plausible; only the deferred row gives it away.
+  const oct = recognitionMonthFor({ season: "Fall", startDate: "2026-10-01" }, { Fall: 9 });
+  assert.deepEqual(oct, { year: 2026, month: 9 }, "the normal case is unchanged");
+
+  const sep = recognitionMonthFor({ season: "Fall", startDate: "2026-09-01" }, { Fall: 9 });
+  assert.deepEqual(sep, { year: 2026, month: 9 },
+    "departing in the recognition month recognises that month, not a year earlier");
+
+  const midSep = recognitionMonthFor({ season: "Fall", startDate: "2026-09-15" }, { Fall: 9 });
+  assert.deepEqual(midSep, { year: 2026, month: 9 }, "the day of the month is irrelevant");
+
+  const dec = recognitionMonthFor({ season: "Fall", startDate: "2026-12-10" }, { Fall: 9 });
+  assert.deepEqual(dec, { year: 2026, month: 9 }, "a later departure still recognises in September");
+  console.log("✓ departing in the recognition month no longer jumps back a year");
+
+  // End to end: the revenue must actually land in the year, and deferred must
+  // not be dragged negative to compensate.
+  const a = base();
+  a.programs = [prog({
+    id: "sep-fall", name: "September Fall", season: "Fall",
+    startDate: "2026-09-01", endDate: "2026-11-15",
+    price: 15_500, paxForecast: 20, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  const f = buildForecast(a);
+
+  assert.ok(f.totals.recognisedRevenue > 0, "Fall revenue is recognised inside the year");
+  // With Pacific Discovery's real constant (Fall = August) a 1 September
+  // departure recognises in August — the month before, which is what the rule
+  // has always meant. Slot 4 is August; slot 0 is April.
+  assert.equal(f.months[4].recognisedRevenue, f.totals.recognisedRevenue,
+    "and it lands in August, the month before departure");
+  assert.equal(f.months[5].recognisedRevenue, 0, "not September");
+
+  // A positive opening is legitimate — deposits collected before 1 April for a
+  // September departure. A NEGATIVE one is the signature of the bug: revenue
+  // recognised in a prior year with none of its cash there to offset.
+  assert.ok(f.totals.deferredOpening >= 0,
+    `deferred opening must not be negative, got ${f.totals.deferredOpening}`);
+  assert.ok(f.months.every((m) => m.deferredRevenueBalance > -1),
+    "deferred revenue never goes negative for an in-year cohort");
+  near(f.months[11].deferredRevenueBalance, 0, 0.01,
+    "and it clears to zero once the cohort has recognised");
+  console.log("✓ a September-departing Fall cohort recognises inside the year");
+}
+
+/* ---------- revenue leaving the year must be said out loud ---------- */
+
+{
+  // Legitimate for an genuinely earlier cohort, an error otherwise. Either way
+  // it must not have to be inferred from a negative deferred balance.
+  const a = base();
+  a.programs = [prog({
+    id: "old-fall", name: "Last year's Fall", season: "Fall",
+    startDate: "2025-10-01", endDate: "2025-12-01",
+    price: 15_500, paxForecast: 10, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  const f = buildForecast(a);
+  assert.ok(f.warnings.some((w) => w.includes("before this fiscal year")),
+    "revenue recognised outside the year is warned about");
+  console.log("✓ revenue recognised outside the year is warned about");
+}
+
+/* ---------- gross bank movements double-count a conversion ---------- */
+
+{
+  // A USD->NZD conversion appears twice in a bank summary: once as USD spent,
+  // once as NZD received. Cash in and cash out are therefore GROSS and both
+  // overstated. The balances and net movement are not, because the same amount
+  // inflates both sides. This test pins that behaviour so nobody "fixes" the
+  // net figure by mistake, and asserts it is stated rather than left to be
+  // discovered by someone reconciling a month by hand.
+  const a = base();
+  a.programs = [];
+  a.actualsThroughMonth = "2026-04";
+  a.fxRates = { NZD: 1, USD: 1.7130 };
+  a.planningRateSource = "manual";
+
+  // The only real event: a student pays USD 22,575, all of it converted to NZD.
+  const f = buildForecast(a, {
+    "2026-04": {
+      byCurrency: {
+        USD: { received: 22_575, spent: 22_575, closing: 0 },
+        NZD: { received: 38_671, spent: 0, closing: 38_671 },
+      },
+    },
+  });
+  const m = f.months[0];
+
+  near(m.cashIn, 77_342, 1, "cash in counts the receipt AND the conversion landing");
+  near(m.net, 38_671, 1, "net movement is right — the double count cancels");
+  near(m.baseClosing, 38_671, 1, "and the balance is the bank's own figure");
+  assert.equal(m.grossIncludesTransfers, true, "the month is flagged");
+  assert.ok(f.warnings.some((w) => w.includes("gross bank movements") && w.includes("Apr 26")),
+    "and it is said out loud, not left to be discovered by hand");
+  console.log("✓ conversions inflate gross cash in/out, and that is stated");
+
+  // A month with no conversion must not be flagged, or the warning is noise.
+  const clean = buildForecast(a, {
+    "2026-04": { byCurrency: { NZD: { received: 10_000, spent: 2_000, closing: 8_000 } } },
+  });
+  assert.equal(clean.months[0].grossIncludesTransfers, false);
+  assert.ok(!clean.warnings.some((w) => w.includes("gross bank movements")));
+  console.log("✓ a month without conversions is not flagged");
 }
 
 console.log("\nAll actuals-overlay tests passed.");

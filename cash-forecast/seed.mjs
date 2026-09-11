@@ -83,7 +83,9 @@ export function seedAssumptions(fiscalYearStartYear) {
     fxRates: { NZD: 1, USD: 1.65 },
     planningRateSource: "avg90",
 
-    recognitionMonths: { Fall: 9, Spring: 1, Summer: 6 },
+    // Fall departs 1 September, so recognition is August — confirmed against the
+    // FY26/27 P&L, which books 1,081,772 of Fall sales in Aug 2026.
+    recognitionMonths: { Fall: 8, Spring: 1, Summer: 6 },
 
     programs: PROGRAMS.map(([name, season, fixedCost, variableCostPerPax, price, paxForecast]) => ({
       id: name.toLowerCase().replace(/\s+/g, "-"),

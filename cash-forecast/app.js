@@ -110,6 +110,19 @@ function withServerActuals(local) {
     return { ...m, provisional: sawActual && state.dirty };
   });
   local.totals = { ...local.totals, actualMonths: server.totals.actualMonths };
+
+  // The local build ran with NO stored actuals — the browser does not hold them
+  // — so it warns that every closed month is missing its Xero figures. For the
+  // months the server DID supply that warning is simply false, and a false
+  // warning on a page whose whole job is trust is worse than no warning. The
+  // server ran the same engine with the real data, so its verdict is the one
+  // that counts: take the actuals warnings from there.
+  const ACTUALS_WARNING = /Locked as actual|has not finished/;
+  local.warnings = [
+    ...local.warnings.filter((w) => !ACTUALS_WARNING.test(w)),
+    ...server.warnings.filter((w) => ACTUALS_WARNING.test(w)),
+  ];
+
   if (state.dirty && sawActual) {
     local.warnings = [...local.warnings,
       "Months after the last closed month will re-base onto the real balance when you save."];
@@ -447,6 +460,40 @@ function paymentsView() {
 }
 
 /**
+ * Recognition months.
+ *
+ * Revenue moves from deferred to sales the month before a season starts. Until
+ * now this lived only in the seed with no way to change it, and it was wrong:
+ * Fall was set to September on the assumption the season departs in October. It
+ * departs 1 September, so a "most recent September before departure" search
+ * landed on September of the PREVIOUS year and took the whole season's revenue
+ * out of the fiscal year. The deferred row went negative by the same amount.
+ *
+ * A value this consequential should not be reachable only by re-seeding.
+ */
+function recognitionControl(ro) {
+  const a = state.assumptions;
+  const rm = a.recognitionMonths || {};
+  const labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const after = (m) => labels[m % 12];
+
+  return `<section class="closebox">
+    <h2>Revenue recognition</h2>
+    <p class="foot">The month each season's revenue moves from deferred to sales — the month before the season starts. This does not move any cash; it moves when the revenue is earned.</p>
+    <div class="recog">
+      ${["Fall", "Spring", "Summer"].map((season) => `
+        <label class="field"><span>${season}</span>
+          <select data-recog="${season}" ${ro ? "disabled" : ""}>
+            ${labels.map((l, i) => `<option value="${i + 1}" ${Number(rm[season]) === i + 1 ? "selected" : ""}>${l}</option>`).join("")}
+          </select>
+          <small class="foot">season starts ${after(Number(rm[season]) || 1)}</small>
+        </label>`).join("")}
+    </div>
+    <p class="foot">Check these against the Sales Income line on your P&amp;L: the month a season recognises should carry that season's revenue. A season set to the month it actually departs recognises a year early and disappears from the year entirely.</p>
+  </section>`;
+}
+
+/**
  * The 1 April balances.
  *
  * These flow through all twelve months untouched, so a wrong NZD/USD split
@@ -614,6 +661,7 @@ function overheadsView() {
     ["Tax", "monthlyTax"],
   ];
   return `
+    ${recognitionControl(ro)}
     ${closeControl()}
     ${openingsControl(ro)}
     <div class="scroll">
@@ -669,6 +717,15 @@ function wire() {
       state.assumptions.openingBalances = {
         ...state.assumptions.openingBalances,
         [e.target.dataset.open]: Number(e.target.value),
+      };
+      touch();
+    }));
+
+  document.querySelectorAll("[data-recog]").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      state.assumptions.recognitionMonths = {
+        ...state.assumptions.recognitionMonths,
+        [e.target.dataset.recog]: Number(e.target.value),
       };
       touch();
     }));

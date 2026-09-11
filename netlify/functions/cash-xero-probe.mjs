@@ -26,6 +26,7 @@ import {
   fetchInvoicesByIds,
   attributeReceipts,
 } from "./_shared/cash-receipts.mjs";
+import { fetchMonthOpex } from "./_shared/cash-opex.mjs";
 
 /**
  * Describe an object's shape without emitting its contents.
@@ -118,6 +119,39 @@ export default async (req) => {
   // ?report=bank needs no new scope — it reads what the sync already stored.
   if (url.searchParams.get("report") === "bank") {
     return json(await bankReport(currentFiscalYear(), month));
+  }
+
+  // ?report=opex uses accounting.reports.profitandloss.read, already consented.
+  // Checks the P&L parser against a month you can open in Xero side by side,
+  // before a single figure of it reaches the forecast.
+  if (url.searchParams.get("report") === "opex") {
+    try {
+      const token = await getAccessToken();
+      const pinned = (process.env.XERO_TENANTS ?? "")
+        .split(",").map((x) => x.trim()).filter(Boolean);
+      const all = await getConnections(token);
+      const org = (pinned.length ? all.filter((c) => pinned.includes(c.tenantId)) : all)[0];
+      if (!org) return json({ error: "No Xero organisation connected." }, 409);
+
+      const opex = await fetchMonthOpex(token, org.tenantId, month);
+      const a = await loadAssumptions(currentFiscalYear());
+      const slot = (Number(month.slice(5, 7)) + 8) % 12; // April is slot 0
+      return json({
+        ...opex,
+        organisation: org.tenantName,
+        modelOverheads: a.monthlyOverheads?.[slot] ?? null,
+        modelCapital: a.monthlyCapital?.[slot] ?? null,
+        // The comparison that matters: what the model assumes leaves the bank
+        // this month, against what actually did.
+        modelTotal: (a.monthlyOverheads?.[slot] ?? 0) + (a.monthlyCapital?.[slot] ?? 0),
+        differenceVsModel: Math.round(
+          opex.cashTotal - ((a.monthlyOverheads?.[slot] ?? 0) + (a.monthlyCapital?.[slot] ?? 0)),
+        ),
+      });
+    } catch (err) {
+      console.error(`[cash-xero-probe opex] ${err.message}`);
+      return json({ error: err.message }, 502);
+    }
   }
 
   const started = Date.now();

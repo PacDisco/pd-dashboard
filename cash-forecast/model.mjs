@@ -9,10 +9,22 @@ export const SEASONS = ["Fall", "Spring", "Summer"];
 /**
  * Month (1-12) in which each season's revenue moves from deferred to sales.
  * Recognition happens the month BEFORE the season starts, so seasons run
- * Oct-, Feb- and Jul-onwards respectively.
+ * Sep-, Feb- and Jul-onwards respectively.
+ *
+ * These are editable per fiscal year on the Overheads tab — a season that moves
+ * its departure month moves its recognition month with it, and a wrong value
+ * here is expensive: it can push a whole season's revenue out of the year.
  */
 export const DEFAULT_RECOGNITION_MONTHS = {
-    Fall: 9, // September → season starts October
+    // Confirmed against Pacific Discovery's own P&L for FY26/27:
+    //   Jun 2026  138,524  Summer
+    //   Aug 2026  1,081,772  Fall      <- August, not September
+    //   Jan 2026  578,382  Spring
+    // Fall was set to September on the assumption that the season departs in
+    // October. It departs 1 September, so the month before is August. The wrong
+    // constant pushed Fall recognition to September of the PREVIOUS year, which
+    // removed it from the fiscal year entirely.
+    Fall: 8, // August    → season starts September
     Spring: 1, // January   → season starts February
     Summer: 6, // June      → season starts July
 };
