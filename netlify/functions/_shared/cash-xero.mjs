@@ -31,9 +31,27 @@ export const SCOPES = [
     "accounting.reports.aged.read",
     // Receivable receipts: Payments carries the payment, Invoices carries the
     // line-item tracking that says which program (and so which season) it was
-    // for. accounting.banktransactions.read was dropped — nothing reads it.
+    // for.
     "accounting.payments.read",
     "accounting.invoices.read",
+    // Bank transactions, for the cash rows.
+    //
+    // A Bank Summary gives four numbers per account — opening, received, spent,
+    // closing — and nothing else. That is why Cash in reads 1,563,931 for June
+    // against roughly 190,000 of student money: a summary cannot tell a customer
+    // payment from an intercompany transfer, and cannot tell either from this
+    // company moving its own USD into its own NZD account, which inflates both
+    // Cash in and Cash out by the amount converted.
+    //
+    // The transaction list can. Xero types every bank transaction, and the two
+    // transfer types (SPEND-TRANSFER / RECEIVE-TRANSFER) are exactly the
+    // movements that should never count as cash in or out of the business. So
+    // this one scope buys both the breakdown and the double-count fix.
+    //
+    // This scope was in the original consent and was removed when nothing read
+    // it. It is a read scope like every other one here; nothing in this codebase
+    // issues a non-GET request to the accounting API.
+    "accounting.banktransactions.read",
     // Budget Manager, for forward overheads. Scope name unconfirmed against
     // Xero's docs (they render client-side); a 403 here means it is wrong and
     // the probe reports the message verbatim rather than swallowing it.

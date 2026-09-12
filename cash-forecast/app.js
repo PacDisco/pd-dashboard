@@ -575,6 +575,12 @@ function diagnosticsPanel(ro) {
     ["opex", `?month=${fy}-04&report=opex`, "P&L for April"],
     ["bank", `?month=${fy}-04&report=bank`, "Bank summary for April"],
     ["budget", `?report=budget`, "List budgets"],
+    // The gate on the cash-rows rebuild. Reconciles Bank Transactions +
+    // Payments + Bank Transfers against the Bank Summary for a month: if the
+    // detail does not add up to what Xero says moved, a source is missing and
+    // nothing built on it can be trusted. Read `reconciliation` first.
+    ["banktx", `?month=${fy}-06&report=banktx`, "Reconcile June transactions"],
+    ["banktx8", `?month=${fy}-08&report=banktx`, "Reconcile August transactions"],
   ];
   return `<section class="closebox">
     <h2>Diagnostics</h2>

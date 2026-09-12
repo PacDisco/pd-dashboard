@@ -19,7 +19,16 @@
 // Admin/operations only, like every other endpoint here.
 
 import { requireCashRole, json } from "./_shared/cash-access.mjs";
-import { getAccessToken, getConnections, xeroGet } from "./_shared/cash-xero.mjs";
+import {
+  getAccessToken, getConnections, xeroGet, getBankAccountCurrencies,
+} from "./_shared/cash-xero.mjs";
+import {
+  fetchBankTransactions,
+  fetchAllPayments,
+  fetchBankTransfers,
+  summariseSources,
+  reconcileToSummary,
+} from "./_shared/cash-bank-tx.mjs";
 import { loadAssumptions, currentFiscalYear, resolveOpeningBalances } from "./_shared/cash-store.mjs";
 import {
   fetchPayments,
@@ -122,6 +131,100 @@ export default async (req) => {
   // ?report=bank needs no new scope — it reads what the sync already stored.
   if (report === "bank") {
     return json(await bankReport(currentFiscalYear(), month));
+  }
+
+  // ?report=banktx is the gate on the whole cash-rows rebuild.
+  //
+  // Before a single figure from the transaction detail reaches the forecast,
+  // this answers one question: do Bank Transactions + Payments + Bank Transfers
+  // add up to what the Bank Summary says moved? If they do not, a source is
+  // missing, and a categoriser built on an incomplete set would produce
+  // plausible numbers that are quietly short. The residual is reported per
+  // currency rather than hidden behind a pass/fail.
+  //
+  // Needs accounting.banktransactions.read. Shapes and counts only — no contact
+  // names, references or line detail leave this endpoint.
+  if (report === "banktx") {
+    try {
+      const token = await getAccessToken();
+      const pinned = (process.env.XERO_TENANTS ?? "")
+        .split(",").map((x) => x.trim()).filter(Boolean);
+      const all = await getConnections(token);
+      const org = (pinned.length ? all.filter((c) => pinned.includes(c.tenantId)) : all)[0];
+      if (!org) return json({ error: "No Xero organisation connected." }, 409);
+
+      const currencyOf = await getBankAccountCurrencies(token, org.tenantId, "NZD");
+      const [{ bankTransactions, truncated: txTrunc },
+             { payments, truncated: payTrunc },
+             transferResult] = await Promise.all([
+        fetchBankTransactions(token, org.tenantId, month),
+        fetchAllPayments(token, org.tenantId, month),
+        fetchBankTransfers(token, org.tenantId, month),
+      ]);
+
+      const summarised = summariseSources({
+        bankTransactions,
+        payments,
+        transfers: transferResult.transfers,
+        currencyOf,
+      });
+
+      // Compared against the SAME stored month the forecast reads, not a fresh
+      // pull — so this checks what the dashboard is actually showing.
+      const { getStore } = await import("@netlify/blobs");
+      const stored = await getStore({ name: "cash-xero-months" })
+        .get(`${org.tenantId}/${month}`, { type: "json" });
+      const reconciliation = reconcileToSummary(summarised, stored?.byCurrency ?? {});
+
+      // Line items are where the categorisation will have to come from, and
+      // whether the LIST endpoint returns them at all decides whether this is
+      // one call a month or one call per transaction. Worth knowing now.
+      const sampleTx = bankTransactions[0];
+      const samplePayment = payments[0];
+
+      return json({
+        month,
+        organisation: org.tenantName,
+        counts: {
+          bankTransactions: bankTransactions.length,
+          payments: payments.length,
+          transfers: transferResult.transfers.length,
+          ...summarised.counts,
+        },
+        truncated: { bankTransactions: txTrunc, payments: payTrunc, transfers: transferResult.truncated },
+        transfersEndpoint: transferResult.available
+          ? "available"
+          : `unavailable: ${transferResult.error ?? "unknown"}`,
+
+        // THE ANSWER. Anything with inTies/outTies false means a source is
+        // missing and the rebuild is not safe to proceed on yet.
+        reconciliation,
+        storedMonthPresent: Boolean(stored),
+
+        // Business movement with the organisation's own transfers taken out —
+        // what Cash in and Cash out would become.
+        businessMovement: summarised.byCurrency,
+        ownTransfers: summarised.transfersByCurrency,
+
+        typesSeen: [...new Set(bankTransactions.map((t) => t?.Type).filter(Boolean))],
+        unknownTypes: summarised.unknownTypes,
+        bankAccountsSeen: summarised.accountsSeen,
+
+        // Field names only, so the categoriser is written against the real
+        // shape instead of the documented one.
+        sampleBankTransactionShape: shapeOf(sampleTx, ["Type", "CurrencyCode", "CurrencyRate", "IsReconciled"]),
+        bankTransactionHasLineItems: Array.isArray(sampleTx?.LineItems),
+        sampleLineItemShape: shapeOf(sampleTx?.LineItems?.[0], ["AccountCode"]),
+        samplePaymentShape: shapeOf(samplePayment, ["PaymentType", "CurrencyRate"]),
+        samplePaymentAccountShape: shapeOf(samplePayment?.Account, ["Code"]),
+      });
+    } catch (err) {
+      console.error(`[cash-xero-probe banktx] ${err.message}`);
+      return json({
+        error: err.message,
+        hint: "A 403 mentioning scope means accounting.banktransactions.read was not granted — re-consent.",
+      }, 502);
+    }
   }
 
   // ?report=opex uses accounting.reports.profitandloss.read, already consented.
