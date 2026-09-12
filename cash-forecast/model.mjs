@@ -134,6 +134,13 @@ export function defaultAssumptions(fiscalYearStartYear) {
         fxRates: { NZD: 1, USD: 1.65 },
         planningRateSource: "avg90",
         recognitionMonths: { ...DEFAULT_RECOGNITION_MONTHS },
+        // Where the overheads row comes from. "auto" takes closed months from
+        // the P&L and the rest from Xero's budget, falling back to the typed
+        // figures for any month neither covers. "manual" pins what is typed.
+        overheadSource: "auto",
+        // Which Xero budget to read. Unset means the most recently updated one,
+        // and whichever was used is reported back so it is never a mystery.
+        xeroBudgetId: null,
         programs: [],
         defaultPaymentRules: {
             deposit: 1000,

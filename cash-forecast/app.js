@@ -24,6 +24,7 @@ const state = {
   actualMonthsAvailable: [],
   partialMonth: null,
   openings: null,
+  overheads: null,
   dirty: false,
   tab: "forecast",
   saving: false,
@@ -63,6 +64,7 @@ async function boot() {
     state.actualMonthsAvailable = data.actualMonthsAvailable ?? [];
     state.partialMonth = data.partialMonth ?? null;
     state.openings = data.openings ?? null;
+    state.overheads = data.overheads ?? null;
     state.effectiveRate = data.effectiveRate ?? null;
     state.canEdit = data.canEdit;
     state.serverForecast = data.forecast ?? null;
@@ -140,7 +142,17 @@ function effectiveAssumptions() {
   const openings = (a.openingBalanceSource ?? "xero") === "xero" && state.openings?.source === "xero"
     ? state.openings.inUse
     : a.openingBalances;
-  return { ...a, openingBalances: openings, fxRates: { ...a.fxRates, [cur]: resolvedRate() } };
+  // Same reasoning as the openings: the server resolves overheads against the
+  // P&L and the budget, and the browser has neither. Use what it resolved.
+  const overheads = (a.overheadSource ?? "auto") === "auto" && state.overheads?.months
+    ? state.overheads.months
+    : a.monthlyOverheads;
+  return {
+    ...a,
+    openingBalances: openings,
+    monthlyOverheads: overheads,
+    fxRates: { ...a.fxRates, [cur]: resolvedRate() },
+  };
 }
 
 function render() {
@@ -543,6 +555,42 @@ function balanceCurveSection(ro) {
 }
 
 /**
+ * Where the overheads row comes from.
+ *
+ * Closed months from the P&L, the rest from Xero's budget, typed figures for
+ * anything neither covers. Shown rather than assumed, because the same row can
+ * now hold three different kinds of number and they are not interchangeable.
+ */
+function overheadSourcePanel(ro) {
+  const o = state.overheads;
+  const want = state.assumptions.overheadSource ?? "auto";
+
+  const counts = o?.counts ?? {};
+  const summary = ["actual", "budget", "typed"]
+    .filter((k) => counts[k])
+    .map((k) => `${counts[k]} ${k}`)
+    .join(" · ");
+
+  return `<section class="closebox">
+    <h2>Overhead source ${summary ? `<span class="stamp">${summary}</span>` : ""}</h2>
+    <div class="rates" style="margin-bottom:10px">
+      ${[["auto", "Xero"], ["manual", "Typed below"]].map(([id, label]) => `
+        <label class="rateopt ${want === id ? "on" : ""}">
+          <input type="radio" name="ohsrc" value="${id}" ${want === id ? "checked" : ""} ${ro ? "disabled" : ""}>
+          <span class="rl">${label}</span>
+        </label>`).join("")}
+    </div>
+    <p class="foot">${
+      want !== "auto"
+        ? `Pinned to the typed figures. The workbook's twelve numbers are a guess made once a year — Xero has both the real spend and the plan.`
+      : o?.budget
+        ? `Closed months come from the P&amp;L, the rest from the Xero budget <b>${escapeHtml(o.budget.description)}</b> — ${o.budget.accounts} expense accounts, ${o.budget.monthsCovered} of 12 months budgeted. Months the budget does not reach keep their typed figure.`
+      : `Closed months come from the P&amp;L. <b>No budget has synced yet</b>, so forecast months are still using the typed figures — check the sync log for a scope error on budgets.`
+    }</p>
+  </section>`;
+}
+
+/**
  * Recognition months.
  *
  * Revenue moves from deferred to sales the month before a season starts. Until
@@ -751,15 +799,34 @@ function overheadsView() {
       <table class="cftable edit">
         <thead><tr><th class="lab"></th>${labels.map((l) => `<th>${l}</th>`).join("")}<th>Total</th></tr></thead>
         <tbody>
-          ${rows.map(([label, key]) => `
+          ${rows.map(([label, key]) => {
+            // Overheads can come from three places and the row must say which,
+            // month by month. A figure that silently changed its source is
+            // worse than a wrong one, because nobody can tell them apart.
+            const src = key === "monthlyOverheads" ? (state.overheads?.sources ?? null) : null;
+            const live = key === "monthlyOverheads" && state.overheads?.months
+              ? state.overheads.months : null;
+            return `
             <tr><th class="lab">${label}</th>
-              ${state.assumptions[key].map((v, i) => `
-                <td><input type="number" data-m="${key}" data-i="${i}" value="${v}" step="1000" ${ro ? "disabled" : ""}></td>`).join("")}
-              <td class="calc">${money(state.assumptions[key].reduce((s, n) => s + Number(n), 0))}</td>
-            </tr>`).join("")}
+              ${state.assumptions[key].map((v, i) => {
+                const from = src?.[i] ?? "typed";
+                const shown = from === "typed" ? v : Math.round(live[i]);
+                return `<td class="ohcell ${from}">
+                  <input type="number" data-m="${key}" data-i="${i}" value="${shown}" step="1000"
+                    ${ro || from !== "typed" ? "disabled" : ""}
+                    title="${from === "actual" ? "From the P&L — this month is closed"
+                          : from === "budget" ? "From the Xero budget"
+                          : "Typed"}">
+                  ${src ? `<span class="ohtag">${from === "actual" ? "actual" : from === "budget" ? "budget" : ""}</span>` : ""}
+                </td>`;
+              }).join("")}
+              <td class="calc">${money((live ?? state.assumptions[key]).reduce((s, n) => s + Number(n), 0))}</td>
+            </tr>`;
+          }).join("")}
         </tbody>
       </table>
     </div>
+    ${overheadSourcePanel(ro)}
     <p class="foot">Positive numbers. The forecast subtracts them. GST and PAYE belong here as their own rows once you decide how to phase them — neither exists in the current workbook.</p>`;
 }
 
@@ -811,6 +878,11 @@ function wire() {
         [e.target.dataset.recog]: Number(e.target.value),
       };
       touch();
+    }));
+
+  document.querySelectorAll("input[name=ohsrc]").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      state.assumptions.overheadSource = e.target.value; touch();
     }));
 
   document.querySelectorAll("input[name=opensrc]").forEach((input) =>

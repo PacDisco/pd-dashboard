@@ -20,6 +20,7 @@ import {
   listVersions,
   currentFiscalYear,
   resolveOpeningBalances,
+  resolveMonthlyOverheads,
 } from "./_shared/cash-store.mjs";
 import { loadRateSummary, planningRate } from "./_shared/cash-fx.mjs";
 import { fiscalMonthKeys } from "./_shared/cash-xero.mjs";
@@ -82,9 +83,36 @@ export default async (req) => {
   // never has to know Xero exists.
   const openings = resolveOpeningBalances(assumptions, actualsByMonth[`${fy}-04`]);
 
+  // Overheads: the P&L for months that have closed, Xero's budget for the rest.
+  // Resolved here rather than in the engine, so the engine keeps taking twelve
+  // plain numbers and never has to know Xero exists.
+  const opexByMonth = {};
+  let budgetInfo = null;
+  try {
+    const latest = await getStore({ name: "cash-xero" }).get("latest", { type: "json" });
+    const tenantId = latest?.orgs?.[0]?.tenantId;
+    if (tenantId) {
+      const opexStore = getStore({ name: "cash-xero-opex" });
+      for (const key of fiscalMonthKeys(fy, new Date(`${fy + 1}-03-31T00:00:00Z`))) {
+        const m = await opexStore.get(`${tenantId}/${key}`, { type: "json" });
+        if (m) opexByMonth[key] = m;
+      }
+      budgetInfo = await getStore({ name: "cash-xero-budget" })
+        .get(`${tenantId}/${fy}`, { type: "json" });
+    }
+  } catch (err) {
+    console.warn("[cash-forecast] overhead sources read failed:", err.message);
+  }
+
+  const overheads = resolveMonthlyOverheads(assumptions, {
+    opexByMonth,
+    budgetMonths: budgetInfo?.months ?? null,
+  });
+
   const effective = {
     ...assumptions,
     openingBalances: openings.balances,
+    monthlyOverheads: overheads.months,
     fxRates: { ...assumptions.fxRates, [settlement]: effectiveRate },
   };
 
@@ -110,6 +138,22 @@ export default async (req) => {
     forecastOnly,
     actualMonthsAvailable: closable,
     partialMonth,
+    overheads: {
+      months: overheads.months,
+      sources: overheads.sources,
+      counts: overheads.counts,
+      typed: assumptions.monthlyOverheads,
+      source: assumptions.overheadSource ?? "auto",
+      budget: budgetInfo
+        ? {
+            id: budgetInfo.budgetID,
+            description: budgetInfo.description,
+            monthsCovered: budgetInfo.monthsCovered,
+            accounts: budgetInfo.included?.length ?? 0,
+            fetchedAt: budgetInfo.fetchedAt,
+          }
+        : null,
+    },
     openings: {
       source: openings.source,
       fromXero: openings.fromXero,

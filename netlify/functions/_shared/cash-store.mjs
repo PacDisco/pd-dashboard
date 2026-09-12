@@ -136,6 +136,74 @@ export function resolveOpeningBalances(assumptions, aprilRecord) {
 }
 
 /**
+ * Decide the twelve monthly overhead figures the forecast should run on.
+ *
+ * Three sources, in priority order, per month:
+ *
+ *   actual   a month that has been closed off, taken from the P&L. What was
+ *            really spent, non-cash lines removed.
+ *   budget   any other month, from Xero's Budget Manager. What is planned.
+ *   typed    neither of the above — the figure someone entered by hand.
+ *
+ * That ordering is the point of the whole thing: the past comes from the books,
+ * the future comes from the budget, and twelve numbers copied out of a workbook
+ * once a year stop being load-bearing.
+ *
+ * EVERY MONTH REPORTS ITS SOURCE. A figure that silently changed where it came
+ * from is worse than a wrong one, because nobody can tell which is which. The
+ * UI labels each month from `sources`.
+ *
+ * Pure — no I/O, so it is testable without Blobs or Xero.
+ *
+ * @param {object} assumptions
+ * @param {{opexByMonth?: object, budgetMonths?: number[]|null}} xero
+ * @returns {{months: number[], sources: string[], counts: object}}
+ */
+export function resolveMonthlyOverheads(assumptions, xero = {}) {
+  const typed = Array.isArray(assumptions.monthlyOverheads)
+    ? assumptions.monthlyOverheads.map((n) => Number(n) || 0)
+    : Array(12).fill(0);
+
+  // "manual" pins the typed figures outright, for a year someone wants frozen.
+  if ((assumptions.overheadSource ?? "auto") !== "auto") {
+    return { months: typed, sources: Array(12).fill("typed"), counts: { typed: 12 } };
+  }
+
+  const fy = assumptions.fiscalYearStartYear;
+  const through = assumptions.actualsThroughMonth || null;
+  const opex = xero.opexByMonth ?? {};
+  const budget = Array.isArray(xero.budgetMonths) ? xero.budgetMonths : null;
+
+  const months = [];
+  const sources = [];
+  for (let slot = 0; slot < 12; slot++) {
+    const abs = 3 + slot;
+    const key = `${fy + Math.floor(abs / 12)}-${String((abs % 12) + 1).padStart(2, "0")}`;
+    const closed = Boolean(through) && key <= through;
+    const actual = opex[key];
+
+    // A closed month with a real figure wins. `cashTotal` can legitimately be
+    // zero, so presence is tested rather than truthiness — a genuinely zero
+    // month must not fall through to the budget and look like a forecast.
+    if (closed && actual && Number.isFinite(actual.cashTotal)) {
+      months.push(actual.cashTotal);
+      sources.push("actual");
+      continue;
+    }
+    if (budget && Number.isFinite(budget[slot]) && budget[slot] !== 0) {
+      months.push(budget[slot]);
+      sources.push("budget");
+      continue;
+    }
+    months.push(typed[slot]);
+    sources.push("typed");
+  }
+
+  const counts = sources.reduce((acc, s) => ({ ...acc, [s]: (acc[s] || 0) + 1 }), {});
+  return { months, sources, counts };
+}
+
+/**
  * Reject anything that would corrupt the model before it reaches storage.
  *
  * The UI validates too, but the UI is not the only thing that can POST here —
@@ -209,6 +277,13 @@ export function validateAssumptions(input) {
 
   if (input.actualsThroughMonth != null && !/^\d{4}-\d{2}$/.test(input.actualsThroughMonth)) {
     return { ok: false, error: "actualsThroughMonth must be YYYY-MM or null" };
+  }
+
+  if (input.overheadSource != null && !["auto", "manual"].includes(input.overheadSource)) {
+    return { ok: false, error: "overheadSource must be auto or manual" };
+  }
+  if (input.xeroBudgetId != null && typeof input.xeroBudgetId !== "string") {
+    return { ok: false, error: "xeroBudgetId must be a string" };
   }
 
   const nzdShare = input.defaultPaymentRules?.nzdReceiptShare;

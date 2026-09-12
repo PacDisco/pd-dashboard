@@ -18,6 +18,9 @@ import {
   fiscalMonthKeys, fetchMonthActuals, getBankAccountCurrencies,
   getTrackingCategories, pickProgramCategory, getTrackedActuals, fiscalYearBounds,
 } from "./_shared/cash-xero.mjs";
+import { fetchMonthOpex } from "./_shared/cash-opex.mjs";
+import { listBudgets, fetchBudget, accountIndex, overheadsFromBudget } from "./_shared/cash-budget.mjs";
+import { loadAssumptions } from "./_shared/cash-store.mjs";
 async function orgCurrency(token, tenantId) {
     try {
         const org = await xeroGet(token, tenantId, "Organisation");
@@ -133,6 +136,81 @@ export default async (_req, _context) => {
     }
   }
 
+  /* ---- overheads: the P&L for months that have ended, the budget for the rest ----
+   *
+   * Two different questions. What DID we spend comes off the P&L, month by
+   * month, non-cash lines removed. What WILL we spend comes off Budget Manager.
+   * Neither is twelve numbers copied out of a workbook once a year, which is
+   * what this replaces.
+   *
+   * Same caching as the bank months: a finished month does not change, so it is
+   * fetched once. The budget is small and refetched every run. */
+  const opexStore = getStore({ name: "cash-xero-opex", consistency: "strong" });
+  const budgetStore = getStore({ name: "cash-xero-budget", consistency: "strong" });
+  let opexFetched = 0;
+  let opexCached = 0;
+  let budgetLines = 0;
+
+  if (primary) {
+    try {
+      const keys = fiscalMonthKeys(fy);
+      // The current month is still running, so its P&L is partial. Only months
+      // that have actually ended are stored.
+      const finished = keys.slice(0, -1);
+      const alwaysRefresh = finished.slice(-1);
+
+      for (const key of finished) {
+        const blobKey = `${primary.tenantId}/${key}`;
+        if (!alwaysRefresh.includes(key) && (await opexStore.get(blobKey))) {
+          opexCached++;
+          continue;
+        }
+        await opexStore.setJSON(blobKey, await fetchMonthOpex(token, primary.tenantId, key));
+        opexFetched++;
+      }
+    } catch (err) {
+      console.error(`[cash-xero-sync] monthly opex failed: ${err.message}`);
+    }
+
+    try {
+      const assumptions = await loadAssumptions(fy);
+      const budgets = await listBudgets(token, primary.tenantId);
+      // Whichever budget was asked for, or the most recently updated one. The
+      // id and description are stored alongside the figures so the dashboard can
+      // say WHICH budget it is showing rather than just "the budget".
+      const chosen = assumptions.xeroBudgetId
+        ? budgets.find((b) => b.budgetID === assumptions.xeroBudgetId)
+        : budgets[0];
+
+      if (chosen) {
+        const [budget, accounts] = await Promise.all([
+          fetchBudget(token, primary.tenantId, chosen.budgetID,
+            { from: `${fy}-04-01`, to: `${fy + 1}-03-31` }),
+          accountIndex(token, primary.tenantId),
+        ]);
+        if (budget) {
+          const result = overheadsFromBudget(budget, accounts, fy);
+          await budgetStore.setJSON(`${primary.tenantId}/${fy}`, {
+            budgetID: chosen.budgetID,
+            description: chosen.description,
+            requested: assumptions.xeroBudgetId ?? null,
+            months: result.months,
+            monthsCovered: result.slotsCovered.length,
+            included: result.included,
+            excluded: result.excluded,
+            fetchedAt: new Date().toISOString(),
+          });
+          budgetLines = result.included.length;
+        }
+      }
+    } catch (err) {
+      // A 403 here means accounting.budgets.read was not granted. Everything
+      // else in the sync carries on — the forecast just keeps using whatever
+      // overheads it had.
+      console.error(`[cash-xero-sync] budget failed: ${err.message}`);
+    }
+  }
+
   const health = await refreshTokenHealth();
     // Group total is only meaningful where currencies match. Anything else is
     // reported per currency — do NOT silently add NZD and USD together.
@@ -158,7 +236,7 @@ export default async (_req, _context) => {
         `ok=${orgs.filter((o) => !o.error).length} ` +
         `errors=${payload.errors.length} ` +
         `tokenDays=${health?.daysRemaining ?? "?"} ` +
-        `months=${monthsFetched}fetched/${monthsCached}cached ` +
+        `months=${monthsFetched}fetched/${monthsCached}cached opex=${opexFetched}fetched/${opexCached}cached budgetAccounts=${budgetLines} ` +
         `durationMs=${payload.durationMs} ` +
         `closingByCurrency=${JSON.stringify(byCurrency)}`,
     );
