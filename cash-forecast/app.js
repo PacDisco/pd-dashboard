@@ -444,7 +444,7 @@ function paymentsView() {
       ${ratePanel(ro)}
       <section>
         <h2>Booking curve <span class="stamp ${Math.abs(sum - 1) > 0.001 ? "warn" : ""}">${(sum * 100).toFixed(1)}%</span></h2>
-        <p class="foot">Share of each cohort that books this many months before departure.</p>
+        <p class="foot">Share of each cohort that books this many months before departure. This is when the <b>deposit</b> lands.</p>
         <div class="curve">
           ${r.bookingCurve.map((p, i) => `
             <label class="curverow">
@@ -456,7 +456,53 @@ function paymentsView() {
         </div>
         <p class="foot">Shares are normalised to 100% when the forecast runs, so a curve that doesn't add up bends the timing but never changes total revenue.</p>
       </section>
+      ${balanceCurveSection(ro)}
     </div>`;
+}
+
+/**
+ * When the balance is actually paid.
+ *
+ * The model used to drop the whole balance into a single month — the due date —
+ * which is why the table showed money arriving in two or three months a year and
+ * nothing in between. Students pay across a range, with the bulk inside the last
+ * 60 days. The annual total is unchanged either way; what moves is WHICH MONTH
+ * the money shows up in, which is the entire output of a cash forecast.
+ */
+function balanceCurveSection(ro) {
+  const r = state.assumptions.defaultPaymentRules;
+  const curve = r.balanceCurve;
+
+  if (!curve?.length) {
+    return `<section>
+      <h2>Balance payments <span class="stamp warn">single lump</span></h2>
+      <p class="foot">The whole balance is currently landing in one month, ${escapeHtml(String(r.balanceDueDaysBeforeDeparture))} days before departure. Real payments arrive across a range.</p>
+      ${ro ? "" : `<button id="addbalcurve" class="btn-primary">Spread it across months</button>`}
+    </section>`;
+  }
+
+  const sum = curve.reduce((s, p) => s + p.share, 0);
+  // "Within 60 days" is offsets 2, 1 and 0 — the window Jake described as
+  // carrying the bulk. Surfacing it makes the curve checkable at a glance
+  // instead of requiring someone to add up seven boxes.
+  const within60 = curve
+    .filter((p) => p.monthsBefore <= 2)
+    .reduce((s, p) => s + p.share, 0);
+
+  return `<section>
+    <h2>Balance payments <span class="stamp ${Math.abs(sum - 1) > 0.001 ? "warn" : ""}">${(sum * 100).toFixed(1)}%</span></h2>
+    <p class="foot">Share of the balance paid this many months before departure. <b>${((within60 / (sum || 1)) * 100).toFixed(0)}% lands within 60 days.</b></p>
+    <div class="curve">
+      ${curve.map((p, i) => `
+        <label class="curverow ${p.monthsBefore <= 2 ? "near" : ""}">
+          <span>${p.monthsBefore}mo</span>
+          <input type="number" data-balcurve="${i}" value="${(p.share * 100).toFixed(1)}" step="0.5" ${ro ? "disabled" : ""}>
+          <span class="pc">%</span>
+          <span class="bar"><i style="width:${Math.min(100, p.share * 250)}%"></i></span>
+        </label>`).join("")}
+    </div>
+    <p class="foot">A starting shape, not a measurement — replace it with the real distribution once receivable receipts are flowing. Shares normalise to 100%, so the year's total never changes; only the timing does.</p>
+  </section>`;
 }
 
 /**
@@ -753,6 +799,23 @@ function wire() {
     input.addEventListener("change", (e) => {
       state.assumptions.fxRates[e.target.dataset.fx] = Number(e.target.value); touch();
     }));
+
+  document.querySelectorAll("[data-balcurve]").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      state.assumptions.defaultPaymentRules.balanceCurve[Number(e.target.dataset.balcurve)].share =
+        Number(e.target.value) / 100;
+      touch();
+    }));
+
+  el("addbalcurve")?.addEventListener("click", () => {
+    state.assumptions.defaultPaymentRules.balanceCurve = [
+      { monthsBefore: 6, share: 0.03 }, { monthsBefore: 5, share: 0.04 },
+      { monthsBefore: 4, share: 0.06 }, { monthsBefore: 3, share: 0.10 },
+      { monthsBefore: 2, share: 0.30 }, { monthsBefore: 1, share: 0.37 },
+      { monthsBefore: 0, share: 0.10 },
+    ];
+    touch();
+  });
 
   document.querySelectorAll("[data-curve]").forEach((input) =>
     input.addEventListener("change", (e) => {

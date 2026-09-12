@@ -92,6 +92,7 @@ function rulesFor(assumptions, program) {
         ...assumptions.defaultPaymentRules,
         ...override,
         bookingCurve: override.bookingCurve ?? assumptions.defaultPaymentRules.bookingCurve,
+        balanceCurve: override.balanceCurve ?? assumptions.defaultPaymentRules.balanceCurve,
     };
 }
 function toBase(amount, currency, fxRates) {
@@ -206,6 +207,11 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         /* ---- cash in ---- */
         const curve = normalise(rules.bookingCurve);
         const departure = parseISODate(program.startDate);
+        // A null monthsBefore means "use the day-precise due date" — the legacy
+        // single-lump path, kept so an existing model does not silently change.
+        const balancePoints = rules.balanceCurve?.length
+            ? normalise(rules.balanceCurve)
+            : [{ monthsBefore: null, share: 1 }];
         for (const point of curve) {
             const paxAtThisPoint = pax * point.share;
             // Deposits land in the month the booking is made.
@@ -229,21 +235,37 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 // Deferred revenue is an accounting figure, so it is stated in base.
                 deferredOpening += depositInBase;
             }
-            // Balances all fall due on the same date regardless of when booked.
-            const balanceMonth = shiftDays(program.startDate, -rules.balanceDueDaysBeforeDeparture);
-            const balanceSlot = dateToFiscalSlot(fy, balanceMonth.year, balanceMonth.month);
-            const balanceCash = paxAtThisPoint * balance;
-            const balanceInBase = balanceCash * receiptRate;
-            if (balanceSlot !== null) {
-                months[balanceSlot].balancesIn += balanceInBase;
-                addSeasonReceipt(months[balanceSlot], program.season, balanceInBase);
-                if (receiptsAreFx)
-                    months[balanceSlot].fxIn += balanceCash;
-                else
-                    months[balanceSlot].baseIn += balanceCash;
-            }
-            else if (balanceMonth.year * 12 + balanceMonth.month < fy * 12 + 4) {
-                deferredOpening += balanceInBase;
+            // Balance payments are SPREAD, not a single lump.
+            //
+            // The model used to land every balance in one month — the due date —
+            // which is why the table showed money arriving in two or three months
+            // a year and nothing in the rest. In reality students pay across a
+            // range, with the bulk inside the last 60 days. A single lump gets
+            // the annual total right and the month wrong, and for a cash forecast
+            // the month is the whole point.
+            //
+            // `balanceCurve` is shares by months before departure, same unit as
+            // the booking curve. With none set, it degrades to exactly the old
+            // behaviour — one lump on the due date, day-precise — so a saved
+            // model that predates this keeps its numbers until someone opts in.
+            for (const bp of balancePoints) {
+                const balanceMonth = bp.monthsBefore === null
+                    ? shiftDays(program.startDate, -rules.balanceDueDaysBeforeDeparture)
+                    : addMonths(departure.year, departure.month, -bp.monthsBefore);
+                const balanceSlot = dateToFiscalSlot(fy, balanceMonth.year, balanceMonth.month);
+                const balanceCash = paxAtThisPoint * balance * bp.share;
+                const balanceInBase = balanceCash * receiptRate;
+                if (balanceSlot !== null) {
+                    months[balanceSlot].balancesIn += balanceInBase;
+                    addSeasonReceipt(months[balanceSlot], program.season, balanceInBase);
+                    if (receiptsAreFx)
+                        months[balanceSlot].fxIn += balanceCash;
+                    else
+                        months[balanceSlot].baseIn += balanceCash;
+                }
+                else if (balanceMonth.year * 12 + balanceMonth.month < fy * 12 + 4) {
+                    deferredOpening += balanceInBase;
+                }
             }
         }
         /* ---- cash out ---- */

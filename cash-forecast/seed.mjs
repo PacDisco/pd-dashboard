@@ -123,6 +123,20 @@ export function seedAssumptions(fiscalYearStartYear) {
         { monthsBefore: 2, share: 0.05 },
         { monthsBefore: 1, share: 0.03 },
       ],
+      // When the balance actually lands. Confirmed shape, not confirmed numbers:
+      // the bulk arrives within 60 days of the program, so 77% sits in the last
+      // three offsets. Replace with the measured curve once receivable receipts
+      // are flowing — this is the single input that decides which month the big
+      // money shows up in.
+      balanceCurve: [
+        { monthsBefore: 6, share: 0.03 },
+        { monthsBefore: 5, share: 0.04 },
+        { monthsBefore: 4, share: 0.06 },
+        { monthsBefore: 3, share: 0.10 },
+        { monthsBefore: 2, share: 0.30 },
+        { monthsBefore: 1, share: 0.37 },
+        { monthsBefore: 0, share: 0.10 },
+      ],
     },
     paymentRulesByProgram: {},
     costPhasing: {

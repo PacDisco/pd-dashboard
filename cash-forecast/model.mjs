@@ -63,6 +63,28 @@ export const DEFAULT_COST_PHASING = {
         { monthOffset: 2, share: 0.05 },
     ],
 };
+/**
+ * When the balance is actually paid, as shares by months before departure.
+ *
+ * The model used to land the whole balance in one month — the due date — which
+ * is why the table showed cash arriving in two or three months a year and
+ * nothing in between. Students pay across a range, with the bulk inside the last
+ * 60 days, and for a cash forecast the month is the entire point.
+ *
+ * This shape is a starting point, not a measurement: 77% inside 60 days
+ * (offsets 2, 1 and 0), with a tail running back six months. The real curve is
+ * derivable from receivable receipts once those are flowing, and should replace
+ * this the moment it is.
+ */
+export const DEFAULT_BALANCE_CURVE = [
+    { monthsBefore: 6, share: 0.03 },
+    { monthsBefore: 5, share: 0.04 },
+    { monthsBefore: 4, share: 0.06 },
+    { monthsBefore: 3, share: 0.10 },
+    { monthsBefore: 2, share: 0.30 },
+    { monthsBefore: 1, share: 0.37 },
+    { monthsBefore: 0, share: 0.10 },
+];
 export function defaultAssumptions(fiscalYearStartYear) {
     return {
         fiscalYearStartYear,
@@ -88,6 +110,7 @@ export function defaultAssumptions(fiscalYearStartYear) {
             deposit: 1000,
             balanceDueDaysBeforeDeparture: 60,
             bookingCurve: DEFAULT_BOOKING_CURVE,
+            balanceCurve: DEFAULT_BALANCE_CURVE,
         },
         paymentRulesByProgram: {},
         costPhasing: DEFAULT_COST_PHASING,

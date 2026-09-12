@@ -211,6 +211,27 @@ export function validateAssumptions(input) {
     return { ok: false, error: "actualsThroughMonth must be YYYY-MM or null" };
   }
 
+  // Curves decide WHICH MONTH money lands in, which is the whole output of a
+  // cash forecast. A malformed one silently moves millions between months.
+  for (const which of ["bookingCurve", "balanceCurve"]) {
+    const curve = input.defaultPaymentRules?.[which];
+    if (curve == null) continue;
+    if (!Array.isArray(curve) || curve.length === 0) {
+      return { ok: false, error: `${which} must be a non-empty array` };
+    }
+    for (const p of curve) {
+      if (!Number.isFinite(Number(p?.monthsBefore)) || Number(p.monthsBefore) < 0 || Number(p.monthsBefore) > 36) {
+        return { ok: false, error: `${which}: monthsBefore must be between 0 and 36` };
+      }
+      if (!Number.isFinite(Number(p?.share)) || Number(p.share) < 0) {
+        return { ok: false, error: `${which}: every share must be a number of at least 0` };
+      }
+    }
+    if (curve.reduce((s, p) => s + Number(p.share), 0) <= 0) {
+      return { ok: false, error: `${which}: shares cannot all be zero` };
+    }
+  }
+
   // A wrong recognition month can move an entire season's revenue out of the
   // fiscal year, so this is checked rather than trusted.
   if (input.recognitionMonths != null) {

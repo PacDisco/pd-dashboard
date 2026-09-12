@@ -603,4 +603,85 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ and still follows forecast receipts when nothing is closed");
 }
 
+/* ---------- balance payments spread across months ---------- */
+
+{
+  // The point of the change: money arrives every month, not in two lumps a year.
+  // The annual total must not move by a cent — only the timing.
+  const single = base();
+  single.programs = [prog({
+    id: "f", name: "F", season: "Fall", startDate: "2026-10-01", endDate: "2026-12-01",
+    price: 15_500, paxForecast: 20, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  single.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+
+  const spread = JSON.parse(JSON.stringify(single));
+  spread.defaultPaymentRules.balanceCurve = [
+    { monthsBefore: 6, share: 0.03 }, { monthsBefore: 5, share: 0.04 },
+    { monthsBefore: 4, share: 0.06 }, { monthsBefore: 3, share: 0.10 },
+    { monthsBefore: 2, share: 0.30 }, { monthsBefore: 1, share: 0.37 },
+    { monthsBefore: 0, share: 0.10 },
+  ];
+
+  const a = buildForecast(single);
+  const b = buildForecast(spread);
+
+  // No balanceCurve => exactly the old single-lump behaviour. A saved model that
+  // predates this must not silently change.
+  const lumpMonths = a.months.filter((m) => m.balancesIn > 0.5);
+  assert.equal(lumpMonths.length, 1, "without a curve the balance is still one lump");
+  assert.equal(lumpMonths[0].label, "Aug 26", "on the due date, 60 days before 1 Oct");
+  console.log("✓ no balance curve means the old behaviour, unchanged");
+
+  const spreadMonths = b.months.filter((m) => m.balancesIn > 0.5);
+  assert.ok(spreadMonths.length >= 5, `the balance now lands across months, got ${spreadMonths.length}`);
+  console.log(`✓ with a curve the balance lands across ${spreadMonths.length} months`);
+
+  // THE INVARIANT: spreading moves money between months and never creates or
+  // destroys any. If this drifts, the forecast is inventing revenue.
+  near(b.totals.cashIn, a.totals.cashIn, 0.01, "total cash in is identical");
+  near(b.totals.cashIn, 20 * 15_500, 0.01, "and still equals pax x price exactly");
+  console.log("✓ spreading changes the timing and not one cent of the total");
+
+  // The bulk really is inside 60 days — offsets 2, 1 and 0 around a 1 Oct
+  // departure are August, September and October.
+  const byLabel = (l) => b.months.find((m) => m.label === l).balancesIn;
+  const near60 = byLabel("Aug 26") + byLabel("Sep 26") + byLabel("Oct 26");
+  const allBalances = b.months.reduce((s, m) => s + m.balancesIn, 0);
+  assert.ok(near60 / allBalances > 0.7,
+    `the bulk must land within 60 days, got ${Math.round((near60 / allBalances) * 100)}%`);
+  console.log("✓ the bulk lands within 60 days of departure");
+
+  // Season receipts must still reconcile after the change.
+  for (const m of b.months) {
+    const summed = Object.values(m.receiptsBySeason).reduce((s, v) => s + v, 0);
+    near(summed, m.cashIn, 0.01, `${m.label}: season split still reconciles`);
+  }
+  console.log("✓ the season split still reconciles month by month");
+}
+
+/* ---------- a curve reaching back before the year opens ---------- */
+
+{
+  // Early instalments for a program departing in April fall before 1 April, and
+  // belong in the opening deferred balance rather than vanishing.
+  const a = base();
+  a.programs = [prog({
+    id: "e", name: "Early", season: "Summer", startDate: "2026-06-01", endDate: "2026-07-01",
+    price: 10_000, paxForecast: 10, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  a.defaultPaymentRules.balanceCurve = [
+    { monthsBefore: 6, share: 0.5 },  // December 2025 — before the year
+    { monthsBefore: 1, share: 0.5 },  // May 2026 — inside it
+  ];
+  const f = buildForecast(a);
+
+  assert.ok(f.totals.deferredOpening > 0,
+    "cash collected before 1 April lands in the opening deferred balance");
+  const inYear = f.months.reduce((s, m) => s + m.balancesIn, 0);
+  assert.ok(inYear > 0 && inYear < 10 * 9_000,
+    "only the in-year half of the balance shows in the table");
+  console.log("✓ instalments before the year opens are not lost");
+}
+
 console.log("\nAll actuals-overlay tests passed.");
