@@ -154,6 +154,11 @@ export default async (req) => {
       opexMonthsStored: Object.keys(opexByMonth).length,
       typed: assumptions.monthlyOverheads,
       source: assumptions.overheadSource ?? "auto",
+      basis: assumptions.overheadBasis ?? "total",
+      // Both figures per closed month, so the UI can show what the other basis
+      // would give without a round trip.
+      byMonth: Object.fromEntries(Object.entries(opexByMonth)
+        .map(([k, v]) => [k, { total: v.total, cashTotal: v.cashTotal }])),
       budget: budgetInfo
         ? {
             id: budgetInfo.budgetID,

@@ -24,14 +24,21 @@ const model = (over = {}) => ({
   fiscalYearStartYear: 2026,
   monthlyOverheads: Array(12).fill(60_000),
   overheadSource: "auto",
+  // Most of these tests are about WHICH SOURCE wins, not which figure within a
+  // source, so they pin the basis and vary only what they are testing.
+  overheadBasis: "cash",
   actualsThroughMonth: null,
   ...over,
 });
 
 // The real Apr–Aug cash opex, from Pacific Discovery's own P&L.
 const REAL = [81_615, 54_130, 106_661, 63_036, 82_808];
+// Total Operating Expenses as the P&L reports it, and the same figure with the
+// non-cash lines stripped. June is the one that matters: its unrealised currency
+// line was a GAIN, so the cash figure is HIGHER than the reported total.
+const REPORTED = [94_093, 63_733, 72_856, 93_956, 82_369];
 const opexByMonth = Object.fromEntries(
-  REAL.map((cashTotal, i) => [KEYS[i], { month: KEYS[i], cashTotal }]),
+  REAL.map((cashTotal, i) => [KEYS[i], { month: KEYS[i], cashTotal, total: REPORTED[i] }]),
 );
 const budgetMonths = Array(12).fill(70_000);
 
@@ -125,4 +132,46 @@ const budgetMonths = Array(12).fill(70_000);
   console.log("✓ actuals only apply to months actually closed off");
 }
 
-console.log("\nAll overhead source tests passed.");
+/* ---------- which P&L figure a closed month uses ---------- */
+
+{
+  // "total" is Total Operating Expenses exactly as reported — what ties to the
+  // P&L. "cash" strips revaluations and unrealised currency movements.
+  const asTotal = resolveMonthlyOverheads(
+    model({ overheadBasis: "total", actualsThroughMonth: "2026-08" }),
+    { opexByMonth, budgetMonths },
+  );
+  const asCash = resolveMonthlyOverheads(
+    model({ overheadBasis: "cash", actualsThroughMonth: "2026-08" }),
+    { opexByMonth, budgetMonths },
+  );
+
+  for (let i = 0; i < 5; i++) {
+    near(asTotal.months[i], REPORTED[i], 0.01, `${LABELS[i]} reports the P&L line`);
+    near(asCash.months[i], REAL[i], 0.01, `${LABELS[i]} reports the cash figure`);
+  }
+  console.log("✓ the basis decides which P&L figure a closed month uses");
+
+  // June is the case that catches a parser which only ever subtracts: its
+  // unrealised currency line was a gain, so cash opex is HIGHER than reported.
+  assert.ok(asCash.months[2] > asTotal.months[2],
+    "June cash opex exceeds reported opex, because the currency line was a gain");
+  near(asCash.months[2] - asTotal.months[2], 33_805, 1, "by the June non-cash swing");
+  console.log("✓ June's currency gain moves the two bases in the unintuitive direction");
+
+  // Default is "total" — the P&L line, which is what ties to the accounts.
+  const dflt = resolveMonthlyOverheads(
+    { fiscalYearStartYear: 2026, monthlyOverheads: Array(12).fill(60_000),
+      overheadSource: "auto", actualsThroughMonth: "2026-08" },
+    { opexByMonth, budgetMonths },
+  );
+  near(dflt.months[0], REPORTED[0], 0.01, "with no basis set, the reported total is used");
+  console.log("✓ the default basis is the P&L line as reported");
+
+  // Forecast months are unaffected either way — the basis is a P&L concept.
+  near(asTotal.months[8], 70_000, 0.01, "budget months ignore the basis");
+  near(asCash.months[8], 70_000, 0.01);
+  console.log("✓ the basis does not touch budget or typed months");
+}
+
+console.log("\nAll overhead basis tests passed.");

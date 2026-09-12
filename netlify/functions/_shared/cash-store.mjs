@@ -171,6 +171,8 @@ export function resolveMonthlyOverheads(assumptions, xero = {}) {
 
   const fy = assumptions.fiscalYearStartYear;
   const through = assumptions.actualsThroughMonth || null;
+  // "total" is the P&L line as reported; "cash" removes the non-cash lines.
+  const basis = assumptions.overheadBasis ?? "total";
   const opex = xero.opexByMonth ?? {};
   const budget = Array.isArray(xero.budgetMonths) ? xero.budgetMonths : null;
 
@@ -182,11 +184,19 @@ export function resolveMonthlyOverheads(assumptions, xero = {}) {
     const closed = Boolean(through) && key <= through;
     const actual = opex[key];
 
-    // A closed month with a real figure wins. `cashTotal` can legitimately be
+    // A closed month with a real figure wins. The figure can legitimately be
     // zero, so presence is tested rather than truthiness — a genuinely zero
     // month must not fall through to the budget and look like a forecast.
-    if (closed && actual && Number.isFinite(actual.cashTotal)) {
-      months.push(actual.cashTotal);
+    //
+    // `total` is the P&L's Total Operating Expenses as reported. `cash` strips
+    // the non-cash lines — revaluations and unrealised currency movements —
+    // which on these books swing by tens of thousands a month in both
+    // directions. June 2026 reported 72,856 and cost 106,661; the difference was
+    // entirely the dollar moving. Both are stored, so this is a display choice
+    // rather than something needing a re-sync.
+    const figure = basis === "cash" ? actual?.cashTotal : actual?.total;
+    if (closed && actual && Number.isFinite(figure)) {
+      months.push(figure);
       sources.push("actual");
       continue;
     }
@@ -281,6 +291,9 @@ export function validateAssumptions(input) {
 
   if (input.overheadSource != null && !["auto", "manual"].includes(input.overheadSource)) {
     return { ok: false, error: "overheadSource must be auto or manual" };
+  }
+  if (input.overheadBasis != null && !["total", "cash"].includes(input.overheadBasis)) {
+    return { ok: false, error: "overheadBasis must be total or cash" };
   }
   if (input.xeroBudgetId != null && typeof input.xeroBudgetId !== "string") {
     return { ok: false, error: "xeroBudgetId must be a string" };

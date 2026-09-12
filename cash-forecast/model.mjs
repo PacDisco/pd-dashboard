@@ -138,6 +138,11 @@ export function defaultAssumptions(fiscalYearStartYear) {
         // the P&L and the rest from Xero's budget, falling back to the typed
         // figures for any month neither covers. "manual" pins what is typed.
         overheadSource: "auto",
+        // Which P&L figure a closed month uses. "total" is Total Operating
+        // Expenses exactly as the P&L reports it. "cash" strips the non-cash
+        // lines — bank revaluations and unrealised currency movements — which
+        // move by tens of thousands a month here purely on the exchange rate.
+        overheadBasis: "total",
         // Which Xero budget to read. Unset means the most recently updated one,
         // and whichever was used is reported back so it is never a mystery.
         xeroBudgetId: null,

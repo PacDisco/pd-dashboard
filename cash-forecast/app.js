@@ -616,6 +616,17 @@ function overheadSourcePanel(ro) {
           <span class="rl">${label}</span>
         </label>`).join("")}
     </div>
+    ${want === "auto" ? `
+    <div class="rates" style="margin:10px 0">
+      ${[["total", "Total operating expenses"], ["cash", "Cash only"]].map(([id, label]) => `
+        <label class="rateopt ${(state.assumptions.overheadBasis ?? "total") === id ? "on" : ""}">
+          <input type="radio" name="ohbasis" value="${id}" ${(state.assumptions.overheadBasis ?? "total") === id ? "checked" : ""} ${ro ? "disabled" : ""}>
+          <span class="rl">${label}</span>
+        </label>`).join("")}
+    </div>
+    <p class="foot">${(state.assumptions.overheadBasis ?? "total") === "total"
+      ? `Closed months use <b>Total Operating Expenses</b> exactly as the P&amp;L reports it. That line includes bank revaluations and unrealised currency movements, which are accounting entries rather than money leaving the account — on these books they swung by 33,805 in June alone, on the exchange rate rather than on anything spent.`
+      : `Closed months use Total Operating Expenses with the non-cash lines removed — bank revaluations and unrealised currency movements. Closer to what actually left the bank; will not tie to the P&amp;L.`}</p>` : ""}
     <p class="foot">${overheadStatus(want, o)}</p>
   </section>`;
 }
@@ -908,6 +919,11 @@ function wire() {
         [e.target.dataset.recog]: Number(e.target.value),
       };
       touch();
+    }));
+
+  document.querySelectorAll("input[name=ohbasis]").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      state.assumptions.overheadBasis = e.target.value; touch();
     }));
 
   document.querySelectorAll("input[name=ohsrc]").forEach((input) =>
