@@ -561,6 +561,42 @@ function balanceCurveSection(ro) {
  * anything neither covers. Shown rather than assumed, because the same row can
  * now hold three different kinds of number and they are not interchangeable.
  */
+/**
+ * Say what is ACTUALLY happening, not what is meant to happen.
+ *
+ * The first version of this panel stated "closed months come from the P&L"
+ * whether or not a single month had one — which is the same failure as the
+ * warning that claimed a month was missing Xero figures while showing them. A
+ * panel that asserts an untrue thing is worse than one that says nothing.
+ *
+ * Three different "no actuals" cases, and they need different answers:
+ * nothing has been closed, nothing has synced, or the sync ran and found
+ * nothing for those months.
+ */
+function overheadStatus(want, o) {
+  if (want !== "auto") {
+    return `Pinned to the typed figures. The workbook's twelve numbers are a guess made once a year — Xero has both the real spend and the plan.`;
+  }
+
+  const closed = o?.closedMonths ?? 0;
+  const stored = o?.opexMonthsStored ?? 0;
+  const actual = o?.counts?.actual ?? 0;
+
+  const past = actual > 0
+    ? `<b>${actual} closed month${actual === 1 ? "" : "s"}</b> come from the P&amp;L.`
+    : closed === 0
+      ? `<b>No months are closed</b>, so none can use the P&amp;L — close them on the Month-end close control below.`
+      : stored === 0
+        ? `${closed} month${closed === 1 ? " is" : "s are"} closed but <b>the P&amp;L has not synced yet</b>. It runs hourly; if it stays empty, check the sync log for <code>opex=</code>.`
+        : `${closed} month${closed === 1 ? " is" : "s are"} closed and the P&amp;L has synced, but not for those months.`;
+
+  const future = o?.budget
+    ? `The rest come from the Xero budget <b>${escapeHtml(o.budget.description)}</b> — ${o.budget.accounts} expense accounts, ${o.budget.monthsCovered} of 12 months budgeted. Months it does not reach keep their typed figure.`
+    : `<b>No budget has synced yet</b>, so forecast months are using the typed figures. Check the sync log for <code>budgetAccounts=</code> — a scope error there means the budget consent did not take.`;
+
+  return `${past} ${future}`;
+}
+
 function overheadSourcePanel(ro) {
   const o = state.overheads;
   const want = state.assumptions.overheadSource ?? "auto";
@@ -580,13 +616,7 @@ function overheadSourcePanel(ro) {
           <span class="rl">${label}</span>
         </label>`).join("")}
     </div>
-    <p class="foot">${
-      want !== "auto"
-        ? `Pinned to the typed figures. The workbook's twelve numbers are a guess made once a year — Xero has both the real spend and the plan.`
-      : o?.budget
-        ? `Closed months come from the P&amp;L, the rest from the Xero budget <b>${escapeHtml(o.budget.description)}</b> — ${o.budget.accounts} expense accounts, ${o.budget.monthsCovered} of 12 months budgeted. Months the budget does not reach keep their typed figure.`
-      : `Closed months come from the P&amp;L. <b>No budget has synced yet</b>, so forecast months are still using the typed figures — check the sync log for a scope error on budgets.`
-    }</p>
+    <p class="foot">${overheadStatus(want, o)}</p>
   </section>`;
 }
 

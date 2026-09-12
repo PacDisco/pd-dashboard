@@ -142,6 +142,16 @@ export default async (req) => {
       months: overheads.months,
       sources: overheads.sources,
       counts: overheads.counts,
+      // Enough to tell the three "no actuals" cases apart: nothing closed, the
+      // P&L not synced, or genuinely no data for those months. The panel used
+      // to state that closed months come from the P&L whether or not any
+      // actually did, which is the kind of confident-but-wrong copy this whole
+      // dashboard is supposed to avoid.
+      closedMonths: assumptions.actualsThroughMonth
+        ? fiscalMonthKeys(fy, new Date(`${fy + 1}-03-31T00:00:00Z`))
+            .filter((k) => k <= assumptions.actualsThroughMonth).length
+        : 0,
+      opexMonthsStored: Object.keys(opexByMonth).length,
       typed: assumptions.monthlyOverheads,
       source: assumptions.overheadSource ?? "auto",
       budget: budgetInfo
