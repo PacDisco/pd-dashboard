@@ -463,12 +463,36 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             row.fxConverted = null;
             row.baseFromConversion = null;
 
-            baseBalance = baseA.closing !== null && baseA.closing !== undefined
-                ? baseA.closing
-                : baseBalance + row.baseIn - row.baseOut;
-            fxBalance = fxA.closing !== null && fxA.closing !== undefined
-                ? fxA.closing
-                : fxBalance + row.fxIn - row.fxOut;
+            // A bank summary's own four columns must reconcile: closing has to
+            // equal opening plus received minus spent. It is the same statement
+            // read four ways, so a mismatch is never a real-world difference —
+            // it means the report was not parsed correctly.
+            //
+            // This check exists because the live dashboard showed a closing
+            // balance of exactly zero for five consecutive months while the same
+            // record reported six figures of receipts. Trusting that zero
+            // re-based the entire remaining forecast onto a balance that never
+            // existed, and the variance row read as half a million to the good.
+            //
+            // Where the columns disagree, the derived figure wins: opening,
+            // received and spent all looked right, and only closing was wrong.
+            // Either way it is said out loud rather than shown as a confident
+            // number.
+            const reconcile = (cur, side, running, inn, out) => {
+                const stored = side.closing;
+                const derived = (Number.isFinite(side.opening) ? side.opening : running) + inn - out;
+                if (stored === null || stored === undefined) return derived;
+                // Tolerate cents, not thousands.
+                const tolerance = Math.max(1, Math.abs(inn) * 0.005);
+                if (Math.abs(stored - derived) > tolerance) {
+                    warnings.push(`${row.label}: the ${cur} bank summary does not add up — closing ${Math.round(stored).toLocaleString("en-NZ")} against opening plus receipts less payments of ${Math.round(derived).toLocaleString("en-NZ")}. The report is not being read correctly, so this month's balances cannot be trusted. Unlock it until this is fixed.`);
+                    return derived;
+                }
+                return stored;
+            };
+
+            baseBalance = reconcile(baseCur, baseA, baseBalance, row.baseIn, row.baseOut);
+            fxBalance = reconcile(fxCur, fxA, fxBalance, row.fxIn, row.fxOut);
         }
         else {
             // Receipts land first, then the month's payments are made.

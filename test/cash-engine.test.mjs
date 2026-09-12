@@ -882,4 +882,64 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ receipts before the year opens land in opening deferred");
 }
 
+/* ---------- a bank summary that does not add up ---------- */
+
+{
+  // The live dashboard showed a closing balance of exactly zero for five months
+  // running while the same record reported six figures of receipts. A bank
+  // summary is one statement read four ways: closing MUST equal opening plus
+  // received minus spent. A mismatch is never a real difference — it means the
+  // report was misparsed — and trusting it re-based the whole forecast onto a
+  // balance that never existed.
+  const a = base();
+  a.programs = [];
+  a.actualsThroughMonth = "2026-04";
+  a.fxRates = { NZD: 1, USD: 1.7135 };
+  a.planningRateSource = "manual";
+  a.openingBalances = { NZD: -463_331, USD: 0 };
+
+  const broken = buildForecast(a, {
+    "2026-04": {
+      byCurrency: {
+        NZD: { opening: -463_331, received: 157_890, spent: 154_190, closing: 0 },
+      },
+    },
+  });
+
+  assert.ok(broken.warnings.some((w) => w.includes("does not add up") && w.includes("NZD")),
+    "an unreconciled bank summary must be called out");
+  assert.ok(broken.warnings.some((w) => w.includes("Unlock it")),
+    "and say what to do about it");
+  near(broken.months[0].baseClosing, -463_331 + 157_890 - 154_190, 1,
+    "the derived balance is used, not the impossible zero");
+  assert.notEqual(Math.round(broken.months[0].baseClosing), 0,
+    "which is the whole point — a zero here poisoned every later month");
+  console.log("✓ a bank summary that does not reconcile is caught and corrected");
+
+  // A record that DOES reconcile passes through untouched and silently.
+  const good = buildForecast(a, {
+    "2026-04": {
+      byCurrency: {
+        NZD: { opening: -463_331, received: 157_890, spent: 154_190, closing: -459_631 },
+      },
+    },
+  });
+  assert.ok(!good.warnings.some((w) => w.includes("does not add up")),
+    "a consistent month must not be warned about, or the warning is noise");
+  near(good.months[0].baseClosing, -459_631, 1, "and the bank's own closing is used");
+  console.log("✓ a consistent bank summary passes through silently");
+
+  // Rounding must not trip it.
+  const cents = buildForecast(a, {
+    "2026-04": {
+      byCurrency: {
+        NZD: { opening: -463_331, received: 157_890, spent: 154_190, closing: -459_630.6 },
+      },
+    },
+  });
+  assert.ok(!cents.warnings.some((w) => w.includes("does not add up")),
+    "a difference of cents is not a parse failure");
+  console.log("✓ cents do not trigger the check");
+}
+
 console.log("\nAll actuals-overlay tests passed.");
