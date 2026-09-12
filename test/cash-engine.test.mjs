@@ -556,4 +556,51 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ a month without conversions is not flagged");
 }
 
+/* ---------- deferred revenue never eats gross bank movements ---------- */
+
+{
+  // On real data this row reached 2,951,924 by August, because a closed month
+  // fed it GROSS bank receipts — which include this company moving its own money
+  // from the USD account to the NZD account. The double count compounded every
+  // month. Deferred is an accounting balance; a bank summary cannot produce one.
+  const a = base();
+  a.programs = [];
+  a.actualsThroughMonth = "2026-04";
+  a.fxRates = { NZD: 1, USD: 1.7135 };
+  a.planningRateSource = "manual";
+
+  const withTransfer = buildForecast(a, {
+    "2026-04": {
+      byCurrency: {
+        USD: { received: 103_890, spent: 103_890, closing: 0 },
+        NZD: { received: 178_016, spent: 0, closing: 178_016 },
+      },
+    },
+  });
+  const withoutTransfer = buildForecast(a, {
+    "2026-04": { byCurrency: { NZD: { received: 0, spent: 0, closing: 0 } } },
+  });
+
+  assert.equal(
+    withTransfer.months[0].deferredRevenueBalance,
+    withoutTransfer.months[0].deferredRevenueBalance,
+    "a month full of bank transfers must not move deferred revenue at all",
+  );
+  near(withTransfer.months[0].deferredRevenueBalance, 0, 0.01,
+    "with no programs there is nothing to defer, whatever the bank did");
+  console.log("✓ deferred revenue ignores gross bank movements in a closed month");
+
+  // And it still tracks the forecast receipts it is supposed to track.
+  const b = base();
+  b.programs = [prog({
+    id: "f", name: "F", season: "Fall", startDate: "2026-10-01", endDate: "2026-12-01",
+    price: 15_500, paxForecast: 10, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  b.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+  const f = buildForecast(b);
+  near(f.months[0].deferredRevenueBalance, f.months[0].cashIn, 0.01,
+    "in a forecast month it still follows the receipts");
+  console.log("✓ and still follows forecast receipts when nothing is closed");
+}
+
 console.log("\nAll actuals-overlay tests passed.");

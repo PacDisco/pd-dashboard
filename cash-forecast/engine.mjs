@@ -67,8 +67,17 @@ function shiftDays(iso, days) {
 export function recognitionMonthFor(program, recognitionMonths) {
     const target = recognitionMonths[program.season];
     const start = parseISODate(program.startDate);
-    // Walk back from the month before departure until the month-of-year matches.
-    for (let back = 1; back <= 12; back++) {
+    // Search back from the departure month INCLUSIVE.
+    //
+    // Starting at -1 looks right — "the month before the season starts" — but it
+    // breaks precisely when a program departs IN its own recognition month. A
+    // Fall program departing 1 September would skip September 2026 and match
+    // September 2025: revenue recognised a full year early, so it disappears
+    // from the fiscal year entirely and deferred revenue goes deeply negative to
+    // compensate. Inclusive costs nothing for the normal case (an October
+    // departure still recognises in September) and removes a twelve-month error
+    // from the edge case.
+    for (let back = 0; back <= 12; back++) {
         const candidate = addMonths(start.year, start.month, -back);
         if (candidate.month === target)
             return candidate;
@@ -146,7 +155,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             cashOut: 0,
             net: 0,
             fxOpening: 0, fxIn: 0, fxOut: 0, fxConverted: 0, fxClosing: 0,
-            isActual: false, actualSource: null,
+            isActual: false, actualSource: null, grossIncludesTransfers: false,
             baseOpening: 0, baseIn: 0, baseFromConversion: 0, baseOut: 0, baseClosing: 0,
             opening: 0,
             closing: 0,
@@ -255,6 +264,14 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         else if (rec.year * 12 + rec.month < fy * 12 + 4) {
             // Recognised in a prior year — its cash is not this year's deferred balance.
             deferredOpening -= grossRevenue;
+            // This is legitimate for a genuinely earlier cohort and a serious
+            // error otherwise: the revenue vanishes from the year and deferred
+            // goes negative by the same amount. Either way nobody should have to
+            // infer it from a negative balance.
+            warnings.push(`${program.name} recognises in ${rec.year}-${String(rec.month).padStart(2, "0")}, before this fiscal year — its revenue is not in the year at all. Check the departure date against the ${program.season} recognition month.`);
+        }
+        else {
+            warnings.push(`${program.name} recognises in ${rec.year}-${String(rec.month).padStart(2, "0")}, after this fiscal year — its revenue falls outside the year shown.`);
         }
         contributions.push({
             programId: program.id,
@@ -327,9 +344,21 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             row.fxOut = fxA.spent || 0;
 
             // Headline rows, base-stated, so the column still adds up.
+            //
+            // CAUTION: these are GROSS bank movements, and a USD→NZD conversion
+            // appears in both — once as USD spent, once as NZD received. So a
+            // month with conversions overstates cash in and cash out by the
+            // converted amount. Net movement and the balances are unaffected,
+            // because the same figure inflates both sides and cancels.
+            //
+            // This cannot be fixed from a bank summary: a conversion landing in
+            // the NZD account and a student paying into it look identical. It is
+            // what the receivable-receipts pull is for. Flagged on the row so the
+            // UI can mark it rather than presenting a gross figure as takings.
             row.cashIn = row.baseIn + row.fxIn * rate;
             row.cashOut = row.baseOut + row.fxOut * rate;
             row.net = row.cashIn - row.cashOut;
+            row.grossIncludesTransfers = row.baseIn > 0 && row.fxOut > 0;
 
             // Not derivable from a bank summary — a conversion and a customer
             // payment both look like money arriving in the NZD account.
@@ -366,9 +395,19 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         row.baseClosing = baseBalance;
         row.closing = baseBalance + fxBalance * rate;
 
-        // Deferred revenue is an accounting balance in base currency. For a
-        // closed month it uses the real receipts, so it stays meaningful.
-        deferred += row.fxIn * rate + row.baseIn - row.recognisedRevenue;
+        // Deferred revenue is an accounting balance, and a bank summary cannot
+        // produce one. In a closed month `baseIn`/`fxIn` are GROSS bank
+        // movements, which include this company moving its own money from the
+        // USD account to the NZD account. Feeding those in compounded the
+        // double count every month — the balance reached 2,951,924 by August on
+        // real data, which is not a number that means anything.
+        //
+        // So the chain always runs on forecast receipts. The row is already
+        // rendered as still-forecast in closed months, and now the figure
+        // matches that label. Reading the real balance would mean taking the
+        // deferred revenue liability off the Balance Sheet, which is a separate
+        // job from anything the bank summary can answer.
+        deferred += row.depositsIn + row.balancesIn - row.recognisedRevenue;
         row.deferredRevenueBalance = deferred;
     }
 
@@ -385,6 +424,10 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         // lock is stored data and could be set by an older client or a direct
         // POST. A part-month shown as actual understates the month AND re-bases
         // every month after it onto a balance that is days old.
+        const gross = months.filter((m) => m.grossIncludesTransfers).map((m) => m.label);
+        if (gross.length) {
+            warnings.push(`Cash in and cash out for ${gross.join(", ")} are gross bank movements: a currency conversion shows as both money out of ${fxCur} and money into ${baseCur}, so both rows are overstated by the amount converted. Net movement and the balances are unaffected.`);
+        }
         const partial = months
             .filter((m) => isClosed(m.key) && actualsByMonth[m.key]?.partial)
             .map((m) => m.label);
