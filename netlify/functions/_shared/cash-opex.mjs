@@ -36,6 +36,26 @@ import { monthRange } from "./cash-xero.mjs";
  * explicit list rather than a clever rule: an over-eager pattern that silently
  * dropped "Bank Fees" (real cash, 6,454 a year) would be invisible.
  */
+/**
+ * Bumped whenever a change here would give a DIFFERENT figure for a month that
+ * has already been fetched and stored.
+ *
+ * Closed months are cached forever, because a closed month does not change. But
+ * the parser does, and when it does the cache is the last thing holding the old
+ * wrong numbers. That is exactly what happened with `standardLayout`: August
+ * refetched and came out right at 82,369, while April to July sat on 18,657 /
+ * 131 / 25,170 / 4,687 because nothing ever asked for them again. Deleting the
+ * blobs by hand fixes it once; this fixes it every time.
+ *
+ * History:
+ *   1  first version — no stamp written, so a record with no parserVersion is
+ *      treated as version 1 and refetched.
+ *   2  standardLayout:"true" on the P&L request. Xero was rendering Pacific
+ *      Discovery's custom layout, whose "Operating Expenses" section holds only
+ *      part of the expenses.
+ */
+export const OPEX_PARSER_VERSION = 2;
+
 export const NON_CASH_LINES = [
   /^bank revaluations?$/i,
   /^unrealised (currency|foreign exchange|fx) (gains?|losses?)$/i,
@@ -126,6 +146,7 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
 
   return {
     month: key,
+    parserVersion: OPEX_PARSER_VERSION,
     total: parsed.total,
     cashTotal: parsed.cashTotal,
     sectionFound: parsed.sectionFound,
@@ -143,4 +164,24 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
   };
 }
 
-export default { parseOperatingExpenses, fetchMonthOpex, isNonCash, NON_CASH_LINES };
+/**
+ * Is a stored opex record still one this parser would produce?
+ *
+ * Anything written before the stamp existed has no parserVersion, and a record
+ * from a newer deploy than this one is left alone rather than being refetched in
+ * a loop by an older function that happens to still be running.
+ */
+export function isOpexRecordCurrent(record, version = OPEX_PARSER_VERSION) {
+  if (!record) return false;
+  const stored = Number(record.parserVersion ?? 1);
+  return Number.isFinite(stored) && stored >= version;
+}
+
+export default {
+  parseOperatingExpenses,
+  fetchMonthOpex,
+  isNonCash,
+  isOpexRecordCurrent,
+  NON_CASH_LINES,
+  OPEX_PARSER_VERSION,
+};

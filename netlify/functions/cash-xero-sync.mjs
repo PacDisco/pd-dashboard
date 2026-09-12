@@ -18,7 +18,7 @@ import {
   fiscalMonthKeys, fetchMonthActuals, getBankAccountCurrencies,
   getTrackingCategories, pickProgramCategory, getTrackedActuals, fiscalYearBounds,
 } from "./_shared/cash-xero.mjs";
-import { fetchMonthOpex } from "./_shared/cash-opex.mjs";
+import { fetchMonthOpex, isOpexRecordCurrent, OPEX_PARSER_VERSION } from "./_shared/cash-opex.mjs";
 import { listBudgets, fetchBudget, accountIndex, overheadsFromBudget } from "./_shared/cash-budget.mjs";
 import { loadAssumptions } from "./_shared/cash-store.mjs";
 async function orgCurrency(token, tenantId) {
@@ -149,6 +149,7 @@ export default async (_req, _context) => {
   const budgetStore = getStore({ name: "cash-xero-budget", consistency: "strong" });
   let opexFetched = 0;
   let opexCached = 0;
+  let opexRestated = 0;
   let budgetLines = 0;
 
   if (primary) {
@@ -161,9 +162,16 @@ export default async (_req, _context) => {
 
       for (const key of finished) {
         const blobKey = `${primary.tenantId}/${key}`;
-        if (!alwaysRefresh.includes(key) && (await opexStore.get(blobKey))) {
-          opexCached++;
-          continue;
+        if (!alwaysRefresh.includes(key)) {
+          const stored = await opexStore.get(blobKey, { type: "json" });
+          if (isOpexRecordCurrent(stored)) {
+            opexCached++;
+            continue;
+          }
+          // Cached, but written by an older parser. Refetching is the whole
+          // point of the stamp: a closed month's figures only ever change
+          // because the code that read them changed.
+          if (stored) opexRestated++;
         }
         await opexStore.setJSON(blobKey, await fetchMonthOpex(token, primary.tenantId, key));
         opexFetched++;
@@ -236,7 +244,9 @@ export default async (_req, _context) => {
         `ok=${orgs.filter((o) => !o.error).length} ` +
         `errors=${payload.errors.length} ` +
         `tokenDays=${health?.daysRemaining ?? "?"} ` +
-        `months=${monthsFetched}fetched/${monthsCached}cached opex=${opexFetched}fetched/${opexCached}cached budgetAccounts=${budgetLines} ` +
+        `months=${monthsFetched}fetched/${monthsCached}cached ` +
+        `opex=${opexFetched}fetched/${opexCached}cached/${opexRestated}restated(v${OPEX_PARSER_VERSION}) ` +
+        `budgetAccounts=${budgetLines} ` +
         `durationMs=${payload.durationMs} ` +
         `closingByCurrency=${JSON.stringify(byCurrency)}`,
     );

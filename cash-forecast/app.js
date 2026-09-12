@@ -25,6 +25,8 @@ const state = {
   partialMonth: null,
   openings: null,
   overheads: null,
+  diag: null,
+  diagBusy: null,
   dirty: false,
   tab: "forecast",
   saving: false,
@@ -555,6 +557,39 @@ function balanceCurveSection(ro) {
 }
 
 /**
+ * Diagnostics.
+ *
+ * The probe endpoints sit under /api/ and verify an Identity token, which the
+ * browser holds in memory rather than in a cookie — so pasting a probe URL into
+ * the address bar returns "Sign in required." and always did. Asking someone to
+ * visit one was asking for something that cannot work. Here they are as buttons
+ * on the page that already has the token.
+ *
+ * Raw JSON on purpose: the whole point is to see what Xero actually returned,
+ * not a tidied summary of it.
+ */
+function diagnosticsPanel(ro) {
+  if (ro) return "";
+  const fy = state.assumptions.fiscalYearStartYear;
+  const checks = [
+    ["opex", `?month=${fy}-04&report=opex`, "P&L for April"],
+    ["bank", `?month=${fy}-04&report=bank`, "Bank summary for April"],
+    ["budget", `?report=budget`, "List budgets"],
+  ];
+  return `<section class="closebox">
+    <h2>Diagnostics</h2>
+    <p class="foot">What Xero actually returned, unedited. Use these when a figure looks wrong — they read only, and change nothing.</p>
+    <div class="rates" style="margin-bottom:10px">
+      ${checks.map(([id, qs, label]) => `
+        <button class="btn-diag" data-diag="${escapeAttr(qs)}" data-diagid="${id}" ${state.diagBusy ? "disabled" : ""}>
+          ${state.diagBusy === id ? "Checking…" : label}
+        </button>`).join("")}
+    </div>
+    ${state.diag ? `<pre class="diagout">${escapeHtml(state.diag)}</pre>` : ""}
+  </section>`;
+}
+
+/**
  * Where the overheads row comes from.
  *
  * Closed months from the P&L, the rest from Xero's budget, typed figures for
@@ -594,7 +629,15 @@ function overheadStatus(want, o) {
     ? `The rest come from the Xero budget <b>${escapeHtml(o.budget.description)}</b> — ${o.budget.accounts} expense accounts, ${o.budget.monthsCovered} of 12 months budgeted. Months it does not reach keep their typed figure.`
     : `<b>No budget has synced yet</b>, so forecast months are using the typed figures. Check the sync log for <code>budgetAccounts=</code> — a scope error there means the budget consent did not take.`;
 
-  return `${past} ${future}`;
+  // A closed month is cached forever, so the only thing that can make its
+  // figure wrong is the code that read it changing underneath. Saying which
+  // months are still on the old parser is the difference between "the numbers
+  // don't match" and "those four refresh on the next sync".
+  const stale = o?.staleMonths?.length
+    ? ` <b>${o.staleMonths.length} month${o.staleMonths.length === 1 ? "" : "s"}</b> (${o.staleMonths.map(escapeHtml).join(", ")}) ${o.staleMonths.length === 1 ? "was" : "were"} read by an older version of the P&amp;L parser and ${o.staleMonths.length === 1 ? "is" : "are"} being refetched — the figures shown for ${o.staleMonths.length === 1 ? "it" : "them"} will change on the next hourly sync.`
+    : "";
+
+  return `${past} ${future}${stale}`;
 }
 
 function overheadSourcePanel(ro) {
@@ -868,6 +911,7 @@ function overheadsView() {
       </table>
     </div>
     ${overheadSourcePanel(ro)}
+    ${diagnosticsPanel(ro)}
     <p class="foot">Positive numbers. The forecast subtracts them. GST and PAYE belong here as their own rows once you decide how to phase them — neither exists in the current workbook.</p>`;
 }
 
@@ -919,6 +963,22 @@ function wire() {
         [e.target.dataset.recog]: Number(e.target.value),
       };
       touch();
+    }));
+
+  document.querySelectorAll("[data-diag]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      state.diagBusy = b.dataset.diagid;
+      state.diag = null;
+      render();
+      try {
+        const res = await fetch(`${API}/cash-xero-probe${b.dataset.diag}`, { credentials: "include" });
+        const body = await res.json().catch(() => ({ error: "response was not JSON" }));
+        state.diag = `HTTP ${res.status}\n\n${JSON.stringify(body, null, 2)}`;
+      } catch (err) {
+        state.diag = `Request failed: ${err.message}`;
+      }
+      state.diagBusy = null;
+      render();
     }));
 
   document.querySelectorAll("input[name=ohbasis]").forEach((input) =>

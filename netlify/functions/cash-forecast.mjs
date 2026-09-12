@@ -22,6 +22,7 @@ import {
   resolveOpeningBalances,
   resolveMonthlyOverheads,
 } from "./_shared/cash-store.mjs";
+import { isOpexRecordCurrent, OPEX_PARSER_VERSION } from "./_shared/cash-opex.mjs";
 import { loadRateSummary, planningRate } from "./_shared/cash-fx.mjs";
 import { fiscalMonthKeys } from "./_shared/cash-xero.mjs";
 import { buildForecast } from "../../cash-forecast/engine.mjs";
@@ -158,7 +159,19 @@ export default async (req) => {
       // Both figures per closed month, so the UI can show what the other basis
       // would give without a round trip.
       byMonth: Object.fromEntries(Object.entries(opexByMonth)
-        .map(([k, v]) => [k, { total: v.total, cashTotal: v.cashTotal }])),
+        .map(([k, v]) => [k, {
+          total: v.total,
+          cashTotal: v.cashTotal,
+          // A month stored by an older parser is still being displayed, so say
+          // so rather than letting a stale figure look like a current one. The
+          // next sync refetches it.
+          stale: !isOpexRecordCurrent(v),
+        }])),
+      staleMonths: Object.entries(opexByMonth)
+        .filter(([, v]) => !isOpexRecordCurrent(v))
+        .map(([k]) => k)
+        .sort(),
+      parserVersion: OPEX_PARSER_VERSION,
       budget: budgetInfo
         ? {
             id: budgetInfo.budgetID,

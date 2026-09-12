@@ -13,6 +13,8 @@ import assert from "node:assert/strict";
 import {
   parseOperatingExpenses,
   isNonCash,
+  isOpexRecordCurrent,
+  OPEX_PARSER_VERSION,
   NON_CASH_LINES,
 } from "../netlify/functions/_shared/cash-opex.mjs";
 
@@ -143,6 +145,52 @@ const pnl = (opexRows) => ({
   near(p.total, 1250, 0.01, "nested leaves are collected");
   assert.equal(p.lines.length, 2, "and the summary row is not counted as a line");
   console.log("✓ nested rows are collected without double-counting the total");
+}
+
+/* ---------- the cache invalidates itself when the parser changes ---------- */
+
+{
+  // WHY THIS TEST EXISTS
+  // --------------------
+  // The standardLayout fix made August read 82,369 — exactly the P&L. April
+  // through July stayed at 18,657 / 131 / 25,170 / 4,687, because the sync only
+  // ever refetches the most recent finished month and a closed month is cached
+  // forever. The code was right and the dashboard was still wrong. A stamp on
+  // the stored record is what turns "delete the blobs by hand" into "the next
+  // sync fixes it".
+
+  assert.equal(isOpexRecordCurrent(null), false, "nothing stored is not current");
+  assert.equal(isOpexRecordCurrent(undefined), false);
+
+  // Records written before the stamp existed are exactly the stale ones.
+  assert.equal(
+    isOpexRecordCurrent({ month: "2026-04", total: 18_657 }),
+    false,
+    "a record with no version is treated as version 1 and refetched",
+  );
+  assert.equal(isOpexRecordCurrent({ parserVersion: 1 }), false, "an older version refetches");
+  assert.equal(
+    isOpexRecordCurrent({ parserVersion: OPEX_PARSER_VERSION }),
+    true,
+    "a record from this parser is left alone",
+  );
+  // A newer deploy's record must not be refetched in a loop by an older
+  // function that is still running during a rollout.
+  assert.equal(
+    isOpexRecordCurrent({ parserVersion: OPEX_PARSER_VERSION + 1 }),
+    true,
+    "a newer record is left alone rather than being fought over",
+  );
+
+  // Garbage must not read as current — that would keep a bad record forever.
+  assert.equal(isOpexRecordCurrent({ parserVersion: "two" }), false, "an unparseable stamp refetches");
+
+  // The version only means anything if it is actually greater than the one the
+  // broken records carry. Version 1 is implicit, so the fix must be 2 or more.
+  assert.ok(OPEX_PARSER_VERSION >= 2,
+    "the standardLayout fix must be a version above the implicit 1");
+
+  console.log("✓ a month stored by an older parser refetches; a current one does not");
 }
 
 console.log("\nAll opex tests passed.");
