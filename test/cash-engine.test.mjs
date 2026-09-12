@@ -790,4 +790,96 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ an out-of-range share clamps");
 }
 
+/* ---------- the single receipts curve ---------- */
+
+{
+  const withCurve = () => {
+    const a = base();
+    a.baseMinimumBuffer = 0;
+    a.openingBalances = { NZD: 0, USD: 0 };
+    a.fxRates = { NZD: 1, USD: 1.7135 };
+    a.planningRateSource = "manual";
+    a.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+    a.defaultPaymentRules.receiptsCurve = [
+      { monthsBefore: 3, share: 0.10 },
+      { monthsBefore: 2, share: 0.25 },
+      { monthsBefore: 1, share: 0.40 },
+      { monthsBefore: 0, share: 0.25 },
+    ];
+    a.programs = [prog({
+      id: "f", name: "F", season: "Fall", currency: "USD",
+      startDate: "2026-10-01", endDate: "2026-12-01",
+      price: 15_000, paxForecast: 20, fixedCost: 0, variableCostPerPax: 0,
+    })];
+    return buildForecast(a);
+  };
+  const f = withCurve();
+
+  // THE INVARIANT: one curve over the full price must collect exactly the same
+  // money as the deposit-plus-balance machinery did. A simplification that
+  // quietly changes the year's revenue is not a simplification.
+  near(f.totals.cashIn, 20 * 15_000 * 1.7135, 0.01, "the year collects pax x price x rate");
+
+  const byLabel = (l) => f.months.find((m) => m.label === l);
+  near(byLabel("Jul 26").revenueIn, 20 * 15_000 * 1.7135 * 0.10, 0.01, "three months out");
+  near(byLabel("Sep 26").revenueIn, 20 * 15_000 * 1.7135 * 0.40, 0.01, "the month before departure");
+  near(byLabel("Oct 26").revenueIn, 20 * 15_000 * 1.7135 * 0.25, 0.01, "the departure month");
+  console.log("✓ one curve places the full price by months before departure");
+
+  // Deposits and balances must be silent — never both paths at once, or the
+  // table double-counts and Cash in is twice what it should be.
+  for (const m of f.months) {
+    near(m.depositsIn, 0, 0.01, `${m.label}: deposits are not used`);
+    near(m.balancesIn, 0, 0.01, `${m.label}: balances are not used`);
+    near(m.cashIn, m.revenueIn, 0.01, `${m.label}: cash in is the revenue line`);
+  }
+  console.log("✓ the deposit and balance rows stay silent — no double count");
+
+  // Season split and deferred still reconcile through the new path.
+  for (const m of f.months) {
+    const summed = Object.values(m.receiptsBySeason).reduce((s, v) => s + v, 0);
+    near(summed, m.cashIn, 0.01, `${m.label}: season split reconciles`);
+  }
+  near(f.months[11].deferredRevenueBalance, 0, 0.01, "deferred clears once the season recognises");
+  console.log("✓ season split and deferred revenue still reconcile");
+
+  // A model with no receipts curve keeps the old behaviour exactly.
+  const legacy = base();
+  legacy.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+  legacy.programs = [prog({
+    id: "f", name: "F", season: "Fall", startDate: "2026-10-01", endDate: "2026-12-01",
+    price: 15_500, paxForecast: 20, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  const old = buildForecast(legacy);
+  assert.ok(old.months.every((m) => Math.abs(m.revenueIn) < 0.01),
+    "without a curve the revenue row stays empty");
+  assert.ok(old.months.some((m) => m.depositsIn > 0.5),
+    "and the old deposit path still runs");
+  console.log("✓ a model without the curve is untouched");
+
+  // Money due before the year opens still lands in the opening deferred figure.
+  const early = base();
+  early.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+  early.defaultPaymentRules.receiptsCurve = [
+    { monthsBefore: 12, share: 0.5 },   // April 2025 — outside the year
+    { monthsBefore: 1, share: 0.5 },
+  ];
+  // Departure stays inside the year so recognition lands in the year too —
+  // otherwise the out-of-year recognition path subtracts the whole cohort and
+  // this would be testing two things at once.
+  early.programs = [prog({
+    id: "e", name: "E", season: "Fall", startDate: "2026-10-01", endDate: "2026-12-01",
+    price: 10_000, paxForecast: 10, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  const e = buildForecast(early);
+  assert.ok(e.totals.recognisedRevenue > 0, "the cohort recognises inside the year");
+  // Half the money arrives in October 2025, before 1 April 2026. The fixture is
+  // priced in NZD (see prog above), so it converts at par.
+  near(e.totals.deferredOpening, 10 * 10_000 * 0.5, 1,
+    "pre-year receipts land in opening deferred rather than vanishing");
+  near(e.totals.cashIn, 10 * 10_000 * 0.5, 1,
+    "and only the in-year half shows in the table");
+  console.log("✓ receipts before the year opens land in opening deferred");
+}
+
 console.log("\nAll actuals-overlay tests passed.");

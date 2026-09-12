@@ -128,6 +128,20 @@ export function seedAssumptions(fiscalYearStartYear) {
       // three offsets. Replace with the measured curve once receivable receipts
       // are flowing — this is the single input that decides which month the big
       // money shows up in.
+      // The single receipts curve — what share of a program's price arrives
+      // N months before departure. Replaces the deposit/balance split entirely;
+      // 72.5% lands inside 60 days. A starting estimate, replaceable with the
+      // measured distribution once receivable receipts are flowing.
+      receiptsCurve: [
+        { monthsBefore: 12, share: 0.006 }, { monthsBefore: 11, share: 0.008 },
+        { monthsBefore: 10, share: 0.010 }, { monthsBefore: 9, share: 0.013 },
+        { monthsBefore: 8, share: 0.016 }, { monthsBefore: 7, share: 0.019 },
+        { monthsBefore: 6, share: 0.028 }, { monthsBefore: 5, share: 0.035 },
+        { monthsBefore: 4, share: 0.050 }, { monthsBefore: 3, share: 0.090 },
+        { monthsBefore: 2, share: 0.250 }, { monthsBefore: 1, share: 0.340 },
+        { monthsBefore: 0, share: 0.135 },
+      ],
+
       // PLACEHOLDER: the share of receipts arriving in NZD rather than USD.
       // Funds come in USD with the exception of some students paying NZD. Set
       // it from the real split — it decides how much has to be converted and so

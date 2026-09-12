@@ -5,7 +5,7 @@
  *
  * This URL must match XERO_REDIRECT_URI exactly and be registered on the app
  * in the Xero developer portal, e.g.
- *   https://dashboard.pacificdiscovery.org/.netlify/functions/xero-callback
+ *   https://dashboard.pacificdiscovery.org/.netlify/functions/cash-xero-callback
  */
 import { exchangeCode, getConnections, requireEnv } from "./_shared/cash-xero.mjs";
 import { getStore } from "@netlify/blobs";
@@ -23,7 +23,7 @@ export default async (req, _context) => {
     const store = getStore({ name: "cash-xero-auth", consistency: "strong" });
     const expected = await store.get("state", { type: "text" });
     if (!state || !expected || state !== expected) {
-        return new Response("State mismatch — start again from xero-auth", { status: 400 });
+        return new Response("State mismatch — start again from cash-xero-auth", { status: 400 });
     }
     await store.delete("state");
     const record = await exchangeCode(code, requireEnv("XERO_REDIRECT_URI"));

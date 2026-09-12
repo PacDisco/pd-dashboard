@@ -34,6 +34,10 @@ export const SCOPES = [
     // for. accounting.banktransactions.read was dropped — nothing reads it.
     "accounting.payments.read",
     "accounting.invoices.read",
+    // Budget Manager, for forward overheads. Scope name unconfirmed against
+    // Xero's docs (they render client-side); a 403 here means it is wrong and
+    // the probe reports the message verbatim rather than swallowing it.
+    "accounting.budgets.read",
     "accounting.settings.read",
 ].join(" ");
 function tokenStore() {
@@ -96,7 +100,7 @@ export async function getAccessToken() {
     const store = tokenStore();
     const record = (await store.get("tokens", { type: "json" }));
     if (!record?.refresh_token) {
-        throw new Error("No Xero refresh token stored. Visit /.netlify/functions/xero-auth once to authorise.");
+        throw new Error("No Xero refresh token stored. Visit /.netlify/functions/cash-xero-auth once to authorise.");
     }
     const stillFresh = record.access_expires_at - REFRESH_SKEW_MS > Date.now();
     if (stillFresh)

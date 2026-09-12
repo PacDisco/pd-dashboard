@@ -94,6 +94,7 @@ function rulesFor(assumptions, program) {
         bookingCurve: override.bookingCurve ?? assumptions.defaultPaymentRules.bookingCurve,
         balanceCurve: override.balanceCurve ?? assumptions.defaultPaymentRules.balanceCurve,
         nzdReceiptShare: override.nzdReceiptShare ?? assumptions.defaultPaymentRules.nzdReceiptShare,
+        receiptsCurve: override.receiptsCurve ?? assumptions.defaultPaymentRules.receiptsCurve,
     };
 }
 function toBase(amount, currency, fxRates) {
@@ -175,6 +176,9 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             month,
             depositsIn: 0,
             balancesIn: 0,
+            // Receipts from the single curve. Deposits and balances stay zero
+            // when this is in use, and vice versa — never both.
+            revenueIn: 0,
             // Receipts split by season, base currency. The actuals side can only
             // report a season total — one part-paid invoice per student means
             // nothing on a payment says whether it was the deposit or the
@@ -244,60 +248,99 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         }
         const balance = price - deposit;
         /* ---- cash in ---- */
-        const curve = normalise(rules.bookingCurve);
         const departure = parseISODate(program.startDate);
-        // A null monthsBefore means "use the day-precise due date" — the legacy
-        // single-lump path, kept so an existing model does not silently change.
-        const balancePoints = rules.balanceCurve?.length
-            ? normalise(rules.balanceCurve)
-            : [{ monthsBefore: null, share: 1 }];
-        for (const point of curve) {
-            const paxAtThisPoint = pax * point.share;
-            // Deposits land in the month the booking is made.
-            const bookingMonth = addMonths(departure.year, departure.month, -point.monthsBefore);
-            const bookingSlot = dateToFiscalSlot(fy, bookingMonth.year, bookingMonth.month);
-            const depositCash = paxAtThisPoint * deposit;
-            const depositInBase = depositCash * receiptRate;
-            if (bookingSlot !== null) {
-                // Headline rows are stated in base currency so they can be added up.
-                // The treasury rows below stay in the currency actually received.
-                months[bookingSlot].depositsIn += depositInBase;
-                addSeasonReceipt(months[bookingSlot], program.season, depositInBase);
-                splitReceiptByCurrency(months[bookingSlot], depositCash, receiptRate, receiptsAreFx, nzdShare);
-            }
-            else if (bookingMonth.year * 12 + bookingMonth.month <
-                fy * 12 + 4) {
-                // Collected before this fiscal year opened — already sitting in deferred.
-                // Deferred revenue is an accounting figure, so it is stated in base.
-                deferredOpening += depositInBase;
-            }
-            // Balance payments are SPREAD, not a single lump.
-            //
-            // The model used to land every balance in one month — the due date —
-            // which is why the table showed money arriving in two or three months
-            // a year and nothing in the rest. In reality students pay across a
-            // range, with the bulk inside the last 60 days. A single lump gets
-            // the annual total right and the month wrong, and for a cash forecast
-            // the month is the whole point.
-            //
-            // `balanceCurve` is shares by months before departure, same unit as
-            // the booking curve. With none set, it degrades to exactly the old
-            // behaviour — one lump on the due date, day-precise — so a saved
-            // model that predates this keeps its numbers until someone opts in.
-            for (const bp of balancePoints) {
-                const balanceMonth = bp.monthsBefore === null
-                    ? shiftDays(program.startDate, -rules.balanceDueDaysBeforeDeparture)
-                    : addMonths(departure.year, departure.month, -bp.monthsBefore);
-                const balanceSlot = dateToFiscalSlot(fy, balanceMonth.year, balanceMonth.month);
-                const balanceCash = paxAtThisPoint * balance * bp.share;
-                const balanceInBase = balanceCash * receiptRate;
-                if (balanceSlot !== null) {
-                    months[balanceSlot].balancesIn += balanceInBase;
-                    addSeasonReceipt(months[balanceSlot], program.season, balanceInBase);
-                    splitReceiptByCurrency(months[balanceSlot], balanceCash, receiptRate, receiptsAreFx, nzdShare);
+
+        // ONE RECEIPTS CURVE, when it is set.
+        //
+        // Deposits and balances were modelled separately for months, and every
+        // part of that split turned out to be unverifiable: with one part-paid
+        // invoice per student, nothing in Xero says which instalment a payment
+        // was. Four inputs — deposit amount, the 60/90-day rule, the booking
+        // curve and the balance curve — could each be wrong in a way nothing
+        // could check.
+        //
+        // This is one curve: the share of a program's price that arrives N
+        // months before departure. It is directly measurable from receivable
+        // receipts, which is the whole argument for it.
+        //
+        // The deposit/balance path below still runs for a model that has no
+        // receipts curve, so nothing saved changes until someone opts in.
+        const receiptsCurve = rules.receiptsCurve?.length
+            ? normalise(rules.receiptsCurve)
+            : null;
+
+        if (receiptsCurve) {
+            for (const point of receiptsCurve) {
+                const month = addMonths(departure.year, departure.month, -point.monthsBefore);
+                const slot = dateToFiscalSlot(fy, month.year, month.month);
+                const cash = pax * price * point.share;
+                const inBase = cash * receiptRate;
+                if (slot !== null) {
+                    months[slot].revenueIn += inBase;
+                    addSeasonReceipt(months[slot], program.season, inBase);
+                    splitReceiptByCurrency(months[slot], cash, receiptRate, receiptsAreFx, nzdShare);
                 }
-                else if (balanceMonth.year * 12 + balanceMonth.month < fy * 12 + 4) {
-                    deferredOpening += balanceInBase;
+                else if (month.year * 12 + month.month < fy * 12 + 4) {
+                    // Collected before the year opened — already in deferred.
+                    deferredOpening += inBase;
+                }
+            }
+        }
+        else {
+            const curve = normalise(rules.bookingCurve);
+            // A null monthsBefore means "use the day-precise due date" — the legacy
+            // single-lump path, kept so an existing model does not silently change.
+            const balancePoints = rules.balanceCurve?.length
+                ? normalise(rules.balanceCurve)
+                : [{ monthsBefore: null, share: 1 }];
+            for (const point of curve) {
+                const paxAtThisPoint = pax * point.share;
+                // Deposits land in the month the booking is made.
+                const bookingMonth = addMonths(departure.year, departure.month, -point.monthsBefore);
+                const bookingSlot = dateToFiscalSlot(fy, bookingMonth.year, bookingMonth.month);
+                const depositCash = paxAtThisPoint * deposit;
+                const depositInBase = depositCash * receiptRate;
+                if (bookingSlot !== null) {
+                    // Headline rows are stated in base currency so they can be added up.
+                    // The treasury rows below stay in the currency actually received.
+                    months[bookingSlot].depositsIn += depositInBase;
+                    addSeasonReceipt(months[bookingSlot], program.season, depositInBase);
+                    splitReceiptByCurrency(months[bookingSlot], depositCash, receiptRate, receiptsAreFx, nzdShare);
+                }
+                else if (bookingMonth.year * 12 + bookingMonth.month <
+                    fy * 12 + 4) {
+                    // Collected before this fiscal year opened — already sitting in deferred.
+                    // Deferred revenue is an accounting figure, so it is stated in base.
+                    deferredOpening += depositInBase;
+                }
+                // Balance payments are SPREAD, not a single lump.
+                //
+                // The model used to land every balance in one month — the due date —
+                // which is why the table showed money arriving in two or three months
+                // a year and nothing in the rest. In reality students pay across a
+                // range, with the bulk inside the last 60 days. A single lump gets
+                // the annual total right and the month wrong, and for a cash forecast
+                // the month is the whole point.
+                //
+                // `balanceCurve` is shares by months before departure, same unit as
+                // the booking curve. With none set, it degrades to exactly the old
+                // behaviour — one lump on the due date, day-precise — so a saved
+                // model that predates this keeps its numbers until someone opts in.
+                for (const bp of balancePoints) {
+                    const balanceMonth = bp.monthsBefore === null
+                        ? shiftDays(program.startDate, -rules.balanceDueDaysBeforeDeparture)
+                        : addMonths(departure.year, departure.month, -bp.monthsBefore);
+                    const balanceSlot = dateToFiscalSlot(fy, balanceMonth.year, balanceMonth.month);
+                    const balanceCash = paxAtThisPoint * balance * bp.share;
+                    const balanceInBase = balanceCash * receiptRate;
+                    if (balanceSlot !== null) {
+                        months[balanceSlot].balancesIn += balanceInBase;
+                        addSeasonReceipt(months[balanceSlot], program.season, balanceInBase);
+                        splitReceiptByCurrency(months[balanceSlot], balanceCash, receiptRate, receiptsAreFx, nzdShare);
+                    }
+                    else if (balanceMonth.year * 12 + balanceMonth.month < fy * 12 + 4) {
+                        deferredOpening += balanceInBase;
+                    }
                 }
             }
         }
@@ -362,7 +405,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
     const isClosed = (key) => Boolean(actualsThrough) && key <= actualsThrough;
 
     for (const row of months) {
-        row.cashIn = row.depositsIn + row.balancesIn;
+        row.cashIn = row.depositsIn + row.balancesIn + row.revenueIn;
         row.cashOut = row.programCostsOut + row.overheads + row.capital + row.tax;
         row.net = row.cashIn - row.cashOut;
         // All outflows are settled in base. Program costs already converted above.
@@ -462,7 +505,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         // matches that label. Reading the real balance would mean taking the
         // deferred revenue liability off the Balance Sheet, which is a separate
         // job from anything the bank summary can answer.
-        deferred += row.depositsIn + row.balancesIn - row.recognisedRevenue;
+        deferred += row.depositsIn + row.balancesIn + row.revenueIn - row.recognisedRevenue;
         row.deferredRevenueBalance = deferred;
     }
 

@@ -27,6 +27,7 @@ import {
   attributeReceipts,
 } from "./_shared/cash-receipts.mjs";
 import { fetchMonthOpex } from "./_shared/cash-opex.mjs";
+import { listBudgets, fetchBudget, accountIndex, overheadsFromBudget } from "./_shared/cash-budget.mjs";
 
 /**
  * Describe an object's shape without emitting its contents.
@@ -111,20 +112,22 @@ export default async (req) => {
   if (user instanceof Response) return user;
 
   const url = new URL(req.url);
+  const report = url.searchParams.get("report");
   const month = url.searchParams.get("month");
-  if (!/^\d{4}-\d{2}$/.test(month ?? "")) {
+  // The budget covers the whole year, so it is the one mode that needs no month.
+  if (report !== "budget" && !/^\d{4}-\d{2}$/.test(month ?? "")) {
     return json({ error: "Pass ?month=YYYY-MM, e.g. ?month=2026-08" }, 400);
   }
 
   // ?report=bank needs no new scope — it reads what the sync already stored.
-  if (url.searchParams.get("report") === "bank") {
+  if (report === "bank") {
     return json(await bankReport(currentFiscalYear(), month));
   }
 
   // ?report=opex uses accounting.reports.profitandloss.read, already consented.
   // Checks the P&L parser against a month you can open in Xero side by side,
   // before a single figure of it reaches the forecast.
-  if (url.searchParams.get("report") === "opex") {
+  if (report === "opex") {
     try {
       const token = await getAccessToken();
       const pinned = (process.env.XERO_TENANTS ?? "")
@@ -151,6 +154,65 @@ export default async (req) => {
     } catch (err) {
       console.error(`[cash-xero-probe opex] ${err.message}`);
       return json({ error: err.message }, 502);
+    }
+  }
+
+  // ?report=budget lists the organisation's budgets; add &budget=<id> to read
+  // one and see the twelve monthly overhead figures it produces.
+  if (report === "budget") {
+    try {
+      const token = await getAccessToken();
+      const pinned = (process.env.XERO_TENANTS ?? "")
+        .split(",").map((x) => x.trim()).filter(Boolean);
+      const all = await getConnections(token);
+      const org = (pinned.length ? all.filter((c) => pinned.includes(c.tenantId)) : all)[0];
+      if (!org) return json({ error: "No Xero organisation connected." }, 409);
+
+      const budgets = await listBudgets(token, org.tenantId);
+      const wanted = url.searchParams.get("budget");
+      if (!wanted) {
+        return json({
+          organisation: org.tenantName,
+          budgets,
+          next: budgets.length
+            ? `Pick one and call again with &budget=<budgetID>`
+            : `No budgets returned. Either none are set up, or the scope is missing.`,
+        });
+      }
+
+      const fy = currentFiscalYear();
+      const [budget, accounts] = await Promise.all([
+        fetchBudget(token, org.tenantId, wanted, { from: `${fy}-04-01`, to: `${fy + 1}-03-31` }),
+        accountIndex(token, org.tenantId),
+      ]);
+      if (!budget) return json({ error: `Budget ${wanted} not found.` }, 404);
+
+      const result = overheadsFromBudget(budget, accounts, fy);
+      const a = await loadAssumptions(fy);
+      const labels = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
+
+      return json({
+        organisation: org.tenantName,
+        budget: { id: wanted, description: budget.Description, type: budget.Type },
+        fiscalYearStartYear: fy,
+        // Side by side with what the model currently assumes, which is the only
+        // comparison that says whether adopting this is an improvement.
+        comparison: labels.map((label, i) => ({
+          month: label,
+          budget: Math.round(result.months[i]),
+          model: Math.round(a.monthlyOverheads?.[i] ?? 0),
+          difference: Math.round(result.months[i] - (a.monthlyOverheads?.[i] ?? 0)),
+        })),
+        budgetTotal: Math.round(result.months.reduce((s, n) => s + n, 0)),
+        modelTotal: Math.round((a.monthlyOverheads ?? []).reduce((s, n) => s + Number(n), 0)),
+        monthsWithBudget: result.slotsCovered.length,
+        includedAccounts: result.included,
+        excludedAccounts: result.excluded,
+        periodsSeen: result.periodsSeen,
+      });
+    } catch (err) {
+      console.error(`[cash-xero-probe budget] ${err.message}`);
+      return json({ error: err.message, hint: "A 403 mentioning scope means accounting.budgets.read was not granted — re-consent." }, 502);
     }
   }
 

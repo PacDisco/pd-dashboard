@@ -253,9 +253,14 @@ function forecastView(f) {
   // program costs / overheads / capital. So in a closed month the totals are
   // real and the components are still forecast — and they must LOOK different,
   // or the column silently fails to add up.
+  // One Revenue row when the single receipts curve is driving cash in; the old
+  // two-row split only appears for a model that still uses deposits/balances.
+  const usingCurve = f.months.some((m) => Math.abs(m.revenueIn) > 0.5);
   const rows = [
-    ["Deposits in", (m) => m.depositsIn, "", false],
-    ["Balances in", (m) => m.balancesIn, "", false],
+    ...(usingCurve
+      ? [["Revenue in", (m) => m.revenueIn, "", false]]
+      : [["Deposits in", (m) => m.depositsIn, "", false],
+         ["Balances in", (m) => m.balancesIn, "", false]]),
     ["Cash in", (m) => m.cashIn, "strong", true],
     ["Program costs", (m) => -m.programCostsOut, "", false],
     ["Overheads", (m) => -m.overheads, "", false],
@@ -431,11 +436,12 @@ function paymentsView() {
   return `
     <div class="two">
       <section>
+        ${r.receiptsCurve?.length ? "" : `
         <h2>When students pay</h2>
         <label class="field"><span>Deposit at booking</span>
           <input type="number" id="deposit" value="${r.deposit}" step="50" ${ro ? "disabled" : ""}></label>
         <label class="field"><span>Balance due, days before departure</span>
-          <input type="number" id="baldays" value="${r.balanceDueDaysBeforeDeparture}" step="5" ${ro ? "disabled" : ""}></label>
+          <input type="number" id="baldays" value="${r.balanceDueDaysBeforeDeparture}" step="5" ${ro ? "disabled" : ""}></label>`}
         <h2>Treasury</h2>
         <label class="field"><span>Minimum NZD balance to hold</span>
           <input type="number" id="buffer" value="${state.assumptions.baseMinimumBuffer ?? 0}" step="10000" ${ro ? "disabled" : ""}></label>
@@ -445,22 +451,50 @@ function paymentsView() {
         <p class="foot">Funds arrive in USD except for students who pay NZD directly. That portion lands in the NZD account already converted, so it never passes through the treasury block. <b>This does not change Cash in, the closing position, or the rate sensitivity</b> — an NZD payment is the USD price converted at the day's rate, so it moves with the rate exactly as a USD payment does. What it changes is how much you actually have to convert, and when the NZD account is short.</p>
       </section>
       ${ratePanel(ro)}
-      <section>
-        <h2>Booking curve <span class="stamp ${Math.abs(sum - 1) > 0.001 ? "warn" : ""}">${(sum * 100).toFixed(1)}%</span></h2>
-        <p class="foot">Share of each cohort that books this many months before departure. This is when the <b>deposit</b> lands.</p>
-        <div class="curve">
-          ${r.bookingCurve.map((p, i) => `
-            <label class="curverow">
-              <span>${p.monthsBefore}mo</span>
-              <input type="number" data-curve="${i}" value="${(p.share * 100).toFixed(1)}" step="0.5" ${ro ? "disabled" : ""}>
-              <span class="pc">%</span>
-              <span class="bar"><i style="width:${Math.min(100, p.share * 400)}%"></i></span>
-            </label>`).join("")}
-        </div>
-        <p class="foot">Shares are normalised to 100% when the forecast runs, so a curve that doesn't add up bends the timing but never changes total revenue.</p>
-      </section>
-      ${balanceCurveSection(ro)}
+      ${receiptsCurveSection(ro, sum)}
     </div>`;
+}
+
+/**
+ * The single receipts curve.
+ *
+ * Deposits and balances were modelled separately for weeks, and every part of
+ * that split turned out to be unverifiable — one part-paid invoice per student
+ * means nothing in Xero says which instalment a payment was. Four inputs that
+ * could each be wrong, with no way to check any of them.
+ *
+ * One curve. Measurable from receivable receipts, which is the point.
+ */
+function receiptsCurveSection(ro, legacySum) {
+  const r = state.assumptions.defaultPaymentRules;
+  const curve = r.receiptsCurve;
+
+  if (!curve?.length) {
+    return `<section>
+      <h2>Payment timing <span class="stamp warn">deposits &amp; balances</span></h2>
+      <p class="foot">This model still splits cash into a deposit at booking and a balance due ${escapeHtml(String(r.balanceDueDaysBeforeDeparture))} days before departure, timed by two separate curves. None of that split can be checked against Xero — a part-paid invoice does not say which instalment a payment was.</p>
+      ${ro ? "" : `<button id="useReceiptsCurve" class="btn-primary">Switch to one revenue curve</button>`}
+      <p class="foot">Switching replaces four inputs with one and does not change the year's total, only its timing.</p>
+    </section>`;
+  }
+
+  const sum = curve.reduce((s, p) => s + p.share, 0);
+  const within60 = curve.filter((p) => p.monthsBefore <= 2).reduce((s, p) => s + p.share, 0);
+
+  return `<section>
+    <h2>Revenue timing <span class="stamp ${Math.abs(sum - 1) > 0.001 ? "warn" : ""}">${(sum * 100).toFixed(1)}%</span></h2>
+    <p class="foot">Share of a program's full price that arrives this many months before departure. <b>${((within60 / (sum || 1)) * 100).toFixed(0)}% lands within 60 days.</b></p>
+    <div class="curve">
+      ${curve.map((p, i) => `
+        <label class="curverow ${p.monthsBefore <= 2 ? "near" : ""}">
+          <span>${p.monthsBefore}mo</span>
+          <input type="number" data-rcurve="${i}" value="${(p.share * 100).toFixed(1)}" step="0.1" ${ro ? "disabled" : ""}>
+          <span class="pc">%</span>
+          <span class="bar"><i style="width:${Math.min(100, p.share * 250)}%"></i></span>
+        </label>`).join("")}
+    </div>
+    <p class="foot">A starting estimate. Replace it with the measured distribution once receivable receipts are flowing — that is the one input this whole model rests on, and the only one Xero can settle. Shares normalise to 100%, so the year's total never changes; only the timing does.</p>
+  </section>`;
 }
 
 /**
@@ -808,6 +842,26 @@ function wire() {
     input.addEventListener("change", (e) => {
       state.assumptions.fxRates[e.target.dataset.fx] = Number(e.target.value); touch();
     }));
+
+  document.querySelectorAll("[data-rcurve]").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      state.assumptions.defaultPaymentRules.receiptsCurve[Number(e.target.dataset.rcurve)].share =
+        Number(e.target.value) / 100;
+      touch();
+    }));
+
+  el("useReceiptsCurve")?.addEventListener("click", () => {
+    state.assumptions.defaultPaymentRules.receiptsCurve = [
+      { monthsBefore: 12, share: 0.006 }, { monthsBefore: 11, share: 0.008 },
+      { monthsBefore: 10, share: 0.010 }, { monthsBefore: 9, share: 0.013 },
+      { monthsBefore: 8, share: 0.016 }, { monthsBefore: 7, share: 0.019 },
+      { monthsBefore: 6, share: 0.028 }, { monthsBefore: 5, share: 0.035 },
+      { monthsBefore: 4, share: 0.050 }, { monthsBefore: 3, share: 0.090 },
+      { monthsBefore: 2, share: 0.250 }, { monthsBefore: 1, share: 0.340 },
+      { monthsBefore: 0, share: 0.135 },
+    ];
+    touch();
+  });
 
   document.querySelectorAll("[data-balcurve]").forEach((input) =>
     input.addEventListener("change", (e) => {

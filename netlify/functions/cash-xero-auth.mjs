@@ -6,7 +6,7 @@
  * on the dashboard — you get one refresh token covering all of them.
  *
  * Protected by a shared secret so a stray visit can't start an auth flow:
- *   /.netlify/functions/xero-auth?key=<XERO_SETUP_KEY>
+ *   /.netlify/functions/cash-xero-auth?key=<XERO_SETUP_KEY>
  */
 import { SCOPES, requireEnv } from "./_shared/cash-xero.mjs";
 import { randomUUID } from "node:crypto";

@@ -85,6 +85,35 @@ export const DEFAULT_BALANCE_CURVE = [
     { monthsBefore: 1, share: 0.37 },
     { monthsBefore: 0, share: 0.10 },
 ];
+/**
+ * When a program's money actually arrives, as shares of its FULL price by months
+ * before departure.
+ *
+ * This replaces four separate inputs — deposit amount, the days-before-departure
+ * rule, the booking curve and the balance curve. Every one of them was
+ * unverifiable: with a single part-paid invoice per student, nothing in Xero
+ * says which instalment a payment was, so the split could be wrong in ways
+ * nothing could check.
+ *
+ * One curve is directly measurable from receivable receipts, which is the whole
+ * point. The shape below is a starting estimate: a thin tail a year out where
+ * deposits used to sit, then 72.5% inside 60 days (offsets 2, 1 and 0).
+ */
+export const DEFAULT_RECEIPTS_CURVE = [
+    { monthsBefore: 12, share: 0.006 },
+    { monthsBefore: 11, share: 0.008 },
+    { monthsBefore: 10, share: 0.010 },
+    { monthsBefore: 9, share: 0.013 },
+    { monthsBefore: 8, share: 0.016 },
+    { monthsBefore: 7, share: 0.019 },
+    { monthsBefore: 6, share: 0.028 },
+    { monthsBefore: 5, share: 0.035 },
+    { monthsBefore: 4, share: 0.050 },
+    { monthsBefore: 3, share: 0.090 },
+    { monthsBefore: 2, share: 0.250 },
+    { monthsBefore: 1, share: 0.340 },
+    { monthsBefore: 0, share: 0.135 },
+];
 export function defaultAssumptions(fiscalYearStartYear) {
     return {
         fiscalYearStartYear,
@@ -121,6 +150,10 @@ export function defaultAssumptions(fiscalYearStartYear) {
             // the day's rate, so it carries the same rate risk. See the note on
             // splitReceiptByCurrency in engine.mjs.
             nzdReceiptShare: 0,
+            // The single receipts curve. When set it replaces deposit,
+            // balanceDueDaysBeforeDeparture, bookingCurve and balanceCurve —
+            // those stay only so a model saved before this keeps its numbers.
+            receiptsCurve: DEFAULT_RECEIPTS_CURVE,
         },
         paymentRulesByProgram: {},
         costPhasing: DEFAULT_COST_PHASING,

@@ -218,7 +218,7 @@ export function validateAssumptions(input) {
 
   // Curves decide WHICH MONTH money lands in, which is the whole output of a
   // cash forecast. A malformed one silently moves millions between months.
-  for (const which of ["bookingCurve", "balanceCurve"]) {
+  for (const which of ["bookingCurve", "balanceCurve", "receiptsCurve"]) {
     const curve = input.defaultPaymentRules?.[which];
     if (curve == null) continue;
     if (!Array.isArray(curve) || curve.length === 0) {
