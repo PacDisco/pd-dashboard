@@ -128,6 +128,11 @@ export function seedAssumptions(fiscalYearStartYear) {
       // three offsets. Replace with the measured curve once receivable receipts
       // are flowing — this is the single input that decides which month the big
       // money shows up in.
+      // PLACEHOLDER: the share of receipts arriving in NZD rather than USD.
+      // Funds come in USD with the exception of some students paying NZD. Set
+      // it from the real split — it decides how much has to be converted and so
+      // how much of the year is exposed to the rate.
+      nzdReceiptShare: 0,
       balanceCurve: [
         { monthsBefore: 6, share: 0.03 },
         { monthsBefore: 5, share: 0.04 },

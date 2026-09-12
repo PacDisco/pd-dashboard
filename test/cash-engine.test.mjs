@@ -684,4 +684,110 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ instalments before the year opens are not lost");
 }
 
+/* ---------- receipts split between USD and NZD ---------- */
+
+{
+  // Funds arrive in USD except for students who pay NZD directly. The NZD
+  // portion lands in the base account already converted and never passes through
+  // treasury — which cuts both the conversion volume and the rate exposure.
+  const mk = (share) => {
+    const a = base();
+    a.baseMinimumBuffer = 0;
+    a.openingBalances = { NZD: 0, USD: 0 };
+    a.fxRates = { NZD: 1, USD: 1.7135 };
+    a.planningRateSource = "manual";
+    a.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+    a.defaultPaymentRules.nzdReceiptShare = share;
+    // Real costs, so the NZD account actually goes short and the treasury block
+    // has something to do. With no costs nothing ever converts and the test
+    // would pass for the wrong reason.
+    a.programs = [prog({
+      id: "f", name: "F", season: "Fall", currency: "USD",
+      startDate: "2026-10-01", endDate: "2026-12-01",
+      price: 15_000, paxForecast: 20, fixedCost: 200_000, variableCostPerPax: 0,
+    })];
+    return buildForecast(a);
+  };
+
+  const allUsd = mk(0);
+  const quarter = mk(0.25);
+  const allNzd = mk(1);
+
+  // THE INVARIANT: the headline rows are base-stated, and a student paying NZD
+  // pays the NZD equivalent of the same price. So the top of the table must not
+  // move by a cent, whatever the split.
+  near(quarter.totals.cashIn, allUsd.totals.cashIn, 0.01, "cash in is unchanged at 25%");
+  near(allNzd.totals.cashIn, allUsd.totals.cashIn, 0.01, "and unchanged at 100%");
+  near(allUsd.totals.cashIn, 20 * 15_000 * 1.7135, 0.01, "and still pax x price x rate");
+  console.log("✓ the currency split never moves the NZD-equivalent totals");
+
+  // What DOES move: how much has to be converted.
+  const usdIn = (f) => f.months.reduce((s, m) => s + m.fxIn, 0);
+  near(usdIn(allUsd), 20 * 15_000, 0.01, "everything arrives as USD at 0%");
+  near(usdIn(quarter), 20 * 15_000 * 0.75, 0.01, "three quarters at 25%");
+  near(usdIn(allNzd), 0, 0.01, "nothing at 100%");
+  assert.ok(allUsd.totals.fxConverted > 0,
+    "the fixture must actually trigger conversion, or this proves nothing");
+  assert.ok(allNzd.totals.fxConverted < allUsd.totals.fxConverted,
+    `more NZD receipts means less conversion: ${Math.round(allNzd.totals.fxConverted)} vs ${Math.round(allUsd.totals.fxConverted)}`);
+  near(allNzd.totals.fxConverted, 0, 0.01,
+    "with every receipt in NZD there is nothing left to convert");
+  console.log("✓ a higher NZD share means less USD to convert");
+
+  // And the year ends in the same place, because the money is the same money.
+  near(allNzd.totals.closingBalance, allUsd.totals.closingBalance, 1,
+    "the closing position is the same either way at a fixed rate");
+  console.log("✓ the closing position is unchanged at a fixed planning rate");
+
+  // DECIDED: an NZD payment is the USD price converted at the day's rate, so it
+  // carries the same rate risk. The share is an operational saving, not a hedge,
+  // and the sensitivity MUST be unchanged by it. Pinned here because the obvious
+  // "improvement" is to make exposure fall with the share — which would be wrong
+  // unless PD starts quoting a fixed NZD price.
+  const closeAt = (share, rate) => {
+    const a = base();
+    a.baseMinimumBuffer = 0;
+    a.openingBalances = { NZD: 0, USD: 0 };
+    a.fxRates = { NZD: 1, USD: rate };
+    a.planningRateSource = "manual";
+    a.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+    a.defaultPaymentRules.nzdReceiptShare = share;
+    a.programs = [prog({
+      id: "f", name: "F", season: "Fall", currency: "USD",
+      startDate: "2026-10-01", endDate: "2026-12-01",
+      price: 15_000, paxForecast: 20, fixedCost: 200_000, variableCostPerPax: 0,
+    })];
+    return buildForecast(a).totals.closingBalance;
+  };
+  const spreadAt = (share) => closeAt(share, 1.77) - closeAt(share, 1.67);
+  near(spreadAt(0.5), spreadAt(0), 1,
+    "rate exposure must NOT fall with the NZD share under the agreed model");
+  assert.ok(spreadAt(0) > 1, "and the fixture must have real exposure to compare");
+  console.log("✓ rate exposure is unchanged by the share — an NZD payment is not a hedge");
+
+  // A program already priced in NZD ignores the share — there is nothing to split.
+  const b = base();
+  b.baseMinimumBuffer = 0;
+  b.fxRates = { NZD: 1, USD: 1.7135 };
+  b.planningRateSource = "manual";
+  b.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+  b.defaultPaymentRules.nzdReceiptShare = 0.5;
+  b.programs = [prog({
+    id: "n", name: "N", season: "Fall", currency: "NZD",
+    startDate: "2026-10-01", endDate: "2026-12-01",
+    price: 25_000, paxForecast: 10, fixedCost: 0, variableCostPerPax: 0,
+  })];
+  const nz = buildForecast(b);
+  near(nz.months.reduce((s, m) => s + m.fxIn, 0), 0, 0.01,
+    "an NZD-priced program never touches the settlement account");
+  near(nz.totals.cashIn, 10 * 25_000, 0.01, "and its receipts are counted once, at par");
+  console.log("✓ an NZD-priced program is unaffected by the share");
+
+  // Out of range is clamped rather than producing negative USD receipts.
+  const silly = mk(2);
+  near(silly.months.reduce((s, m) => s + m.fxIn, 0), 0, 0.01,
+    "a share above 1 clamps instead of inverting the split");
+  console.log("✓ an out-of-range share clamps");
+}
+
 console.log("\nAll actuals-overlay tests passed.");

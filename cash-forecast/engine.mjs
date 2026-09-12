@@ -93,6 +93,7 @@ function rulesFor(assumptions, program) {
         ...override,
         bookingCurve: override.bookingCurve ?? assumptions.defaultPaymentRules.bookingCurve,
         balanceCurve: override.balanceCurve ?? assumptions.defaultPaymentRules.balanceCurve,
+        nzdReceiptShare: override.nzdReceiptShare ?? assumptions.defaultPaymentRules.nzdReceiptShare,
     };
 }
 function toBase(amount, currency, fxRates) {
@@ -129,6 +130,38 @@ function addSeasonReceipt(row, season, amountInBase) {
     if (!season || !amountInBase)
         return;
     row.receiptsBySeason[season] = (row.receiptsBySeason[season] || 0) + amountInBase;
+}
+/**
+ * Put a receipt into the right account, splitting it by the currency it arrives
+ * in.
+ *
+ * Most students pay in USD; some pay in NZD. The NZD portion lands straight in
+ * the base account and never needs converting.
+ *
+ * DECIDED, September 2026: an NZD payment is the USD price converted at the
+ * day's rate, NOT a separately-held NZD price. So this is an operational saving,
+ * not a hedge — the amount still moves with the rate, and the closing position
+ * and the sensitivity table are unchanged at any share. Do not "fix" the
+ * sensitivity to respond to this number; it is correct that it does not.
+ *
+ * If PD ever starts quoting a fixed NZD price, that is a different model: those
+ * receipts become rate-independent and the share genuinely reduces exposure.
+ *
+ * The base-stated total is identical either way: a student paying NZD pays the
+ * NZD equivalent of the same price. So `Deposits in`, `Balances in` and `Cash in`
+ * do not move. Only the treasury rows do — which is exactly the distinction the
+ * top block and the treasury block exist to keep apart.
+ */
+function baseCurrencyName(a) { return a.baseCurrency || "NZD"; }
+function splitReceiptByCurrency(row, nativeAmount, receiptRate, receiptsAreFx, nzdShare) {
+    if (!receiptsAreFx) {
+        // Already priced in base — there is nothing to split.
+        row.baseIn += nativeAmount;
+        return;
+    }
+    const share = Math.min(Math.max(Number(nzdShare) || 0, 0), 1);
+    row.fxIn += nativeAmount * (1 - share);
+    row.baseIn += nativeAmount * receiptRate * share;
 }
 export function buildForecast(assumptions, actualsByMonth = {}) {
     const fy = assumptions.fiscalYearStartYear;
@@ -197,6 +230,12 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             continue;
         }
         const rules = rulesFor(assumptions, program);
+        // Share of this program's receipts that arrive already in base currency.
+        // Most funds come in USD; some students pay NZD directly.
+        const nzdShare = Math.min(Math.max(Number(rules.nzdReceiptShare) || 0, 0), 1);
+        if (Number(rules.nzdReceiptShare) > 1) {
+            warnings.push(`${program.name}: the ${baseCurrencyName(assumptions)} receipt share is above 100% — capped. It is a share, not a percentage of a percentage.`);
+        }
         const grossRevenue = pax * priceInBase;
         const totalCost = fixedCost + variableCost * pax;
         const deposit = Math.min(rules.deposit, price);
@@ -224,10 +263,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 // The treasury rows below stay in the currency actually received.
                 months[bookingSlot].depositsIn += depositInBase;
                 addSeasonReceipt(months[bookingSlot], program.season, depositInBase);
-                if (receiptsAreFx)
-                    months[bookingSlot].fxIn += depositCash;
-                else
-                    months[bookingSlot].baseIn += depositCash;
+                splitReceiptByCurrency(months[bookingSlot], depositCash, receiptRate, receiptsAreFx, nzdShare);
             }
             else if (bookingMonth.year * 12 + bookingMonth.month <
                 fy * 12 + 4) {
@@ -258,10 +294,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 if (balanceSlot !== null) {
                     months[balanceSlot].balancesIn += balanceInBase;
                     addSeasonReceipt(months[balanceSlot], program.season, balanceInBase);
-                    if (receiptsAreFx)
-                        months[balanceSlot].fxIn += balanceCash;
-                    else
-                        months[balanceSlot].baseIn += balanceCash;
+                    splitReceiptByCurrency(months[balanceSlot], balanceCash, receiptRate, receiptsAreFx, nzdShare);
                 }
                 else if (balanceMonth.year * 12 + balanceMonth.month < fy * 12 + 4) {
                     deferredOpening += balanceInBase;

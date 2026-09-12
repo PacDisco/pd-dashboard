@@ -440,6 +440,9 @@ function paymentsView() {
         <label class="field"><span>Minimum NZD balance to hold</span>
           <input type="number" id="buffer" value="${state.assumptions.baseMinimumBuffer ?? 0}" step="10000" ${ro ? "disabled" : ""}></label>
         <p class="foot">USD is converted only when the NZD account would fall below this. Raise it to convert earlier and hold less USD; lower it to hold USD longer and carry more rate risk.</p>
+        <label class="field"><span>Share of receipts paid in NZD</span>
+          <input type="number" id="nzdshare" value="${(((r.nzdReceiptShare ?? 0) * 100)).toFixed(1)}" step="1" min="0" max="100" ${ro ? "disabled" : ""}></label>
+        <p class="foot">Funds arrive in USD except for students who pay NZD directly. That portion lands in the NZD account already converted, so it never passes through the treasury block. <b>This does not change Cash in, the closing position, or the rate sensitivity</b> — an NZD payment is the USD price converted at the day's rate, so it moves with the rate exactly as a USD payment does. What it changes is how much you actually have to convert, and when the NZD account is short.</p>
       </section>
       ${ratePanel(ro)}
       <section>
@@ -783,6 +786,12 @@ function wire() {
 
   el("closethru")?.addEventListener("change", (e) => {
     state.assumptions.actualsThroughMonth = e.target.value || null;
+    touch();
+  });
+
+  el("nzdshare")?.addEventListener("change", (e) => {
+    const pct = Math.min(Math.max(Number(e.target.value) || 0, 0), 100);
+    state.assumptions.defaultPaymentRules.nzdReceiptShare = pct / 100;
     touch();
   });
 

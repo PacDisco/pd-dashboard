@@ -111,6 +111,16 @@ export function defaultAssumptions(fiscalYearStartYear) {
             balanceDueDaysBeforeDeparture: 60,
             bookingCurve: DEFAULT_BOOKING_CURVE,
             balanceCurve: DEFAULT_BALANCE_CURVE,
+            // Share of receipts that arrive already in NZD rather than the
+            // program's price currency. Funds come in USD with the exception of
+            // some students paying NZD directly; that portion never needs
+            // converting, so it changes the treasury block without moving the
+            // NZD-equivalent totals at the top of the table.
+            //
+            // It is NOT a hedge: an NZD payment is the USD price converted at
+            // the day's rate, so it carries the same rate risk. See the note on
+            // splitReceiptByCurrency in engine.mjs.
+            nzdReceiptShare: 0,
         },
         paymentRulesByProgram: {},
         costPhasing: DEFAULT_COST_PHASING,

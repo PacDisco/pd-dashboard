@@ -211,6 +211,11 @@ export function validateAssumptions(input) {
     return { ok: false, error: "actualsThroughMonth must be YYYY-MM or null" };
   }
 
+  const nzdShare = input.defaultPaymentRules?.nzdReceiptShare;
+  if (nzdShare != null && (!Number.isFinite(Number(nzdShare)) || Number(nzdShare) < 0 || Number(nzdShare) > 1)) {
+    return { ok: false, error: "nzdReceiptShare must be a share between 0 and 1" };
+  }
+
   // Curves decide WHICH MONTH money lands in, which is the whole output of a
   // cash forecast. A malformed one silently moves millions between months.
   for (const which of ["bookingCurve", "balanceCurve"]) {
