@@ -69,11 +69,18 @@ function cellValue(cell) {
  */
 export function parseOperatingExpenses(report, patterns = NON_CASH_LINES) {
   const sections = report?.Reports?.[0]?.Rows ?? [];
+  // Every section title, so "the numbers are too small" can be answered by
+  // looking rather than guessing. A custom layout shows up here immediately as
+  // headings that are not the four standard ones.
+  const sectionsSeen = sections
+    .filter((s) => s.RowType === "Section")
+    .map((s) => ({ title: s.Title || "(untitled)", rows: (s.Rows ?? []).length }));
+
   const section = sections.find(
     (s) => s.RowType === "Section" && /operating expense/i.test(s.Title ?? ""),
   );
   if (!section) {
-    return { lines: [], total: 0, cashTotal: 0, excluded: [], sectionFound: false };
+    return { lines: [], total: 0, cashTotal: 0, excluded: [], sectionFound: false, sectionsSeen };
   }
 
   const lines = [];
@@ -93,7 +100,7 @@ export function parseOperatingExpenses(report, patterns = NON_CASH_LINES) {
   const excluded = lines.filter((l) => l.nonCash);
   const cashTotal = total - excluded.reduce((s, l) => s + l.amount, 0);
 
-  return { lines, total, cashTotal, excluded, sectionFound: true };
+  return { lines, total, cashTotal, excluded, sectionFound: true, sectionsSeen };
 }
 
 /**
@@ -107,6 +114,13 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
   const report = await xeroGet(accessToken, tenantId, "Reports/ProfitAndLoss", {
     fromDate: from,
     toDate: to,
+    // Without this, Xero renders the organisation's own custom P&L layout —
+    // which can group accounts under headings of its own and leave the section
+    // called "Operating Expenses" holding only part of the expenses. That is
+    // the shape of the bug this fixes: April read 18,657 against a real 94,093,
+    // May read 131, and no two months were wrong by the same ratio, which is
+    // what a subset looks like rather than a scaling error.
+    standardLayout: "true",
   });
   const parsed = parseOperatingExpenses(report, patterns);
 
@@ -115,6 +129,8 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
     total: parsed.total,
     cashTotal: parsed.cashTotal,
     sectionFound: parsed.sectionFound,
+    sectionsSeen: parsed.sectionsSeen,
+    lineCount: parsed.lines.length,
     excluded: parsed.excluded.map((l) => ({ name: l.name, amount: l.amount })),
     // Biggest lines first, so a wrong figure has an obvious place to start.
     topLines: parsed.lines

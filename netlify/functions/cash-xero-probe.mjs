@@ -19,7 +19,7 @@
 // Admin/operations only, like every other endpoint here.
 
 import { requireCashRole, json } from "./_shared/cash-access.mjs";
-import { getAccessToken, getConnections } from "./_shared/cash-xero.mjs";
+import { getAccessToken, getConnections, xeroGet } from "./_shared/cash-xero.mjs";
 import { loadAssumptions, currentFiscalYear, resolveOpeningBalances } from "./_shared/cash-store.mjs";
 import {
   fetchPayments,
@@ -137,6 +137,11 @@ export default async (req) => {
       if (!org) return json({ error: "No Xero organisation connected." }, 409);
 
       const opex = await fetchMonthOpex(token, org.tenantId, month);
+      // The raw report too, so a layout that does not match can be seen rather
+      // than deduced. Section titles and their row counts are enough.
+      const raw = await xeroGet(token, org.tenantId, "Reports/ProfitAndLoss", {
+        fromDate: `${month}-01`, toDate: `${month}-28`, standardLayout: "true",
+      }).catch(() => null);
       const a = await loadAssumptions(currentFiscalYear());
       const slot = (Number(month.slice(5, 7)) + 8) % 12; // April is slot 0
       return json({
@@ -147,6 +152,8 @@ export default async (req) => {
         // The comparison that matters: what the model assumes leaves the bank
         // this month, against what actually did.
         modelTotal: (a.monthlyOverheads?.[slot] ?? 0) + (a.monthlyCapital?.[slot] ?? 0),
+        reportTitles: (raw?.Reports?.[0]?.Rows ?? [])
+          .map((r) => ({ rowType: r.RowType, title: r.Title ?? null, rows: (r.Rows ?? []).length })),
         differenceVsModel: Math.round(
           opex.cashTotal - ((a.monthlyOverheads?.[slot] ?? 0) + (a.monthlyCapital?.[slot] ?? 0)),
         ),
