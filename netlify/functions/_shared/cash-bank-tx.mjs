@@ -175,48 +175,146 @@ export async function fetchBankTransfers(accessToken, tenantId, key, { maxPages 
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-function bucket(map, currency, side, amount) {
-  const c = currency || "?";
-  map[c] ??= { in: 0, out: 0 };
-  map[c][side] += amount;
+/**
+ * Payment types that allocate rather than move money.
+ *
+ * ARCREDITPAYMENT and APCREDITPAYMENT are a credit note being applied to an
+ * invoice or bill. No cash leaves or enters the bank — the balance owing simply
+ * drops. Counting them would overstate both sides, and the June probe found
+ * five of them, so this is a real case and not a hypothetical.
+ */
+export const ALLOCATION_PAYMENT_TYPES = new Set([
+  "ARCREDITPAYMENT",
+  "APCREDITPAYMENT",
+  // Over- and prepayments are the subtle pair. The money arrived earlier, as a
+  // RECEIVE-OVERPAYMENT or RECEIVE-PREPAYMENT bank transaction — and June's
+  // probe confirmed RECEIVE-OVERPAYMENT is in use here. A Payment of these
+  // types is the LATER allocation of that money to an invoice. Counting both
+  // would bank the same dollar twice.
+  "AROVERPAYMENTPAYMENT",
+  "APOVERPAYMENTPAYMENT",
+  "ARPREPAYMENTPAYMENT",
+  "APPREPAYMENTPAYMENT",
+]);
+
+/**
+ * The only two payment types that move money at a bank.
+ *
+ * Named explicitly rather than matched on an "ACCREC"/"ACCPAY" prefix. The
+ * prefix reads as safe against today's enum and is not: anything Xero adds
+ * later starting with those six letters would be silently banked as cash in the
+ * direction the prefix implies, with nothing to notice. An explicit pair means a
+ * new type shows up in unknownTypes instead.
+ */
+export const CASH_PAYMENT_TYPES = new Map([
+  ["ACCRECPAYMENT", "in"],
+  ["ACCPAYPAYMENT", "out"],
+]);
+
+/**
+ * Bank accounts by id AND by name, with each one's own currency.
+ *
+ * Pacific Discovery runs nineteen bank accounts — two credit cards, a tax
+ * account, payroll accounts in two currencies, and several per-program accounts.
+ * A per-CURRENCY reconciliation on top of that says "USD is short 533,030",
+ * which is almost useless; a per-ACCOUNT one names the account, which is
+ * something you can open in Xero.
+ */
+export async function bankAccountIndex(accessToken, tenantId, baseCurrency = "NZD") {
+  const byId = new Map();
+  const byName = new Map();
+  try {
+    const json = await xeroGet(accessToken, tenantId, "Accounts", { where: 'Type=="BANK"' });
+    for (const a of json?.Accounts ?? []) {
+      const rec = {
+        id: a.AccountID,
+        name: (a.Name ?? "").trim(),
+        code: a.Code ?? null,
+        currency: a.CurrencyCode || baseCurrency,
+      };
+      if (rec.id) byId.set(rec.id, rec);
+      if (rec.name) byName.set(rec.name.toLowerCase(), rec);
+    }
+  } catch {
+    // Without the list, currency falls back to whatever each row carries.
+  }
+  return {
+    byId,
+    byName,
+    resolve(ref = {}) {
+      // A Payment's Account carries AccountID and CurrencyCode but NO Name —
+      // which is how the first pass silently filed every USD payment as NZD.
+      // Id first, then name, then whatever the row states about itself.
+      const hit =
+        (ref.AccountID && byId.get(ref.AccountID)) ||
+        (ref.Name && byName.get(String(ref.Name).trim().toLowerCase())) ||
+        null;
+      return {
+        name: hit?.name ?? (ref.Name ? String(ref.Name).trim() : "(unknown account)"),
+        currency: hit?.currency ?? ref.CurrencyCode ?? baseCurrency,
+      };
+    },
+    size: byId.size,
+  };
 }
 
 /**
- * Total the three sources per currency, keeping transfers separate.
+ * What the bank account actually moved for one payment.
  *
- * Pure — no I/O — so it runs against fixtures in tests rather than against the
- * real organisation.
+ * `Amount` is in the INVOICE's currency and `CurrencyRate` relates the two, but
+ * the direction of that rate is not what it looks like — June's sample carried
+ * 0.592969 on a USD payment against an NZD base, which is USD-per-NZD, the
+ * inverse of the obvious reading. Multiplying by it would have quietly halved
+ * every cross-currency receipt.
  *
- * Amounts are taken in the BANK ACCOUNT's own currency, because that is what the
- * Bank Summary reports and so is the only thing the result can be checked
- * against. A bank transaction's Total is already in its account's currency; a
- * payment's Amount is in the invoice currency, so it is converted at the
- * payment's own CurrencyRate the same way cash-receipts does.
+ * `BankAmount` is the figure in the bank account's own currency. It is what the
+ * statement shows, it needs no conversion, and it cannot be got backwards.
+ */
+export function bankMoved(payment) {
+  const bank = num(payment?.BankAmount);
+  if (bank) return { amount: Math.abs(bank), field: "BankAmount" };
+  // Older or same-currency payments may not carry it; then Amount already is
+  // the bank figure.
+  return { amount: Math.abs(num(payment?.Amount)), field: "Amount" };
+}
+
+function bucket(map, key, side, amount) {
+  const k = key || "?";
+  map[k] ??= { in: 0, out: 0 };
+  map[k][side] += amount;
+}
+
+/**
+ * Total the sources per currency and per account, keeping transfers separate.
  *
- * @param {object} input
- * @param {Array}  input.bankTransactions
- * @param {Array}  input.payments
- * @param {Array}  input.transfers
- * @param {Function} input.currencyOf  bank account name -> currency code
- * @returns {{byCurrency, transfersByCurrency, counts, unknownTypes, accountsSeen}}
+ * Pure — no I/O — so it runs against fixtures rather than the real organisation.
+ *
+ * @returns {{byCurrency, transfersByCurrency, byAccount, transfersByAccount,
+ *            counts, unknownTypes, allocations, accountsSeen}}
  */
 export function summariseSources({
   bankTransactions = [],
   payments = [],
   transfers = [],
-  currencyOf = () => "NZD",
+  accounts = null,
 } = {}) {
+  const resolve = accounts?.resolve
+    ? (ref) => accounts.resolve(ref)
+    : (ref) => ({
+        name: ref?.Name ? String(ref.Name).trim() : "(unknown account)",
+        currency: ref?.CurrencyCode || "NZD",
+      });
+
   const byCurrency = {};
   const transfersByCurrency = {};
-  const counts = { bankTransactions: 0, payments: 0, transfers: 0, skipped: 0 };
+  const byAccount = {};
+  const transfersByAccount = {};
+  const counts = {
+    bankTransactions: 0, payments: 0, transfers: 0,
+    allocations: 0, skipped: 0, zeroAmount: 0,
+  };
   const unknownTypes = new Map();
   const accountsSeen = new Map();
-
-  const noteAccount = (name, currency) => {
-    if (!name) return;
-    const k = String(name).trim();
-    if (!accountsSeen.has(k)) accountsSeen.set(k, currency);
-  };
 
   for (const t of bankTransactions) {
     const dir = direction(t?.Type);
@@ -225,56 +323,51 @@ export function summariseSources({
       counts.skipped++;
       continue;
     }
-    const name = t?.BankAccount?.Name;
-    // A bank transaction's CurrencyCode is the account's own currency; the
-    // account list is the fallback when the field is absent.
-    const currency = t?.CurrencyCode || currencyOf(name);
-    noteAccount(name, currency);
+    const acct = resolve(t?.BankAccount);
+    // A bank transaction states its own currency, and it is the account's.
+    const currency = t?.CurrencyCode || acct.currency;
+    accountsSeen.set(acct.name, currency);
     const amount = Math.abs(num(t?.Total));
-    if (!amount) { counts.skipped++; continue; }
+    if (!amount) { counts.zeroAmount++; continue; }
 
     counts.bankTransactions++;
-    // Transfers are counted so the reconciliation ties, and kept apart so the
-    // business figure can exclude them.
-    if (isTransfer(t?.Type)) bucket(transfersByCurrency, currency, dir, amount);
-    else bucket(byCurrency, currency, dir, amount);
+    if (isTransfer(t?.Type)) {
+      bucket(transfersByCurrency, currency, dir, amount);
+      bucket(transfersByAccount, acct.name, dir, amount);
+    } else {
+      bucket(byCurrency, currency, dir, amount);
+      bucket(byAccount, acct.name, dir, amount);
+    }
   }
 
   for (const p of payments) {
     const type = String(p?.PaymentType ?? "").toUpperCase();
-    // ACCREC money in, ACCPAY money out. Overpayments and prepayments carry
-    // their own type names and are matched on the same prefix.
-    const dir = type.startsWith("ACCREC") ? "in" : type.startsWith("ACCPAY") ? "out" : null;
+    if (ALLOCATION_PAYMENT_TYPES.has(type)) {
+      // Real, and deliberately not counted: a credit note applied to an invoice
+      // moves no bank money. Reported so it is a decision, not an oversight.
+      counts.allocations++;
+      continue;
+    }
+    const dir = CASH_PAYMENT_TYPES.get(type) ?? null;
     if (!dir) {
       unknownTypes.set(type || "(none)", (unknownTypes.get(type || "(none)") || 0) + 1);
       counts.skipped++;
       continue;
     }
-    const name = p?.Account?.Name;
-    const currency = currencyOf(name);
-    noteAccount(name, currency);
-    // Amount is in the invoice's currency; CurrencyRate converts it to what the
-    // bank actually moved. A missing rate means they are the same currency.
-    const amount = Math.abs(num(p?.Amount)) * (num(p?.CurrencyRate) || 1);
-    if (!amount) { counts.skipped++; continue; }
+    const acct = resolve(p?.Account);
+    accountsSeen.set(acct.name, acct.currency);
+    const { amount } = bankMoved(p);
+    if (!amount) { counts.zeroAmount++; continue; }
 
     counts.payments++;
-    bucket(byCurrency, currency, dir, amount);
+    bucket(byCurrency, acct.currency, dir, amount);
+    bucket(byAccount, acct.name, dir, amount);
   }
 
-  // BankTransfers, when the endpoint is available, are the cross-check on the
-  // transfer types above rather than an additional source of movement.
-  for (const t of transfers) {
-    counts.transfers++;
-    const fromName = t?.FromBankAccount?.Name;
-    const toName = t?.ToBankAccount?.Name;
-    noteAccount(fromName, currencyOf(fromName));
-    noteAccount(toName, currencyOf(toName));
-  }
+  for (const _t of transfers) counts.transfers++;
 
   return {
-    byCurrency,
-    transfersByCurrency,
+    byCurrency, transfersByCurrency, byAccount, transfersByAccount,
     counts,
     unknownTypes: Object.fromEntries(unknownTypes),
     accountsSeen: Object.fromEntries(accountsSeen),
@@ -282,57 +375,112 @@ export function summariseSources({
 }
 
 /**
- * Does the transaction detail account for the Bank Summary?
+ * Are both legs of every transfer present in the transactions we pulled?
  *
- * This is the gate. Until the three sources add up to what Xero says moved,
- * nothing here is fit to replace the Cash in row — a categoriser that explains
- * 80% of the money is not a cash forecast, it is a guess with extra steps.
+ * This is the assumption the double-count fix rests on, and it is checkable
+ * exactly rather than by inference: a BankTransfer names the two bank
+ * transactions it created, in FromBankTransactionID and ToBankTransactionID.
+ * Either those ids are in the set or they are not.
  *
- * @param summary per-currency {received, spent} from the stored bank month
- * @returns per-currency expected vs detail, with the residual named
+ * June showed USD transfers OUT of 212,132 against transfers IN of 41,840 —
+ * asymmetric in a way that suggests missing legs, and this says so for certain.
  */
-export function reconcileToSummary(summarised, summary = {}, { tolerance = 1 } = {}) {
-  const currencies = new Set([
-    ...Object.keys(summarised?.byCurrency ?? {}),
-    ...Object.keys(summarised?.transfersByCurrency ?? {}),
-    ...Object.keys(summary ?? {}),
-  ]);
+export function transferLegCoverage(transfers = [], bankTransactions = []) {
+  const ids = new Set(bankTransactions.map((t) => t?.BankTransactionID).filter(Boolean));
+  let bothPresent = 0, fromOnly = 0, toOnly = 0, neither = 0;
+  const missing = [];
 
-  const rows = [];
-  for (const c of currencies) {
-    const biz = summarised?.byCurrency?.[c] ?? { in: 0, out: 0 };
-    const tr = summarised?.transfersByCurrency?.[c] ?? { in: 0, out: 0 };
-    const s = summary?.[c] ?? {};
-    const received = num(s.received);
-    const spent = num(s.spent);
-
-    const detailIn = biz.in + tr.in;
-    const detailOut = biz.out + tr.out;
-    const inResidual = received - detailIn;
-    const outResidual = spent - detailOut;
-    // A residual of a few cents is rounding; a residual of thousands is a
-    // missing source, and the difference between those two is the whole point.
-    const tol = (base) => Math.max(tolerance, Math.abs(base) * 0.001);
-
-    rows.push({
-      currency: c,
-      summaryReceived: received,
-      summarySpent: spent,
-      detailIn,
-      detailOut,
-      businessIn: biz.in,
-      businessOut: biz.out,
-      transfersIn: tr.in,
-      transfersOut: tr.out,
-      inResidual,
-      outResidual,
-      inTies: Math.abs(inResidual) <= tol(received),
-      outTies: Math.abs(outResidual) <= tol(spent),
-    });
+  for (const t of transfers) {
+    const from = t?.FromBankTransactionID;
+    const to = t?.ToBankTransactionID;
+    const hasFrom = Boolean(from && ids.has(from));
+    const hasTo = Boolean(to && ids.has(to));
+    if (hasFrom && hasTo) bothPresent++;
+    else if (hasFrom) { fromOnly++; missing.push({ side: "to", amount: num(t?.Amount) }); }
+    else if (hasTo) { toOnly++; missing.push({ side: "from", amount: num(t?.Amount) }); }
+    else { neither++; missing.push({ side: "both", amount: num(t?.Amount) }); }
   }
 
-  rows.sort((a, b) => a.currency.localeCompare(b.currency));
-  return { rows, ties: rows.every((r) => r.inTies && r.outTies) };
+  return {
+    transfers: transfers.length,
+    bothPresent, fromOnly, toOnly, neither,
+    complete: fromOnly === 0 && toOnly === 0 && neither === 0,
+    missingAmount: missing.reduce((s, m) => s + Math.abs(m.amount), 0),
+  };
+}
+
+/**
+ * Does the transaction detail account for what the Bank Summary says moved?
+ *
+ * The gate. Until the sources add up, nothing here is fit to replace the Cash in
+ * row — a categoriser that explains 80% of the money is not a cash forecast.
+ *
+ * Runs per account when the stored month carries account rows, and per currency
+ * otherwise. Per account is what makes a residual actionable: "USD is short
+ * 533,030" is not something anyone can act on; "Bali Summer USD is short
+ * 533,030" is a screen in Xero.
+ */
+export function reconcile(summarised, { byCurrency = {}, accounts = null } = {}, { tolerance = 1 } = {}) {
+  const build = (detailBiz, detailTr, expected, label) => {
+    const keys = new Set([
+      ...Object.keys(detailBiz ?? {}),
+      ...Object.keys(detailTr ?? {}),
+      ...Object.keys(expected ?? {}),
+    ]);
+    const rows = [];
+    for (const k of keys) {
+      const biz = detailBiz?.[k] ?? { in: 0, out: 0 };
+      const tr = detailTr?.[k] ?? { in: 0, out: 0 };
+      const e = expected?.[k] ?? {};
+      const received = num(e.received);
+      const spent = num(e.spent);
+      const detailIn = biz.in + tr.in;
+      const detailOut = biz.out + tr.out;
+      const inResidual = received - detailIn;
+      const outResidual = spent - detailOut;
+      // Cents are rounding. Thousands are a missing source. The gap between
+      // those two readings is the entire value of this function.
+      const tol = (base) => Math.max(tolerance, Math.abs(base) * 0.001);
+      rows.push({
+        [label]: k,
+        summaryReceived: received, summarySpent: spent,
+        detailIn, detailOut,
+        businessIn: biz.in, businessOut: biz.out,
+        transfersIn: tr.in, transfersOut: tr.out,
+        inResidual, outResidual,
+        inTies: Math.abs(inResidual) <= tol(received),
+        outTies: Math.abs(outResidual) <= tol(spent),
+      });
+    }
+    // Worst first — with nineteen accounts, the ones that tie are noise.
+    rows.sort((a, b) =>
+      Math.abs(b.inResidual) + Math.abs(b.outResidual) -
+      (Math.abs(a.inResidual) + Math.abs(a.outResidual)));
+    return rows;
+  };
+
+  const currencyRows = build(
+    summarised.byCurrency, summarised.transfersByCurrency, byCurrency, "currency");
+
+  let accountRows = null;
+  if (accounts?.length) {
+    const expected = {};
+    for (const a of accounts) {
+      if (!a?.name) continue;
+      expected[String(a.name).trim()] = { received: num(a.received), spent: num(a.spent) };
+    }
+    accountRows = build(
+      summarised.byAccount, summarised.transfersByAccount, expected, "account");
+  }
+
+  return {
+    currencyRows,
+    accountRows,
+    ties: currencyRows.every((r) => r.inTies && r.outTies),
+    worstAccounts: accountRows
+      ? accountRows.filter((r) => !r.inTies || !r.outTies).slice(0, 8)
+      : null,
+  };
 }
 
 export default {
@@ -342,9 +490,12 @@ export default {
   TRANSFER_TYPES,
   isTransfer,
   direction,
+  bankAccountIndex,
+  bankMoved,
+  transferLegCoverage,
   fetchBankTransactions,
   fetchAllPayments,
   fetchBankTransfers,
   summariseSources,
-  reconcileToSummary,
+  reconcile,
 };

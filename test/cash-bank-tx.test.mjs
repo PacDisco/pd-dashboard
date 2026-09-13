@@ -15,22 +15,50 @@ import assert from "node:assert/strict";
 import {
   direction,
   isTransfer,
+  bankMoved,
+  transferLegCoverage,
   summariseSources,
-  reconcileToSummary,
+  reconcile,
 } from "../netlify/functions/_shared/cash-bank-tx.mjs";
 
 const near = (a, b, tol, msg) =>
   assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
-// Two accounts, as Pacific Discovery has them.
-const currencyOf = (name) =>
-  /usd/i.test(String(name ?? "")) ? "USD" : "NZD";
+// Real account names and ids, in the shape the June probe returned. Pacific
+// Discovery runs nineteen bank accounts across three currencies; three is
+// enough to catch the bugs.
+const ACCOUNTS = [
+  { id: "id-bnz", name: "BNZ Pacific Discovery (BNZ Current Account)", currency: "NZD" },
+  { id: "id-wise-us", name: "Wise US Account", currency: "USD" },
+  { id: "id-wise-au", name: "Wise Aus Account", currency: "AUD" },
+];
+const byId = new Map(ACCOUNTS.map((a) => [a.id, a]));
+const byName = new Map(ACCOUNTS.map((a) => [a.name.toLowerCase(), a]));
+const accounts = {
+  byId, byName, size: byId.size,
+  resolve(ref = {}) {
+    const hit = (ref.AccountID && byId.get(ref.AccountID)) ||
+      (ref.Name && byName.get(String(ref.Name).trim().toLowerCase())) || null;
+    return {
+      name: hit?.name ?? (ref.Name ? String(ref.Name).trim() : "(unknown account)"),
+      currency: hit?.currency ?? ref.CurrencyCode ?? "NZD",
+    };
+  },
+};
+const NZD = ACCOUNTS[0], USD = ACCOUNTS[1], AUD = ACCOUNTS[2];
 
-const tx = (Type, Total, account = "PD NZD Cheque", extra = {}) => ({
-  Type, Total, BankAccount: { Name: account }, ...extra,
+// A BankTransaction names its account AND states its own currency.
+const tx = (Type, Total, acct = NZD, extra = {}) => ({
+  BankTransactionID: `tx-${Math.random().toString(36).slice(2)}`,
+  Type, Total, CurrencyCode: acct.currency,
+  BankAccount: { Name: acct.name, AccountID: acct.id }, ...extra,
 });
-const pay = (PaymentType, Amount, account = "PD NZD Cheque", extra = {}) => ({
-  PaymentType, Amount, Account: { Name: account }, ...extra,
+
+// A Payment's Account carries AccountID and CurrencyCode but NO Name — the
+// exact shape that made the first pass file every USD receipt as NZD.
+const pay = (PaymentType, BankAmount, acct = NZD, extra = {}) => ({
+  PaymentType, BankAmount,
+  Account: { AccountID: acct.id, CurrencyCode: acct.currency }, ...extra,
 });
 
 /* ---------- direction and transfers ---------- */
@@ -60,9 +88,9 @@ const pay = (PaymentType, Amount, account = "PD NZD Cheque", extra = {}) => ({
       tx("RECEIVE", 5_000),                              // real money in, NZD
       tx("SPEND", 2_000),                                // real money out, NZD
       tx("RECEIVE-TRANSFER", 80_000),                    // conversion landing in NZD
-      tx("SPEND-TRANSFER", 50_000, "PD USD Account"),    // the other leg, in USD
+      tx("SPEND-TRANSFER", 50_000, USD),    // the other leg, in USD
     ],
-    currencyOf,
+    accounts,
   });
 
   near(s.byCurrency.NZD.in, 5_000, 0.01, "the conversion is not business cash in");
@@ -83,9 +111,9 @@ const pay = (PaymentType, Amount, account = "PD NZD Cheque", extra = {}) => ({
       pay("ACCPAYPAYMENT", 3_000),                                  // supplier
       // A USD invoice paid into the USD account: Amount is in the INVOICE's
       // currency, CurrencyRate converts it to what the bank moved.
-      pay("ACCRECPAYMENT", 10_000, "PD USD Account", { CurrencyRate: 1 }),
+      pay("ACCRECPAYMENT", 10_000, USD),
     ],
-    currencyOf,
+    accounts,
   });
 
   near(s.byCurrency.NZD.in, 10_000, 0.01, "bank receipts and AR payments both count as in");
@@ -97,10 +125,104 @@ const pay = (PaymentType, Amount, account = "PD NZD Cheque", extra = {}) => ({
 
   // A payment type nobody anticipated must be reported, not silently dropped
   // into one side or the other.
-  const odd = summariseSources({ payments: [pay("ARCREDITPAYMENT", 500)], currencyOf });
+  const odd = summariseSources({ payments: [pay("ACCRECSOMETHINGNEW", 500)], accounts });
   assert.equal(odd.counts.payments, 0, "an unrecognised payment type moves no money");
-  assert.ok(odd.unknownTypes.ARCREDITPAYMENT, "and is named in the report");
+  assert.ok(odd.unknownTypes.ACCRECSOMETHINGNEW, "and is named in the report");
+  // Deliberately a type that BEGINS with ACCREC. Prefix matching would have
+  // banked this as cash in without a murmur; the explicit pair does not.
   console.log("✓ an unrecognised payment type is surfaced rather than bucketed");
+}
+
+/* ---------- THE THREE THINGS THE REAL JUNE DATA CORRECTED ---------- */
+
+{
+  // 1. A Payment's Account has AccountID and CurrencyCode but NO Name.
+  //
+  // The first pass looked up currency by account NAME, so every payment
+  // resolved to undefined and fell back to the base currency. June's USD
+  // receipts were filed as NZD: NZD over by 162,403, USD short by 533,030.
+  const s = summariseSources({
+    payments: [pay("ACCRECPAYMENT", 100_000, USD)],
+    accounts,
+  });
+  near(s.byCurrency.USD?.in ?? 0, 100_000, 0.01, "a USD payment lands in USD");
+  assert.equal(s.byCurrency.NZD, undefined, "and NOT in the base currency");
+  assert.ok(s.byAccount["Wise US Account"], "and is attributed to the named account");
+  console.log("✓ a payment's account resolves by id, because it carries no name");
+}
+
+{
+  // 2. BankAmount, not Amount × CurrencyRate.
+  //
+  // June's sample payment carried CurrencyRate 0.592969 on a USD payment
+  // against an NZD base — that is USD-per-NZD, the inverse of the obvious
+  // reading. Multiplying by it would have quietly roughly halved every
+  // cross-currency receipt, in the direction that looks plausible.
+  const p = { PaymentType: "ACCRECPAYMENT", Amount: 8_430, BankAmount: 5_000, CurrencyRate: 0.592969 };
+  const moved = bankMoved(p);
+  near(moved.amount, 5_000, 0.01, "the bank figure is used as given");
+  assert.equal(moved.field, "BankAmount");
+  assert.notEqual(Math.round(moved.amount), Math.round(8_430 * 0.592969),
+    "and is NOT Amount times the rate, which is the trap");
+
+  // Same-currency payments may carry no BankAmount; then Amount is the bank figure.
+  const same = bankMoved({ PaymentType: "ACCRECPAYMENT", Amount: 2_500 });
+  near(same.amount, 2_500, 0.01, "falling back to Amount when there is no BankAmount");
+  assert.equal(same.field, "Amount");
+  console.log("✓ the bank-side amount is taken, never reconstructed from a rate");
+}
+
+{
+  // 3. Credit note allocations move no money.
+  //
+  // June returned five ARCREDITPAYMENTs. A credit note applied to an invoice
+  // reduces what is owed; nothing reaches the bank. Counting them would
+  // overstate cash in by their value.
+  const s = summariseSources({
+    payments: [
+      pay("ACCRECPAYMENT", 9_000),
+      pay("ARCREDITPAYMENT", 1_500),
+      pay("APCREDITPAYMENT", 800),
+      // The money for this arrived earlier as a RECEIVE-OVERPAYMENT bank
+      // transaction — which June's probe shows Pacific Discovery does use. This
+      // record is only its allocation to an invoice.
+      pay("AROVERPAYMENTPAYMENT", 2_200),
+    ],
+    accounts,
+  });
+  near(s.byCurrency.NZD.in, 9_000, 0.01, "only the real receipt counts");
+  assert.equal(s.counts.allocations, 3, "and the allocations are counted, not hidden");
+  assert.equal(s.unknownTypes.ARCREDITPAYMENT, undefined,
+    "they are a known decision, not an unrecognised type");
+  console.log("✓ credit note allocations are excluded deliberately and reported");
+}
+
+/* ---------- are both legs of every transfer actually present? ---------- */
+
+{
+  // June showed USD transfers OUT of 212,132 against IN of 41,840. Either the
+  // legs are genuinely lopsided or BankTransactions did not return them all,
+  // and a BankTransfer names both transactions it created — so this is a set
+  // membership test, not an inference.
+  const legA = tx("SPEND-TRANSFER", 50_000, USD);
+  const legB = tx("RECEIVE-TRANSFER", 80_000, NZD);
+  const orphan = { BankTransferID: "bt-2", Amount: 12_000,
+    FromBankTransactionID: "tx-missing-a", ToBankTransactionID: "tx-missing-b" };
+
+  const complete = transferLegCoverage(
+    [{ BankTransferID: "bt-1", Amount: 50_000,
+       FromBankTransactionID: legA.BankTransactionID,
+       ToBankTransactionID: legB.BankTransactionID }],
+    [legA, legB],
+  );
+  assert.equal(complete.complete, true, "both legs present");
+  assert.equal(complete.bothPresent, 1);
+
+  const short = transferLegCoverage([orphan], [legA, legB]);
+  assert.equal(short.complete, false, "a transfer whose legs are absent is flagged");
+  assert.equal(short.neither, 1);
+  near(short.missingAmount, 12_000, 0.01, "and the amount at stake is named");
+  console.log("✓ transfer legs are checked by id rather than assumed");
 }
 
 /* ---------- the gate ---------- */
@@ -109,13 +231,13 @@ const pay = (PaymentType, Amount, account = "PD NZD Cheque", extra = {}) => ({
   const summarised = summariseSources({
     bankTransactions: [tx("RECEIVE", 1_000), tx("RECEIVE-TRANSFER", 80_000)],
     payments: [pay("ACCRECPAYMENT", 9_000), pay("ACCPAYPAYMENT", 3_000)],
-    currencyOf,
+    accounts,
   });
 
   // Xero says 90,000 received and 3,000 spent. The detail accounts for both.
-  const good = reconcileToSummary(summarised, { NZD: { received: 90_000, spent: 3_000 } });
+  const good = reconcile(summarised, { byCurrency: { NZD: { received: 90_000, spent: 3_000 } } });
   assert.equal(good.ties, true, "detail that adds up ties");
-  const row = good.rows.find((r) => r.currency === "NZD");
+  const row = good.currencyRows.find((r) => r.currency === "NZD");
   near(row.businessIn, 10_000, 0.01, "business cash in excludes the conversion");
   near(row.detailIn, 90_000, 0.01, "while the reconciliation includes it, so it can tie");
   near(row.transfersIn, 80_000, 0.01);
@@ -124,27 +246,27 @@ const pay = (PaymentType, Amount, account = "PD NZD Cheque", extra = {}) => ({
   // never pulled, the detail is short by 6,000 and MUST NOT pass.
   const missing = summariseSources({
     bankTransactions: [tx("RECEIVE", 1_000), tx("RECEIVE-TRANSFER", 80_000)],
-    currencyOf,
+    accounts,
   });
-  const bad = reconcileToSummary(missing, { NZD: { received: 90_000, spent: 3_000 } });
+  const bad = reconcile(missing, { byCurrency: { NZD: { received: 90_000, spent: 3_000 } } });
   assert.equal(bad.ties, false, "a missing source must fail the gate");
-  const badRow = bad.rows.find((r) => r.currency === "NZD");
+  const badRow = bad.currencyRows.find((r) => r.currency === "NZD");
   near(badRow.inResidual, 9_000, 0.01, "and the residual says exactly how much is unexplained");
   near(badRow.outResidual, 3_000, 0.01);
   console.log("✓ detail that does not account for the bank summary fails, with the gap named");
 
   // Cents are rounding, not a missing source.
-  const rounding = reconcileToSummary(summarised, { NZD: { received: 90_000.4, spent: 2_999.7 } });
+  const rounding = reconcile(summarised, { byCurrency: { NZD: { received: 90_000.4, spent: 2_999.7 } } });
   assert.equal(rounding.ties, true, "sub-dollar differences are rounding");
   console.log("✓ rounding does not trip the gate");
 
   // A currency present in the summary but absent from the detail is the
   // silent-hole case — it must appear as a row, not vanish.
-  const oneSided = reconcileToSummary(summarised, {
+  const oneSided = reconcile(summarised, { byCurrency: {
     NZD: { received: 90_000, spent: 3_000 },
     USD: { received: 412_523, spent: 0 },
-  });
-  assert.ok(oneSided.rows.some((r) => r.currency === "USD"), "a currency with no detail still reports");
+  } });
+  assert.ok(oneSided.currencyRows.some((r) => r.currency === "USD"), "a currency with no detail still reports");
   assert.equal(oneSided.ties, false, "and fails, because 412,523 is unexplained");
   console.log("✓ a currency with no transaction detail is a failure, not an omission");
 }
@@ -152,8 +274,8 @@ const pay = (PaymentType, Amount, account = "PD NZD Cheque", extra = {}) => ({
 /* ---------- nothing at all ---------- */
 
 {
-  const empty = reconcileToSummary(summariseSources({}), {});
-  assert.deepEqual(empty.rows, [], "no data produces no rows");
+  const empty = reconcile(summariseSources({}), {});
+  assert.deepEqual(empty.currencyRows, [], "no data produces no rows");
   assert.equal(empty.ties, true, "and vacuously ties — the caller checks the counts");
   console.log("✓ an empty month does not throw");
 }

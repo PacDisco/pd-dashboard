@@ -20,14 +20,16 @@
 
 import { requireCashRole, json } from "./_shared/cash-access.mjs";
 import {
-  getAccessToken, getConnections, xeroGet, getBankAccountCurrencies,
+  getAccessToken, getConnections, xeroGet,
 } from "./_shared/cash-xero.mjs";
 import {
   fetchBankTransactions,
   fetchAllPayments,
   fetchBankTransfers,
+  bankAccountIndex,
+  transferLegCoverage,
   summariseSources,
-  reconcileToSummary,
+  reconcile,
 } from "./_shared/cash-bank-tx.mjs";
 import { loadAssumptions, currentFiscalYear, resolveOpeningBalances } from "./_shared/cash-store.mjs";
 import {
@@ -153,7 +155,7 @@ export default async (req) => {
       const org = (pinned.length ? all.filter((c) => pinned.includes(c.tenantId)) : all)[0];
       if (!org) return json({ error: "No Xero organisation connected." }, 409);
 
-      const currencyOf = await getBankAccountCurrencies(token, org.tenantId, "NZD");
+      const accounts = await bankAccountIndex(token, org.tenantId, "NZD");
       const [{ bankTransactions, truncated: txTrunc },
              { payments, truncated: payTrunc },
              transferResult] = await Promise.all([
@@ -166,7 +168,7 @@ export default async (req) => {
         bankTransactions,
         payments,
         transfers: transferResult.transfers,
-        currencyOf,
+        accounts,
       });
 
       // Compared against the SAME stored month the forecast reads, not a fresh
@@ -174,17 +176,22 @@ export default async (req) => {
       const { getStore } = await import("@netlify/blobs");
       const stored = await getStore({ name: "cash-xero-months" })
         .get(`${org.tenantId}/${month}`, { type: "json" });
-      const reconciliation = reconcileToSummary(summarised, stored?.byCurrency ?? {});
+      const reconciliation = reconcile(summarised, {
+        byCurrency: stored?.byCurrency ?? {},
+        accounts: stored?.accounts ?? null,
+      });
 
-      // Line items are where the categorisation will have to come from, and
-      // whether the LIST endpoint returns them at all decides whether this is
-      // one call a month or one call per transaction. Worth knowing now.
+      // Exact, not inferred: a BankTransfer names the two bank transactions it
+      // created, so whether both legs came back is a set membership test.
+      const legs = transferLegCoverage(transferResult.transfers, bankTransactions);
+
       const sampleTx = bankTransactions[0];
       const samplePayment = payments[0];
 
       return json({
         month,
         organisation: org.tenantName,
+        bankAccountsKnown: accounts.size,
         counts: {
           bankTransactions: bankTransactions.length,
           payments: payments.length,
@@ -196,27 +203,30 @@ export default async (req) => {
           ? "available"
           : `unavailable: ${transferResult.error ?? "unknown"}`,
 
-        // THE ANSWER. Anything with inTies/outTies false means a source is
-        // missing and the rebuild is not safe to proceed on yet.
-        reconciliation,
+        // THE ANSWER. currencyRows is the verdict; worstAccounts says WHERE,
+        // which with nineteen bank accounts is the only actionable form.
+        reconciliation: {
+          ties: reconciliation.ties,
+          currencyRows: reconciliation.currencyRows,
+          worstAccounts: reconciliation.worstAccounts,
+        },
+        transferLegs: legs,
         storedMonthPresent: Boolean(stored),
+        storedAccountRows: stored?.accounts?.length ?? 0,
 
-        // Business movement with the organisation's own transfers taken out —
-        // what Cash in and Cash out would become.
         businessMovement: summarised.byCurrency,
         ownTransfers: summarised.transfersByCurrency,
 
         typesSeen: [...new Set(bankTransactions.map((t) => t?.Type).filter(Boolean))],
+        paymentTypesSeen: [...new Set(payments.map((p) => p?.PaymentType).filter(Boolean))],
         unknownTypes: summarised.unknownTypes,
         bankAccountsSeen: summarised.accountsSeen,
 
-        // Field names only, so the categoriser is written against the real
-        // shape instead of the documented one.
-        sampleBankTransactionShape: shapeOf(sampleTx, ["Type", "CurrencyCode", "CurrencyRate", "IsReconciled"]),
+        sampleBankTransactionShape: shapeOf(sampleTx, ["Type", "CurrencyCode", "CurrencyRate"]),
         bankTransactionHasLineItems: Array.isArray(sampleTx?.LineItems),
         sampleLineItemShape: shapeOf(sampleTx?.LineItems?.[0], ["AccountCode"]),
         samplePaymentShape: shapeOf(samplePayment, ["PaymentType", "CurrencyRate"]),
-        samplePaymentAccountShape: shapeOf(samplePayment?.Account, ["Code"]),
+        sampleTransferShape: shapeOf(transferResult.transfers?.[0], ["Amount", "CurrencyRate"]),
       });
     } catch (err) {
       console.error(`[cash-xero-probe banktx] ${err.message}`);
