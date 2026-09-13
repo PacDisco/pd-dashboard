@@ -70,6 +70,9 @@ async function boot() {
     state.effectiveRate = data.effectiveRate ?? null;
     state.canEdit = data.canEdit;
     state.serverForecast = data.forecast ?? null;
+    // What the server fed the engine for closed months, so the browser can run
+    // the identical chain instead of splicing two incompatible ones together.
+    state.actualsByMonth = data.actualsByMonth ?? {};
     state.forecastOnly = data.forecastOnly ?? null;
     state.email = data.email;
   } catch (err) {
@@ -157,12 +160,49 @@ function effectiveAssumptions() {
   };
 }
 
+/**
+ * The forecast to display.
+ *
+ * THE BUG THIS FIXES, because it was subtle and expensive.
+ *
+ * The browser recomputes locally for instant feedback while editing, and
+ * `withServerActuals` then splices the server's closed months over the top. But
+ * a spliced table is TWO RUNS JOINED AT A SEAM, and balances do not carry across
+ * a seam. April to August came from the server's chain, which had the real Xero
+ * figures; September onward came from a local chain that never saw them and had
+ * therefore already spent its USD somewhere else entirely.
+ *
+ * The visible symptom: August closed with 229,675 USD and September opened with
+ * none of it — converting only its own receipts, month after month, with the
+ * USD balance pinned at zero. About 394,000 NZD of cover simply absent from the
+ * forecast, and the NZD account roughly that much worse than it should be from
+ * September on.
+ *
+ * `withServerActuals` half-knew this: it marks the tail `provisional` — but only
+ * when `state.dirty`. Sitting and reading the page, dirty is false, so the tail
+ * was presented as re-based when it was nothing of the kind.
+ *
+ * So: when not editing, show the SERVER's forecast. It ran this same engine with
+ * the real actuals in one unbroken chain, which is the only way the balances can
+ * be right. The local splice stays for live editing, where an instantly wrong
+ * tail clearly labelled provisional beats a correct one that arrives a second
+ * after each keystroke.
+ */
+function displayForecast() {
+  if (!state.dirty && state.serverForecast) return state.serverForecast;
+  // While editing, run the SAME chain the server runs — same engine, same
+  // actuals — so the live preview differs from the saved forecast only by the
+  // edit in progress, never by a seam. Falls back to the splice for an older
+  // server that does not send the monthly actuals.
+  const actuals = state.actualsByMonth;
+  if (actuals && Object.keys(actuals).length) {
+    return buildForecast(effectiveAssumptions(), actuals);
+  }
+  return withServerActuals(buildForecast(effectiveAssumptions()));
+}
+
 function render() {
-  // The browser recomputes for instant feedback while editing, but it does not
-  // hold the Xero monthly figures — so a locked month would silently revert to
-  // forecast here. Recompute only the forecast side and splice the server's
-  // actual months back over the top.
-  const f = withServerActuals(buildForecast(effectiveAssumptions()));
+  const f = displayForecast();
   el("app").innerHTML = `
     ${topBar(f)}
     ${emptyState()}

@@ -139,6 +139,22 @@ export default async (req) => {
     forecastOnly,
     actualMonthsAvailable: closable,
     partialMonth,
+    // The three fields the engine reads from a closed month, and nothing else.
+    //
+    // Without these the browser cannot run the same chain the server ran: its
+    // local recompute would start from April with no actuals, spend its USD
+    // differently, and hand the forecast tail an opening balance that never
+    // existed. The table then shows two runs joined at the lock boundary, and
+    // balances do not carry across a join — August closed with 229,675 USD and
+    // September opened with none of it.
+    //
+    // Trimmed rather than passed whole: the full record carries nineteen bank
+    // account rows per month that nothing on the client reads.
+    actualsByMonth: Object.fromEntries(Object.entries(actualsByMonth).map(([k, m]) => [k, {
+      byCurrency: m.byCurrency ?? {},
+      source: m.source ?? null,
+      partial: m.partial ?? false,
+    }])),
     overheads: {
       months: overheads.months,
       sources: overheads.sources,
