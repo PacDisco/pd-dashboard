@@ -211,9 +211,83 @@ function cellValue(cell) {
  * BankSummary → closing balance per bank account, plus the total.
  * Columns are: Account | Opening | Cash Received | Cash Spent | Closing.
  */
+/**
+ * Which column is which in a Bank Summary.
+ *
+ * THE BUG THIS EXISTS BECAUSE OF
+ * ------------------------------
+ * The columns used to be read by fixed index: 1 opening, 2 received, 3 spent,
+ * 4 closing. That is the layout Xero returns for an organisation whose bank
+ * accounts are all in the base currency. Add a foreign-currency account and
+ * Xero inserts an "FX Gain" column BEFORE the closing balance, so index 4 stops
+ * being the closing balance and becomes the revaluation.
+ *
+ * The symptom was unmistakable once the reconcile guard started printing both
+ * figures: every NZD account reported a closing balance of exactly 0, because a
+ * base-currency account has no FX gain, while the USD accounts reported -87,
+ * -258, 3,241, -6,470 and -1,785 — revaluation-sized numbers where hundreds of
+ * thousands should be. Five months of balances came from the guard's derived
+ * fallback rather than from Xero.
+ *
+ * So columns are resolved by their HEADER TITLE. Xero can add, remove or
+ * reorder a column and this keeps working; if the headers cannot be read at all
+ * it falls back to the old indices with closing taken from the LAST cell, which
+ * is right in both layouts.
+ */
+/**
+ * Bumped when a change here would give different figures for a month already
+ * fetched and stored. Closed months are cached forever, so the cache is the
+ * last thing holding old wrong numbers when a parser is fixed.
+ *
+ * History:
+ *   1  fixed column indices; closing read from column 4.
+ *   2  columns resolved by header title, FX gain captured. Column 4 is the
+ *      revaluation whenever a foreign-currency bank account exists, so every
+ *      month stored under version 1 has wrong closing balances.
+ */
+export const BANKSUMMARY_PARSER_VERSION = 2;
+
+export function bankSummaryColumns(report) {
+    const rows = report?.Reports?.[0]?.Rows ?? [];
+    const header = rows.find((r) => r.RowType === "Header");
+    const titles = (header?.Cells ?? []).map((c) => String(c?.Value ?? "").trim());
+
+    const find = (re) => {
+        const i = titles.findIndex((t) => re.test(t));
+        return i > 0 ? i : null;   // never column 0, which is the account name
+    };
+
+    const cols = {
+        opening: find(/opening/i),
+        received: find(/received/i),
+        spent: find(/spent/i),
+        fxGain: find(/\b(fx|foreign|currency)\b.*\bgain/i) ?? find(/^fx gain/i),
+        closing: find(/closing/i),
+        resolvedFromHeader: titles.length > 1,
+        titles,
+    };
+
+    // No usable header: assume the classic layout, but take closing from the
+    // last cell rather than a fixed 4 — that is correct whether or not the FX
+    // column is present.
+    if (cols.opening === null && cols.received === null && cols.closing === null) {
+        return { opening: 1, received: 2, spent: 3, fxGain: null, closing: -1,
+                 resolvedFromHeader: false, titles };
+    }
+    return cols;
+}
+
 export function parseBankSummary(report) {
     const rows = report?.Reports?.[0]?.Rows ?? [];
+    const cols = bankSummaryColumns(report);
     const accounts = [];
+
+    const at = (cells, index) => {
+        if (index === null || index === undefined) return 0;
+        const i = index < 0 ? cells.length + index : index;
+        return cellValue(cells[i]);
+    };
+
     for (const section of rows) {
         if (section.RowType !== "Section")
             continue;
@@ -226,10 +300,15 @@ export function parseBankSummary(report) {
                 continue;
             accounts.push({
                 name,
-                opening: cellValue(cells[1]),
-                received: cellValue(cells[2]),
-                spent: cellValue(cells[3]),
-                closing: cellValue(cells[4]),
+                opening: at(cells, cols.opening),
+                received: at(cells, cols.received),
+                spent: at(cells, cols.spent),
+                // Kept rather than discarded: it is the reason opening plus
+                // receipts less payments does not equal closing on a foreign
+                // currency account, and the reconcile guard needs it to tell a
+                // revaluation from a parse failure.
+                fxGain: at(cells, cols.fxGain),
+                closing: at(cells, cols.closing),
                 isTotal: row.RowType === "SummaryRow",
             });
         }
@@ -242,6 +321,7 @@ export function parseBankSummary(report) {
     return {
         accounts: detail.map(({ isTotal, ...rest }) => rest),
         totalClosing,
+        columns: cols,
     };
 }
 /**
@@ -437,18 +517,23 @@ export async function fetchMonthActuals(accessToken, tenantId, key, accountCurre
     const byCurrency = {};
     for (const acc of parsed.accounts) {
         const cur = accountCurrency(acc.name);
-        const c = (byCurrency[cur] ||= { received: 0, spent: 0, closing: 0, opening: 0 });
+        const c = (byCurrency[cur] ||= { received: 0, spent: 0, closing: 0, opening: 0, fxGain: 0 });
         c.opening += acc.opening;
         c.received += acc.received;
         // Xero reports "Cash Spent" as a positive magnitude in this column.
         c.spent += Math.abs(acc.spent);
+        c.fxGain += acc.fxGain ?? 0;
         c.closing += acc.closing;
     }
 
     return {
         month: key,
+        parserVersion: BANKSUMMARY_PARSER_VERSION,
         byCurrency,
         accounts: parsed.accounts,
+        // Which layout Xero returned, so a future column change is diagnosable
+        // from the stored month rather than by re-deriving it from symptoms.
+        columns: parsed.columns,
         partial,
         source: "Xero Bank Summary",
         fetchedAt: new Date().toISOString(),
@@ -473,4 +558,11 @@ export async function getBankAccountCurrencies(accessToken, tenantId, baseCurren
         // currency. Better a stated assumption than a guessed split.
     }
     return (name) => map.get(String(name).trim().toLowerCase()) || baseCurrency;
+}
+
+/** Is a stored bank month still one this parser would produce? See cash-opex. */
+export function isMonthRecordCurrent(record, version = BANKSUMMARY_PARSER_VERSION) {
+    if (!record) return false;
+    const stored = Number(record.parserVersion ?? 1);
+    return Number.isFinite(stored) && stored >= version;
 }

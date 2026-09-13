@@ -212,3 +212,94 @@ const typed = { openingBalances: { NZD: -501_125, USD: 0 }, openingBalanceSource
 }
 
 console.log("\nAll opening balance tests passed.");
+
+/* ================================================================== *
+ * THE FX GAIN COLUMN
+ *
+ * Xero's Bank Summary has four value columns for an organisation whose bank
+ * accounts are all in the base currency, and FIVE when any account is foreign:
+ * an "FX Gain" column is inserted BEFORE the closing balance.
+ *
+ * The parser read column 4 as closing. With foreign accounts present that is
+ * the revaluation, so every NZD account reported a closing balance of exactly
+ * zero (a base-currency account has no revaluation) and the USD accounts
+ * reported -87, -258, 3,241, -6,470 and -1,785 where hundreds of thousands
+ * belonged. Five months of balances came from a fallback rather than from Xero,
+ * and the only reason anyone noticed was a guard printing both figures.
+ * ================================================================== */
+
+import { bankSummaryColumns } from "../netlify/functions/_shared/cash-xero.mjs";
+
+const near = (a, b, tol, msg) =>
+  assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+
+const cell = (v) => ({ Value: v });
+const summaryReport = (titles, rows) => ({
+  Reports: [{
+    ReportName: "BankSummary",
+    Rows: [
+      { RowType: "Header", Cells: titles.map(cell) },
+      { RowType: "Section", Title: "", Rows: rows },
+    ],
+  }],
+});
+const acct = (...values) => ({ RowType: "Row", Cells: values.map(cell) });
+
+{
+  // The five-column layout, which is what Pacific Discovery actually returns.
+  const report = summaryReport(
+    ["Bank Accounts", "Opening Balance", "Cash Received", "Cash Spent", "FX Gain", "Closing Balance"],
+    [
+      acct("BNZ Pacific Discovery", "-103207.00", "885907.00", "806470.00", "0.00", "-23770.00"),
+      acct("Wise US Account", "175739.00", "412523.00", "358587.00", "-1785.00", "227890.00"),
+    ],
+  );
+
+  const cols = bankSummaryColumns(report);
+  assert.equal(cols.closing, 5, "closing is the sixth column, not the fifth");
+  assert.equal(cols.fxGain, 4, "and the fifth is the revaluation");
+  assert.ok(cols.resolvedFromHeader, "resolved from the header, not assumed");
+
+  const parsed = parseBankSummary(report);
+  const usd = parsed.accounts.find((a) => /Wise US/.test(a.name));
+  near(usd.closing, 227_890, 0.01, "the USD account's real closing balance");
+  near(usd.fxGain, -1_785, 0.01, "with the revaluation kept, not discarded");
+  // The precise old failure: 4 was read as closing.
+  assert.notEqual(Math.round(usd.closing), -1_785,
+    "reading the FX column as closing is the bug, not the behaviour");
+
+  const nzd = parsed.accounts.find((a) => /BNZ/.test(a.name));
+  near(nzd.closing, -23_770, 0.01, "and a base-currency account is unaffected");
+  near(nzd.fxGain, 0, 0.01, "carrying no revaluation");
+  console.log("✓ the FX gain column is identified and does not masquerade as closing");
+}
+
+{
+  // The four-column layout must still parse — an org with no foreign accounts.
+  const report = summaryReport(
+    ["Bank Accounts", "Opening Balance", "Cash Received", "Cash Spent", "Closing Balance"],
+    [acct("BNZ Current", "1000.00", "5000.00", "2000.00", "4000.00")],
+  );
+  const parsed = parseBankSummary(report);
+  near(parsed.accounts[0].closing, 4_000, 0.01, "closing is the fifth column here");
+  near(parsed.accounts[0].fxGain, 0, 0.01, "and there is no revaluation column");
+  console.log("✓ the four-column layout still parses correctly");
+}
+
+{
+  // No header at all: fall back to the LAST cell for closing, which is right in
+  // both layouts — unlike a hardcoded 4, which is right in only one.
+  const noHeader = {
+    Reports: [{ Rows: [{ RowType: "Section", Rows: [
+      acct("Wise US Account", "175739.00", "412523.00", "358587.00", "-1785.00", "227890.00"),
+    ] }] }],
+  };
+  const cols = bankSummaryColumns(noHeader);
+  assert.equal(cols.resolvedFromHeader, false, "nothing to resolve from");
+  const parsed = parseBankSummary(noHeader);
+  near(parsed.accounts[0].closing, 227_890, 0.01,
+    "the last column is still the closing balance");
+  console.log("✓ with no header, the last column is taken rather than a fixed index");
+}
+
+console.log("\nAll bank summary column tests passed.");

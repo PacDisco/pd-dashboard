@@ -478,14 +478,28 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             // received and spent all looked right, and only closing was wrong.
             // Either way it is said out loud rather than shown as a confident
             // number.
+            // FX GAIN IS PART OF THE IDENTITY, not noise.
+            //
+            // A foreign-currency bank account's closing balance is opening plus
+            // receipts less payments PLUS the revaluation Xero books when the
+            // rate moves. Leaving it out made every USD month fail this check by
+            // the size of the revaluation even once the columns were read
+            // correctly — and a guard that cries wolf every month is a guard
+            // nobody reads. Base-currency accounts carry zero here, so the
+            // identity is unchanged for them.
             const reconcile = (cur, side, running, inn, out) => {
                 const stored = side.closing;
-                const derived = (Number.isFinite(side.opening) ? side.opening : running) + inn - out;
+                const fxGain = Number.isFinite(side.fxGain) ? side.fxGain : 0;
+                const derived = (Number.isFinite(side.opening) ? side.opening : running)
+                    + inn - out + fxGain;
                 if (stored === null || stored === undefined) return derived;
                 // Tolerate cents, not thousands.
                 const tolerance = Math.max(1, Math.abs(inn) * 0.005);
                 if (Math.abs(stored - derived) > tolerance) {
-                    warnings.push(`${row.label}: the ${cur} bank summary does not add up — closing ${Math.round(stored).toLocaleString("en-NZ")} against opening plus receipts less payments of ${Math.round(derived).toLocaleString("en-NZ")}. The report is not being read correctly, so this month's balances cannot be trusted. Unlock it until this is fixed.`);
+                    const fxNote = fxGain
+                        ? ` (including ${Math.round(fxGain).toLocaleString("en-NZ")} of revaluation)`
+                        : "";
+                    warnings.push(`${row.label}: the ${cur} bank summary does not add up — closing ${Math.round(stored).toLocaleString("en-NZ")} against opening plus receipts less payments of ${Math.round(derived).toLocaleString("en-NZ")}${fxNote}. The report is not being read correctly, so this month's balances cannot be trusted. Unlock it until this is fixed.`);
                     return derived;
                 }
                 return stored;

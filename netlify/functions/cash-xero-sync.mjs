@@ -17,6 +17,7 @@ import {
   monthBounds, iso,
   fiscalMonthKeys, fetchMonthActuals, getBankAccountCurrencies,
   getTrackingCategories, pickProgramCategory, getTrackedActuals, fiscalYearBounds,
+  isMonthRecordCurrent, BANKSUMMARY_PARSER_VERSION,
 } from "./_shared/cash-xero.mjs";
 import { fetchMonthOpex, isOpexRecordCurrent, OPEX_PARSER_VERSION } from "./_shared/cash-opex.mjs";
 import { listBudgets, fetchBudget, accountIndex, overheadsFromBudget } from "./_shared/cash-budget.mjs";
@@ -114,6 +115,7 @@ export default async (_req, _context) => {
   const primary = connections[0];
   let monthsFetched = 0;
   let monthsCached = 0;
+  let monthsRestated = 0;
 
   if (primary) {
     try {
@@ -123,9 +125,15 @@ export default async (_req, _context) => {
 
       for (const key of keys) {
         const blobKey = `${primary.tenantId}/${key}`;
-        if (!alwaysRefresh.includes(key) && (await monthStore.get(blobKey))) {
-          monthsCached++;
-          continue;
+        if (!alwaysRefresh.includes(key)) {
+          const stored = await monthStore.get(blobKey, { type: "json" });
+          if (isMonthRecordCurrent(stored)) {
+            monthsCached++;
+            continue;
+          }
+          // Cached, but read by a parser that took the FX gain column for the
+          // closing balance. Refetch rather than leave wrong balances in place.
+          if (stored) monthsRestated++;
         }
         const actuals = await fetchMonthActuals(token, primary.tenantId, key, currency);
         await monthStore.setJSON(blobKey, actuals);
@@ -244,7 +252,7 @@ export default async (_req, _context) => {
         `ok=${orgs.filter((o) => !o.error).length} ` +
         `errors=${payload.errors.length} ` +
         `tokenDays=${health?.daysRemaining ?? "?"} ` +
-        `months=${monthsFetched}fetched/${monthsCached}cached ` +
+        `months=${monthsFetched}fetched/${monthsCached}cached/${monthsRestated}restated(v${BANKSUMMARY_PARSER_VERSION}) ` +
         `opex=${opexFetched}fetched/${opexCached}cached/${opexRestated}restated(v${OPEX_PARSER_VERSION}) ` +
         `budgetAccounts=${budgetLines} ` +
         `durationMs=${payload.durationMs} ` +
