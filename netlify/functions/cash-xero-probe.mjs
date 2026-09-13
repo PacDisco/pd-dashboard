@@ -21,6 +21,8 @@
 import { requireCashRole, json } from "./_shared/cash-access.mjs";
 import {
   getAccessToken, getConnections, xeroGet,
+  parseBankSummary, bankSummaryColumns, monthRange,
+  isMonthRecordCurrent, BANKSUMMARY_PARSER_VERSION,
 } from "./_shared/cash-xero.mjs";
 import {
   fetchBankTransactions,
@@ -83,8 +85,60 @@ async function bankReport(fy, month) {
   const fxCur = assumptions.settlementCurrency || "USD";
   const b = record?.byCurrency ?? {};
 
+  /* A LIVE pull as well as the stored one.
+   *
+   * The stored blob is what the forecast reads, and it only changes when the
+   * hourly sync rewrites it — so after a parser fix the warnings persist until
+   * that runs, and there is no way to tell "fix not deployed" from "fix
+   * deployed, cache not yet refreshed" by looking at the dashboard.
+   *
+   * More importantly: the FX-gain diagnosis was made from symptoms — NZD
+   * closing exactly zero, USD closing revaluation-sized — and NOT from seeing
+   * Xero's header row. Printing the actual column titles is what turns that
+   * from a good inference into a fact. */
+  let live = null;
+  try {
+    const token = await getAccessToken();
+    const { from, to } = monthRange(month);
+    const report = await xeroGet(token, tenantId, "Reports/BankSummary", { fromDate: from, toDate: to });
+    const cols = bankSummaryColumns(report);
+    const parsed = parseBankSummary(report);
+    live = {
+      // THE ANSWER. If "FX Gain" (or similar) sits between Cash Spent and
+      // Closing Balance, the diagnosis is confirmed and the fix is right.
+      columnTitles: cols.titles,
+      columnsUsed: {
+        opening: cols.opening, received: cols.received, spent: cols.spent,
+        fxGain: cols.fxGain, closing: cols.closing,
+      },
+      resolvedFromHeader: cols.resolvedFromHeader,
+      accountCount: parsed.accounts.length,
+      // A few accounts with every column, so the identity can be checked by eye:
+      // opening + received - spent + fxGain should equal closing.
+      sampleAccounts: parsed.accounts.slice(0, 6).map((a) => ({
+        name: a.name,
+        opening: Math.round(a.opening),
+        received: Math.round(a.received),
+        spent: Math.round(a.spent),
+        fxGain: Math.round(a.fxGain ?? 0),
+        closing: Math.round(a.closing),
+        identityHolds:
+          Math.abs((a.opening + a.received - Math.abs(a.spent) + (a.fxGain ?? 0)) - a.closing) < 1,
+      })),
+    };
+  } catch (err) {
+    live = { error: err.message };
+  }
+
   return {
     month,
+    live,
+    // Whether the blob the forecast reads was written by the current parser.
+    // "false" with a deployed fix means the sync has not run yet — the warnings
+    // will clear on its next pass, without any further change.
+    storedParserVersion: record?.parserVersion ?? null,
+    storedIsCurrent: isMonthRecordCurrent(record),
+    expectedParserVersion: BANKSUMMARY_PARSER_VERSION,
     stored: Boolean(record),
     partial: record?.partial ?? null,
     fetchedAt: record?.fetchedAt ?? null,
