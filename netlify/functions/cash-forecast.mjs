@@ -119,6 +119,15 @@ export default async (req) => {
   const effective = {
     ...assumptions,
     openingBalances: openings.balances,
+    // Passed through purely so a warning about the opening balance can say
+    // WHICH opening it used and where that came from. The engine never computes
+    // with it.
+    openingsMeta: {
+      source: openings.source,
+      fromXero: openings.fromXero,
+      typed: openings.typed,
+      openingRateSource: openings.openingRateSource,
+    },
     monthlyOverheads: overheads.months,
     fxRates: { ...assumptions.fxRates, [settlement]: effectiveRate },
   };

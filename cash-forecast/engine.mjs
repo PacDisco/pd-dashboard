@@ -590,14 +590,27 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 if (storedBase !== null && storedBase !== undefined) {
                     const drift = baseBalance - storedBase;
                     if (Math.abs(drift) > Math.max(50, Math.abs(storedBase) * 0.002)) {
-                        warnings.push(`${row.label}: the ${baseCur} balance from transactions (${Math.round(baseBalance).toLocaleString("en-NZ")}) does not match the bank summary (${Math.round(storedBase).toLocaleString("en-NZ")}), a difference of ${Math.round(drift).toLocaleString("en-NZ")}. The same difference in every month points at the opening balance; a changing one points at missing transactions.`);
+                        // Name the opening this chain started from, and where it
+                        // came from. A constant drift IS an opening-balance
+                        // error, and the next question is always "which figure
+                        // did it use" — so answer it in the warning rather than
+                        // making someone go and look.
+                        const meta = assumptions.openingsMeta;
+                        const first = months[0];
+                        const openingNote = meta
+                            ? ` This chain started from a ${baseCur} opening of ${Math.round(first.baseOpening).toLocaleString("en-NZ")} (${meta.source}${
+                                meta.fromXero?.[baseCur] !== undefined && meta.source !== "xero"
+                                    ? `; Xero's April opening is ${Math.round(meta.fromXero[baseCur]).toLocaleString("en-NZ")}`
+                                    : ""}).`
+                            : "";
+                        warnings.push(`${row.label}: the ${baseCur} balance from transactions (${Math.round(baseBalance).toLocaleString("en-NZ")}) does not match the bank summary (${Math.round(storedBase).toLocaleString("en-NZ")}), a difference of ${Math.round(drift).toLocaleString("en-NZ")}. The same difference in every month points at the opening balance; a changing one points at missing transactions.${openingNote}`);
                     }
                 }
 
                 for (const cur of [baseCur, fxCur]) {
                     const flow = tx.flowCheck?.[cur];
                     if (flow && flow.ties === false) {
-                        warnings.push(`${row.label}: the ${cur} transactions do not account for the month's movement — receipts differ by ${flow.inGapPct}% and payments by ${flow.outGapPct}% from what the bank summary reports. A source is missing.`);
+                        warnings.push(`${row.label}: the ${cur} transactions are ${flow.inGapPct}% out on receipts and ${flow.outGapPct}% on payments against the bank summary. Beyond what intra-month rate movement explains, so a source may be missing — check with Reconcile ${row.label.split(" ")[0]}.`);
                     }
                 }
 

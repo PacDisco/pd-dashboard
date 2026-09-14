@@ -156,6 +156,14 @@ function effectiveAssumptions() {
     ...a,
     openingBalances: openings,
     monthlyOverheads: overheads,
+    // Same metadata the server passes, so a locally recomputed preview explains
+    // an opening-balance mismatch the same way the saved forecast does.
+    openingsMeta: state.openings ? {
+      source: state.openings.source,
+      fromXero: state.openings.fromXero,
+      typed: state.openings.typed,
+      openingRateSource: state.openings.openingRateSource,
+    } : null,
     fxRates: { ...a.fxRates, [cur]: resolvedRate() },
   };
 }
