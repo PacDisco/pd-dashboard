@@ -92,6 +92,13 @@ export function budgetOf(ms, units) {
 }
 const UNLIMITED = { expired: NO_DEADLINE, take: () => true, spent: 0 };
 
+/* Where the background worker reports progress, and where the dashboard reads
+ * it. One key: a refresh is a single global operation, not a per-user one. */
+export const STATUS_KEY = "refresh-status";
+export function statusStore() {
+  return getStore({ name: "cash-xero-refresh", consistency: "strong" });
+}
+
 /**
  * Bank Summary months.
  *

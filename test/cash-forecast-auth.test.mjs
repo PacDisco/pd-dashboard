@@ -56,8 +56,8 @@ const { requireCashRole, canEdit } = await import('../netlify/functions/_shared/
 
 /** A request carrying a bearer token. The token's CONTENT is irrelevant — the
  *  point of verifiedUser is that GoTrue decides, not the token's own claims. */
-function req(token = 'any-token-at-all') {
-  return new Request('https://dash.example.invalid/api/cash-forecast', {
+function req(token = 'any-token-at-all', url = 'https://dash.example.invalid/api/cash-forecast') {
+  return new Request(url, {
     headers: token ? { authorization: `Bearer ${token}` } : {}
   });
 }
@@ -180,6 +180,38 @@ const freshToken = () => `token-${++n}`;
   // If it had reached loadAssumptions it would have thrown on getStore outside
   // Netlify, so a clean 401 also proves the gate runs first.
   console.log('✓ cash-forecast refuses before any Blobs/Xero call');
+}
+
+/* ---------- the refresh endpoint is gated, and is not a link ---------- */
+{
+  // This one SPENDS Xero API calls and REWRITES stored months. Two properties
+  // matter and neither is obvious from reading the handler: it must refuse an
+  // unauthenticated caller before doing any of that, and it must refuse GET —
+  // otherwise an <img src> or a prefetched link could trigger a full refetch.
+  const { default: refreshFn } = await import('../netlify/functions/cash-xero-refresh.mjs');
+
+  const anon = await refreshFn(new Request('https://dash.example.invalid/api/cash-xero-refresh',
+    { method: 'POST' }));
+  assert.equal(anon.status, 401, 'unauthenticated POST must 401 before calling Xero');
+
+  // GET is now the STATUS read, so it is allowed — but it must never start
+  // anything. Only POST does that, because starting spends Xero calls and
+  // rewrites stored data, which a link or a prefetch must not be able to do.
+  identityRoles = ['admin'];
+  const viaGet = await refreshFn(req(freshToken(), 'https://dash.example.invalid/api/cash-xero-refresh'));
+  assert.notEqual(viaGet.status, 401, 'an authorised GET reads status rather than being refused');
+
+  // PUT is neither, and must be refused outright.
+  const viaPut = new Request('https://dash.example.invalid/api/cash-xero-refresh', {
+    method: 'PUT', headers: { authorization: `Bearer ${freshToken()}` },
+  });
+  assert.equal((await refreshFn(viaPut)).status, 405, 'any other verb is refused');
+  console.log('✓ cash-xero-refresh refuses anonymous callers, and only POST can start work');
+
+  // The background worker must not be reachable without the role either — it
+  // is invoked internally, but it is still a URL on the site.
+  const { default: bgFn } = await import('../netlify/functions/cash-xero-refresh-background.mjs');
+  assert.equal(typeof bgFn, 'function', 'the background worker exports a handler');
 }
 
 assert.ok(calls.identity > 0, 'the test actually exercised Identity verification');

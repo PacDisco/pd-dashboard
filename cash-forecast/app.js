@@ -639,7 +639,7 @@ function diagnosticsPanel(ro) {
         ${state.diagBusy === "refreshforce" ? "Refetching…" : "Force refetch every month"}
       </button>
     </div>
-    <p class="foot">Closed months are cached, and the cache is what the table reads — so a fix to how a Xero report is parsed does not show up until the data is pulled again. The scheduled sync does that hourly and cannot be triggered by hand; these buttons run the same code now. <b>Refresh</b> refetches anything a newer parser would read differently. <b>Force</b> refetches everything regardless. A full year is sixty-odd Xero calls, more than one request can finish, so these run in passes until the server reports nothing left — it may take several seconds.</p>
+    <p class="foot">Closed months are cached, and the cache is what the table reads — so a fix to how a Xero report is parsed does not show up until the data is pulled again. The scheduled sync does that hourly and cannot be triggered by hand; these buttons run the same code now. <b>Refresh</b> refetches anything a newer parser would read differently. <b>Force</b> refetches everything regardless. A full year is sixty-odd Xero calls, far more than one web request can finish, so the work runs in the background and this page watches it — a forced refetch takes a few minutes.</p>
     ${state.diag ? `<pre class="diagout">${escapeHtml(state.diag)}</pre>` : ""}
   </section>`;
 }
@@ -1042,53 +1042,49 @@ function wire() {
       state.diag = null;
       render();
       try {
-        /* A full-year refresh is sixty-odd Xero calls and a function gets ten
-         * seconds, so the endpoint does a slice and reports what is left. Loop
-         * until it says done.
+        /* START, THEN POLL.
          *
-         * This is what was silently failing before: the request was being killed
-         * partway through, the bank summaries finished first, and the heaviest
-         * pass — transactions — never ran. The store stayed empty, which looks
-         * identical to a deployment that did not work. */
-        const passes = [];
-        let body = null;
-        // Enough passes for a full year at four pulls each, with room to spare.
-        for (let pass = 1; pass <= 40; pass++) {
-          // POST: it spends Xero calls and rewrites stored months, so it must
-          // not be something a link can trigger.
-          const res = await fetch(`${API}/cash-xero-refresh${b.dataset.refresh}`, {
-            method: "POST", credentials: "include",
-          });
-          // Read as TEXT first. A killed function returns Netlify's HTML error
-          // page, and `res.json()` on that throws — which is how a timeout came
-          // back as the useless "response was not JSON" with nothing to act on.
-          const raw = await res.text();
-          try {
-            body = JSON.parse(raw);
-          } catch {
-            body = {
-              error: res.status === 502 || res.status === 504 || /timed out/i.test(raw)
-                ? `The refresh took too long and was cut off (HTTP ${res.status}). It does a few months per pass, so try again — the work already done is saved.`
-                : `Unexpected ${res.status} response`,
-              status: res.status,
-              // The first part of whatever actually came back, so a surprise is
-              // diagnosable rather than described as "not JSON".
-              responseStart: raw.slice(0, 300),
-            };
-          }
-          passes.push({ pass, status: res.status, summary: body.summary, remaining: body.remaining });
-          state.diag = `Pass ${pass} — ${body.summary ?? body.error ?? "…"}\n${body.remaining ?? 0} remaining`;
-          render();
-          if (!res.ok || body.done !== false) {
-            state.diag = `HTTP ${res.status} · ${pass} pass${pass === 1 ? "" : "es"}\n\n` +
-              JSON.stringify({ passes, ...body }, null, 2);
-            if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
-            break;
+         * The refresh used to run inside this request. It could not: a full
+         * year is sixty-odd Xero calls, one month of transactions is six of
+         * them on its own, and a Netlify function gets ten seconds. Three
+         * rounds of shrinking the budget produced three HTTP 504s.
+         *
+         * Now a background worker does it with a fifteen-minute allowance and
+         * writes progress to a blob; this just starts it and watches. */
+        const res = await fetch(`${API}/cash-xero-refresh${b.dataset.refresh}`, {
+          method: "POST", credentials: "include",
+        });
+        const raw = await res.text();
+        let body;
+        try { body = JSON.parse(raw); }
+        catch {
+          throw new Error(`Unexpected ${res.status} response: ${raw.slice(0, 200)}`);
+        }
+        if (!res.ok || body.started === false) {
+          if (body.status?.running) {
+            state.diag = "A refresh is already running — watching it.";
+          } else {
+            throw new Error(body.error || body.note || `Could not start (${res.status})`);
           }
         }
-        // The refreshed figures are in the blob store now, not in this page.
-        // Reload so the table and the warnings reflect what was just pulled —
-        // otherwise the numbers sit unchanged and it looks like nothing happened.
+
+        // Poll until it stops running. Generous ceiling: a forced refetch of a
+        // full year is a few minutes of Xero calls.
+        let status = null;
+        for (let tick = 0; tick < 240; tick++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const s2 = await fetch(`${API}/cash-xero-refresh`, { credentials: "include" });
+          const j = await s2.json().catch(() => null);
+          status = j?.status ?? null;
+          state.diag = status?.running
+            ? `Refreshing… ${status.summary ?? ""}`.trim()
+            : (status?.summary ?? status?.error ?? "Finishing…");
+          render();
+          if (status && !status.running) break;
+        }
+
+        state.diag = JSON.stringify(status, null, 2);
+        // The figures are in the blob store now, not in this page.
         const keep = state.diag;
         await boot();
         state.diag = keep;
