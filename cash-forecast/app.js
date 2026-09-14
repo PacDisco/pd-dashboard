@@ -631,6 +631,15 @@ function diagnosticsPanel(ro) {
           ${state.diagBusy === id ? "Checking…" : label}
         </button>`).join("")}
     </div>
+    <div class="rates" style="margin-bottom:10px">
+      <button class="btn-diag" data-refresh="" data-diagid="refresh" ${state.diagBusy ? "disabled" : ""}>
+        ${state.diagBusy === "refresh" ? "Refreshing…" : "Refresh Xero data now"}
+      </button>
+      <button class="btn-diag" data-refresh="?force=1" data-diagid="refreshforce" ${state.diagBusy ? "disabled" : ""}>
+        ${state.diagBusy === "refreshforce" ? "Refetching…" : "Force refetch every month"}
+      </button>
+    </div>
+    <p class="foot">Closed months are cached, and the cache is what the table reads — so a fix to how a Xero report is parsed does not show up until the data is pulled again. The scheduled sync does that hourly and cannot be triggered by hand; these buttons run the same code now. <b>Refresh</b> refetches anything a newer parser would read differently. <b>Force</b> refetches everything regardless. A full year is sixty-odd Xero calls, more than one request can finish, so these run in passes until the server reports nothing left — it may take several seconds.</p>
     ${state.diag ? `<pre class="diagout">${escapeHtml(state.diag)}</pre>` : ""}
   </section>`;
 }
@@ -1020,6 +1029,54 @@ function wire() {
         const res = await fetch(`${API}/cash-xero-probe${b.dataset.diag}`, { credentials: "include" });
         const body = await res.json().catch(() => ({ error: "response was not JSON" }));
         state.diag = `HTTP ${res.status}\n\n${JSON.stringify(body, null, 2)}`;
+      } catch (err) {
+        state.diag = `Request failed: ${err.message}`;
+      }
+      state.diagBusy = null;
+      render();
+    }));
+
+  document.querySelectorAll("[data-refresh]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      state.diagBusy = b.dataset.diagid;
+      state.diag = null;
+      render();
+      try {
+        /* A full-year refresh is sixty-odd Xero calls and a function gets ten
+         * seconds, so the endpoint does a slice and reports what is left. Loop
+         * until it says done.
+         *
+         * This is what was silently failing before: the request was being killed
+         * partway through, the bank summaries finished first, and the heaviest
+         * pass — transactions — never ran. The store stayed empty, which looks
+         * identical to a deployment that did not work. */
+        const passes = [];
+        let body = null;
+        for (let pass = 1; pass <= 12; pass++) {
+          // POST: it spends Xero calls and rewrites stored months, so it must
+          // not be something a link can trigger.
+          const res = await fetch(`${API}/cash-xero-refresh${b.dataset.refresh}`, {
+            method: "POST", credentials: "include",
+          });
+          body = await res.json().catch(() => ({ error: "response was not JSON" }));
+          passes.push({ pass, status: res.status, summary: body.summary, remaining: body.remaining });
+          state.diag = `Pass ${pass} — ${body.summary ?? body.error ?? "…"}\n${body.remaining ?? 0} remaining`;
+          render();
+          if (!res.ok || body.done !== false) {
+            state.diag = `HTTP ${res.status} · ${pass} pass${pass === 1 ? "" : "es"}\n\n` +
+              JSON.stringify({ passes, ...body }, null, 2);
+            if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+            break;
+          }
+        }
+        // The refreshed figures are in the blob store now, not in this page.
+        // Reload so the table and the warnings reflect what was just pulled —
+        // otherwise the numbers sit unchanged and it looks like nothing happened.
+        const keep = state.diag;
+        await boot();
+        state.diag = keep;
+        render();
+        return;
       } catch (err) {
         state.diag = `Request failed: ${err.message}`;
       }

@@ -39,6 +39,25 @@ import {
 import { loadAssumptions } from "./cash-store.mjs";
 
 /**
+ * A refresh does not fit in one HTTP request, and pretending it does is how the
+ * transaction pull silently never happened.
+ *
+ * Twelve Bank Summaries, twelve months of transactions across three paged
+ * endpoints, eleven P&L calls and a budget is comfortably sixty Xero requests.
+ * A Netlify function gets ten seconds. The earlier passes finish, the function
+ * is killed partway through the later ones, and the only symptom is a store
+ * that stays empty — which looks exactly like a fix that did not work.
+ *
+ * So every pass takes a deadline, stops cleanly when it runs out, and reports
+ * how much is left. The caller calls again until nothing is.
+ */
+export function deadlineIn(ms) {
+  const at = Date.now() + ms;
+  return () => Date.now() >= at;
+}
+const NO_DEADLINE = () => false;
+
+/**
  * Bank Summary months.
  *
  * @param force  ignore the cache entirely and refetch every month. For the
@@ -46,9 +65,9 @@ import { loadAssumptions } from "./cash-store.mjs";
  *               and wants to see it take effect now rather than reasoning about
  *               which months the version check will catch.
  */
-export async function refreshMonths(token, tenantId, fy, { force = false } = {}) {
+export async function refreshMonths(token, tenantId, fy, { force = false, expired = NO_DEADLINE } = {}) {
   const store = getStore({ name: "cash-xero-months", consistency: "strong" });
-  const out = { fetched: 0, cached: 0, restated: 0, version: BANKSUMMARY_PARSER_VERSION, error: null };
+  const out = { fetched: 0, cached: 0, restated: 0, remaining: 0, version: BANKSUMMARY_PARSER_VERSION, error: null };
   try {
     const currency = await getBankAccountCurrencies(token, tenantId, "NZD");
     const keys = fiscalMonthKeys(fy);
@@ -63,6 +82,10 @@ export async function refreshMonths(token, tenantId, fy, { force = false } = {})
         if (isMonthRecordCurrent(stored)) { out.cached++; continue; }
         if (stored) out.restated++;
       }
+      // Checked BEFORE the work, not after: stopping with the month unwritten
+      // leaves it to the next call, where stopping after it would still have
+      // been killed mid-request.
+      if (expired()) { out.remaining++; continue; }
       await store.setJSON(blobKey, await fetchMonthActuals(token, tenantId, key, currency));
       out.fetched++;
     }
@@ -73,9 +96,9 @@ export async function refreshMonths(token, tenantId, fy, { force = false } = {})
 }
 
 /** Operating expenses, one P&L call per finished month. */
-export async function refreshOpex(token, tenantId, fy, { force = false } = {}) {
+export async function refreshOpex(token, tenantId, fy, { force = false, expired = NO_DEADLINE } = {}) {
   const store = getStore({ name: "cash-xero-opex", consistency: "strong" });
-  const out = { fetched: 0, cached: 0, restated: 0, version: OPEX_PARSER_VERSION, error: null };
+  const out = { fetched: 0, cached: 0, restated: 0, remaining: 0, version: OPEX_PARSER_VERSION, error: null };
   try {
     const keys = fiscalMonthKeys(fy);
     // The current month is still running, so its P&L is partial.
@@ -89,6 +112,7 @@ export async function refreshOpex(token, tenantId, fy, { force = false } = {}) {
         if (isOpexRecordCurrent(stored)) { out.cached++; continue; }
         if (stored) out.restated++;
       }
+      if (expired()) { out.remaining++; continue; }
       await store.setJSON(blobKey, await fetchMonthOpex(token, tenantId, key));
       out.fetched++;
     }
@@ -156,10 +180,10 @@ export async function refreshBudget(token, tenantId, fy) {
  * Runs AFTER refreshMonths, because the implied rate comes from comparing the
  * two views of the same month.
  */
-export async function refreshTransactions(token, tenantId, fy, { force = false } = {}) {
+export async function refreshTransactions(token, tenantId, fy, { force = false, expired = NO_DEADLINE } = {}) {
   const store = getStore({ name: "cash-xero-tx", consistency: "strong" });
   const monthStore = getStore({ name: "cash-xero-months", consistency: "strong" });
-  const out = { fetched: 0, cached: 0, restated: 0, version: TX_PARSER_VERSION, error: null, truncated: [] };
+  const out = { fetched: 0, cached: 0, restated: 0, remaining: 0, version: TX_PARSER_VERSION, error: null, truncated: [] };
   try {
     const accounts = await bankAccountIndex(token, tenantId, "NZD");
     const keys = fiscalMonthKeys(fy);
@@ -172,6 +196,9 @@ export async function refreshTransactions(token, tenantId, fy, { force = false }
         if (isTxRecordCurrent(stored)) { out.cached++; continue; }
         if (stored) out.restated++;
       }
+      // The heaviest pass by far — three paged endpoints per month — so this is
+      // the one that was being cut off, and the one the deadline matters for.
+      if (expired()) { out.remaining++; continue; }
       const month = await monthStore.get(blobKey, { type: "json" });
       const record = await fetchMonthTransactions(
         token, tenantId, key, accounts, month?.byCurrency ?? {});
@@ -185,15 +212,27 @@ export async function refreshTransactions(token, tenantId, fy, { force = false }
   return out;
 }
 
-/** All of them, in the order the scheduled sync does them. */
-export async function refreshAll(token, tenantId, fy, { force = false } = {}) {
-  return {
-    months: await refreshMonths(token, tenantId, fy, { force }),
-    // After months: the implied rate needs both views of the same month.
-    transactions: await refreshTransactions(token, tenantId, fy, { force }),
-    opex: await refreshOpex(token, tenantId, fy, { force }),
-    budget: await refreshBudget(token, tenantId, fy),
-  };
+/**
+ * All of them, in dependency order, within a time budget.
+ *
+ * Transactions run second because the implied rate needs both views of the same
+ * month, and the bank summary is the other one. Budget runs last because it is a
+ * handful of calls and never the thing that gets starved.
+ */
+export async function refreshAll(token, tenantId, fy, { force = false, expired = NO_DEADLINE } = {}) {
+  const months = await refreshMonths(token, tenantId, fy, { force, expired });
+  const transactions = await refreshTransactions(token, tenantId, fy, { force, expired });
+  const opex = await refreshOpex(token, tenantId, fy, { force, expired });
+  // Skipped rather than half-run when the clock has gone: a partial budget write
+  // would look like a complete one.
+  const budget = expired()
+    ? { accounts: 0, description: null, error: null, skipped: true }
+    : await refreshBudget(token, tenantId, fy);
+
+  const remaining = months.remaining + transactions.remaining + opex.remaining +
+    (budget.skipped ? 1 : 0);
+
+  return { months, transactions, opex, budget, remaining, done: remaining === 0 };
 }
 
 /** One log line, identical whichever path ran the refresh. */
@@ -201,7 +240,8 @@ export function refreshSummary(r) {
   return `months=${r.months.fetched}fetched/${r.months.cached}cached/${r.months.restated}restated(v${r.months.version}) ` +
     `tx=${r.transactions.fetched}fetched/${r.transactions.cached}cached/${r.transactions.restated}restated(v${r.transactions.version}) ` +
     `opex=${r.opex.fetched}fetched/${r.opex.cached}cached/${r.opex.restated}restated(v${r.opex.version}) ` +
-    `budgetAccounts=${r.budget.accounts}`;
+    `budgetAccounts=${r.budget.accounts}` +
+    (r.remaining ? ` remaining=${r.remaining}` : "");
 }
 
-export default { refreshMonths, refreshTransactions, refreshOpex, refreshBudget, refreshAll, refreshSummary };
+export default { refreshMonths, refreshTransactions, refreshOpex, refreshBudget, refreshAll, refreshSummary, deadlineIn };

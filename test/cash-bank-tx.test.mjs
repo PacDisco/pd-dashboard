@@ -281,3 +281,26 @@ const pay = (PaymentType, BankAmount, acct = NZD, extra = {}) => ({
 }
 
 console.log("\nAll bank transaction tests passed.");
+
+/* ---------- a refresh that cannot finish must say so, not half-finish ---------- */
+
+{
+  // WHY THIS EXISTS
+  // ---------------
+  // A full-year refresh is twelve Bank Summaries, twelve months of transactions
+  // across three paged endpoints, eleven P&L calls and a budget — sixty-odd Xero
+  // requests against a ten-second function limit. It was being killed partway
+  // through. The earlier passes completed, the heaviest one (transactions) never
+  // ran, and the only symptom was a store that stayed empty — indistinguishable
+  // from a deployment that had not worked.
+  const { deadlineIn } = await import("../netlify/functions/_shared/cash-refresh.mjs");
+
+  const already = deadlineIn(-1);
+  assert.equal(already(), true, "a deadline in the past is expired immediately");
+
+  const soon = deadlineIn(50);
+  assert.equal(soon(), false, "and one in the future is not");
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(soon(), true, "until it passes");
+  console.log("✓ the refresh deadline actually expires");
+}
