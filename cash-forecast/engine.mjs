@@ -566,22 +566,40 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 baseBalance += (row.baseIn + trBase.in) - (row.baseOut + trBase.out);
                 fxBalance += (row.fxIn + trFx.in) - (row.fxOut + trFx.out);
 
-                const crossCheck = (cur, side, derived) => {
-                    const stored = side.closing;
-                    if (stored === null || stored === undefined) return;
-                    const implied = tx.impliedRates?.[cur];
-                    // A month with almost no movement implies a rate from two
-                    // small numbers. Checking against that would produce noise,
-                    // not information.
-                    if (!implied || !implied.rate || implied.thin) return;
-                    const inAccountCurrency = stored / implied.rate;
-                    const tolerance = Math.max(50, Math.abs(inAccountCurrency) * 0.02);
-                    if (Math.abs(inAccountCurrency - derived) > tolerance) {
-                        warnings.push(`${row.label}: the ${cur} balance from transactions (${Math.round(derived).toLocaleString("en-NZ")}) does not match the bank summary (${Math.round(inAccountCurrency).toLocaleString("en-NZ")} at the month's implied rate of ${implied.rate.toFixed(4)}). One of the two sources is incomplete.`);
+                /* TWO DIFFERENT CHECKS, because the two currencies are not
+                 * comparable in the same way.
+                 *
+                 * The base currency converts at 1, so its transaction-derived
+                 * balance and the summary's closing balance can be compared
+                 * directly and any difference is real.
+                 *
+                 * A foreign account cannot be checked that way. The summary is
+                 * base-currency, so comparing it to a dollar balance needs a
+                 * rate, and the only rate available is the one implied by the
+                 * month's FLOWS — an average over the month. Applying an
+                 * average-of-month rate to a point-in-time balance produces a
+                 * difference that is pure arithmetic and grows with the balance.
+                 * That is exactly what happened: every USD month reported a
+                 * mismatch of tens of thousands while the data was fine, and the
+                 * one real finding — a constant offset in NZD — sat in the
+                 * middle of the noise.
+                 *
+                 * So the foreign side is checked on its FLOWS, where no
+                 * point-in-time conversion is involved. */
+                const storedBase = baseA.closing;
+                if (storedBase !== null && storedBase !== undefined) {
+                    const drift = baseBalance - storedBase;
+                    if (Math.abs(drift) > Math.max(50, Math.abs(storedBase) * 0.002)) {
+                        warnings.push(`${row.label}: the ${baseCur} balance from transactions (${Math.round(baseBalance).toLocaleString("en-NZ")}) does not match the bank summary (${Math.round(storedBase).toLocaleString("en-NZ")}), a difference of ${Math.round(drift).toLocaleString("en-NZ")}. The same difference in every month points at the opening balance; a changing one points at missing transactions.`);
                     }
-                };
-                crossCheck(baseCur, baseA, baseBalance);
-                crossCheck(fxCur, fxA, fxBalance);
+                }
+
+                for (const cur of [baseCur, fxCur]) {
+                    const flow = tx.flowCheck?.[cur];
+                    if (flow && flow.ties === false) {
+                        warnings.push(`${row.label}: the ${cur} transactions do not account for the month's movement — receipts differ by ${flow.inGapPct}% and payments by ${flow.outGapPct}% from what the bank summary reports. A source is missing.`);
+                    }
+                }
 
                 if (tx.transferLegs && tx.transferLegs.complete === false) {
                     warnings.push(`${row.label}: ${tx.transferLegs.transfers - tx.transferLegs.bothPresent} of ${tx.transferLegs.transfers} transfers between your own accounts are missing a leg, worth ${Math.round(tx.transferLegs.missingAmount).toLocaleString("en-NZ")}. Balances for this month may be wrong by that amount.`);

@@ -551,6 +551,63 @@ export function impliedRates(summaryByCurrency = {}, detailByCurrency = {}, tran
 }
 
 /**
+ * Do the three sources account for the month's movement?
+ *
+ * WHY NOT JUST COMPARE BALANCES
+ * -----------------------------
+ * For the base currency you can: the rate is 1, so the transaction-derived
+ * balance and the summary's closing balance are directly comparable and any
+ * difference is real.
+ *
+ * For a foreign account you cannot. The summary is base-currency, so comparing
+ * it to a balance in dollars needs a rate — and the only rate available is the
+ * one implied by the month's FLOWS, which is an average over the month's
+ * transactions. Applying an average-of-month rate to a point-in-time balance
+ * produces a difference that is pure arithmetic artefact, and it grows with the
+ * balance. That is what made every USD month report a mismatch of tens of
+ * thousands while the underlying data was fine.
+ *
+ * So the completeness question is asked of the flows instead. The implied rate
+ * is derived from receipts AND payments together; if the detail is complete,
+ * that same rate reproduces each side separately. If a source is missing, the
+ * two sides disagree. No point-in-time conversion anywhere.
+ */
+export function flowCheck(summaryByCurrency = {}, detailByCurrency = {}, transfersByCurrency = {}, rates = {}) {
+  const out = {};
+  for (const [cur, sum] of Object.entries(summaryByCurrency)) {
+    const biz = detailByCurrency[cur] ?? { in: 0, out: 0 };
+    const tr = transfersByCurrency[cur] ?? { in: 0, out: 0 };
+    const detailIn = biz.in + tr.in;
+    const detailOut = biz.out + tr.out;
+    const rate = rates[cur]?.rate;
+
+    if (!rate || rates[cur]?.thin) {
+      out[cur] = { ties: null, reason: "too little movement to check" };
+      continue;
+    }
+    const expectedIn = Math.abs(num(sum.received)) / rate;
+    const expectedOut = Math.abs(num(sum.spent)) / rate;
+    const gap = (a, b) => (Math.max(Math.abs(a), Math.abs(b)) < 1 ? 0
+      : Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b), 1));
+
+    const inGap = gap(expectedIn, detailIn);
+    const outGap = gap(expectedOut, detailOut);
+    out[cur] = {
+      // 1% either side. A single day's rate movement inside a month is smaller
+      // than that; a missing source is very much larger.
+      ties: inGap <= 0.01 && outGap <= 0.01,
+      inGapPct: Math.round(inGap * 1000) / 10,
+      outGapPct: Math.round(outGap * 1000) / 10,
+      detailIn: Math.round(detailIn),
+      detailOut: Math.round(detailOut),
+      expectedIn: Math.round(expectedIn),
+      expectedOut: Math.round(expectedOut),
+    };
+  }
+  return out;
+}
+
+/**
  * Everything the forecast needs about one month's bank movement, in account
  * currency, plus the rate implied against the base-currency summary.
  *
@@ -570,6 +627,7 @@ export async function fetchMonthTransactions(accessToken, tenantId, key, account
   });
   const legs = transferLegCoverage(transferResult.transfers, bankTransactions);
   const rates = impliedRates(summaryByCurrency, s.byCurrency, s.transfersByCurrency);
+  const flows = flowCheck(summaryByCurrency, s.byCurrency, s.transfersByCurrency, rates);
 
   return {
     month: key,
@@ -580,6 +638,10 @@ export async function fetchMonthTransactions(accessToken, tenantId, key, account
     transfersByCurrency: s.transfersByCurrency,
     byAccount: s.byAccount,
     impliedRates: rates,
+    // Whether the three sources actually account for the month's movement,
+    // checked per currency. See flowCheck for why this is the right question to
+    // ask of a foreign-currency account and a balance comparison is not.
+    flowCheck: flows,
     counts: s.counts,
     unknownTypes: s.unknownTypes,
     transferLegs: legs,

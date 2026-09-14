@@ -619,8 +619,14 @@ function diagnosticsPanel(ro) {
     // Payments + Bank Transfers against the Bank Summary for a month: if the
     // detail does not add up to what Xero says moved, a source is missing and
     // nothing built on it can be trusted. Read `reconciliation` first.
-    ["banktx", `?month=${fy}-06&report=banktx`, "Reconcile June transactions"],
-    ["banktx8", `?month=${fy}-08&report=banktx`, "Reconcile August transactions"],
+    // Every closed month, because "which month does the discrepancy start in"
+    // is the question that localises an opening-balance error — and a constant
+    // offset from April onward is exactly that shape.
+    ...["04", "05", "06", "07", "08"].map((mm) => [
+      `banktx${mm}`,
+      `?month=${fy}-${mm}&report=banktx`,
+      `Reconcile ${["Apr","May","Jun","Jul","Aug"][Number(mm) - 4]}`,
+    ]),
   ];
   return `<section class="closebox">
     <h2>Diagnostics</h2>
