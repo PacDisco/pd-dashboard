@@ -92,12 +92,27 @@ export function resolveOpeningBalances(assumptions, aprilRecord) {
 
   const byCurrency = aprilRecord?.byCurrency ?? null;
   if (want !== "xero" || !byCurrency) {
+    // Still report what Xero WOULD have said, even when the typed figure is
+    // pinned. Someone looking at a balance that does not reconcile needs the
+    // comparison in front of them — "you are using -501,125, Xero's April
+    // opening is -463,330" is an answer; "manual" on its own is a shrug.
+    const wouldBe = {};
+    if (byCurrency) {
+      const r = aprilRecord?.tx?.impliedRates ?? {};
+      for (const [cur, v] of Object.entries(byCurrency)) {
+        if (!Number.isFinite(v?.opening)) continue;
+        const implied = r[cur];
+        const usable = implied && Number.isFinite(implied.rate) && implied.rate > 0 && !implied.thin;
+        wouldBe[cur] = usable ? v.opening / implied.rate : v.opening;
+      }
+    }
     return {
       balances: typed,
       source: want === "xero" ? "manual-no-data" : "manual",
-      fromXero: null,
+      fromXero: Object.keys(wouldBe).length ? wouldBe : null,
       typed,
       mixed: false,
+      openingRateSource: {},
     };
   }
 

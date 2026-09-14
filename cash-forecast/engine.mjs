@@ -607,9 +607,28 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                     }
                 }
 
+                /* JUDGE HERE, do not read a stored judgement.
+                 *
+                 * `ties` was being computed when the month was FETCHED and baked
+                 * into the blob. So widening the tolerance from 1% to 6% changed
+                 * nothing on screen: every stored month still carried
+                 * `ties: false` from the old threshold, and would have kept
+                 * carrying it until someone refetched a year of data.
+                 *
+                 * The gap percentages are DATA — measured, fixed, worth caching.
+                 * Whether that gap is acceptable is a JUDGEMENT, and a judgement
+                 * belongs where it can be changed without a refetch. Same
+                 * mistake as caching a parser's output: fine until the rule
+                 * changes, and then the cache is the last thing holding the old
+                 * answer. */
+                const FLOW_TOLERANCE_PCT = 6;
                 for (const cur of [baseCur, fxCur]) {
                     const flow = tx.flowCheck?.[cur];
-                    if (flow && flow.ties === false) {
+                    const gapsKnown = flow && Number.isFinite(flow.inGapPct) && Number.isFinite(flow.outGapPct);
+                    const tiesNow = gapsKnown
+                        ? flow.inGapPct <= FLOW_TOLERANCE_PCT && flow.outGapPct <= FLOW_TOLERANCE_PCT
+                        : flow?.ties;
+                    if (flow && tiesNow === false) {
                         warnings.push(`${row.label}: the ${cur} transactions are ${flow.inGapPct}% out on receipts and ${flow.outGapPct}% on payments against the bank summary. Beyond what intra-month rate movement explains, so a source may be missing — check with Reconcile ${row.label.split(" ")[0]}.`);
                     }
                 }
