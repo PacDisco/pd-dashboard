@@ -106,11 +106,38 @@ export function resolveOpeningBalances(assumptions, aprilRecord) {
   let usedXero = 0;
   let usedTyped = 0;
 
+  /* THE OPENING IS IN THE WRONG CURRENCY UNTIL IT IS CONVERTED.
+   *
+   * Xero's Bank Summary reports every account in the organisation's base
+   * currency, so the "opening" under USD is New Zealand dollars. Feeding that
+   * straight in as a USD balance starts the whole year's treasury chain roughly
+   * 1.7x too high, and every conversion after it is sized off that.
+   *
+   * The month's own transaction detail gives the rate to undo it: the same
+   * month's movement, seen once in base and once in account currency. Measured
+   * from the data rather than taken from an FX series, so it is the rate Xero
+   * itself used.
+   *
+   * One honest caveat: the implied rate is an AVERAGE over April's transactions,
+   * while the opening is a balance at a single instant on 1 April. So this is
+   * close, not exact, and the error shrinks to nothing as soon as the real
+   * transaction chain takes over from the second month. `openingRateSource`
+   * says which it was, so nobody has to guess later.
+   */
+  const rates = aprilRecord?.tx?.impliedRates ?? {};
+  const rateSource = {};
+
   for (const cur of Object.keys(typed)) {
     const opening = byCurrency[cur]?.opening;
     if (Number.isFinite(opening)) {
-      fromXero[cur] = opening;
-      balances[cur] = opening;
+      const implied = rates[cur];
+      const usable = implied && Number.isFinite(implied.rate) && implied.rate > 0 && !implied.thin;
+      const converted = usable ? opening / implied.rate : opening;
+      fromXero[cur] = converted;
+      balances[cur] = converted;
+      rateSource[cur] = usable
+        ? { rate: implied.rate, basedOn: implied.basedOn, source: "implied" }
+        : { rate: 1, source: implied ? "too-little-movement-to-imply" : "no-transaction-detail" };
       usedXero++;
     } else {
       usedTyped++;
@@ -120,8 +147,14 @@ export function resolveOpeningBalances(assumptions, aprilRecord) {
   // it usually means a real account nobody put in the model.
   for (const [cur, v] of Object.entries(byCurrency)) {
     if (!(cur in balances) && Number.isFinite(v?.opening)) {
-      fromXero[cur] = v.opening;
-      balances[cur] = v.opening;
+      const implied = rates[cur];
+      const usable = implied && Number.isFinite(implied.rate) && implied.rate > 0 && !implied.thin;
+      const converted = usable ? v.opening / implied.rate : v.opening;
+      fromXero[cur] = converted;
+      balances[cur] = converted;
+      rateSource[cur] = usable
+        ? { rate: implied.rate, basedOn: implied.basedOn, source: "implied" }
+        : { rate: 1, source: implied ? "too-little-movement-to-imply" : "no-transaction-detail" };
       usedXero++;
     }
   }
@@ -132,6 +165,10 @@ export function resolveOpeningBalances(assumptions, aprilRecord) {
     fromXero: usedXero ? fromXero : null,
     typed,
     mixed: usedXero > 0 && usedTyped > 0,
+    // Which rate turned each base-currency opening into account currency, and
+    // where it came from. A converted figure with no stated rate is exactly the
+    // kind of number this dashboard exists to stop producing.
+    openingRateSource: rateSource,
   };
 }
 

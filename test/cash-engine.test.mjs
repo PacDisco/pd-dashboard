@@ -321,11 +321,25 @@ console.log("\nAll treasury tests passed.");
   near(apr.baseIn, 5_000, 0.01, "NZD received comes from Xero");
   near(apr.fxIn, 40_000, 0.01, "USD received comes from Xero");
   near(apr.baseOut, 25_000, 0.01, "NZD spent comes from Xero");
-  near(apr.cashIn, 5_000 + 40_000 * 2.0, 0.01, "headline cash in is base-stated");
+  // A BANK SUMMARY IS ALREADY IN THE BASE CURRENCY.
+  //
+  // This assertion used to read `5_000 + 40_000 * 2.0`, and it was wrong — it
+  // encoded the bug rather than the behaviour. Xero's Bank Summary reports every
+  // account converted to the organisation's base currency, so the figure filed
+  // under USD is New Zealand dollars. Multiplying it by the planning rate
+  // converted the same money twice and put August's real total position out by
+  // about 166,000.
+  //
+  // Confirmed against the live books over two months and three currencies: with
+  // own-account transfers included, the transaction detail reconciles to the
+  // summary EXACTLY in NZD, and the ratio for USD and AUD is that month's FX
+  // rate to four significant figures.
+  near(apr.cashIn, 45_000, 0.01, "a bank summary needs no conversion — it is already base");
   near(apr.baseClosing, 80_000, 0.01, "closing is the real bank balance");
   near(apr.fxClosing, 40_000, 0.01);
-  near(apr.closing, 80_000 + 40_000 * 2.0, 0.01, "combined position uses real balances");
-  console.log("✓ closed month shows Xero figures, not forecast");
+  near(apr.closing, 120_000, 0.01, "and the combined position adds them, it does not convert");
+  assert.equal(apr.fxFiguresAreBase, true, "the row says which units it is in");
+  console.log("✓ closed month shows Xero figures, without converting them twice");
 
   // The conversion split is NOT derivable from a bank summary, so it must be
   // null rather than a plausible-looking number.
@@ -529,10 +543,16 @@ console.log("\nAll treasury tests passed.");
   a.planningRateSource = "manual";
 
   // The only real event: a student pays USD 22,575, all of it converted to NZD.
+  //
+  // Every figure below is stated in NZD, including the USD account's, because
+  // that is what a Xero Bank Summary actually returns — it converts every
+  // account to the organisation's base currency. The fixture used to hold
+  // 22,575 in the USD row, which quietly made this test agree with an engine
+  // that converted the same money twice.
   const f = buildForecast(a, {
     "2026-04": {
       byCurrency: {
-        USD: { received: 22_575, spent: 22_575, closing: 0 },
+        USD: { received: 38_671, spent: 38_671, closing: 0 },
         NZD: { received: 38_671, spent: 0, closing: 38_671 },
       },
     },
@@ -554,6 +574,77 @@ console.log("\nAll treasury tests passed.");
   assert.equal(clean.months[0].grossIncludesTransfers, false);
   assert.ok(!clean.warnings.some((w) => w.includes("gross bank movements")));
   console.log("✓ a month without conversions is not flagged");
+}
+
+/* ---------- transaction detail replaces the summary, in real dollars ---------- */
+
+{
+  // THE SAME MONTH, seen through the transaction detail instead.
+  //
+  // Two things change and both matter. The conversion stops counting as cash —
+  // it is a transfer between the organisation's own accounts, not money entering
+  // the business — so cash in halves from the gross 77,342 to the 38,671 that
+  // actually arrived. And the USD figures are in US DOLLARS, so the balance is
+  // what you would see logging into Wise rather than its NZD valuation.
+  const a = base();
+  a.programs = [];
+  a.actualsThroughMonth = "2026-04";
+  a.fxRates = { NZD: 1, USD: 1.7130 };
+  a.planningRateSource = "manual";
+  a.openingBalances = { NZD: 0, USD: 10_000 };
+
+  const f = buildForecast(a, {
+    "2026-04": {
+      // The summary still comes along, base-stated, as the cross-check.
+      byCurrency: {
+        USD: { received: 38_671, spent: 38_671, closing: 17_130 },
+        NZD: { received: 38_671, spent: 0, closing: 38_671 },
+      },
+      tx: {
+        source: "Xero transactions",
+        // Account currency. The student paid 22,575 US dollars.
+        byCurrency: { USD: { in: 22_575, out: 0 }, NZD: { in: 0, out: 0 } },
+        // The conversion: out of USD, into NZD.
+        transfersByCurrency: { USD: { in: 0, out: 22_575 }, NZD: { in: 38_671, out: 0 } },
+        impliedRates: { USD: { rate: 1.7130, basedOn: 45_150, thin: false },
+                        NZD: { rate: 1, basedOn: 38_671, thin: false } },
+        transferLegs: { transfers: 1, bothPresent: 1, complete: true, missingAmount: 0 },
+        truncated: false,
+      },
+    },
+  });
+  const m = f.months[0];
+
+  assert.equal(m.usesTransactionDetail, true, "the detail is preferred over the summary");
+  near(m.cashIn, 38_671, 1, "the conversion is no longer counted as cash in");
+  assert.equal(m.grossIncludesTransfers, false, "so the gross warning does not apply");
+  assert.ok(!f.warnings.some((w) => w.includes("gross bank movements")),
+    "and is not raised");
+
+  // Now derivable, where a bank summary could only offer null.
+  near(m.fxConverted, 22_575, 1, "how much USD was converted, in USD");
+  near(m.baseFromConversion, 38_671, 1, "and what it produced in NZD");
+
+  // The balance chain runs in each account's own currency.
+  near(m.fxClosing, 10_000, 1, "USD closing is dollars: 10,000 + 22,575 received - 22,575 converted");
+  near(m.baseClosing, 38_671, 1, "NZD closing is the conversion landing");
+  near(m.closing, 38_671 + 10_000 * 1.7130, 1,
+    "and the total position values the real dollars at the planning rate");
+  console.log("✓ transaction detail gives real dollars, and excludes own transfers");
+
+  // A truncated month must fall back rather than present a short month as whole.
+  const short = buildForecast(a, {
+    "2026-04": {
+      byCurrency: { USD: { received: 38_671, spent: 38_671, closing: 17_130 },
+                    NZD: { received: 38_671, spent: 0, closing: 38_671 } },
+      tx: { byCurrency: { USD: { in: 1, out: 0 } }, transfersByCurrency: {}, truncated: true },
+    },
+  });
+  assert.equal(short.months[0].usesTransactionDetail, false,
+    "an incomplete pull is not used");
+  assert.ok(short.warnings.some((w) => w.includes("more transactions than were read")),
+    "and says why");
+  console.log("✓ a truncated transaction pull falls back to the summary, loudly");
 }
 
 /* ---------- deferred revenue never eats gross bank movements ---------- */

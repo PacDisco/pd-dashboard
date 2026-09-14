@@ -499,3 +499,102 @@ export default {
   summariseSources,
   reconcile,
 };
+
+/* ------------------------------------------------------------------ *
+ * A month, in the currency each account actually holds
+ * ------------------------------------------------------------------ */
+
+/**
+ * Bumped when a change here would alter a month already fetched and stored.
+ *
+ * History:
+ *   1  first version.
+ */
+export const TX_PARSER_VERSION = 1;
+
+/**
+ * The rate Xero used, implied by the two views of the same month.
+ *
+ * The Bank Summary reports every account in the ORGANISATION'S BASE CURRENCY.
+ * The transaction detail reports each account in ITS OWN. So for any month with
+ * movement, the ratio between them is the rate Xero applied — no guessing, no
+ * FX series, no assumption about which way round `CurrencyRate` runs.
+ *
+ * June and August agreed to four significant figures across three currencies:
+ * USD 1.7194 and 1.6949, AUD 1.2183 and 1.2108, NZD exactly 1. That agreement
+ * is what makes this trustworthy rather than a plausible-looking division.
+ *
+ * It is an AVERAGE over the month's transactions, so it is right for converting
+ * flows and only approximately right for a point-in-time balance. Returned with
+ * the evidence so a caller can see how much movement it rests on.
+ */
+export function impliedRates(summaryByCurrency = {}, detailByCurrency = {}, transfersByCurrency = {}) {
+  const out = {};
+  for (const [cur, s] of Object.entries(summaryByCurrency)) {
+    const biz = detailByCurrency[cur] ?? { in: 0, out: 0 };
+    const tr = transfersByCurrency[cur] ?? { in: 0, out: 0 };
+    const detailIn = biz.in + tr.in;
+    const detailOut = biz.out + tr.out;
+    const base = Math.abs(num(s.received)) + Math.abs(num(s.spent));
+    const account = detailIn + detailOut;
+
+    // A month with almost no movement gives a rate built on rounding. Say so
+    // rather than returning a confident number derived from two small figures.
+    const thin = account < 1000;
+    out[cur] = {
+      rate: account > 0 ? base / account : null,
+      basedOn: Math.round(account),
+      thin,
+    };
+  }
+  return out;
+}
+
+/**
+ * Everything the forecast needs about one month's bank movement, in account
+ * currency, plus the rate implied against the base-currency summary.
+ *
+ * Three Xero calls (paged): BankTransactions, Payments, BankTransfers.
+ */
+export async function fetchMonthTransactions(accessToken, tenantId, key, accounts, summaryByCurrency = {}) {
+  const [{ bankTransactions, truncated: txTrunc },
+         { payments, truncated: payTrunc },
+         transferResult] = await Promise.all([
+    fetchBankTransactions(accessToken, tenantId, key),
+    fetchAllPayments(accessToken, tenantId, key),
+    fetchBankTransfers(accessToken, tenantId, key),
+  ]);
+
+  const s = summariseSources({
+    bankTransactions, payments, transfers: transferResult.transfers, accounts,
+  });
+  const legs = transferLegCoverage(transferResult.transfers, bankTransactions);
+  const rates = impliedRates(summaryByCurrency, s.byCurrency, s.transfersByCurrency);
+
+  return {
+    month: key,
+    parserVersion: TX_PARSER_VERSION,
+    // Business cash, in each account's own currency, with the organisation's
+    // own transfers between its own accounts excluded.
+    byCurrency: s.byCurrency,
+    transfersByCurrency: s.transfersByCurrency,
+    byAccount: s.byAccount,
+    impliedRates: rates,
+    counts: s.counts,
+    unknownTypes: s.unknownTypes,
+    transferLegs: legs,
+    // A truncated page means real movement is missing, which must never be
+    // silently treated as a complete month.
+    truncated: Boolean(txTrunc || payTrunc || transferResult.truncated),
+    transfersAvailable: transferResult.available,
+    source: "Xero BankTransactions + Payments + BankTransfers",
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+/** Is a stored transaction month still one this code would produce? */
+export function isTxRecordCurrent(record, version = TX_PARSER_VERSION) {
+  if (!record) return false;
+  const stored = Number(record.parserVersion ?? 0);
+  return Number.isFinite(stored) && stored >= version;
+}

@@ -57,12 +57,18 @@ export default async (req) => {
   let partialMonth = null;
   try {
     const monthStore = getStore({ name: "cash-xero-months" });
+    const txStore = getStore({ name: "cash-xero-tx" });
     const latest = await getStore({ name: "cash-xero" }).get("latest", { type: "json" });
     const tenantId = latest?.orgs?.[0]?.tenantId;
     if (tenantId) {
       for (const key of fiscalMonthKeys(fy, new Date(`${fy + 1}-03-31T00:00:00Z`))) {
         const m = await monthStore.get(`${tenantId}/${key}`, { type: "json" });
-        if (m) actualsByMonth[key] = m;
+        if (!m) continue;
+        // The transaction detail rides along on the month it describes, so the
+        // engine takes one object per month and never has to know there are two
+        // stores behind it.
+        const tx = await txStore.get(`${tenantId}/${key}`, { type: "json" });
+        actualsByMonth[key] = tx ? { ...m, tx } : m;
       }
     }
   } catch (err) {
@@ -154,6 +160,16 @@ export default async (req) => {
       byCurrency: m.byCurrency ?? {},
       source: m.source ?? null,
       partial: m.partial ?? false,
+      // Only the fields the engine reads, so the browser runs the same chain
+      // without shipping every transaction to it.
+      tx: m.tx ? {
+        source: m.tx.source ?? null,
+        byCurrency: m.tx.byCurrency ?? {},
+        transfersByCurrency: m.tx.transfersByCurrency ?? {},
+        impliedRates: m.tx.impliedRates ?? {},
+        transferLegs: m.tx.transferLegs ?? null,
+        truncated: Boolean(m.tx.truncated),
+      } : null,
     }])),
     overheads: {
       months: overheads.months,

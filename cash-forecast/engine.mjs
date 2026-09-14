@@ -434,34 +434,74 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             const fxA = b[fxCur] || { received: 0, spent: 0, closing: null };
 
             row.isActual = true;
-            row.actualSource = actual.source || "Xero Bank Summary";
 
-            row.baseIn = baseA.received || 0;
-            row.fxIn = fxA.received || 0;
-            row.baseOut = baseA.spent || 0;
-            row.fxOut = fxA.spent || 0;
+            /* TRANSACTION DETAIL IF WE HAVE IT, BANK SUMMARY IF WE DO NOT.
+             *
+             * These two sources are NOT in the same units, which is the trap
+             * that made the treasury block wrong for months. Xero's Bank Summary
+             * reports EVERY account converted to the base currency, so the
+             * bucket labelled USD held New Zealand dollars — and this engine
+             * then multiplied it by the planning rate a second time. August's
+             * total position read 370,307 where roughly 204,500 was right.
+             *
+             * The transaction detail is in each account's OWN currency, which is
+             * what the rest of this engine assumes, and it excludes transfers
+             * between the organisation's own accounts — so cash in stops
+             * counting the 1.08m that June moved between nineteen accounts.
+             *
+             * Proven, not assumed: with transfers included the detail reconciles
+             * to the summary exactly in NZD, and the ratio for USD and AUD is
+             * the day's FX rate to four significant figures. */
+            const tx = actual.tx;
+            const txBase = tx?.byCurrency?.[baseCur] || { in: 0, out: 0 };
+            const txFx = tx?.byCurrency?.[fxCur] || { in: 0, out: 0 };
+            const trBase = tx?.transfersByCurrency?.[baseCur] || { in: 0, out: 0 };
+            const trFx = tx?.transfersByCurrency?.[fxCur] || { in: 0, out: 0 };
+            const usingTx = Boolean(tx) && !tx.truncated;
 
-            // Headline rows, base-stated, so the column still adds up.
-            //
-            // CAUTION: these are GROSS bank movements, and a USD→NZD conversion
-            // appears in both — once as USD spent, once as NZD received. So a
-            // month with conversions overstates cash in and cash out by the
-            // converted amount. Net movement and the balances are unaffected,
-            // because the same figure inflates both sides and cancels.
-            //
-            // This cannot be fixed from a bank summary: a conversion landing in
-            // the NZD account and a student paying into it look identical. It is
-            // what the receivable-receipts pull is for. Flagged on the row so the
-            // UI can mark it rather than presenting a gross figure as takings.
-            row.cashIn = row.baseIn + row.fxIn * rate;
-            row.cashOut = row.baseOut + row.fxOut * rate;
+            row.usesTransactionDetail = usingTx;
+            row.actualSource = usingTx
+                ? (tx.source || "Xero transactions")
+                : (actual.source || "Xero Bank Summary");
+
+            if (usingTx) {
+                // Business cash only. Own-account transfers are excluded here and
+                // applied to the balances separately, below.
+                row.baseIn = txBase.in;
+                row.fxIn = txFx.in;
+                row.baseOut = txBase.out;
+                row.fxOut = txFx.out;
+                row.grossIncludesTransfers = false;
+
+                // Now derivable, and real: the USD leg of a conversion is a
+                // transfer OUT of a USD account, and the NZD that arrived is the
+                // matching transfer IN. A bank summary could never tell these
+                // from a customer payment.
+                row.fxConverted = trFx.out;
+                row.baseFromConversion = trBase.in;
+            } else {
+                row.baseIn = baseA.received || 0;
+                row.fxIn = fxA.received || 0;
+                row.baseOut = baseA.spent || 0;
+                row.fxOut = fxA.spent || 0;
+                // GROSS movements: a conversion appears as both money out of the
+                // fx account and money into the base account, so both rows are
+                // overstated by the amount converted. Net movement and the
+                // balances are unaffected, because it inflates both sides.
+                row.grossIncludesTransfers = row.baseIn > 0 && row.fxOut > 0;
+                row.fxConverted = null;
+                row.baseFromConversion = null;
+                // The summary is base-currency throughout, so its fx figures are
+                // ALREADY in base and must not be converted again.
+                row.fxFiguresAreBase = true;
+            }
+
+            // Headline rows, base-stated, so the column still adds up. The fx
+            // side is converted only when it is genuinely in the fx currency.
+            const fxToBase = row.fxFiguresAreBase ? 1 : rate;
+            row.cashIn = row.baseIn + row.fxIn * fxToBase;
+            row.cashOut = row.baseOut + row.fxOut * fxToBase;
             row.net = row.cashIn - row.cashOut;
-            row.grossIncludesTransfers = row.baseIn > 0 && row.fxOut > 0;
-
-            // Not derivable from a bank summary — a conversion and a customer
-            // payment both look like money arriving in the NZD account.
-            row.fxConverted = null;
-            row.baseFromConversion = null;
 
             // A bank summary's own four columns must reconcile: closing has to
             // equal opening plus received minus spent. It is the same statement
@@ -505,8 +545,49 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 return stored;
             };
 
-            baseBalance = reconcile(baseCur, baseA, baseBalance, row.baseIn, row.baseOut);
-            fxBalance = reconcile(fxCur, fxA, fxBalance, row.fxIn, row.fxOut);
+            if (usingTx) {
+                /* Chain the balances in each account's OWN currency.
+                 *
+                 * Business cash plus the organisation's own transfers: a
+                 * conversion is not business cash, but it absolutely moves the
+                 * balance, so it belongs here and nowhere else.
+                 *
+                 * The bank summary is still checked against this, but it cannot
+                 * be compared directly — it is base-currency — so it is
+                 * converted back at the rate the two views imply for that month.
+                 * That rate is measured, not assumed: it comes from dividing the
+                 * same month's summary by the same month's detail. */
+                baseBalance += (row.baseIn + trBase.in) - (row.baseOut + trBase.out);
+                fxBalance += (row.fxIn + trFx.in) - (row.fxOut + trFx.out);
+
+                const crossCheck = (cur, side, derived) => {
+                    const stored = side.closing;
+                    if (stored === null || stored === undefined) return;
+                    const implied = tx.impliedRates?.[cur];
+                    // A month with almost no movement implies a rate from two
+                    // small numbers. Checking against that would produce noise,
+                    // not information.
+                    if (!implied || !implied.rate || implied.thin) return;
+                    const inAccountCurrency = stored / implied.rate;
+                    const tolerance = Math.max(50, Math.abs(inAccountCurrency) * 0.02);
+                    if (Math.abs(inAccountCurrency - derived) > tolerance) {
+                        warnings.push(`${row.label}: the ${cur} balance from transactions (${Math.round(derived).toLocaleString("en-NZ")}) does not match the bank summary (${Math.round(inAccountCurrency).toLocaleString("en-NZ")} at the month's implied rate of ${implied.rate.toFixed(4)}). One of the two sources is incomplete.`);
+                    }
+                };
+                crossCheck(baseCur, baseA, baseBalance);
+                crossCheck(fxCur, fxA, fxBalance);
+
+                if (tx.transferLegs && tx.transferLegs.complete === false) {
+                    warnings.push(`${row.label}: ${tx.transferLegs.transfers - tx.transferLegs.bothPresent} of ${tx.transferLegs.transfers} transfers between your own accounts are missing a leg, worth ${Math.round(tx.transferLegs.missingAmount).toLocaleString("en-NZ")}. Balances for this month may be wrong by that amount.`);
+                }
+            } else {
+                baseBalance = reconcile(baseCur, baseA, baseBalance, row.baseIn, row.baseOut);
+                fxBalance = reconcile(fxCur, fxA, fxBalance, row.fxIn, row.fxOut);
+            }
+
+            if (tx?.truncated) {
+                warnings.push(`${row.label}: Xero returned more transactions than were read, so this month is incomplete. The bank summary is being used instead.`);
+            }
         }
         else {
             // Receipts land first, then the month's payments are made.
@@ -529,7 +610,10 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
 
         row.fxClosing = fxBalance;
         row.baseClosing = baseBalance;
-        row.closing = baseBalance + fxBalance * rate;
+        // When a closed month fell back to the bank summary, fxBalance is
+        // already base-currency and must not be converted a second time. That
+        // double conversion is what put August's total position 166,000 high.
+        row.closing = baseBalance + fxBalance * (row.fxFiguresAreBase ? 1 : rate);
 
         // Deferred revenue is an accounting balance, and a bank summary cannot
         // produce one. In a closed month `baseIn`/`fxIn` are GROSS bank

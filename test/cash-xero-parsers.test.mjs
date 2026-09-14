@@ -303,3 +303,65 @@ const acct = (...values) => ({ RowType: "Row", Cells: values.map(cell) });
 }
 
 console.log("\nAll bank summary column tests passed.");
+
+/* ================================================================== *
+ * THE APRIL OPENING IS IN THE WRONG CURRENCY UNTIL IT IS CONVERTED
+ *
+ * The Bank Summary reports every account in the base currency, so the "opening"
+ * filed under USD is New Zealand dollars. Used as-is it starts the year's
+ * treasury chain about 1.7x too high, and every conversion for twelve months is
+ * sized off it.
+ * ================================================================== */
+
+{
+  const aprilWithTx = {
+    month: "2026-04",
+    byCurrency: {
+      NZD: { opening: -456_313, received: 100_000, spent: 50_000 },
+      USD: { opening: 12_875, received: 171_940, spent: 0 },
+    },
+    tx: {
+      byCurrency: { NZD: { in: 100_000, out: 50_000 }, USD: { in: 100_000, out: 0 } },
+      transfersByCurrency: {},
+      impliedRates: {
+        NZD: { rate: 1, basedOn: 150_000, thin: false },
+        USD: { rate: 1.7194, basedOn: 100_000, thin: false },
+      },
+    },
+  };
+
+  const r = resolveOpeningBalances(
+    { openingBalances: { NZD: 0, USD: 0 }, openingBalanceSource: "xero" },
+    aprilWithTx,
+  );
+
+  near(r.balances.USD, 12_875 / 1.7194, 1, "the USD opening becomes real dollars");
+  assert.ok(r.balances.USD < 7_500, "roughly 7,488, not the 12,875 the summary reports");
+  near(r.balances.NZD, -456_313, 0.01, "the base currency is untouched — its rate is 1");
+  assert.equal(r.openingRateSource.USD.source, "implied", "and it says where the rate came from");
+  near(r.openingRateSource.USD.rate, 1.7194, 0.0001);
+  console.log("✓ the April opening is converted out of base currency, with the rate stated");
+}
+
+{
+  // No transaction detail: convert nothing rather than guess a rate. Wrong, but
+  // wrong in a way that is visible and labelled, which a silent 1.7x is not.
+  const r = resolveOpeningBalances(
+    { openingBalances: { NZD: 0, USD: 0 }, openingBalanceSource: "xero" },
+    { byCurrency: { USD: { opening: 12_875 } } },
+  );
+  near(r.balances.USD, 12_875, 0.01, "left alone when there is nothing to imply a rate from");
+  assert.equal(r.openingRateSource.USD.source, "no-transaction-detail");
+
+  // A month with almost no movement implies a rate from two small numbers.
+  const thin = resolveOpeningBalances(
+    { openingBalances: { USD: 0 }, openingBalanceSource: "xero" },
+    { byCurrency: { USD: { opening: 12_875 } },
+      tx: { impliedRates: { USD: { rate: 4.2, basedOn: 30, thin: true } } } },
+  );
+  near(thin.balances.USD, 12_875, 0.01, "a rate built on 30 dollars of movement is not used");
+  assert.equal(thin.openingRateSource.USD.source, "too-little-movement-to-imply");
+  console.log("✓ an unreliable implied rate is refused rather than applied");
+}
+
+console.log("\nAll opening currency tests passed.");
