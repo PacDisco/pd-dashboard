@@ -565,7 +565,13 @@ console.log("\nAll treasury tests passed.");
   assert.equal(m.grossIncludesTransfers, true, "the month is flagged");
   assert.ok(f.warnings.some((w) => w.includes("gross bank movements") && w.includes("Apr 26")),
     "and it is said out loud, not left to be discovered by hand");
-  console.log("✓ conversions inflate gross cash in/out, and that is stated");
+  // A warning that describes a problem without naming its remedy only makes
+  // someone ask again. This month has no transaction detail stored, and the
+  // fix for that is a button, so the warning says which button.
+  assert.ok(f.warnings.some((w) => w.includes("Refresh Xero data now")),
+    "and says what to do about it");
+  assert.equal(m.actualsFallbackReason, "no-transaction-detail");
+  console.log("✓ conversions inflate gross cash in/out, and the warning names the remedy");
 
   // A month with no conversion must not be flagged, or the warning is noise.
   const clean = buildForecast(a, {

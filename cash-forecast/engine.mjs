@@ -489,6 +489,12 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 // overstated by the amount converted. Net movement and the
                 // balances are unaffected, because it inflates both sides.
                 row.grossIncludesTransfers = row.baseIn > 0 && row.fxOut > 0;
+                // WHY the summary is being used, so the warning can say what to
+                // do rather than only what is wrong. "No detail stored" and "the
+                // detail came back short" need different answers, and a warning
+                // that describes a problem without naming its remedy just makes
+                // someone ask again.
+                row.actualsFallbackReason = tx ? "truncated" : "no-transaction-detail";
                 row.fxConverted = null;
                 row.baseFromConversion = null;
                 // The summary is base-currency throughout, so its fx figures are
@@ -646,7 +652,14 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         // every month after it onto a balance that is days old.
         const gross = months.filter((m) => m.grossIncludesTransfers).map((m) => m.label);
         if (gross.length) {
-            warnings.push(`Cash in and cash out for ${gross.join(", ")} are gross bank movements: a currency conversion shows as both money out of ${fxCur} and money into ${baseCur}, so both rows are overstated by the amount converted. Net movement and the balances are unaffected.`);
+            // The remedy depends on why the detail is absent, and the difference
+            // matters: one is a button, the other is a bug.
+            const missing = months.filter(
+                (m) => m.grossIncludesTransfers && m.actualsFallbackReason === "no-transaction-detail").length;
+            const remedy = missing
+                ? ` The transaction detail that fixes this has not been pulled for ${missing === gross.length ? "these months" : "some of these months"} — run Diagnostics → Refresh Xero data now.`
+                : ` Xero returned more transactions than could be read for ${gross.length === 1 ? "this month" : "these months"}, so the summary is being used instead.`;
+            warnings.push(`Cash in and cash out for ${gross.join(", ")} are gross bank movements: a currency conversion shows as both money out of ${fxCur} and money into ${baseCur}, so both rows are overstated by the amount converted. Net movement and the balances are unaffected.${remedy}`);
         }
         const partial = months
             .filter((m) => isClosed(m.key) && actualsByMonth[m.key]?.partial)
