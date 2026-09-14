@@ -36,6 +36,8 @@
 // READ-ONLY. Every request is a GET.
 
 import { xeroGet } from "./cash-xero.mjs";
+import { costSignals } from "./cash-costs.mjs";
+import { fetchInvoicesByIds } from "./cash-receipts.mjs";
 
 /** Bumped when a change here would alter a month already fetched and stored. */
 export const BANKTX_PARSER_VERSION = 1;
@@ -510,7 +512,7 @@ export default {
  * History:
  *   1  first version.
  */
-export const TX_PARSER_VERSION = 1;
+export const TX_PARSER_VERSION = 2;
 
 /**
  * The rate Xero used, implied by the two views of the same month.
@@ -644,6 +646,34 @@ export async function fetchMonthTransactions(accessToken, tenantId, key, account
   const rates = impliedRates(summaryByCurrency, s.byCurrency, s.transfersByCurrency);
   const flows = flowCheck(summaryByCurrency, s.byCurrency, s.transfersByCurrency, rates);
 
+  /* Which program did the money go out for?
+   *
+   * A Spend Money transaction carries its own line items, tracking and all. A
+   * supplier BILL paid does not — the Payment names the bill and the tracking
+   * lives on the bill — so the bills paid this month are fetched to go with it.
+   * Without that, every supplier payment is unattributable and the coverage
+   * figure would say tracking is useless when it is simply unread.
+   *
+   * Batched by id, the same way receipts fetch their invoices: a handful of
+   * extra calls a month, not one per payment. */
+  const billIds = payments
+    .filter((p) => String(p?.PaymentType ?? "").toUpperCase() === "ACCPAYPAYMENT")
+    .map((p) => p?.Invoice?.InvoiceID)
+    .filter(Boolean);
+  let invoicesById = new Map();
+  let billsFetched = 0;
+  try {
+    invoicesById = await fetchInvoicesByIds(accessToken, tenantId, billIds);
+    billsFetched = invoicesById.size;
+  } catch {
+    // Attribution degrades, the month does not fail. Coverage will show it.
+  }
+
+  const costs = costSignals({
+    bankTransactions, payments, invoicesById, accounts,
+    impliedRates: rates, baseCurrency: "NZD",
+  });
+
   return {
     month: key,
     parserVersion: TX_PARSER_VERSION,
@@ -657,6 +687,12 @@ export async function fetchMonthTransactions(accessToken, tenantId, key, account
     // checked per currency. See flowCheck for why this is the right question to
     // ask of a foreign-currency account and a balance comparison is not.
     flowCheck: flows,
+    // Program-attributed outgoing money, by each of the three possible routes,
+    // with the coverage of each. This is what a measured cost curve is built
+    // from — and the coverage is what says whether it can be.
+    costs,
+    billsFetched,
+    billsReferenced: new Set(billIds).size,
     counts: s.counts,
     unknownTypes: s.unknownTypes,
     transferLegs: legs,

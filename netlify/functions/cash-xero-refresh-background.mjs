@@ -61,7 +61,9 @@ export default async (req) => {
     // than a constraint — if something is pathologically slow it should stop
     // and report, not be killed with no record of how far it got.
     const result = await refreshAll(token, org.tenantId, fy, {
-      force, budget: budgetOf(12 * 60_000, 60),
+      // Two fiscal years of transactions plus this year's summaries, P&L and
+      // budget: a shade under a hundred pulls on a first full run.
+      force, budget: budgetOf(12 * 60_000, 120),
     });
 
     const durationMs = Date.now() - started;

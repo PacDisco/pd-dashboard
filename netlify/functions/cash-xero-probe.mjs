@@ -34,6 +34,7 @@ import {
   reconcile,
 } from "./_shared/cash-bank-tx.mjs";
 import { loadAssumptions, currentFiscalYear, resolveOpeningBalances } from "./_shared/cash-store.mjs";
+import { fiscalMonthKeys } from "./_shared/cash-xero.mjs";
 import {
   fetchPayments,
   fetchInvoicesByIds,
@@ -180,7 +181,7 @@ export default async (req) => {
   const report = url.searchParams.get("report");
   const month = url.searchParams.get("month");
   // The budget covers the whole year, so it is the one mode that needs no month.
-  if (report !== "budget" && !/^\d{4}-\d{2}$/.test(month ?? "")) {
+  if (!["budget", "costs"].includes(report) && !/^\d{4}-\d{2}$/.test(month ?? "")) {
     return json({ error: "Pass ?month=YYYY-MM, e.g. ?month=2026-08" }, 400);
   }
 
@@ -289,6 +290,83 @@ export default async (req) => {
         hint: "A 403 mentioning scope means accounting.banktransactions.read was not granted — re-consent.",
       }, 502);
     }
+  }
+
+  // ?report=costs answers the one question the cost-phasing rebuild rests on:
+  // can outgoing money be tied to a program at all, and by which route?
+  //
+  // Reads the STORED transaction months, so it reflects exactly what a derived
+  // curve would be built from. Program names and account codes only — no
+  // supplier names, references or amounts per contact.
+  if (report === "costs") {
+    const { getStore } = await import("@netlify/blobs");
+    const latest = await getStore({ name: "cash-xero" }).get("latest", { type: "json" });
+    const tenantId = latest?.orgs?.[0]?.tenantId;
+    if (!tenantId) return json({ error: "No synced organisation yet." }, 409);
+
+    const txStore = getStore({ name: "cash-xero-tx" });
+    const fy = currentFiscalYear();
+    const months = [];
+    // Both fiscal years, because a curve needs complete program cycles and this
+    // year alone is all pre-departure for Fall.
+    for (const y of [fy - 1, fy]) {
+      for (const key of fiscalMonthKeys(y, new Date(`${y + 1}-03-31T00:00:00Z`))) {
+        const rec = await txStore.get(`${tenantId}/${key}`, { type: "json" });
+        if (rec?.costs) months.push({ month: key, ...rec.costs, billsFetched: rec.billsFetched, billsReferenced: rec.billsReferenced });
+      }
+    }
+
+    if (!months.length) {
+      return json({ error: "No transaction months stored yet — run a forced refresh first." }, 409);
+    }
+
+    // Weighted across every month, because one quiet month proves nothing.
+    const total = months.reduce((s, m) => s + (m.totalOut || 0), 0);
+    const weighted = (route) => (total > 0
+      ? Math.round(months.reduce((s, m) => s + (m.totalOut || 0) * ((m.coverage?.[route] ?? 0) / 100), 0) / total * 1000) / 10
+      : 0);
+
+    const merge = (field) => {
+      const out = {};
+      for (const m of months) for (const [k, v] of Object.entries(m[field] ?? {})) out[k] = (out[k] ?? 0) + v;
+      return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]).slice(0, 40));
+    };
+
+    const a = await loadAssumptions(fy);
+    const programNames = new Set((a.programs ?? []).flatMap(
+      (p) => [p.xeroTrackingOption, p.name].filter(Boolean).map((n) => String(n).trim().toLowerCase())));
+    const trackingTotals = merge("byTracking");
+    const matched = Object.keys(trackingTotals).filter((k) => programNames.has(k.trim().toLowerCase()));
+
+    return json({
+      monthsStored: months.length,
+      fiscalYears: [fy - 1, fy],
+      totalOutAcrossMonths: Math.round(total),
+      // THE ANSWER. Share of outgoing money each route can attribute.
+      coverageWeighted: {
+        tracking: weighted("tracking"),
+        accountCode: weighted("accountCode"),
+      },
+      // Names, so a mapping can be proposed rather than guessed.
+      byTracking: trackingTotals,
+      byBankAccount: merge("byBankAccount"),
+      byAccountCode: merge("byAccountCode"),
+      // Do the tracking options line up with the programs in the model? A route
+      // with high coverage and names nothing recognises is not usable.
+      trackingOptionsMatchingPrograms: matched,
+      trackingOptionsUnmatched: Object.keys(trackingTotals).filter((k) => !programNames.has(k.trim().toLowerCase())),
+      programsInModel: (a.programs ?? []).map((p) => p.name),
+      unattributable: {
+        spendWithoutLineDetail: months.reduce((s, m) => s + (m.spendWithoutLineDetail || 0), 0),
+        unconverted: months.reduce((s, m) => s + (m.unconverted || 0), 0),
+        billsFetched: months.reduce((s, m) => s + (m.billsFetched || 0), 0),
+        billsReferenced: months.reduce((s, m) => s + (m.billsReferenced || 0), 0),
+      },
+      perMonth: months.map((m) => ({
+        month: m.month, totalOut: m.totalOut, coverage: m.coverage,
+        spendWithoutLineDetail: m.spendWithoutLineDetail,
+      })),
+    });
   }
 
   // ?report=opex uses accounting.reports.profitandloss.read, already consented.

@@ -630,6 +630,9 @@ function diagnosticsPanel(ro) {
     // Every closed month, because "which month does the discrepancy start in"
     // is the question that localises an opening-balance error — and a constant
     // offset from April onward is exactly that shape.
+    // Can outgoing money be tied to a program at all? Everything about the cost
+    // curve depends on the answer, and nothing else on this page reveals it.
+    ["costs", `?report=costs`, "Cost attribution"],
     ...["04", "05", "06", "07", "08"].map((mm) => [
       `banktx${mm}`,
       `?month=${fy}-${mm}&report=banktx`,

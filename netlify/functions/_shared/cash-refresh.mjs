@@ -227,17 +227,45 @@ export async function refreshBudget(token, tenantId, fy) {
  * Runs AFTER refreshMonths, because the implied rate comes from comparing the
  * two views of the same month.
  */
-export async function refreshTransactions(token, tenantId, fy, { force = false, budget = UNLIMITED } = {}) {
+/**
+ * How many fiscal years of transactions to keep.
+ *
+ * WHY MORE THAN ONE
+ * -----------------
+ * A cost curve is "how does spend on a program sit relative to its departure",
+ * and that needs a COMPLETE cycle: first supplier deposit through to final
+ * payment. The current year alone cannot give one. Fall departs 1 September, so
+ * April to August is entirely pre-departure — enough to see the ramp up, and
+ * nothing at all about the departure month or the tail. Deriving a full curve
+ * from it would mean inventing the second half again, which is what the whole
+ * exercise is meant to stop.
+ *
+ * One prior year gives Fall 25, Spring 26 and Summer 26 start to finish. Roughly
+ * seventy extra Xero calls, once, against a daily limit of a thousand.
+ */
+export const TX_HISTORY_YEARS = 2;
+
+export async function refreshTransactions(token, tenantId, fy, { force = false, budget = UNLIMITED, years = TX_HISTORY_YEARS } = {}) {
   const store = getStore({ name: "cash-xero-tx", consistency: "strong" });
   const monthStore = getStore({ name: "cash-xero-months", consistency: "strong" });
-  const out = { fetched: 0, cached: 0, restated: 0, remaining: 0, version: TX_PARSER_VERSION, error: null, truncated: [] };
+  const out = { fetched: 0, cached: 0, restated: 0, remaining: 0, version: TX_PARSER_VERSION, error: null, truncated: [], years };
   // Same reason as refreshMonths: bankAccountIndex is a Xero call, and spending
   // it when there is no budget left to use the result is pure overrun.
-  if (budget.expired()) { out.remaining = 12; return out; }
+  if (budget.expired()) { out.remaining = 12 * Math.max(1, years); return out; }
   try {
     const accounts = await bankAccountIndex(token, tenantId, "NZD");
-    const keys = fiscalMonthKeys(fy);
-    const alwaysRefresh = keys.slice(-2);
+    // The current year, then each prior one. Current first so a budget that runs
+    // out leaves the forecast's own months complete and only the history short.
+    const keys = [];
+    for (let back = 0; back < Math.max(1, years); back++) {
+      const y = fy - back;
+      // A past year is complete, so take the whole twelve months rather than
+      // stopping at today.
+      keys.push(...(back === 0
+        ? fiscalMonthKeys(y)
+        : fiscalMonthKeys(y, new Date(`${y + 1}-03-31T00:00:00Z`))));
+    }
+    const alwaysRefresh = fiscalMonthKeys(fy).slice(-2);
 
     for (const key of keys) {
       const blobKey = `${tenantId}/${key}`;
@@ -249,6 +277,9 @@ export async function refreshTransactions(token, tenantId, fy, { force = false, 
       // The heaviest pass by far — three paged endpoints per month — so this is
       // the one that was being cut off, and the one the budget matters for.
       if (!budget.take()) { out.remaining++; continue; }
+      // A prior year has no stored bank summary, so no implied rate — foreign
+      // amounts in those months come back unconverted and say so, rather than
+      // being mixed into a base-currency total at a guessed rate.
       const month = await monthStore.get(blobKey, { type: "json" });
       const record = await fetchMonthTransactions(
         token, tenantId, key, accounts, month?.byCurrency ?? {});
