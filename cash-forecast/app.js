@@ -1025,15 +1025,25 @@ function wire() {
       state.diagBusy = b.dataset.diagid;
       state.diag = null;
       render();
+      // finally, for the same reason as the refresh button below: a busy flag
+      // set before an await must be cleared on every path out, or a working
+      // request that happens to return early leaves the UI claiming it is still
+      // going.
       try {
         const res = await fetch(`${API}/cash-xero-probe${b.dataset.diag}`, { credentials: "include" });
-        const body = await res.json().catch(() => ({ error: "response was not JSON" }));
+        // Text first: a function that times out returns Netlify's HTML error
+        // page, and res.json() on that throws with nothing useful to show.
+        const raw = await res.text();
+        let body;
+        try { body = JSON.parse(raw); }
+        catch { body = { error: `Unexpected ${res.status} response`, responseStart: raw.slice(0, 300) }; }
         state.diag = `HTTP ${res.status}\n\n${JSON.stringify(body, null, 2)}`;
       } catch (err) {
         state.diag = `Request failed: ${err.message}`;
+      } finally {
+        state.diagBusy = null;
+        render();
       }
-      state.diagBusy = null;
-      render();
     }));
 
   document.querySelectorAll("[data-refresh]").forEach((b) =>
@@ -1041,6 +1051,17 @@ function wire() {
       state.diagBusy = b.dataset.diagid;
       state.diag = null;
       render();
+
+      /* try/FINALLY, and the finally is the point.
+       *
+       * The first version cleared the busy flag on the error path and on the
+       * fall-through, but the success path returned early — so a refresh that
+       * worked perfectly left the button reading "Refetching…" for ever, which
+       * looks exactly like one that hung. The data was in the store; only the
+       * button was lying.
+       *
+       * A flag set before an await and cleared afterwards belongs in a finally.
+       * There is no path out of this function that should leave it set. */
       try {
         /* START, THEN POLL.
          *
@@ -1083,18 +1104,17 @@ function wire() {
           if (status && !status.running) break;
         }
 
-        state.diag = JSON.stringify(status, null, 2);
-        // The figures are in the blob store now, not in this page.
-        const keep = state.diag;
+        // The refreshed figures are in the blob store now, not in this page.
         await boot();
-        state.diag = keep;
-        render();
-        return;
+        state.diag = status?.error
+          ? `Refresh reported a problem:\n\n${JSON.stringify(status, null, 2)}`
+          : `${status?.summary ?? "Done."}\n\n${JSON.stringify(status, null, 2)}`;
       } catch (err) {
         state.diag = `Request failed: ${err.message}`;
+      } finally {
+        state.diagBusy = null;
+        render();
       }
-      state.diagBusy = null;
-      render();
     }));
 
   document.querySelectorAll("input[name=ohbasis]").forEach((input) =>
