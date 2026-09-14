@@ -293,7 +293,7 @@ console.log("\nAll bank transaction tests passed.");
   // through. The earlier passes completed, the heaviest one (transactions) never
   // ran, and the only symptom was a store that stayed empty — indistinguishable
   // from a deployment that had not worked.
-  const { deadlineIn } = await import("../netlify/functions/_shared/cash-refresh.mjs");
+  const { deadlineIn, budgetOf } = await import("../netlify/functions/_shared/cash-refresh.mjs");
 
   const already = deadlineIn(-1);
   assert.equal(already(), true, "a deadline in the past is expired immediately");
@@ -303,4 +303,24 @@ console.log("\nAll bank transaction tests passed.");
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(soon(), true, "until it passes");
   console.log("✓ the refresh deadline actually expires");
+
+  // A CLOCK ALONE WAS NOT ENOUGH.
+  //
+  // It can only stop work that has not started, and one month of transactions
+  // is three paged Xero endpoints — enough on its own to overrun a ten-second
+  // function. The first attempt at this fix still died, and what came back was
+  // Netlify's HTML timeout page, which the client could only describe as
+  // "response was not JSON". So the budget counts units too.
+  const b = budgetOf(60_000, 3);
+  assert.equal(b.take(), true);
+  assert.equal(b.take(), true);
+  assert.equal(b.take(), true);
+  assert.equal(b.take(), false, "a fourth pull is refused even with time on the clock");
+  assert.equal(b.spent, 3, "and the count is reported");
+
+  // Time still wins when it runs out first.
+  const t = budgetOf(-1, 100);
+  assert.equal(t.take(), false, "no pulls once the clock has gone, however many units remain");
+  assert.equal(t.spent, 0);
+  console.log("✓ the budget is a count as well as a clock, and either can stop it");
 }

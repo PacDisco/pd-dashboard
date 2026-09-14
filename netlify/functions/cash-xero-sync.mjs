@@ -17,7 +17,7 @@ import {
   monthBounds, iso,
   getTrackingCategories, pickProgramCategory, getTrackedActuals, fiscalYearBounds,
 } from "./_shared/cash-xero.mjs";
-import { refreshAll, refreshSummary, deadlineIn } from "./_shared/cash-refresh.mjs";
+import { refreshAll, refreshSummary, budgetOf } from "./_shared/cash-refresh.mjs";
 async function orgCurrency(token, tenantId) {
     try {
         const org = await xeroGet(token, tenantId, "Organisation");
@@ -112,7 +112,7 @@ export default async (_req, _context) => {
   // picks up on the next. Better a slice per hour than a run that is killed
   // partway through every time.
   const refreshed = primary
-    ? await refreshAll(token, primary.tenantId, fy, { expired: deadlineIn(40_000) })
+    ? await refreshAll(token, primary.tenantId, fy, { budget: budgetOf(40_000, 40) })
     : null;
 
   for (const [name, r] of Object.entries(refreshed ?? {})) {

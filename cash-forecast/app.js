@@ -1052,13 +1052,30 @@ function wire() {
          * identical to a deployment that did not work. */
         const passes = [];
         let body = null;
-        for (let pass = 1; pass <= 12; pass++) {
+        // Enough passes for a full year at four pulls each, with room to spare.
+        for (let pass = 1; pass <= 40; pass++) {
           // POST: it spends Xero calls and rewrites stored months, so it must
           // not be something a link can trigger.
           const res = await fetch(`${API}/cash-xero-refresh${b.dataset.refresh}`, {
             method: "POST", credentials: "include",
           });
-          body = await res.json().catch(() => ({ error: "response was not JSON" }));
+          // Read as TEXT first. A killed function returns Netlify's HTML error
+          // page, and `res.json()` on that throws — which is how a timeout came
+          // back as the useless "response was not JSON" with nothing to act on.
+          const raw = await res.text();
+          try {
+            body = JSON.parse(raw);
+          } catch {
+            body = {
+              error: res.status === 502 || res.status === 504 || /timed out/i.test(raw)
+                ? `The refresh took too long and was cut off (HTTP ${res.status}). It does a few months per pass, so try again — the work already done is saved.`
+                : `Unexpected ${res.status} response`,
+              status: res.status,
+              // The first part of whatever actually came back, so a surprise is
+              // diagnosable rather than described as "not JSON".
+              responseStart: raw.slice(0, 300),
+            };
+          }
           passes.push({ pass, status: res.status, summary: body.summary, remaining: body.remaining });
           state.diag = `Pass ${pass} — ${body.summary ?? body.error ?? "…"}\n${body.remaining ?? 0} remaining`;
           render();

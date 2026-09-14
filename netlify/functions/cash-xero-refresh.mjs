@@ -22,7 +22,7 @@ import { getStore } from "@netlify/blobs";
 import { requireCashRole, json } from "./_shared/cash-access.mjs";
 import { getAccessToken, getConnections } from "./_shared/cash-xero.mjs";
 import { currentFiscalYear } from "./_shared/cash-store.mjs";
-import { refreshAll, refreshSummary, deadlineIn } from "./_shared/cash-refresh.mjs";
+import { refreshAll, refreshSummary, budgetOf } from "./_shared/cash-refresh.mjs";
 
 export default async (req) => {
   const user = await requireCashRole(req, "write", "cash-xero-refresh");
@@ -45,13 +45,18 @@ export default async (req) => {
     if (!org) return json({ error: "No Xero organisation connected." }, 409);
 
     const fy = currentFiscalYear();
-    // Well inside the ten seconds a Netlify function gets. A refresh of a full
-    // year is sixty-odd Xero calls and cannot finish in one request; being
-    // killed partway through leaves a store half-written and no way to tell
-    // that from a fix that did not work. So do a slice and say what is left —
-    // the caller comes back for the rest.
+    /* Five seconds AND at most four pulls, whichever runs out first.
+     *
+     * The count is the part that makes this reliable. A clock can only stop
+     * work that has not started, and one month of transactions is three paged
+     * Xero endpoints — enough on its own to blow a ten-second function. Four
+     * pulls is comfortably under the limit even when Xero is slow.
+     *
+     * The cost of being wrong here is not a slow response, it is no response:
+     * a killed function returns Netlify's HTML error page, the client cannot
+     * parse it, and the only thing anyone sees is "response was not JSON". */
     const result = await refreshAll(token, org.tenantId, fy, {
-      force, expired: deadlineIn(7000),
+      force, budget: budgetOf(5000, 4),
     });
     const durationMs = Date.now() - started;
 
