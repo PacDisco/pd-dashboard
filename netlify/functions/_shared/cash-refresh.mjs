@@ -142,15 +142,40 @@ export async function refreshMonths(token, tenantId, fy, { force = false, budget
 }
 
 /** Operating expenses, one P&L call per finished month. */
-export async function refreshOpex(token, tenantId, fy, { force = false, budget = UNLIMITED } = {}) {
+/**
+ * How many fiscal years of P&L to keep.
+ *
+ * WHY MORE THAN ONE
+ * -----------------
+ * The calendar cost profile — what share of a year's program cost leaves in
+ * each fiscal month — can only be defined by a COMPLETE fiscal year, because a
+ * part-year's shares describe the months it happens to contain. This function
+ * used to walk `fiscalMonthKeys(fy)` alone, so the only year it ever stored was
+ * the one still running. There was never a complete year in the store and there
+ * never could be, which the panel reported as "no complete fiscal year" without
+ * either of us being able to tell that no amount of waiting would fix it.
+ *
+ * Matches TX_HISTORY_YEARS so the two sides of a month arrive together.
+ */
+export const OPEX_HISTORY_YEARS = 2;
+
+export async function refreshOpex(token, tenantId, fy, { force = false, budget = UNLIMITED, years = OPEX_HISTORY_YEARS } = {}) {
   const store = getStore({ name: "cash-xero-opex", consistency: "strong" });
-  const out = { fetched: 0, cached: 0, restated: 0, remaining: 0, version: OPEX_PARSER_VERSION, error: null };
-  if (budget.expired()) { out.remaining = 11; return out; }
+  const out = { fetched: 0, cached: 0, restated: 0, remaining: 0, version: OPEX_PARSER_VERSION, error: null, years };
+  if (budget.expired()) { out.remaining = 11 * Math.max(1, years); return out; }
   try {
-    const keys = fiscalMonthKeys(fy);
-    // The current month is still running, so its P&L is partial.
-    const finished = keys.slice(0, -1);
-    const alwaysRefresh = finished.slice(-1);
+    // Current year first, then each prior one, so a budget that runs out leaves
+    // the forecast's own months complete and only the history short.
+    const finished = [];
+    for (let back = 0; back < Math.max(1, years); back++) {
+      const y = fy - back;
+      // The current month is still running, so its P&L is partial. A past year
+      // has no running month — take all twelve.
+      finished.push(...(back === 0
+        ? fiscalMonthKeys(y).slice(0, -1)
+        : fiscalMonthKeys(y, new Date(`${y + 1}-03-31T00:00:00Z`))));
+    }
+    const alwaysRefresh = fiscalMonthKeys(fy).slice(0, -1).slice(-1);
 
     for (const key of finished) {
       const blobKey = `${tenantId}/${key}`;

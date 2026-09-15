@@ -527,9 +527,35 @@ function costCurvePanel() {
   }
 
   const cov = c.coverageWeighted ?? {};
+  const ev = c.evidence ?? {};
+
+  /* "Nothing tagged" is only a fact about the books if the books were read.
+   *
+   * Across 4,000 line items it means nobody tags supplier spend. Across zero it
+   * means nothing was fetched, which is a fact about this code. The panel said
+   * the first when the truth was the second, so the sentence now states which. */
   const covLine = Object.entries(cov).length
     ? Object.entries(cov).map(([k, v]) => `<b>${escapeHtml(k)}</b> ${v}%`).join(" · ")
-    : "nothing tagged";
+    : ev.lineItemsSeen
+      ? `nothing tagged — ${Number(ev.lineItemsSeen).toLocaleString("en-NZ")} line items read and not one carries a Program or Season tag`
+      : "nothing read yet — no line detail has been fetched, so this says nothing about the books";
+
+  /* What to DO about it, which is different for each cause and was previously
+   * left as an exercise. */
+  const D = {
+    "nothing-fetched": "No month has been fetched yet. Run <b>Diagnostics → Refresh from Xero</b> and let it finish.",
+    "opex-stale": `The P&amp;L months in store were written before this code could read Cost of Sales, so they hold overheads but no program cost. The version stamp is now bumped, so <b>Diagnostics → Refresh from Xero</b> rewrites them. Nothing is wrong with the books.`,
+    "history-short": "The refresh gets through the current year first and stops when its time is up, so the prior year is still short. Run <b>Diagnostics → Refresh from Xero</b> again — each run keeps what it got and carries on.",
+  }[ev.diagnosis];
+
+  const evidenceBlock = !ev.tx ? "" : `
+    <p class="foot"><b>What was read:</b>
+      bank detail ${ev.tx.stored}/${ev.tx.expected} months
+      · P&amp;L ${ev.opex.stored}/${ev.opex.expected} months, ${ev.opex.withProgramCost} with program cost
+      · ${Number(ev.lineItemsSeen || 0).toLocaleString("en-NZ")} line items
+      ${ev.billsReferenced ? `· ${ev.billsFetched}/${ev.billsReferenced} supplier bills opened` : ""}
+    </p>
+    ${D ? `<p class="foot">${D}</p>` : ""}`;
 
   const pf = c.profile;
   const MONTHS = pf?.fiscalMonths ?? ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
@@ -589,6 +615,7 @@ function costCurvePanel() {
   return `<section class="closebox">
     <h2>Cost phasing <span class="stamp">${c.monthsStored} months · ${c.categoryUsed}</span></h2>
     <p class="foot">Share of a season's spend by months from departure — negative is before. Derived from ${Number(c.totalOutAcrossMonths).toLocaleString("en-NZ")} of outgoing money across two fiscal years. Tagging coverage: ${covLine}.</p>
+    ${evidenceBlock}
 
     ${splitBlock}
     ${profileBlock}

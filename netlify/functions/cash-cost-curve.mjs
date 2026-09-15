@@ -35,6 +35,22 @@ export default async (req) => {
   const txStore = getStore({ name: "cash-xero-tx" });
   const opexStore = getStore({ name: "cash-xero-opex" });
   const txMonths = [];
+  /* WHAT WAS ACTUALLY LOOKED AT.
+   *
+   * The panel told Jake "nothing tagged", "not measurable yet" and "no program
+   * cost recorded" — three true statements that between them did not say
+   * whether the problem was Pacific Discovery's bookkeeping or this code's
+   * cache. It was the cache, twice. So the raw evidence travels with the
+   * verdict now: how many months exist, how many line items were read, and how
+   * much spend was never opened. "Nothing tagged" across 4,000 line items is a
+   * fact about the books; across zero line items it is a fact about me. */
+  const evidence = {
+    tx: { expected: 0, stored: 0, byYear: {} },
+    opex: { expected: 0, stored: 0, withProgramCost: 0, byYear: {} },
+    lineItemsSeen: 0,
+    billsFetched: 0,
+    billsReferenced: 0,
+  };
   // Program cost by month, from the P&L's Cost of Sales — the same report the
   // overheads come from, a different section. This needs no attribution at all
   // and covers 100% of program spend, which is why it is the profile's source
@@ -43,16 +59,48 @@ export default async (req) => {
   // Both fiscal years: the current one alone is all pre-departure for Fall, so
   // a curve from it would have no tail.
   for (const y of [fy - 1, fy]) {
-    for (const key of fiscalMonthKeys(y, new Date(`${y + 1}-03-31T00:00:00Z`))) {
+    const keys = fiscalMonthKeys(y, new Date(`${y + 1}-03-31T00:00:00Z`));
+    evidence.tx.byYear[y] = { expected: keys.length, stored: 0 };
+    evidence.opex.byYear[y] = { expected: keys.length, stored: 0, withProgramCost: 0 };
+    evidence.tx.expected += keys.length;
+    evidence.opex.expected += keys.length;
+
+    for (const key of keys) {
       const rec = await txStore.get(`${tenantId}/${key}`, { type: "json" });
-      if (rec?.costs) txMonths.push({ month: key, ...rec.costs });
+      if (rec?.costs) {
+        txMonths.push({ month: key, ...rec.costs });
+        evidence.tx.stored++;
+        evidence.tx.byYear[y].stored++;
+        evidence.lineItemsSeen += rec.costs.lineItemsSeen || 0;
+        evidence.billsFetched += rec.billsFetched || 0;
+        evidence.billsReferenced += rec.billsReferenced || 0;
+      }
 
       const opex = await opexStore.get(`${tenantId}/${key}`, { type: "json" });
+      if (opex) {
+        evidence.opex.stored++;
+        evidence.opex.byYear[y].stored++;
+      }
       if (opex && Number.isFinite(opex.programCost)) {
         (programCostByYear[y] ??= {})[key] = opex.programCost;
+        evidence.opex.withProgramCost++;
+        evidence.opex.byYear[y].withProgramCost++;
       }
     }
   }
+
+  /* The distinction that matters, named rather than left to be inferred.
+   *
+   * A stored month with no programCost was written by a parser that did not
+   * know how to read Cost of Sales. That is a stale cache, and it clears itself
+   * on the next refresh now the version stamp is bumped. A month that is not
+   * stored at all was simply never fetched, and only a refresh brings it. The
+   * two need different actions, so the page must not show them as one shrug. */
+  evidence.diagnosis =
+    evidence.tx.stored === 0 && evidence.opex.stored === 0 ? "nothing-fetched"
+    : evidence.opex.stored > 0 && evidence.opex.withProgramCost === 0 ? "opex-stale"
+    : evidence.opex.stored < evidence.opex.expected ? "history-short"
+    : null;
 
   const profile = monthlyCostProfile(programCostByYear);
 
@@ -93,6 +141,7 @@ export default async (req) => {
     coverageWeighted: coverage,
     monthsStored: txMonths.length,
     totalOutAcrossMonths: Math.round(totalOut),
+    evidence,
     unattributable: {
       spendWithoutLineDetail: txMonths.reduce((s, m) => s + (m.spendWithoutLineDetail || 0), 0),
       unconverted: txMonths.reduce((s, m) => s + (m.unconverted || 0), 0),

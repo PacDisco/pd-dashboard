@@ -53,8 +53,19 @@ import { monthRange } from "./cash-xero.mjs";
  *   2  standardLayout:"true" on the P&L request. Xero was rendering Pacific
  *      Discovery's custom layout, whose "Operating Expenses" section holds only
  *      part of the expenses.
+ *   3  (skipped — see 4)
+ *   4  parseDirectCosts added, so every record now carries programCost from the
+ *      P&L's Cost of Sales section. This was added WITHOUT bumping the stamp,
+ *      which is the exact failure the comment above describes, committed again
+ *      one function lower down. Every month was already stored at version 3, so
+ *      isOpexRecordCurrent said "current", nothing refetched, and programCost
+ *      was absent from all of them — which the cost-phasing panel reported,
+ *      accurately and uselessly, as "no program cost recorded".
+ *
+ *      The rule this keeps breaking: bump the stamp in the SAME commit that
+ *      changes what the parser returns, not in the commit that notices.
  */
-export const OPEX_PARSER_VERSION = 2;
+export const OPEX_PARSER_VERSION = 4;
 
 export const NON_CASH_LINES = [
   /^bank revaluations?$/i,
@@ -124,6 +135,54 @@ export function parseOperatingExpenses(report, patterns = NON_CASH_LINES) {
 }
 
 /**
+ * Direct program cost for one month, from the same report.
+ *
+ * WHY THIS MATTERS MORE THAN IT LOOKS
+ * -----------------------------------
+ * The forecast needs to know when money goes out on programs. The obvious route
+ * is to tie each supplier payment to a program by its tracking tag — which
+ * depends on whether someone filled that tag in, a question nobody can answer
+ * without measuring, and which fails silently when the answer is "sometimes".
+ *
+ * The P&L already separates program cost from overhead. Cost of Sales IS the
+ * program spend, monthly, on 100% of the money, in a report anyone can open and
+ * check. No attribution, no mapping, no coverage caveat.
+ *
+ * What it gives up: this is accrual, not cash — a supplier bill is booked when
+ * raised, not when paid. For phasing SHARES rather than amounts the difference
+ * is typically under a month, and the caller can compare the total against
+ * actual bank spend to see whether that holds.
+ *
+ * Section titles vary ("Cost of Sales", "Less Cost of Sales", "Direct Costs"),
+ * so it is matched on any of them rather than an exact string.
+ */
+export function parseDirectCosts(report) {
+  const sections = report?.Reports?.[0]?.Rows ?? [];
+  const section = sections.find(
+    (s) => s.RowType === "Section" && /cost of sales|direct cost/i.test(s.Title ?? ""),
+  );
+  if (!section) return { lines: [], total: 0, sectionFound: false };
+
+  const lines = [];
+  (function walk(rows) {
+    for (const row of rows ?? []) {
+      if (row.Rows) walk(row.Rows);
+      // SummaryRow is the section's own total — counting it would double.
+      if (row.RowType !== "Row") continue;
+      const name = row.Cells?.[0]?.Value;
+      if (!name) continue;
+      lines.push({ name, amount: cellValue(row.Cells?.[1]) });
+    }
+  })(section.Rows);
+
+  return {
+    lines,
+    total: lines.reduce((s, l) => s + l.amount, 0),
+    sectionFound: true,
+  };
+}
+
+/**
  * Operating expenses for one month, cash view.
  *
  * One P&L call per month. Cached by the caller the same way bank months are, so
@@ -143,10 +202,20 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
     standardLayout: "true",
   });
   const parsed = parseOperatingExpenses(report, patterns);
+  const direct = parseDirectCosts(report);
 
   return {
     month: key,
     parserVersion: OPEX_PARSER_VERSION,
+    // Program cost, from the same report and the same call. Kept apart from
+    // operating expenses so the two can never be added together by accident —
+    // Overheads is already its own row.
+    programCost: direct.total,
+    programCostSectionFound: direct.sectionFound,
+    programCostTopLines: direct.lines
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+      .slice(0, 12)
+      .map((l) => ({ name: l.name, amount: Math.round(l.amount) })),
     total: parsed.total,
     cashTotal: parsed.cashTotal,
     sectionFound: parsed.sectionFound,
@@ -179,6 +248,7 @@ export function isOpexRecordCurrent(record, version = OPEX_PARSER_VERSION) {
 
 export default {
   parseOperatingExpenses,
+  parseDirectCosts,
   fetchMonthOpex,
   isNonCash,
   isOpexRecordCurrent,

@@ -190,6 +190,23 @@ const pnl = (opexRows) => ({
   assert.ok(OPEX_PARSER_VERSION >= 2,
     "the standardLayout fix must be a version above the implicit 1");
 
+  // THE STAMP HAS TO MOVE WHEN THE SHAPE MOVES.
+  //
+  // programCost was added to fetchMonthOpex's return without bumping the stamp.
+  // Every month was already stored at version 3, isOpexRecordCurrent said
+  // "current", nothing ever refetched, and the cost-phasing panel reported "no
+  // program cost recorded" for weeks — a true statement about the cache that
+  // read as a statement about the books.
+  //
+  // This asserts the version is past that mistake. It does not stop the same
+  // mistake being made again at version 5, but it does mean the next person to
+  // change the return shape meets a test that says out loud what the stamp is
+  // for.
+  assert.ok(OPEX_PARSER_VERSION >= 4,
+    "records written before parseDirectCosts hold no programCost and must refetch");
+  assert.equal(isOpexRecordCurrent({ parserVersion: 3 }), false,
+    "a version-3 record predates programCost and is stale even though it looks complete");
+
   console.log("✓ a month stored by an older parser refetches; a current one does not");
 }
 
