@@ -64,8 +64,10 @@ import { monthRange } from "./cash-xero.mjs";
  *
  *      The rule this keeps breaking: bump the stamp in the SAME commit that
  *      changes what the parser returns, not in the commit that notices.
+ *   5  every expense line stored, not just the twelve biggest. See `lines`
+ *      below for why twelve was the wrong number.
  */
-export const OPEX_PARSER_VERSION = 4;
+export const OPEX_PARSER_VERSION = 5;
 
 export const NON_CASH_LINES = [
   /^bank revaluations?$/i,
@@ -228,6 +230,26 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
       .slice(0, 12)
       .map((l) => ({ name: l.name, amount: Math.round(l.amount) })),
+    /* EVERY LINE, NOT THE TWELVE BIGGEST.
+     *
+     * `topLines` above keeps the twelve largest for a quick look. That is the
+     * wrong basis for asking "what do we spend money on", because the cut-off
+     * moves month to month: a line that is thirteenth in May and eleventh in
+     * June appears to exist in one month and not the other, and any average
+     * taken across months would divide a real annual cost by however many
+     * months it happened to make the cut in. A steady 1,800-a-month
+     * subscription could read as a one-off.
+     *
+     * A P&L operating-expense section runs to a few dozen lines, so keeping all
+     * of them costs nothing worth counting and removes a whole category of
+     * quietly wrong answers. nonCash travels with each line so a cash view can
+     * exclude revaluations without having to re-derive which ones they were.
+     */
+    lines: parsed.lines.map((l) => ({
+      name: l.name,
+      amount: Math.round(l.amount),
+      nonCash: l.nonCash,
+    })),
     source: "Xero Profit and Loss",
     fetchedAt: new Date().toISOString(),
   };

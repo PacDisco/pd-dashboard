@@ -514,6 +514,105 @@ function programsView(f) {
 /* ---------------- payment rules ---------------- */
 
 /**
+ * What the overheads are made of.
+ *
+ * WHY A PANEL RATHER THAN AN ANSWER IN CHAT
+ * -----------------------------------------
+ * "Where do we cut" is not a question with one answer, and it is not a question
+ * anyone should have to ask me twice. The P&L lines have been in the store
+ * since the first sync; the dashboard showed a monthly total and nothing
+ * underneath it. This reads what is already there.
+ *
+ * The ranking is by ANNUALISED cost, not by the largest single month. A 1,800
+ * subscription paid every month outranks a 12,000 one-off, and should: the
+ * first is 21,600 a year of standing commitment and the second is a decision
+ * already made.
+ */
+function overheadLinesPanel() {
+  const d = state.ohLines;
+  const basis = state.ohLinesBasis ?? "cash";
+
+  const basisPicker = `
+    <div class="rates" style="margin:10px 0">
+      ${[["cash", "Cash only"], ["total", "Everything in the P&L"]].map(([id, label]) => `
+        <label class="rateopt ${basis === id ? "on" : ""}">
+          <input type="radio" name="ohlbasis" value="${id}" ${basis === id ? "checked" : ""}>
+          <span class="rl">${label}</span>
+        </label>`).join("")}
+    </div>`;
+
+  if (!d) {
+    return `<section class="closebox">
+      <h2>What the overheads are <span class="stamp">from the P&amp;L</span></h2>
+      <p class="foot">Every expense line in the books, ranked by what it costs a year, with the months it actually landed in. Reads the P&amp;L months already stored — no Xero calls.</p>
+      <button class="btn-diag" id="loadohlines" ${state.ohLinesBusy ? "disabled" : ""}>
+        ${state.ohLinesBusy ? "Reading the P&L…" : "Break down the overheads"}
+      </button>
+    </section>`;
+  }
+  if (d.error) {
+    return `<section class="closebox">
+      <h2>What the overheads are</h2>
+      <p class="foot">${escapeHtml(d.error)}${d.hint ? ` ${escapeHtml(d.hint)}` : ""}</p>
+      <button class="btn-diag" id="loadohlines">Try again</button>
+    </section>`;
+  }
+
+  const money0 = (n) => Number(n).toLocaleString("en-NZ", { maximumFractionDigits: 0 });
+  const c = d.concentration ?? { lines: 0, sharePct: 0 };
+
+  /* The sparkline is twelve-ish bars, not a chart library.
+   *
+   * What it has to answer is one question — is this every month or is it a
+   * spike — and a bar per observed month answers it at a glance without the
+   * reader having to compare numbers across a wide row. */
+  const scale = (l) => {
+    const peak = Math.max(...l.amounts.map(Math.abs), 1);
+    return l.amounts.map((v, i) => {
+      const h = Math.round((Math.abs(v) / peak) * 100);
+      return `<i style="height:${Math.max(h, v ? 6 : 1)}%" title="${escapeHtml(d.monthKeys[i] ?? "")}: ${money0(v)}"></i>`;
+    }).join("");
+  };
+
+  const rows = (d.lines ?? []).filter((l) => Math.abs(l.total) > 0).slice(0, 40);
+
+  return `<section class="closebox">
+    <h2>What the overheads are
+      <span class="stamp">${d.monthsObserved} months · ${basis === "cash" ? "cash only" : "everything"}</span></h2>
+    <p class="foot">${money0(d.annualised)} a year, running at ${money0(d.monthlyMean)} a month across the ${d.monthsObserved} months in the books.
+      ${c.lines ? `<b>${c.lines} lines make up ${c.sharePct}% of it</b> — that is the conversation.` : ""}</p>
+    <p class="foot"><b>${money0(d.steadyTotal)}</b> of it is steady, month after month — contracts, subscriptions, people — and <b>${money0(d.lumpyTotal)}</b> arrives in lumps. The first is renegotiated, the second is decided one at a time, and they are rarely the same meeting.</p>
+    ${basisPicker}
+    ${d.truncatedMonths?.length ? `<p class="foot"><b>${d.truncatedMonths.length} month${d.truncatedMonths.length === 1 ? " was" : "s were"} stored before every line was kept</b> (${d.truncatedMonths.map(escapeHtml).join(", ")}), so only their twelve biggest lines are here. Anything smaller is missing from those months and its yearly figure is understated. Diagnostics → Refresh from Xero rewrites them.</p>` : ""}
+    <div class="scroll">
+      <table class="cftable tight">
+        <thead><tr>
+          <th class="lab">Line</th><th>A year</th><th>A month</th>
+          <th>Months</th><th>Pattern</th><th class="lab">By month</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((l) => `
+            <tr>
+              <th class="lab">${escapeHtml(l.name)}${l.nonCash ? ' <span class="stamp">non-cash</span>' : ""}</th>
+              <td><b>${money0(l.annualised)}</b></td>
+              <td>${money0(l.monthlyMean)}</td>
+              <td>${l.monthsWithSpend}/${d.monthsObserved}</td>
+              <td>${l.steady ? '<span class="stamp">steady</span>'
+                    : `<span class="stamp">lumpy ×${l.spread.toFixed(1)}</span>`}</td>
+              <td class="lab"><span class="spark">${scale(l)}</span></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+    <p class="foot"><b>A year</b> is the monthly average across every observed month, times twelve — including the months a line was zero. That is deliberate: dividing a line's total by only the months it appeared in would make a once-a-year cost look like a large standing one, which is exactly backwards for deciding what to cut.</p>
+    <p class="foot"><b>Pattern</b> compares a line's biggest month against its own average. Steady means it lands most months at a similar size. <i>Lumpy ×4</i> means one month was four times the average — an event, not a run rate.</p>
+    <button class="btn-diag" id="loadohlines" ${state.ohLinesBusy ? "disabled" : ""}>
+      ${state.ohLinesBusy ? "Reading…" : "Re-read"}
+    </button>
+  </section>`;
+}
+
+/**
  * The caveat that has to travel with the tail.
  *
  * Months past 31 March exist so there is always a year of runway visible. They
@@ -1183,6 +1282,7 @@ function overheadsView() {
       </table>
     </div>
     ${overheadSourcePanel(ro)}
+    ${overheadLinesPanel()}
     ${diagnosticsPanel(ro)}
     <p class="foot">Positive numbers. The forecast subtracts them. GST and PAYE belong here as their own rows once you decide how to phase them — neither exists in the current workbook.</p>
     <p class="foot">These twelve also cover the runway months past 31 March: April next year takes April's figure, and so on. That keeps rent and wages visible in the tail without inventing next year's budget — but it is a repeat, not a plan, and the tail is marked as such on the Forecast tab.</p>`;
@@ -1280,6 +1380,32 @@ function wire() {
       render();
     }
   });
+
+  el("loadohlines")?.addEventListener("click", async () => {
+    state.ohLinesBusy = true;
+    render();
+    try {
+      const basis = state.ohLinesBasis ?? "cash";
+      const res = await fetch(`${API}/cash-overhead-lines?basis=${basis}`, { credentials: "include" });
+      const raw = await res.text();
+      try { state.ohLines = JSON.parse(raw); }
+      catch { state.ohLines = { error: `Unexpected ${res.status} response` }; }
+    } catch (err) {
+      state.ohLines = { error: err.message };
+    } finally {
+      state.ohLinesBusy = false;
+      render();
+    }
+  });
+
+  document.querySelectorAll("[name=ohlbasis]").forEach((r) =>
+    r.addEventListener("change", () => {
+      state.ohLinesBasis = r.value;
+      // Re-reads rather than re-filtering in the browser: the cash/total split
+      // is decided by the parser's own non-cash list, and a second copy of that
+      // judgement here is a second place for it to drift.
+      el("loadohlines")?.click();
+    }));
 
   document.querySelectorAll("[data-refresh]").forEach((b) =>
     b.addEventListener("click", async () => {
