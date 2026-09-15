@@ -326,6 +326,18 @@ export default async (req) => {
       ? Math.round(months.reduce((s, m) => s + (m.totalOut || 0) * ((m.coverage?.[route] ?? 0) / 100), 0) / total * 1000) / 10
       : 0);
 
+    // Every tracking category seen anywhere, so nothing is assumed about what
+    // they are called. Pacific Discovery uses "Program" and "Season"; the code
+    // reads whatever is actually there.
+    const categories = [...new Set(months.flatMap((m) => m.categoriesSeen ?? []))];
+
+    const mergeCategory = (cat) => {
+      const out = {};
+      for (const m of months) {
+        for (const [k, v] of Object.entries(m.byCategory?.[cat] ?? {})) out[k] = (out[k] ?? 0) + v;
+      }
+      return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]).slice(0, 60));
+    };
     const merge = (field) => {
       const out = {};
       for (const m of months) for (const [k, v] of Object.entries(m[field] ?? {})) out[k] = (out[k] ?? 0) + v;
@@ -335,27 +347,44 @@ export default async (req) => {
     const a = await loadAssumptions(fy);
     const programNames = new Set((a.programs ?? []).flatMap(
       (p) => [p.xeroTrackingOption, p.name].filter(Boolean).map((n) => String(n).trim().toLowerCase())));
-    const trackingTotals = merge("byTracking");
-    const matched = Object.keys(trackingTotals).filter((k) => programNames.has(k.trim().toLowerCase()));
+    const modelSeasons = new Set((a.programs ?? []).map((p) => p.season).filter(Boolean));
+
+    const byCategory = Object.fromEntries(categories.map((c) => [c, mergeCategory(c)]));
 
     return json({
       monthsStored: months.length,
       fiscalYears: [fy - 1, fy],
       totalOutAcrossMonths: Math.round(total),
-      // THE ANSWER. Share of outgoing money each route can attribute.
+      categoriesSeen: categories,
+      // THE ANSWER. Share of outgoing money each route can attribute, weighted
+      // across both years. One line per tracking category, because Program and
+      // Season are tagged independently and one can be well kept and the other
+      // not.
       coverageWeighted: {
-        tracking: weighted("tracking"),
+        ...Object.fromEntries(categories.map((c) => [c, weighted(c)])),
         accountCode: weighted("accountCode"),
       },
-      // Names, so a mapping can be proposed rather than guessed.
-      byTracking: trackingTotals,
+      // The option names themselves, so a mapping can be proposed rather than
+      // guessed — and so a category full of names nothing recognises is visible
+      // rather than hiding behind a good coverage number.
+      byCategory,
       byBankAccount: merge("byBankAccount"),
       byAccountCode: merge("byAccountCode"),
-      // Do the tracking options line up with the programs in the model? A route
-      // with high coverage and names nothing recognises is not usable.
-      trackingOptionsMatchingPrograms: matched,
-      trackingOptionsUnmatched: Object.keys(trackingTotals).filter((k) => !programNames.has(k.trim().toLowerCase())),
-      programsInModel: (a.programs ?? []).map((p) => p.name),
+      // Do the names line up with the model? High coverage against labels the
+      // forecast does not recognise is worth less than lower coverage against
+      // ones it does.
+      matchAgainstModel: Object.fromEntries(categories.map((c) => {
+        const names = Object.keys(byCategory[c] ?? {});
+        const known = /season/i.test(c) ? modelSeasons : programNames;
+        const norm = (n) => String(n).trim().toLowerCase();
+        const knownNorm = new Set([...known].map(norm));
+        return [c, {
+          matched: names.filter((n) => knownNorm.has(norm(n))),
+          unmatched: names.filter((n) => !knownNorm.has(norm(n))),
+        }];
+      })),
+      programsInModel: (a.programs ?? []).map((p) => ({ name: p.name, season: p.season, departs: p.startDate })),
+      seasonsInModel: [...modelSeasons],
       unattributable: {
         spendWithoutLineDetail: months.reduce((s, m) => s + (m.spendWithoutLineDetail || 0), 0),
         unconverted: months.reduce((s, m) => s + (m.unconverted || 0), 0),

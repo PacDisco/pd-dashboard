@@ -49,15 +49,38 @@ function toBase(amount, currency, impliedRates, baseCurrency) {
 }
 
 /**
- * A line item's tracking options, flattened to plain names.
+ * A line item's tracking, kept BY CATEGORY.
  *
- * Xero nests these as [{Name: "Program", Option: "NZA"}]. The category name
- * varies by organisation, so the OPTION is what identifies the program.
+ * Xero allows two tracking categories, and Pacific Discovery uses both:
+ * "Program" and "Season". They are different questions about the same line, and
+ * flattening them into one list of options is wrong in a way that hides itself.
+ *
+ * The first version of this did exactly that, and then split each line's amount
+ * equally across the options it found. A line tagged Program "NZA" AND Season
+ * "Fall 26" would have had half its value filed under each — halving both, with
+ * coverage still reading a confident 100%. With one category in use the bug is
+ * invisible; with two it is everywhere.
+ *
+ * So: category name is the key, option is the value, and a line contributes its
+ * FULL amount to each category independently. Program totals and Season totals
+ * each add up to the same money, viewed two ways.
+ *
+ * @returns {Record<string, string>} e.g. { Program: "NZA", Season: "Fall 26" }
  */
+export function trackingByCategory(lineItem) {
+  const out = {};
+  for (const t of lineItem?.Tracking ?? []) {
+    const category = String(t?.Name ?? "").trim();
+    const option = String(t?.Option ?? "").trim();
+    // A category with no option is "not tagged", not a category called "".
+    if (category && option) out[category] = option;
+  }
+  return out;
+}
+
+/** Back-compat: every option on a line, category ignored. */
 export function trackingOptions(lineItem) {
-  return (lineItem?.Tracking ?? [])
-    .map((t) => String(t?.Option ?? "").trim())
-    .filter(Boolean);
+  return Object.values(trackingByCategory(lineItem));
 }
 
 /**
@@ -78,10 +101,12 @@ export function costSignals({
   impliedRates = {},
   baseCurrency = "NZD",
 } = {}) {
-  const byTracking = {};
+  // One bucket per tracking CATEGORY, so Program and Season are counted
+  // independently and each sums to the same money.
+  const byCategory = {};
+  const categoryTotals = {};
   const byAccountCode = {};
   const byBankAccount = {};
-  const trackedTotal = { v: 0 };
   const codedTotal = { v: 0 };
 
   let totalOut = 0;
@@ -126,12 +151,12 @@ export function costSignals({
       const share = lineTotal > 0 ? Math.abs(num(line?.LineAmount)) / lineTotal : 1 / lines.length;
       const amount = base * share;
 
-      const options = trackingOptions(line);
-      if (options.length) {
-        // An equal split across options rather than picking the first: two
-        // options on one line means the line genuinely covers both.
-        for (const opt of options) add(byTracking, opt, amount / options.length);
-        trackedTotal.v += amount;
+      for (const [category, option] of Object.entries(trackingByCategory(line))) {
+        byCategory[category] ??= {};
+        // The FULL amount, not a share. Two categories are two views of the
+        // same money, not two claims on it.
+        add(byCategory[category], option, amount);
+        categoryTotals[category] = (categoryTotals[category] ?? 0) + amount;
       }
       const code = line?.AccountCode ? String(line.AccountCode) : null;
       if (code) { add(byAccountCode, code, amount); codedTotal.v += amount; }
@@ -164,10 +189,10 @@ export function costSignals({
       const share = lineTotal > 0 ? Math.abs(num(line?.LineAmount)) / lineTotal : 1 / lines.length;
       const amount = base * share;
 
-      const options = trackingOptions(line);
-      if (options.length) {
-        for (const opt of options) add(byTracking, opt, amount / options.length);
-        trackedTotal.v += amount;
+      for (const [category, option] of Object.entries(trackingByCategory(line))) {
+        byCategory[category] ??= {};
+        add(byCategory[category], option, amount);
+        categoryTotals[category] = (categoryTotals[category] ?? 0) + amount;
       }
       const code = line?.AccountCode ? String(line.AccountCode) : null;
       if (code) { add(byAccountCode, code, amount); codedTotal.v += amount; }
@@ -179,14 +204,19 @@ export function costSignals({
   return {
     totalOut: Math.round(totalOut),
     unconverted: Math.round(unconverted),
-    byTracking: round(byTracking),
+    // { Program: { NZA: 12345, ... }, Season: { "Fall 26": 98765, ... } }
+    byCategory: Object.fromEntries(
+      Object.entries(byCategory).map(([cat, bucket]) => [cat, round(bucket)])),
     byAccountCode: round(byAccountCode),
     byBankAccount: round(byBankAccount),
     // THE ANSWER TO "which route works". Percentages of outgoing money each
     // route can attribute. A curve built on a low-coverage route is a curve
     // built on a minority of the spend.
     coverage: {
-      tracking: pct(trackedTotal.v),
+      // Per category, because Program and Season are tagged independently and
+      // one can be well kept while the other is not.
+      ...Object.fromEntries(
+        Object.entries(categoryTotals).map(([cat, v]) => [cat, pct(v)])),
       accountCode: pct(codedTotal.v),
       // The bank-account route always covers everything, because every payment
       // leaves an account — but only some of those accounts name a program, so
@@ -194,6 +224,7 @@ export function costSignals({
       // byBankAccount are what decide that.
       bankAccount: pct(totalOut),
     },
+    categoriesSeen: Object.keys(byCategory),
     lineItemsSeen,
     spendWithoutLineDetail: Math.round(spendWithoutLineDetail),
   };
@@ -207,4 +238,4 @@ function round(bucket) {
   );
 }
 
-export default { costSignals, trackingOptions };
+export default { costSignals, trackingByCategory, trackingOptions };
