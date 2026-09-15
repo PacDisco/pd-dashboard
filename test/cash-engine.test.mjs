@@ -228,9 +228,21 @@ console.log("\nAll engine tests passed (including split-currency).");
     assert.ok(firstConversion.fxClosing > 0, "and leaves the rest in USD");
     console.log("✓ conversion happens on demand and is sized to the shortfall");
     // Conservation: every USD received is either still held or was converted.
-    const usdIn = f.months.reduce((s, m) => s + m.fxIn, 0);
-    const usdConverted = f.months.reduce((s, m) => s + m.fxConverted, 0);
-    near(usdIn - usdConverted, f.months[11].fxClosing, 0.01, "USD conserved across the year");
+    //
+    // This used to sum all months and compare against months[11], which was the
+    // same window only because the table was exactly twelve months long. Now
+    // that it runs past the fiscal year, the sum and the closing balance have to
+    // be taken over the SAME window or the identity is being tested against a
+    // different period than it was measured over. Stated properly the law holds
+    // over any window at all, so both are checked.
+    const conserved = (window, closing, label) => {
+        const usdIn = window.reduce((s, m) => s + m.fxIn, 0);
+        const usdConverted = window.reduce((s, m) => s + m.fxConverted, 0);
+        near(usdIn - usdConverted, closing, 0.01, label);
+    };
+    const fyWindow = f.months.slice(0, 12);
+    conserved(fyWindow, fyWindow[11].fxClosing, "USD conserved across the fiscal year");
+    conserved(f.months, f.months[f.months.length - 1].fxClosing, "USD conserved across the whole horizon");
     console.log("✓ USD conserved");
     // The combined position must equal NZD cash plus USD marked at the rate.
     for (const m of f.months) {

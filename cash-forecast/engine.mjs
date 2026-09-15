@@ -38,6 +38,46 @@ export function dateToFiscalSlot(fyStart, year, month) {
     const slot = (year - fyStart) * 12 + (month - 1) - 3;
     return slot >= 0 && slot < 12 ? slot : null;
 }
+/**
+ * How many months the table runs for.
+ *
+ * WHY THIS IS NOT TWELVE
+ * ----------------------
+ * A fiscal-year table is the right shape for reporting and the wrong shape for
+ * cash. In September it showed seven months ahead; by February it would have
+ * shown two. The months a business most needs to see — is there money in
+ * March, is there money in June — drop off the right-hand edge precisely as
+ * they get close enough to matter.
+ *
+ * So the horizon is whichever is longer: the fiscal year, or twelve months from
+ * today. Both, not either. The fiscal year always appears whole, so year totals
+ * and the annual comparison still mean what they meant; and there are never
+ * fewer than twelve months of runway visible.
+ *
+ * The consequence is that the table changes width through the year — 12 columns
+ * each April, growing to 23 by the following March. That is the honest shape of
+ * "a whole fiscal year AND a year of runway" and there is no way to have both
+ * without it.
+ */
+export function horizonLength(fyStart, today = new Date()) {
+    const y = today.getUTCFullYear();
+    const m = today.getUTCMonth() + 1;
+    // Twelve months from the CURRENT month inclusive: this month plus eleven.
+    const lastNeeded = (y - fyStart) * 12 + (m - 1) - 3 + 11;
+    return Math.max(12, lastNeeded + 1);
+}
+/**
+ * Slot within the horizon, or null if before the fiscal year or past the end.
+ *
+ * Replaces dateToFiscalSlot everywhere money is placed. Using the fiscal
+ * version for that was what made the tail impossible: a cost or receipt landing
+ * in April 2027 returned null and was silently dropped, so extending the table
+ * without this would have produced empty months that looked like a finding.
+ */
+export function dateToHorizonSlot(fyStart, year, month, length) {
+    const slot = (year - fyStart) * 12 + (month - 1) - 3;
+    return slot >= 0 && slot < length ? slot : null;
+}
 function monthKey(year, month) {
     return `${year}-${String(month).padStart(2, "0")}`;
 }
@@ -164,16 +204,24 @@ function splitReceiptByCurrency(row, nativeAmount, receiptRate, receiptsAreFx, n
     row.fxIn += nativeAmount * (1 - share);
     row.baseIn += nativeAmount * receiptRate * share;
 }
-export function buildForecast(assumptions, actualsByMonth = {}) {
+export function buildForecast(assumptions, actualsByMonth = {}, { today = new Date() } = {}) {
     const fy = assumptions.fiscalYearStartYear;
     const warnings = [];
-    const months = Array.from({ length: 12 }, (_, slot) => {
+    const horizon = horizonLength(fy, today);
+    const months = Array.from({ length: horizon }, (_, slot) => {
         const { year, month } = fiscalSlotToDate(fy, slot);
         return {
             key: monthKey(year, month),
-            label: `${MONTH_LABELS[slot]} ${String(year).slice(2)}`,
+            label: `${MONTH_LABELS[slot % 12]} ${String(year).slice(2)}`,
             year,
             month,
+            // Past the fiscal year the model is running on assumptions nobody
+            // has entered yet: there are no FY27/28 programs, so no student
+            // money arrives and no program cost goes out. Every consumer needs
+            // to be able to tell those months apart from real ones, or the
+            // cliff where the programs stop reads as a finding about the
+            // business rather than a gap in the inputs.
+            beyondFiscalYear: slot >= 12,
             depositsIn: 0,
             balancesIn: 0,
             // Receipts from the single curve. Deposits and balances stay zero
@@ -272,7 +320,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         if (receiptsCurve) {
             for (const point of receiptsCurve) {
                 const month = addMonths(departure.year, departure.month, -point.monthsBefore);
-                const slot = dateToFiscalSlot(fy, month.year, month.month);
+                const slot = dateToHorizonSlot(fy, month.year, month.month, horizon);
                 const cash = pax * price * point.share;
                 const inBase = cash * receiptRate;
                 if (slot !== null) {
@@ -297,7 +345,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                 const paxAtThisPoint = pax * point.share;
                 // Deposits land in the month the booking is made.
                 const bookingMonth = addMonths(departure.year, departure.month, -point.monthsBefore);
-                const bookingSlot = dateToFiscalSlot(fy, bookingMonth.year, bookingMonth.month);
+                const bookingSlot = dateToHorizonSlot(fy, bookingMonth.year, bookingMonth.month, horizon);
                 const depositCash = paxAtThisPoint * deposit;
                 const depositInBase = depositCash * receiptRate;
                 if (bookingSlot !== null) {
@@ -330,7 +378,7 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
                     const balanceMonth = bp.monthsBefore === null
                         ? shiftDays(program.startDate, -rules.balanceDueDaysBeforeDeparture)
                         : addMonths(departure.year, departure.month, -bp.monthsBefore);
-                    const balanceSlot = dateToFiscalSlot(fy, balanceMonth.year, balanceMonth.month);
+                    const balanceSlot = dateToHorizonSlot(fy, balanceMonth.year, balanceMonth.month, horizon);
                     const balanceCash = paxAtThisPoint * balance * bp.share;
                     const balanceInBase = balanceCash * receiptRate;
                     if (balanceSlot !== null) {
@@ -348,14 +396,14 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
         const phasing = normalise(assumptions.costPhasing.offsets);
         for (const point of phasing) {
             const costMonth = addMonths(departure.year, departure.month, point.monthOffset);
-            const slot = dateToFiscalSlot(fy, costMonth.year, costMonth.month);
+            const slot = dateToHorizonSlot(fy, costMonth.year, costMonth.month, horizon);
             if (slot !== null) {
                 months[slot].programCostsOut += totalCost * point.share;
             }
         }
         /* ---- recognition ---- */
         const rec = recognitionMonthFor(program, assumptions.recognitionMonths);
-        const recSlot = dateToFiscalSlot(fy, rec.year, rec.month);
+        const recSlot = dateToHorizonSlot(fy, rec.year, rec.month, horizon);
         if (recSlot !== null) {
             months[recSlot].recognisedRevenue += grossRevenue;
         }
@@ -382,11 +430,30 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             recognitionIndex: recSlot,
         });
     }
-    /* ---- overheads, capital, tax ---- */
-    for (let slot = 0; slot < 12; slot++) {
-        months[slot].overheads = assumptions.monthlyOverheads[slot] ?? 0;
-        months[slot].capital = assumptions.monthlyCapital[slot] ?? 0;
-        months[slot].tax = assumptions.monthlyTax[slot] ?? 0;
+    /* ---- overheads, capital, tax ----
+     *
+     * These are twelve entered figures, one per fiscal month. Past the fiscal
+     * year the same twelve repeat: April 2027 takes April 2026's overhead.
+     *
+     * WHY REPEAT RATHER THAN LEAVE BLANK
+     * ----------------------------------
+     * Blank would be the purer choice and it produces a worse lie. The tail has
+     * no FY27/28 programs, so no student money arrives in it. If overheads were
+     * also blank the tail would show net zero every month — a flat line that
+     * reads as "nothing happens", when what is actually true is "rent and
+     * salaries keep going out and we have not entered next year's programs".
+     * The first is invisible; the second is a prompt to go and enter them.
+     *
+     * Wages and rent continuing is a much smaller assumption than any guess at
+     * next year's enrolments, which is why this repeats and programs do not.
+     * Every month it applies to is flagged carriedForward, and the page says so
+     * above the table. */
+    for (let slot = 0; slot < months.length; slot++) {
+        const source = slot % 12;
+        months[slot].overheads = assumptions.monthlyOverheads[source] ?? 0;
+        months[slot].capital = assumptions.monthlyCapital[source] ?? 0;
+        months[slot].tax = assumptions.monthlyTax[source] ?? 0;
+        months[slot].carriedForward = slot >= 12;
     }
     /* ---- roll forward: two accounts, converting only when NZD runs short ---- */
     const baseCur = assumptions.baseCurrency;
@@ -718,17 +785,37 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
             warnings.push(`${partial.join(", ")} is locked as actual but the month has not finished — the Xero figures cover part of it only, so the total is understated and every month after it is re-based on it.`);
         }
     }
-    const lowest = months.reduce((min, r) => (r.closing < min.closing ? r : min), months[0]);
-    const lowestBase = months.reduce((min, r) => (r.baseClosing < min.baseClosing ? r : min), months[0]);
+    /* EVERY HEADLINE JUDGEMENT IS MADE ON THE FISCAL YEAR, NOT THE HORIZON.
+     *
+     * The tail has no programs in it, so its cash-out is real and its cash-in is
+     * zero by construction. Let the worst-position search run over the whole
+     * horizon and it will ALWAYS find its answer in the final tail month, every
+     * month, for the rest of time — a number that measures nothing but the
+     * absence of next year's programs, dressed as a liquidity warning.
+     *
+     * That is the sort of alarm that trains people to ignore alarms. So the
+     * fiscal year answers "how bad does it get", and the tail gets its own
+     * plainly-labelled caveat lower down. */
+    const fyMonths = months.slice(0, 12);
+    const lowest = fyMonths.reduce((min, r) => (r.closing < min.closing ? r : min), fyMonths[0]);
+    const lowestBase = fyMonths.reduce((min, r) => (r.baseClosing < min.baseClosing ? r : min), fyMonths[0]);
     if (lowestBase.baseClosing < 0) {
-        const first = months.find((m) => m.baseClosing < 0);
+        const first = fyMonths.find((m) => m.baseClosing < 0);
         warnings.push(`${baseCur} account goes negative in ${first.label} — worst ${Math.round(lowestBase.baseClosing).toLocaleString("en-NZ")} in ${lowestBase.label}, after converting everything available.`);
     }
-    else if (months.some((m) => m.baseClosing < buffer)) {
-        const first = months.find((m) => m.baseClosing < buffer);
+    else if (fyMonths.some((m) => m.baseClosing < buffer)) {
+        const first = fyMonths.find((m) => m.baseClosing < buffer);
         warnings.push(`${baseCur} dips below the ${Math.round(buffer).toLocaleString("en-NZ")} buffer in ${first.label}.`);
     }
-    const unconverted = months[11].fxClosing;
+    const tail = months.slice(12);
+    // Only when the tail is genuinely empty. Once next year's programs are
+    // entered the tail becomes a real forecast, and a caveat that kept
+    // apologising for it would be the thing that was wrong.
+    const tailHasPrograms = tail.some((m) => m.cashIn !== 0 || m.programCostsOut !== 0);
+    if (tail.length && !tailHasPrograms) {
+        warnings.push(`${tail[0].label} onward has no programs entered, so those months show overheads going out and no student money coming in. The balance falling through them is the gap in the inputs, not a forecast. Year totals and the warnings above cover the fiscal year only.`);
+    }
+    const unconverted = fyMonths[11].fxClosing;
     if (unconverted > 0) {
         warnings.push(`${Math.round(unconverted).toLocaleString("en-NZ")} ${fxCur} is still unconverted at 31 March, valued here at ${rate.toFixed(4)}. A 5c move in the rate changes that by ${Math.round(unconverted * 0.05).toLocaleString("en-NZ")} ${baseCur}.`);
     }
@@ -739,26 +826,43 @@ export function buildForecast(assumptions, actualsByMonth = {}) {
     return {
         fiscalYearStartYear: fy,
         months,
+        // The shape of the table, so the page does not have to re-derive it and
+        // get a different answer. fiscalYearMonths is always 12 and is where
+        // every total and warning comes from; anything past it is runway.
+        horizon: {
+            length: months.length,
+            fiscalYearMonths: 12,
+            beyondFiscalYear: Math.max(0, months.length - 12),
+            lastFiscalMonth: fyMonths[11].key,
+            lastMonth: months[months.length - 1].key,
+            // The tail exists to show runway, and right now it shows runway
+            // with no programs in it. Naming that here means every consumer
+            // gets the caveat, not just the one that remembered to add it.
+            tailHasPrograms,
+        },
         programs: contributions,
         totals: {
-            cashIn: months.reduce((s, m) => s + m.cashIn, 0),
-            cashOut: months.reduce((s, m) => s + m.cashOut, 0),
-            receiptsBySeason: months.reduce((acc, m) => {
+            // Fiscal year only. The horizon is longer now, and a year total
+            // that quietly included six months of the next one would be wrong
+            // in a way nobody would catch by looking at it.
+            cashIn: fyMonths.reduce((s, m) => s + m.cashIn, 0),
+            cashOut: fyMonths.reduce((s, m) => s + m.cashOut, 0),
+            receiptsBySeason: fyMonths.reduce((acc, m) => {
                 for (const [season, v] of Object.entries(m.receiptsBySeason)) {
                     acc[season] = (acc[season] || 0) + v;
                 }
                 return acc;
             }, {}),
-            recognisedRevenue: months.reduce((s, m) => s + m.recognisedRevenue, 0),
+            recognisedRevenue: fyMonths.reduce((s, m) => s + m.recognisedRevenue, 0),
             // Cash collected before 1 April for programs departing inside this
             // year. Exposed because when the deferred row misbehaves this is the
             // first place to look, and it is otherwise invisible.
             deferredOpening,
-            closingBalance: months[11].closing,
+            closingBalance: fyMonths[11].closing,
             lowestClosing: lowest.closing,
             lowestMonth: lowest.label,
-            fxConverted: months.reduce((s, m) => s + m.fxConverted, 0),
-            baseFromConversion: months.reduce((s, m) => s + m.baseFromConversion, 0),
+            fxConverted: fyMonths.reduce((s, m) => s + m.fxConverted, 0),
+            baseFromConversion: fyMonths.reduce((s, m) => s + m.baseFromConversion, 0),
             lowestBaseClosing: lowestBase.baseClosing,
             lowestBaseMonth: lowestBase.label,
             planningRate: rate,

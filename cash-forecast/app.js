@@ -237,7 +237,8 @@ function topBar(f) {
     <header class="top">
       <div class="title">
         <h1>Pacific Discovery cash flow</h1>
-        <span class="fy">FY ${fy}/${String(fy + 1).slice(2)} · Apr–Mar</span>
+        <span class="fy">FY ${fy}/${String(fy + 1).slice(2)} · Apr–Mar${
+          f.horizon?.beyondFiscalYear ? ` + ${f.horizon.beyondFiscalYear} mo runway` : ""}</span>
       </div>
       <div class="tiles">
         <div class="tile"><span class="k">Cash in</span><span class="v">${money(t.cashIn)}</span><span class="sub">NZD equiv.</span></div>
@@ -348,29 +349,33 @@ function forecastView(f) {
   return `
     <figure class="chartwrap">
       <div style="position:relative;height:250px"><canvas id="chart"></canvas></div>
-      <figcaption>NZD account by month, with the total position including unconverted USD behind it. The dashed red line is zero.</figcaption>
+      <figcaption>NZD account by month, with the total position including unconverted USD behind it. The dashed red line is zero.${
+        f.horizon?.beyondFiscalYear && !f.horizon.tailHasPrograms
+          ? ` Past ${escapeHtml(f.months[f.horizon.fiscalYearMonths].label)} the line goes grey and dashed: those months have overheads but no programs entered, so the decline is missing inputs rather than a forecast.`
+          : ""}</figcaption>
     </figure>
     <div class="scroll">
       <table class="cftable">
-        <thead><tr><th class="lab"></th>${f.months.map((m) =>
-          `<th class="${m.isActual ? "actualcol" : ""}${m.provisional ? " provisional" : ""}">${m.label}${
+        <thead><tr><th class="lab"></th>${f.months.map((m, i) =>
+          `<th class="${m.isActual ? "actualcol" : ""}${m.provisional ? " provisional" : ""}${span(f, i)}">${m.label}${
             m.isActual ? '<span class="amark">actual</span>' : ""}</th>`).join("")}</tr></thead>
         <tbody>
           ${rows.map(([label, get, cls, real]) => `
             <tr class="${cls || ""}">
               <th class="lab">${label}</th>
-              ${f.months.map((m) => cell(get(m), m, real)).join("")}
+              ${f.months.map((m, i) => cell(get(m), m, real, span(f, i))).join("")}
             </tr>`).join("")}
-          <tr class="sep"><th class="lab">Treasury</th>${f.months.map(() => "<td></td>").join("")}</tr>
+          <tr class="sep"><th class="lab">Treasury</th>${f.months.map((m, i) => `<td class="${span(f, i).trim()}"></td>`).join("")}</tr>
           ${treasuryRows.map(([label, get, cls, real]) => `
             <tr class="${cls || ""}">
               <th class="lab">${label}</th>
-              ${f.months.map((m) => cell(get(m), m, real)).join("")}
+              ${f.months.map((m, i) => cell(get(m), m, real, span(f, i))).join("")}
             </tr>`).join("")}
           ${varianceRow(f)}
         </tbody>
       </table>
     </div>
+    ${beyondNote(f)}
     ${f.totals.actualMonths ? `<p class="foot"><b>Closed months</b> (tinted) show Xero figures for the totals — cash in, cash out, and the balances. The category split below them is <span class="stillfc-key">still forecast</span>, because a bank summary gives a month's totals and not how the spend divided. Rows marked <i>n/a</i> cannot be derived at all: a conversion and a customer payment both look like money arriving.</p>` : ""}
     <p class="foot">Funds are collected in USD and converted only when the NZD account would fall below the buffer. <b>NZD account</b> is the row that says whether you can pay a supplier; <b>Total position</b> values unconverted USD at the planning rate and is a mark-to-market figure, not spendable cash.</p>
     ${actualsPanel()}`;
@@ -381,7 +386,21 @@ function forecastView(f) {
  * thing: a real zero, a figure that cannot be derived from a bank summary
  * (null — conversions, for instance), and a normal number.
  */
-function cell(v, m, realWhenClosed = true) {
+/**
+ * Column classes marking the fiscal-year boundary.
+ *
+ * The table now runs past 31 March, so a reader scanning any row crosses from
+ * "the year the totals describe" into "runway with no programs entered". That
+ * transition has to be visible in the table itself — a footnote under it would
+ * be read after the number rather than with it.
+ */
+function span(f, i) {
+  const fyLast = (f.horizon?.fiscalYearMonths ?? 12) - 1;
+  if (i === fyLast && f.months.length > fyLast + 1) return " fyend";
+  return i > fyLast ? " beyond" : "";
+}
+
+function cell(v, m, realWhenClosed = true, extra = "") {
   // In a closed month, a figure that is still forecast must not look like one
   // that came from the bank.
   const stillForecast = m.isActual && !realWhenClosed;
@@ -390,6 +409,7 @@ function cell(v, m, realWhenClosed = true) {
     m.provisional ? "provisional" : "",
     stillForecast ? "stillfc" : "",
     typeof v === "number" && v <= -0.5 ? "neg" : "",
+    extra.trim(),
   ].filter(Boolean).join(" ");
 
   if (v === null || v === undefined) {
@@ -410,14 +430,14 @@ function cell(v, m, realWhenClosed = true) {
 function varianceRow(f) {
   if (!f.totals.actualMonths || !state.forecastOnly) return "";
   const byKey = Object.fromEntries(state.forecastOnly.months.map((m) => [m.key, m]));
-  return `<tr class="sep"><th class="lab">Variance</th>${f.months.map(() => "<td></td>").join("")}</tr>
+  return `<tr class="sep"><th class="lab">Variance</th>${f.months.map((m, i) => `<td class="${span(f, i).trim()}"></td>`).join("")}</tr>
     <tr class="var">
       <th class="lab">NZD vs forecast</th>
-      ${f.months.map((m) => {
-        if (!m.isActual || !byKey[m.key]) return `<td class="na">—</td>`;
+      ${f.months.map((m, i) => {
+        if (!m.isActual || !byKey[m.key]) return `<td class="na${span(f, i)}">—</td>`;
         const d = m.baseClosing - byKey[m.key].baseClosing;
         const sign = d > 0 ? "+" : "";
-        return `<td class="actualcol ${d < -0.5 ? "neg" : d > 0.5 ? "pos" : ""}" title="Actual ${money(m.baseClosing)} vs forecast ${money(byKey[m.key].baseClosing)}">${
+        return `<td class="actualcol ${d < -0.5 ? "neg" : d > 0.5 ? "pos" : ""}${span(f, i)}" title="Actual ${money(m.baseClosing)} vs forecast ${money(byKey[m.key].baseClosing)}">${
           Math.abs(d) < 0.5 ? "—" : sign + money(d)}</td>`;
       }).join("")}
     </tr>`;
@@ -492,6 +512,33 @@ function programsView(f) {
 }
 
 /* ---------------- payment rules ---------------- */
+
+/**
+ * The caveat that has to travel with the tail.
+ *
+ * Months past 31 March exist so there is always a year of runway visible. They
+ * are not a forecast of next year: no FY27/28 programs are entered, so no
+ * student money arrives in them and no program cost goes out. Overheads repeat
+ * from the same fiscal month a year earlier, because rent and wages continuing
+ * is a far smaller assumption than any guess at next year's enrolments.
+ *
+ * The balance therefore falls through the tail. That fall is the shape of the
+ * missing inputs, and saying so here — in the same view as the number, not in a
+ * help page — is the difference between a prompt and a false alarm.
+ */
+function beyondNote(f) {
+  const h = f.horizon;
+  if (!h?.beyondFiscalYear) return "";
+  const first = f.months[h.fiscalYearMonths];
+  const last = f.months[f.months.length - 1];
+  if (h.tailHasPrograms) {
+    return `<p class="beyondnote"><b>${escapeHtml(first.label)} to ${escapeHtml(last.label)}</b> are next fiscal year, shown so there is always twelve months of runway. Year totals and the tiles above cover FY${String(f.fiscalYearStartYear).slice(2)}/${String(f.fiscalYearStartYear + 1).slice(2)} only.</p>`;
+  }
+  return `<p class="beyondnote"><b>${escapeHtml(first.label)} onward has no programs entered.</b>
+    Those months show overheads going out — carried forward from the same month a year earlier — and no student money coming in, because nothing has been entered for FY${String(f.fiscalYearStartYear + 1).slice(2)}/${String(f.fiscalYearStartYear + 2).slice(2)} yet.
+    The balance falling away across them is the gap in the inputs, not a forecast, and no warning or tile above is drawn from them.
+    Add next year's programs on the Programs tab and the tail fills in.</p>`;
+}
 
 /**
  * What the books say about cost phasing, next to what the model assumes.
@@ -1137,7 +1184,8 @@ function overheadsView() {
     </div>
     ${overheadSourcePanel(ro)}
     ${diagnosticsPanel(ro)}
-    <p class="foot">Positive numbers. The forecast subtracts them. GST and PAYE belong here as their own rows once you decide how to phase them — neither exists in the current workbook.</p>`;
+    <p class="foot">Positive numbers. The forecast subtracts them. GST and PAYE belong here as their own rows once you decide how to phase them — neither exists in the current workbook.</p>
+    <p class="foot">These twelve also cover the runway months past 31 March: April next year takes April's figure, and so on. That keeps rent and wages visible in the tail without inventing next year's budget — but it is a repeat, not a plan, and the tail is marked as such on the Forecast tab.</p>`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1478,6 +1526,17 @@ function drawChart(f) {
   const base = f.months.map((m) => Math.round(m.baseClosing));
   const total = f.months.map((m) => Math.round(m.closing));
 
+  /* The tail is drawn dashed and unfilled.
+   *
+   * It has overheads in it and no programs, so it descends steadily — and on a
+   * shared y-axis that descent sets the scale and flattens the fiscal year,
+   * which is the part anyone is actually reading. Dashing the segment past 31
+   * March keeps the runway visible while making it unmistakably a different
+   * kind of line: solid is a forecast, dashed is what happens if next year is
+   * never entered. */
+  const fyLast = (f.horizon?.fiscalYearMonths ?? 12) - 1;
+  const inTail = (ctx) => ctx.p1DataIndex > fyLast;
+
   chart = new Chart(canvas.getContext("2d"), {
     type: "line",
     data: {
@@ -1491,9 +1550,15 @@ function drawChart(f) {
           borderWidth: 2,
           fill: "origin",
           tension: 0.15,
-          // Months where the NZD account is under water get called out.
-          pointBackgroundColor: base.map((v) => (v < 0 ? "#b02a37" : "#288195")),
-          pointRadius: base.map((v) => (v < 0 ? 4 : 3)),
+          segment: {
+            borderDash: (ctx) => (inTail(ctx) ? [5, 4] : undefined),
+            borderColor: (ctx) => (inTail(ctx) ? "#9aa7b4" : undefined),
+          },
+          // Months where the NZD account is under water get called out — but
+          // only inside the fiscal year. A red dot in the tail would flag the
+          // absence of next year's programs as a liquidity event.
+          pointBackgroundColor: base.map((v, i) => (i > fyLast ? "#c3cbd4" : v < 0 ? "#b02a37" : "#288195")),
+          pointRadius: base.map((v, i) => (i > fyLast ? 2 : v < 0 ? 4 : 3)),
         },
         {
           label: "Incl. unconverted USD",

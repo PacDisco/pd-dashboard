@@ -113,6 +113,18 @@
   .cftable tr.sep td { border-bottom-color: transparent; }
   .calc { color: #6b7280; background: var(--sunk); }
 
+  /* The fiscal-year boundary. Everything left of this line is the year the
+     totals and warnings describe; everything right of it is runway with no
+     programs entered yet. The line is solid and the tail is greyed because the
+     two halves of the table are not the same kind of thing, and a reader
+     scanning the closing balance across them needs to see where one stops. */
+  .cftable th.fyend, .cftable td.fyend { border-right: 2px solid #94a3b8; }
+  .cftable th.beyond, .cftable td.beyond { color: #98a2b3; background: repeating-linear-gradient(
+      -45deg, transparent, transparent 7px, rgba(148,163,184,.07) 7px, rgba(148,163,184,.07) 14px); }
+  .cftable thead th.beyond { font-style: italic; }
+  .beyondnote { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+    background: #fff8e6; border: 1px solid #f0d9a0; color: #6b5525; font-size: 12.5px; }
+
   .cftable.edit th, .cftable.edit td { padding: 6px 7px; }
   .cftable.edit input, .cftable.edit select { width: 100%; min-width: 4.4rem; font: inherit; font-size: 12.5px;
     text-align: right; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px;
@@ -179,6 +191,13 @@
 
   .curverow.near input { border-color: var(--topaz); font-weight: 500; }
   .curverow.near .bar i { background: var(--topaz); }
+  .btn-diag { font: inherit; font-size: 13px; padding: 7px 13px; cursor: pointer;
+    background: #fff; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); }
+  .btn-diag:hover:not(:disabled) { border-color: var(--topaz); color: var(--topaz); }
+  .btn-diag:disabled { opacity: .5; cursor: default; }
+  .diagout { margin: 0; padding: 12px 14px; background: #f7f9fa; border: 1px solid var(--line);
+    border-radius: 8px; max-height: 460px; overflow: auto; font-size: 11.5px; line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
   td.ohcell { position: relative; }
   td.ohcell.actual input, td.ohcell.budget input { background: var(--soft, #f4fafc); }
   td.ohcell.actual input { border-color: var(--topaz); }
