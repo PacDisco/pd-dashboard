@@ -27,6 +27,8 @@ const state = {
   overheads: null,
   diag: null,
   diagBusy: null,
+  costCurve: null,
+  curveBusy: false,
   dirty: false,
   tab: "forecast",
   saving: false,
@@ -491,11 +493,135 @@ function programsView(f) {
 
 /* ---------------- payment rules ---------------- */
 
+/**
+ * What the books say about cost phasing, next to what the model assumes.
+ *
+ * WHY THIS IS A PANEL AND NOT A DIAGNOSTIC
+ * ----------------------------------------
+ * The previous four steps each ended with "run this probe and send me the
+ * output". That makes one person a courier for their own data, and it leaves
+ * the answer in a conversation rather than on the page. So the derivation runs
+ * server-side and reports itself here, with its own coverage and window.
+ *
+ * It does NOT adopt anything automatically. A curve built on half a cycle looks
+ * every bit as authoritative as one built on two, and the difference matters
+ * more than the shape does.
+ */
+function costCurvePanel() {
+  const c = state.costCurve;
+  if (!c) {
+    return `<section class="closebox">
+      <h2>Cost phasing <span class="stamp">from the books</span></h2>
+      <p class="foot">The model spreads a program's cost 25% the month before departure and 45% in the departure month. That shape was invented. This reads what was actually paid, per season, against each season's departure.</p>
+      <button class="btn-diag" id="loadcurve" ${state.curveBusy ? "disabled" : ""}>
+        ${state.curveBusy ? "Reading the books…" : "Derive from actual spend"}
+      </button>
+    </section>`;
+  }
+  if (c.error) {
+    return `<section class="closebox">
+      <h2>Cost phasing</h2>
+      <p class="foot">${escapeHtml(c.error)}${c.hint ? ` ${escapeHtml(c.hint)}` : ""}</p>
+      <button class="btn-diag" id="loadcurve">Try again</button>
+    </section>`;
+  }
+
+  const cov = c.coverageWeighted ?? {};
+  const covLine = Object.entries(cov).length
+    ? Object.entries(cov).map(([k, v]) => `<b>${escapeHtml(k)}</b> ${v}%`).join(" · ")
+    : "nothing tagged";
+
+  const pf = c.profile;
+  const MONTHS = pf?.fiscalMonths ?? ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
+
+  /* The calendar profile, shown FIRST because it is usually the better trade.
+   *
+   * The season curves below depend on each payment carrying a tracking tag —
+   * something nobody controls and which fails quietly when it is only sometimes
+   * filled in. This depends on the year repeating, which anyone can check, and
+   * it is measured on every dollar of program cost rather than the tagged
+   * share. */
+  const profileBlock = !pf ? "" : `
+    <div class="closebox" style="margin:8px 0">
+      <h2 style="font-size:14px">By calendar month
+        <span class="stamp">${pf.adoptable ? "usable" : "not usable yet"}</span></h2>
+      <p class="foot">Share of a year's program cost leaving in each fiscal month, from the P&amp;L's Cost of Sales. No tagging needed — this covers every dollar of program spend.</p>
+      ${pf.shares ? `<p class="foot">${pf.shares.map((v, i) => `<span class="stamp">${MONTHS[i]} ${Math.round(v * 100)}%</span>`).join(" ")}</p>` : ""}
+      <p class="foot">${(pf.perYear ?? []).map((y) => `FY${String(y.fiscalYear).slice(2)}/${String(y.fiscalYear + 1).slice(2)}: ${Number(y.total).toLocaleString("en-NZ")} over ${y.monthsWithData}/12 months${y.complete ? "" : " <b>(incomplete)</b>"}`).join(" · ") || "no program cost recorded"}</p>
+      ${pf.adoptable ? "" : `<p class="foot"><b>Why not yet:</b> ${(pf.reasons ?? []).map(escapeHtml).join("; ")}.</p>`}
+      ${pf.maxYearGapPct != null ? `<p class="foot">The observed years differ by up to ${pf.maxYearGapPct} points in a single month. ${pf.maxYearGapPct > 8 ? "That is the calendar assumption not holding — worth understanding before adopting." : "Close enough that the rhythm looks stable."}</p>` : ""}
+      <p class="foot"><b>Shape only.</b> The amount comes from the model's own pax and per-pax costs, so more enrolments spend more on the same rhythm. What this cannot know is a season MOVING — shift Fall to October and real spend moves with it while these shares do not.</p>
+    </div>`;
+
+  /* THE SPLIT, shown before either curve.
+   *
+   * Programs in a season end on the same day but start on staggered dates, so a
+   * later start means a SHORTER program — and the engine, which anchors
+   * everything to the start date and has never read endDate, slides its whole
+   * cost shape later instead of compressing it. How much that matters depends
+   * entirely on how much of the money goes out during delivery rather than
+   * before it, which is a question worth measuring rather than assuming. */
+  const sp = c.split;
+  const splitBlock = !sp ? "" : `
+    <div class="closebox" style="margin:8px 0">
+      <h2 style="font-size:14px">Before, during, after
+        <span class="stamp">${sp.adoptable ? "measured" : "not measurable yet"}</span></h2>
+      ${sp.overall ? `<p class="foot">
+        <span class="stamp">run-up ${Math.round(sp.overall.before * 100)}%</span>
+        <span class="stamp">during delivery ${Math.round(sp.overall.during * 100)}%</span>
+        <span class="stamp">after it ends ${Math.round(sp.overall.after * 100)}%</span>
+        — weighted across ${(sp.seasonYearsUsed ?? []).length} season${(sp.seasonYearsUsed ?? []).length === 1 ? "" : "s"} observed all the way through.</p>` : ""}
+      ${(sp.seasonYears ?? []).map((y) => `<p class="foot">${escapeHtml(y.key)}: ${Number(y.total).toLocaleString("en-NZ")}${y.shares ? ` — ${Math.round(y.shares.before * 100)}/${Math.round(y.shares.during * 100)}/${Math.round(y.shares.after * 100)}` : ""}, runs ${escapeHtml(y.firstStart)} to ${escapeHtml(y.end ?? "?")}${y.staggerDays ? `, starts staggered over ${y.staggerDays} days` : ""}${y.complete ? "" : " <b>(run-up only)</b>"}</p>`).join("")}
+      ${sp.adoptable ? "" : `<p class="foot"><b>Why not yet:</b> ${(sp.reasons ?? []).map(escapeHtml).join("; ")}.</p>`}
+      ${sp.overall && sp.overall.during > 0.35 ? `<p class="foot"><b>This matters.</b> ${Math.round(sp.overall.during * 100)}% of program cost goes out while the group is away, and a program that starts a month later finishes on the same day — so it is a month shorter and that spend has to compress, not slide. The engine currently slides it.</p>` : ""}
+      ${sp.overall && sp.overall.during <= 0.35 && sp.adoptable ? `<p class="foot">Most of the money is committed before anyone departs, so trip length matters less than the booking rhythm does — the calendar profile above carries most of the weight.</p>` : ""}
+      ${sp.taggedToUnknownSeason ? `<p class="foot">${Number(sp.taggedToUnknownSeason).toLocaleString("en-NZ")} is tagged to a season with no end date in the model, so it cannot be placed. Add end dates on the Programs tab to include it.</p>` : ""}
+    </div>`;
+
+  const seasons = Object.entries(c.seasons ?? {});
+  const unmatched = Object.entries(c.unmatchedOptions ?? {});
+
+  const curveRow = (offsets) => {
+    if (!offsets?.length) return `<td colspan="2" class="muted">—</td>`;
+    return offsets.map((o) => `<span class="stamp">${o.monthOffset > 0 ? "+" : ""}${o.monthOffset}m ${Math.round(o.share * 100)}%</span>`).join(" ");
+  };
+
+  return `<section class="closebox">
+    <h2>Cost phasing <span class="stamp">${c.monthsStored} months · ${c.categoryUsed}</span></h2>
+    <p class="foot">Share of a season's spend by months from departure — negative is before. Derived from ${Number(c.totalOutAcrossMonths).toLocaleString("en-NZ")} of outgoing money across two fiscal years. Tagging coverage: ${covLine}.</p>
+
+    ${splitBlock}
+    ${profileBlock}
+    <p class="foot"><b>By season, anchored to departure</b> — adapts when a season moves, but only covers spend that carries a season tag.</p>
+    ${seasons.length ? seasons.map(([name, s]) => `
+      <div class="closebox" style="margin:8px 0">
+        <h2 style="font-size:14px">${escapeHtml(name)}
+          <span class="stamp">${s.adoptable ? "usable" : "not usable yet"}</span></h2>
+        <p class="foot">${Number(s.total).toLocaleString("en-NZ")} of spend · ${s.seasonYears} season${s.seasonYears === 1 ? "" : "s"} observed (${(s.observedYears ?? []).map(escapeHtml).join(", ")}) · window ${s.window?.first}m to ${s.window?.last > 0 ? "+" : ""}${s.window?.last}m</p>
+        <p class="foot">${curveRow(s.offsets)}</p>
+        ${s.adoptable ? "" : `<p class="foot"><b>Why not yet:</b> ${(s.reasons ?? []).map(escapeHtml).join("; ")}.</p>`}
+        ${(s.anchors ?? []).some((a) => a.spreadDays > 21) ? `<p class="foot">Programs in this season depart up to ${Math.max(...s.anchors.map((a) => a.spreadDays || 0))} days apart, so the curve averages departures that are not aligned.</p>` : ""}
+      </div>`).join("")
+      : `<p class="foot">No season could be placed against a departure date. ${unmatched.length ? "Tags were found, but none matched a season in the model." : "No spend carries a season tag."}</p>`}
+
+    <p class="foot"><b>The model currently uses</b> ${curveRow(c.current)} for every season.</p>
+
+    ${unmatched.length ? `<p class="foot"><b>Tagged but unplaceable:</b> ${unmatched.slice(0, 12).map(([k, v]) => `${escapeHtml(k)} ${Number(v).toLocaleString("en-NZ")}`).join(" · ")}. These carry a tag that does not match a season in the model, so their spend is excluded rather than attached to the nearest thing that looks similar.</p>` : ""}
+
+    ${c.unattributable?.spendWithoutLineDetail ? `<p class="foot">${Number(c.unattributable.spendWithoutLineDetail).toLocaleString("en-NZ")} of spend has no line detail to attribute by, and ${Number(c.unattributable.unconverted || 0).toLocaleString("en-NZ")} could not be converted to NZD honestly. Both count against the coverage above rather than being hidden.</p>` : ""}
+
+    <button class="btn-diag" id="loadcurve" ${state.curveBusy ? "disabled" : ""}>
+      ${state.curveBusy ? "Reading…" : "Re-read"}
+    </button>
+  </section>`;
+}
+
 function paymentsView() {
   const r = state.assumptions.defaultPaymentRules;
   const ro = !state.canEdit;
   const sum = r.bookingCurve.reduce((s, p) => s + p.share, 0);
   return `
+    ${costCurvePanel()}
     <div class="two">
       <section>
         ${r.receiptsCurve?.length ? "" : `
@@ -1062,6 +1188,23 @@ function wire() {
         render();
       }
     }));
+
+  el("loadcurve")?.addEventListener("click", async () => {
+    state.curveBusy = true;
+    render();
+    try {
+      const res = await fetch(`${API}/cash-cost-curve`, { credentials: "include" });
+      const raw = await res.text();
+      try { state.costCurve = JSON.parse(raw); }
+      catch { state.costCurve = { error: `Unexpected ${res.status} response` }; }
+    } catch (err) {
+      state.costCurve = { error: err.message };
+    } finally {
+      // finally, for the same reason as every other busy flag on this page.
+      state.curveBusy = false;
+      render();
+    }
+  });
 
   document.querySelectorAll("[data-refresh]").forEach((b) =>
     b.addEventListener("click", async () => {
