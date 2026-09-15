@@ -238,7 +238,9 @@ function topBar(f) {
       <div class="title">
         <h1>Pacific Discovery cash flow</h1>
         <span class="fy">FY ${fy}/${String(fy + 1).slice(2)} · Apr–Mar${
-          f.horizon?.beyondFiscalYear ? ` + ${f.horizon.beyondFiscalYear} mo runway` : ""}</span>
+          f.horizon?.beyondFiscalYear
+            ? ` + ${f.horizon.beyondFiscalYear} mo to ${escapeHtml(f.months[f.months.length - 1].label)}`
+            : ""}</span>
       </div>
       <div class="tiles">
         <div class="tile"><span class="k">Cash in</span><span class="v">${money(t.cashIn)}</span><span class="sub">NZD equiv.</span></div>
@@ -350,9 +352,11 @@ function forecastView(f) {
     <figure class="chartwrap">
       <div style="position:relative;height:250px"><canvas id="chart"></canvas></div>
       <figcaption>NZD account by month, with the total position including unconverted USD behind it. The dashed red line is zero.${
-        f.horizon?.beyondFiscalYear && !f.horizon.tailHasPrograms
-          ? ` Past ${escapeHtml(f.months[f.horizon.fiscalYearMonths].label)} the line goes grey and dashed: those months have overheads but no programs entered, so the decline is missing inputs rather than a forecast.`
-          : ""}</figcaption>
+        f.horizon?.emptyFromLabel
+          ? ` The line goes grey and dashed past 31 March; from ${escapeHtml(f.horizon.emptyFromLabel)} it has overheads but no programs entered, so that decline is missing inputs rather than a forecast.`
+          : f.horizon?.beyondFiscalYear
+            ? " The line goes grey and dashed past 31 March — still a forecast, just beyond the reported year."
+            : ""}</figcaption>
     </figure>
     <div class="scroll">
       <table class="cftable">
@@ -395,9 +399,14 @@ function forecastView(f) {
  * be read after the number rather than with it.
  */
 function span(f, i) {
-  const fyLast = (f.horizon?.fiscalYearMonths ?? 12) - 1;
-  if (i === fyLast && f.months.length > fyLast + 1) return " fyend";
-  return i > fyLast ? " beyond" : "";
+  const per = f.horizon?.fiscalYearMonths ?? 12;
+  const beyond = i >= per ? " beyond" : "";
+  // A divider at EVERY 31 March, not just the first. With two-plus years on
+  // screen a single line marks the edge of the reported year but leaves the
+  // rest as one undifferentiated run, and a reader scanning the closing balance
+  // has no way to tell FY27/28 from FY28/29 without counting columns.
+  const isYearEnd = (i + 1) % per === 0 && i + 1 < f.months.length;
+  return `${isYearEnd ? " fyend" : ""}${beyond}`;
 }
 
 function cell(v, m, realWhenClosed = true, extra = "") {
@@ -630,13 +639,15 @@ function beyondNote(f) {
   if (!h?.beyondFiscalYear) return "";
   const first = f.months[h.fiscalYearMonths];
   const last = f.months[f.months.length - 1];
-  if (h.tailHasPrograms) {
-    return `<p class="beyondnote"><b>${escapeHtml(first.label)} to ${escapeHtml(last.label)}</b> are next fiscal year, shown so there is always twelve months of runway. Year totals and the tiles above cover FY${String(f.fiscalYearStartYear).slice(2)}/${String(f.fiscalYearStartYear + 1).slice(2)} only.</p>`;
+  const scope = `Year totals and the tiles above cover FY${String(f.fiscalYearStartYear).slice(2)}/${String(f.fiscalYearStartYear + 1).slice(2)} only.`;
+
+  if (!h.emptyFromLabel) {
+    return `<p class="beyondnote"><b>${escapeHtml(first.label)} to ${escapeHtml(last.label)}</b> are beyond the reported year, shown so there are always two years of runway. Programs are entered right through, so these are a real forecast. ${scope}</p>`;
   }
-  return `<p class="beyondnote"><b>${escapeHtml(first.label)} onward has no programs entered.</b>
-    Those months show overheads going out — carried forward from the same month a year earlier — and no student money coming in, because nothing has been entered for FY${String(f.fiscalYearStartYear + 1).slice(2)}/${String(f.fiscalYearStartYear + 2).slice(2)} yet.
+  return `<p class="beyondnote"><b>${escapeHtml(h.emptyFromLabel)} onward has no programs entered</b> — ${h.emptyMonths} month${h.emptyMonths === 1 ? "" : "s"} of the ${h.beyondFiscalYear} past 31 March.
+    Those months show overheads going out — carried forward from the same month a year earlier — and no student money coming in.
     The balance falling away across them is the gap in the inputs, not a forecast, and no warning or tile above is drawn from them.
-    Add next year's programs on the Programs tab and the tail fills in.</p>`;
+    Add the missing programs on the Programs tab and the tail fills in from there.</p>`;
 }
 
 /**
@@ -1660,8 +1671,12 @@ function drawChart(f) {
    * March keeps the runway visible while making it unmistakably a different
    * kind of line: solid is a forecast, dashed is what happens if next year is
    * never entered. */
-  const fyLast = (f.horizon?.fiscalYearMonths ?? 12) - 1;
+  const per = f.horizon?.fiscalYearMonths ?? 12;
+  const fyLast = per - 1;
   const inTail = (ctx) => ctx.p1DataIndex > fyLast;
+  // Indices sitting on a 31 March, for the year-boundary rules on the x axis.
+  const fyEnds = new Set(
+    f.months.map((m, i) => (m.month === 3 ? i : -1)).filter((i) => i >= 0));
 
   chart = new Chart(canvas.getContext("2d"), {
     type: "line",
@@ -1722,7 +1737,30 @@ function drawChart(f) {
             lineWidth: (c) => (c.tick.value === 0 ? 1.5 : 1),
           },
         },
-        x: { ticks: { color: "#98a2b3", font: { size: 11 } }, grid: { display: false } },
+        x: {
+          ticks: {
+            color: "#98a2b3",
+            font: { size: 11 },
+            // Nearly three years of months will not fit as labels. Rather than
+            // letting Chart.js drop them at whatever interval fits — which
+            // lands on arbitrary months and makes the axis hard to read — every
+            // third month is labelled and the rest are blank, so the spacing is
+            // regular and the fiscal-year ends stay findable.
+            autoSkip: false,
+            maxRotation: 0,
+            callback(value, index) {
+              const step = labels.length > 18 ? 3 : labels.length > 13 ? 2 : 1;
+              return index % step === 0 ? labels[index] : "";
+            },
+          },
+          grid: {
+            display: true,
+            // A vertical rule at each 31 March, matching the table's divider.
+            color: (c) => (fyEnds.has(c.index) ? "#cbd5e1" : "transparent"),
+            lineWidth: 1,
+            drawTicks: false,
+          },
+        },
       },
     },
   });

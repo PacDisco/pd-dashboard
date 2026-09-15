@@ -39,32 +39,47 @@ export function dateToFiscalSlot(fyStart, year, month) {
     return slot >= 0 && slot < 12 ? slot : null;
 }
 /**
+ * Months of runway the table must always show, counting the current month.
+ *
+ * Two fiscal years. Changing this one number changes the whole horizon, and it
+ * is a round number of years on purpose: the floor below it is the same value,
+ * so on 1 April the table is EXACTLY two fiscal years, Apr–Mar and Apr–Mar,
+ * with no ragged remainder. Any value that is not a multiple of twelve gives up
+ * that property.
+ */
+export const MONTHS_AHEAD = 24;
+
+/**
  * How many months the table runs for.
  *
- * WHY THIS IS NOT TWELVE
- * ----------------------
+ * WHY THIS IS NOT THE FISCAL YEAR
+ * -------------------------------
  * A fiscal-year table is the right shape for reporting and the wrong shape for
  * cash. In September it showed seven months ahead; by February it would have
  * shown two. The months a business most needs to see — is there money in
  * March, is there money in June — drop off the right-hand edge precisely as
  * they get close enough to matter.
  *
- * So the horizon is whichever is longer: the fiscal year, or twelve months from
- * today. Both, not either. The fiscal year always appears whole, so year totals
- * and the annual comparison still mean what they meant; and there are never
- * fewer than twelve months of runway visible.
+ * So the horizon is whichever is longer: the fiscal year (always whole, so year
+ * totals and the annual comparison still mean what they meant), or MONTHS_AHEAD
+ * from today. Both, not either.
  *
- * The consequence is that the table changes width through the year — 12 columns
- * each April, growing to 23 by the following March. That is the honest shape of
- * "a whole fiscal year AND a year of runway" and there is no way to have both
- * without it.
+ * The consequence is that the table changes width through the year — 24 columns
+ * each April, growing to 35 by the following March, then back to 24. That is
+ * the honest shape of "whole fiscal years AND two years of runway": holding the
+ * width fixed would mean either truncating the far end or letting the near end
+ * shrink, and the near end shrinking is the failure this replaced.
  */
-export function horizonLength(fyStart, today = new Date()) {
+export function horizonLength(fyStart, today = new Date(), monthsAhead = MONTHS_AHEAD) {
     const y = today.getUTCFullYear();
     const m = today.getUTCMonth() + 1;
-    // Twelve months from the CURRENT month inclusive: this month plus eleven.
-    const lastNeeded = (y - fyStart) * 12 + (m - 1) - 3 + 11;
-    return Math.max(12, lastNeeded + 1);
+    // monthsAhead from the CURRENT month INCLUSIVE: this month plus the rest.
+    const lastNeeded = (y - fyStart) * 12 + (m - 1) - 3 + (monthsAhead - 1);
+    // The floor is whole fiscal years, never a bare twelve: a horizon of 24
+    // that fell back to 12 before the year started would shrink rather than
+    // grow, which is the opposite of the point.
+    const wholeYears = Math.ceil(monthsAhead / 12) * 12;
+    return Math.max(wholeYears, lastNeeded + 1);
 }
 /**
  * Slot within the horizon, or null if before the fiscal year or past the end.
@@ -204,10 +219,10 @@ function splitReceiptByCurrency(row, nativeAmount, receiptRate, receiptsAreFx, n
     row.fxIn += nativeAmount * (1 - share);
     row.baseIn += nativeAmount * receiptRate * share;
 }
-export function buildForecast(assumptions, actualsByMonth = {}, { today = new Date() } = {}) {
+export function buildForecast(assumptions, actualsByMonth = {}, { today = new Date(), monthsAhead = MONTHS_AHEAD } = {}) {
     const fy = assumptions.fiscalYearStartYear;
     const warnings = [];
-    const horizon = horizonLength(fy, today);
+    const horizon = horizonLength(fy, today, monthsAhead);
     const months = Array.from({ length: horizon }, (_, slot) => {
         const { year, month } = fiscalSlotToDate(fy, slot);
         return {
@@ -808,12 +823,29 @@ export function buildForecast(assumptions, actualsByMonth = {}, { today = new Da
         warnings.push(`${baseCur} dips below the ${Math.round(buffer).toLocaleString("en-NZ")} buffer in ${first.label}.`);
     }
     const tail = months.slice(12);
-    // Only when the tail is genuinely empty. Once next year's programs are
-    // entered the tail becomes a real forecast, and a caveat that kept
-    // apologising for it would be the thing that was wrong.
-    const tailHasPrograms = tail.some((m) => m.cashIn !== 0 || m.programCostsOut !== 0);
-    if (tail.length && !tailHasPrograms) {
-        warnings.push(`${tail[0].label} onward has no programs entered, so those months show overheads going out and no student money coming in. The balance falling through them is the gap in the inputs, not a forecast. Year totals and the warnings above cover the fiscal year only.`);
+    const hasProgramMoney = (m) => m.cashIn !== 0 || m.programCostsOut !== 0;
+    const tailHasPrograms = tail.some(hasProgramMoney);
+
+    /* WHERE THE ENTERED DATA ACTUALLY RUNS OUT.
+     *
+     * A single "does the tail have programs" flag was enough when the tail was
+     * five months. It is not enough now it spans two years: enter FY27/28 and
+     * the flag flips true while April to August 2028 are still empty, so the
+     * caveat disappears from exactly the months that still need it.
+     *
+     * What matters is the TRAILING run of empty months — the point past which
+     * nothing is entered — because everything after it is a balance falling on
+     * missing inputs. Gaps in the middle are left alone: a quiet month between
+     * two seasons is a real forecast, not an absence. */
+    let emptyFromIndex = months.length;
+    for (let i = months.length - 1; i >= 12; i--) {
+        if (hasProgramMoney(months[i])) break;
+        emptyFromIndex = i;
+    }
+    const emptyFrom = emptyFromIndex < months.length ? months[emptyFromIndex] : null;
+    if (emptyFrom) {
+        const n = months.length - emptyFromIndex;
+        warnings.push(`${emptyFrom.label} onward has no programs entered — ${n} month${n === 1 ? "" : "s"} showing overheads going out and no student money coming in. The balance falling through them is the gap in the inputs, not a forecast. Year totals and the warnings above cover the fiscal year only.`);
     }
     const unconverted = fyMonths[11].fxClosing;
     if (unconverted > 0) {
@@ -839,6 +871,11 @@ export function buildForecast(assumptions, actualsByMonth = {}, { today = new Da
             // with no programs in it. Naming that here means every consumer
             // gets the caveat, not just the one that remembered to add it.
             tailHasPrograms,
+            // The month from which nothing is entered, and how many months that
+            // is. Null once programs reach the end of the horizon.
+            emptyFromKey: emptyFrom?.key ?? null,
+            emptyFromLabel: emptyFrom?.label ?? null,
+            emptyMonths: emptyFrom ? months.length - emptyFromIndex : 0,
         },
         programs: contributions,
         totals: {

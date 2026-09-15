@@ -1,4 +1,4 @@
-// The table shows a whole fiscal year AND never less than twelve months ahead.
+// The table shows whole fiscal years AND never less than two years ahead.
 //
 // THE BUG THIS PREVENTS
 // ---------------------
@@ -14,7 +14,7 @@
 // that look entirely plausible on screen.
 
 import assert from "node:assert/strict";
-import { buildForecast, horizonLength } from "../cash-forecast/engine.mjs";
+import { buildForecast, horizonLength, MONTHS_AHEAD } from "../cash-forecast/engine.mjs";
 
 const near = (a, b, tol, msg) => {
   // NaN vs NaN slipped through the original form of this helper: Math.abs(NaN)
@@ -69,20 +69,30 @@ const MODEL = {
 
 /* ---- horizon length ---- */
 {
-  // April: the fiscal year already reaches twelve months out, so nothing extra.
-  assert.equal(horizonLength(2026, new Date("2026-04-15T00:00:00Z")), 12,
-    "in April the fiscal year IS the twelve months ahead");
-  // September: Sep 26 + 11 = Aug 27, which is fiscal slot 16, so 17 months.
-  assert.equal(horizonLength(2026, new Date("2026-09-15T00:00:00Z")), 17,
-    "in September the table must reach August next year");
-  // March, the worst case under the old behaviour: one month of visible runway
-  // became twelve.
-  assert.equal(horizonLength(2026, new Date("2027-03-15T00:00:00Z")), 23,
-    "in March the table must reach February the year after");
-  // Before the fiscal year starts, the year is still shown whole.
-  assert.equal(horizonLength(2026, new Date("2026-01-15T00:00:00Z")), 12,
-    "a fiscal year not yet started still shows all twelve of its months");
-  console.log("✓ horizon is the longer of the fiscal year and twelve months out");
+  assert.equal(MONTHS_AHEAD, 24, "the horizon is two years of runway");
+
+  // 1 April is the property worth protecting: with a round number of years the
+  // table is EXACTLY two fiscal years, Apr-Mar and Apr-Mar, no remainder.
+  assert.equal(horizonLength(2026, new Date("2026-04-15T00:00:00Z")), 24,
+    "in April the table is exactly two fiscal years");
+  // September: Sep 26 + 23 = Aug 28, fiscal slot 28, so 29 columns.
+  assert.equal(horizonLength(2026, new Date("2026-09-15T00:00:00Z")), 29,
+    "in September it must reach August two years out");
+  // It grows by exactly one column a month, which is what makes the far edge
+  // hold still while the near edge advances.
+  for (const [a, b] of [["2026-09-15", "2026-10-15"], ["2027-01-15", "2027-02-15"]]) {
+    assert.equal(
+      horizonLength(2026, new Date(`${b}T00:00:00Z`)) -
+      horizonLength(2026, new Date(`${a}T00:00:00Z`)),
+      1, `one more column from ${a} to ${b}`);
+  }
+  assert.equal(horizonLength(2026, new Date("2027-03-15T00:00:00Z")), 35,
+    "by March it has grown to 35, and rolls back to 24 when the year turns");
+  // Before the fiscal year starts, the floor is whole YEARS, not a bare twelve.
+  // A horizon of 24 that fell back to 12 here would shrink rather than grow.
+  assert.equal(horizonLength(2026, new Date("2026-01-15T00:00:00Z")), 24,
+    "a fiscal year not yet started still shows two whole years");
+  console.log("✓ horizon is the longer of whole fiscal years and two years out");
 }
 
 /* ---- the fiscal year is untouched by the extension ---- */
@@ -90,8 +100,8 @@ const MODEL = {
   const short = buildForecast(MODEL, {}, { today: new Date("2026-04-15T00:00:00Z") });
   const long = buildForecast(MODEL, {}, { today: new Date("2026-09-15T00:00:00Z") });
 
-  assert.equal(short.months.length, 12);
-  assert.equal(long.months.length, 17);
+  assert.equal(short.months.length, 24);
+  assert.equal(long.months.length, 29);
 
   // EVERY fiscal-year month must be identical. If extending the table changed
   // a single figure inside the year, the year's numbers would depend on when
@@ -119,9 +129,14 @@ const MODEL = {
   const f = buildForecast(MODEL, {}, { today: new Date("2026-09-15T00:00:00Z") });
   const tail = f.months.slice(12);
 
-  assert.equal(tail.length, 5, "Apr 27 to Aug 27");
+  assert.equal(tail.length, 17, "Apr 27 to Aug 28");
   assert.equal(f.months[12].key, "2027-04");
   assert.equal(f.months[12].label, "Apr 27", "labels keep working past the year end");
+  // Two years past the fiscal year end, so the month labels have to survive
+  // more than one wrap. Slot 24 is April again, two calendar years on.
+  assert.equal(f.months[24].key, "2028-04");
+  assert.equal(f.months[24].label, "Apr 28", "and past the SECOND year end too");
+  assert.equal(f.months[f.months.length - 1].key, "2028-08");
   assert.ok(tail.every((m) => m.beyondFiscalYear), "every tail month is flagged");
   assert.ok(f.months.slice(0, 12).every((m) => !m.beyondFiscalYear), "no fiscal month is");
 
@@ -136,6 +151,11 @@ const MODEL = {
   // when the truth is "wages keep going out and next year is not entered yet".
   near(f.months[12].overheads, MODEL.monthlyOverheads[0], 0.01, "Apr 27 repeats Apr 26");
   near(f.months[16].overheads, MODEL.monthlyOverheads[4], 0.01, "Aug 27 repeats Aug 26");
+  // The repeat is by fiscal slot modulo twelve, so it keeps working in the
+  // second tail year rather than running off the end of the array into zero.
+  near(f.months[24].overheads, MODEL.monthlyOverheads[0], 0.01, "Apr 28 repeats Apr 26 again");
+  assert.ok(tail.every((m) => Number.isFinite(m.overheads)),
+    "no tail month falls off the end of the twelve entered figures");
   assert.ok(tail.every((m) => m.carriedForward), "and every one of them says it is a repeat");
   console.log("✓ the tail carries overheads forward and nothing else");
 }
@@ -170,16 +190,20 @@ const MODEL = {
 
 /* ---- the horizon block the page draws from ---- */
 {
+  const hasProgramMoney = (m) => m.cashIn !== 0 || m.programCostsOut !== 0;
   const f = buildForecast(MODEL, {}, { today: new Date("2026-09-15T00:00:00Z") });
   assert.deepEqual(
     { ...f.horizon },
     {
-      length: 17,
+      length: 29,
       fiscalYearMonths: 12,
-      beyondFiscalYear: 5,
+      beyondFiscalYear: 17,
       lastFiscalMonth: "2027-03",
-      lastMonth: "2027-08",
+      lastMonth: "2028-08",
       tailHasPrograms: false,
+      emptyFromKey: "2027-04",
+      emptyFromLabel: "Apr 27",
+      emptyMonths: 17,
     },
     "the page must not have to re-derive the boundary and get a different answer",
   );
@@ -198,8 +222,33 @@ const MODEL = {
   const g = buildForecast(withNext, {}, { today: new Date("2026-09-15T00:00:00Z") });
   assert.equal(g.horizon.tailHasPrograms, true,
     "a program departing in the tail makes the tail a real forecast");
-  assert.ok(!g.warnings.some((w) => w.includes("no programs entered")),
-    "and the missing-programs caveat disappears");
+
+  // THE CASE THAT ONLY EXISTS AT THIS LENGTH.
+  //
+  // FY27/28 is now entered, so "does the tail have programs" is true — but the
+  // horizon runs to Aug 28 and nothing is entered past Mar 28. A single boolean
+  // would have dropped the caveat from exactly the months that still need it.
+  // The caveat must survive, and must name where the data actually stops.
+  assert.ok(g.horizon.emptyFromLabel,
+    "entering one more year must not silence the caveat for the year after");
+  // That program departs Oct 2027 and its last cost lands in the departure
+  // month, so the entered data stops at the end of October 2027 — not at the
+  // fiscal year end, which is the intuitive-but-wrong answer. The horizon runs
+  // ten months past it.
+  assert.equal(g.horizon.emptyFromKey, "2027-11",
+    "the data stops where the last program's money stops, not at a year end");
+  assert.equal(g.horizon.emptyMonths, 10, "Nov 27 to Aug 28");
+  assert.ok(g.warnings.some((w) => w.includes("Nov 27") && w.includes("no programs entered")),
+    `the warning must name Nov 27 — got: ${g.warnings.join(" | ")}`);
+
+  // A quiet month BETWEEN two seasons is a real forecast, not an absence, so
+  // only the TRAILING run counts. May 27 sits between the two programs' booking
+  // and balance months and has no program money at all; treating the first
+  // empty month as the end of the data would have stopped there and written
+  // off two years of entered forecast.
+  assert.ok(!hasProgramMoney(g.months[13]), "May 27 is genuinely quiet");
+  assert.notEqual(g.horizon.emptyFromKey, "2027-05",
+    "a gap in the middle is not where the entered data stops");
 
   // That program's deposits land six months before departure — April 2027,
   // inside the tail. Under the old fiscal-only slot lookup they returned null
