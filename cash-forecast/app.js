@@ -154,10 +154,17 @@ function effectiveAssumptions() {
   const overheads = (a.overheadSource ?? "auto") === "auto" && state.overheads?.months
     ? state.overheads.months
     : a.monthlyOverheads;
+  // Likewise for the runway months: they repeat the budget, not the resolved
+  // array, and only the server knows what the budget says.
+  const forward = (a.overheadSource ?? "auto") === "auto" && state.overheads?.forward
+    ? state.overheads.forward
+    : a.monthlyOverheads;
   return {
     ...a,
     openingBalances: openings,
     monthlyOverheads: overheads,
+    monthlyOverheadsForward: forward,
+    monthlyOverheadsForwardSources: state.overheads?.forwardSources ?? null,
     // Same metadata the server passes, so a locally recomputed preview explains
     // an opening-balance mismatch the same way the saved forecast does.
     openingsMeta: state.openings ? {
@@ -644,8 +651,19 @@ function beyondNote(f) {
   if (!h.emptyFromLabel) {
     return `<p class="beyondnote"><b>${escapeHtml(first.label)} to ${escapeHtml(last.label)}</b> are beyond the reported year, shown so there are always two years of runway. Programs are entered right through, so these are a real forecast. ${scope}</p>`;
   }
+  // What the runway's overheads are actually costed from. "Carried forward"
+  // covers two quite different things — a budgeted figure and a hand-typed one
+  // — and which it is decides how much weight the tail deserves.
+  const fwd = (f.months.slice(h.fiscalYearMonths) ?? [])
+    .map((m) => m.overheadCarriedFrom).filter(Boolean);
+  const budgeted = fwd.filter((s) => s === "budget").length;
+  const basis = !fwd.length ? ""
+    : budgeted === fwd.length ? " Their overheads repeat this year's <b>Xero budget</b>, month for month."
+    : budgeted ? ` Their overheads repeat this year's Xero budget where it has a figure (${budgeted} of 12 months) and the typed figure otherwise.`
+    : " Their overheads repeat the <b>typed</b> figures — no Xero budget was found, so nothing here comes from a plan.";
+
   return `<p class="beyondnote"><b>${escapeHtml(h.emptyFromLabel)} onward has no programs entered</b> — ${h.emptyMonths} month${h.emptyMonths === 1 ? "" : "s"} of the ${h.beyondFiscalYear} past 31 March.
-    Those months show overheads going out — carried forward from the same month a year earlier — and no student money coming in.
+    Those months show overheads going out and no student money coming in.${basis}
     The balance falling away across them is the gap in the inputs, not a forecast, and no warning or tile above is drawn from them.
     Add the missing programs on the Programs tab and the tail fills in from there.</p>`;
 }
@@ -1296,7 +1314,7 @@ function overheadsView() {
     ${overheadLinesPanel()}
     ${diagnosticsPanel(ro)}
     <p class="foot">Positive numbers. The forecast subtracts them. GST and PAYE belong here as their own rows once you decide how to phase them — neither exists in the current workbook.</p>
-    <p class="foot">These twelve also cover the runway months past 31 March: April next year takes April's figure, and so on. That keeps rent and wages visible in the tail without inventing next year's budget — but it is a repeat, not a plan, and the tail is marked as such on the Forecast tab.</p>`;
+    <p class="foot">The runway months past 31 March repeat these twelve by fiscal month — April next year takes April's figure, and so on. What they repeat is the <b>forward</b> basis: the Xero budget where it has a figure, the typed number where it does not. Never the actual. A closed month holds what was really spent, and carrying that into a forecast two years out would mix history into a plan — and get worse every month as more of the year closes.</p>`;
 }
 
 /* ------------------------------------------------------------------ */

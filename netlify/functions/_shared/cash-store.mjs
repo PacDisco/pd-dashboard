@@ -230,16 +230,29 @@ export function resolveMonthlyOverheads(assumptions, xero = {}) {
 
   const months = [];
   const sources = [];
+  /* THE FORWARD BASIS — what a month costs when it has not happened.
+   *
+   * Same twelve slots, resolved WITHOUT the actual: budget if there is one,
+   * otherwise the typed figure. It exists for the runway months past the
+   * fiscal year, which repeat a slot from this year.
+   *
+   * Repeating `months` there would have been the obvious thing and it is
+   * wrong: April 2026 is closed, so months[0] is what was actually spent, and
+   * April 2028 would inherit a figure from the books rather than from the plan.
+   * That silently mixes "what happened once" into a forecast two years out,
+   * and it gets worse every month as more of the year closes — by March the
+   * entire repeated year would be actuals.
+   *
+   * Budget is the answer to "what will a month cost", so the runway repeats the
+   * budget. */
+  const forward = [];
+  const forwardSources = [];
   for (let slot = 0; slot < 12; slot++) {
     const abs = 3 + slot;
     const key = `${fy + Math.floor(abs / 12)}-${String((abs % 12) + 1).padStart(2, "0")}`;
     const closed = Boolean(through) && key <= through;
     const actual = opex[key];
 
-    // A closed month with a real figure wins. The figure can legitimately be
-    // zero, so presence is tested rather than truthiness — a genuinely zero
-    // month must not fall through to the budget and look like a forecast.
-    //
     // `total` is the P&L's Total Operating Expenses as reported. `cash` strips
     // the non-cash lines — revaluations and unrealised currency movements —
     // which on these books swing by tens of thousands a month in both
@@ -247,12 +260,22 @@ export function resolveMonthlyOverheads(assumptions, xero = {}) {
     // entirely the dollar moving. Both are stored, so this is a display choice
     // rather than something needing a re-sync.
     const figure = basis === "cash" ? actual?.cashTotal : actual?.total;
+    const budgeted = budget && Number.isFinite(budget[slot]) && budget[slot] !== 0;
+
+    // The forward basis is decided first and independently — it must never see
+    // the actual, whatever this month's status is.
+    forward.push(budgeted ? budget[slot] : typed[slot]);
+    forwardSources.push(budgeted ? "budget" : "typed");
+
+    // A closed month with a real figure wins. The figure can legitimately be
+    // zero, so presence is tested rather than truthiness — a genuinely zero
+    // month must not fall through to the budget and look like a forecast.
     if (closed && actual && Number.isFinite(figure)) {
       months.push(figure);
       sources.push("actual");
       continue;
     }
-    if (budget && Number.isFinite(budget[slot]) && budget[slot] !== 0) {
+    if (budgeted) {
       months.push(budget[slot]);
       sources.push("budget");
       continue;
@@ -262,7 +285,8 @@ export function resolveMonthlyOverheads(assumptions, xero = {}) {
   }
 
   const counts = sources.reduce((acc, s) => ({ ...acc, [s]: (acc[s] || 0) + 1 }), {});
-  return { months, sources, counts };
+  const forwardCounts = forwardSources.reduce((acc, s) => ({ ...acc, [s]: (acc[s] || 0) + 1 }), {});
+  return { months, sources, counts, forward, forwardSources, forwardCounts };
 }
 
 /**

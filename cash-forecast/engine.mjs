@@ -462,13 +462,38 @@ export function buildForecast(assumptions, actualsByMonth = {}, { today = new Da
      * Wages and rent continuing is a much smaller assumption than any guess at
      * next year's enrolments, which is why this repeats and programs do not.
      * Every month it applies to is flagged carriedForward, and the page says so
-     * above the table. */
+     * above the table.
+     *
+     * WHICH TWELVE GET REPEATED
+     * -------------------------
+     * `monthlyOverheads` is resolved per month: a closed month holds what was
+     * actually spent, an open one holds the budget. Repeating THAT into the
+     * runway would carry actuals forward — April 2028 inheriting what April
+     * 2026 happened to cost — and the problem compounds as the year closes,
+     * until by March the whole repeated year is history rather than plan.
+     *
+     * `monthlyOverheadsForward` is the same twelve resolved without the
+     * actuals: budget where there is one, typed where there is not. The runway
+     * repeats that, so a month that has not happened is costed the way every
+     * other month that has not happened is costed. It falls back to the
+     * resolved array for an older caller that does not send it. */
+    const forwardBasis = Array.isArray(assumptions.monthlyOverheadsForward)
+        ? assumptions.monthlyOverheadsForward
+        : assumptions.monthlyOverheads;
     for (let slot = 0; slot < months.length; slot++) {
         const source = slot % 12;
-        months[slot].overheads = assumptions.monthlyOverheads[source] ?? 0;
+        const beyond = slot >= 12;
+        months[slot].overheads = (beyond ? forwardBasis[source] : assumptions.monthlyOverheads[source]) ?? 0;
+        // Capital and tax have no budget feed — they are typed figures only —
+        // so they repeat as they are. Named here rather than left implicit,
+        // because "everything past actuals comes from the budget" is true of
+        // overheads and not yet true of these.
         months[slot].capital = assumptions.monthlyCapital[source] ?? 0;
         months[slot].tax = assumptions.monthlyTax[source] ?? 0;
-        months[slot].carriedForward = slot >= 12;
+        months[slot].carriedForward = beyond;
+        months[slot].overheadCarriedFrom = beyond
+            ? (assumptions.monthlyOverheadsForwardSources?.[source] ?? "typed")
+            : null;
     }
     /* ---- roll forward: two accounts, converting only when NZD runs short ---- */
     const baseCur = assumptions.baseCurrency;

@@ -12,6 +12,7 @@
 
 import assert from "node:assert/strict";
 import { resolveMonthlyOverheads } from "../netlify/functions/_shared/cash-store.mjs";
+import { buildForecast } from "../cash-forecast/engine.mjs";
 
 const near = (a, b, tol, msg) =>
   assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -172,6 +173,103 @@ const budgetMonths = Array(12).fill(70_000);
   near(asTotal.months[8], 70_000, 0.01, "budget months ignore the basis");
   near(asCash.months[8], 70_000, 0.01);
   console.log("✓ the basis does not touch budget or typed months");
+}
+
+/* ---- the forward basis: what a month costs when it has not happened ---- */
+{
+  // The runway months past 31 March repeat one of this year's twelve. Which
+  // twelve they repeat is the whole question.
+  const opexByMonth = {
+    "2026-04": { total: 94_093, cashTotal: 94_093 },
+    "2026-05": { total: 71_000, cashTotal: 71_000 },
+  };
+  const budgetMonths = Array(12).fill(70_000);
+
+  const r = resolveMonthlyOverheads(
+    { fiscalYearStartYear: 2026, monthlyOverheads: Array(12).fill(60_000),
+      overheadSource: "auto", actualsThroughMonth: "2026-05" },
+    { opexByMonth, budgetMonths },
+  );
+
+  // The resolved array does what it always did: closed months from the books.
+  near(r.months[0], 94_093, 0.01, "April is closed, so it holds what was spent");
+  assert.equal(r.sources[0], "actual");
+
+  // THE POINT. The forward basis must NOT contain that figure. Repeating the
+  // resolved array into April 2028 would cost it at 94,093 — what April 2026
+  // happened to be — rather than at the 70,000 that was budgeted. And it gets
+  // worse as the year closes: by March every repeated month would be history.
+  near(r.forward[0], 70_000, 0.01,
+    "the forward basis costs a future April at the budget, not at what April cost");
+  assert.equal(r.forwardSources[0], "budget");
+  assert.ok(!r.forwardSources.includes("actual"),
+    "no month of the forward basis may ever be sourced from an actual");
+
+  // With no budget at all it falls back to typed, and says so rather than
+  // reaching for the actual as a better-than-nothing figure.
+  const noBudget = resolveMonthlyOverheads(
+    { fiscalYearStartYear: 2026, monthlyOverheads: Array(12).fill(60_000),
+      overheadSource: "auto", actualsThroughMonth: "2026-05" },
+    { opexByMonth, budgetMonths: null },
+  );
+  near(noBudget.forward[0], 60_000, 0.01, "no budget means the typed figure");
+  assert.equal(noBudget.forwardSources[0], "typed");
+  assert.equal(noBudget.months[0], 94_093, "while the closed month is still the actual");
+  console.log("✓ the forward basis never inherits an actual");
+}
+
+/* ---- and the engine actually uses it ---- */
+{
+  const opexByMonth = { "2026-04": { total: 94_093, cashTotal: 94_093 } };
+  const r = resolveMonthlyOverheads(
+    { fiscalYearStartYear: 2026, monthlyOverheads: Array(12).fill(60_000),
+      overheadSource: "auto", actualsThroughMonth: "2026-04" },
+    { opexByMonth, budgetMonths: Array(12).fill(70_000) },
+  );
+
+  const f = buildForecast({
+    fiscalYearStartYear: 2026, baseCurrency: "NZD", settlementCurrency: "USD",
+    fxRates: { NZD: 1, USD: 1.7 }, baseMinimumBuffer: 0,
+    openingBalances: { NZD: 1_000_000, USD: 0 },
+    monthlyOverheads: r.months,
+    monthlyOverheadsForward: r.forward,
+    monthlyOverheadsForwardSources: r.forwardSources,
+    monthlyCapital: Array(12).fill(0), monthlyTax: Array(12).fill(0),
+    recognitionMonths: { Fall: 9, Spring: 1, Summer: 6 },
+    paymentRulesByProgram: {}, programs: [],
+    defaultPaymentRules: { deposit: 2_500, balanceDueDaysBeforeDeparture: 90,
+      bookingCurve: [{ monthsBefore: 6, share: 1 }], balanceCurve: [{ monthsBefore: 2, share: 1 }],
+      nzdReceiptShare: 0, receiptsCurve: null },
+    costPhasing: { offsets: [{ monthOffset: 0, share: 1 }] },
+  }, {}, { today: new Date("2026-09-15T00:00:00Z") });
+
+  near(f.months[0].overheads, 94_093, 0.01, "April 2026 is closed and shows the actual");
+  near(f.months[12].overheads, 70_000, 0.01,
+    "April 2027 repeats the BUDGET, not the 94,093 April actually cost");
+  near(f.months[24].overheads, 70_000, 0.01, "and so does April 2028");
+  assert.equal(f.months[12].overheadCarriedFrom, "budget",
+    "and the month says where its figure came from");
+  assert.equal(f.months[0].overheadCarriedFrom, null,
+    "a fiscal-year month is not carried from anywhere");
+
+  // An older caller that sends no forward basis must still work, falling back
+  // rather than costing the runway at zero.
+  const legacy = buildForecast({
+    fiscalYearStartYear: 2026, baseCurrency: "NZD", settlementCurrency: "USD",
+    fxRates: { NZD: 1, USD: 1.7 }, baseMinimumBuffer: 0,
+    openingBalances: { NZD: 1_000_000, USD: 0 },
+    monthlyOverheads: r.months,
+    monthlyCapital: Array(12).fill(0), monthlyTax: Array(12).fill(0),
+    recognitionMonths: { Fall: 9, Spring: 1, Summer: 6 },
+    paymentRulesByProgram: {}, programs: [],
+    defaultPaymentRules: { deposit: 2_500, balanceDueDaysBeforeDeparture: 90,
+      bookingCurve: [{ monthsBefore: 6, share: 1 }], balanceCurve: [{ monthsBefore: 2, share: 1 }],
+      nzdReceiptShare: 0, receiptsCurve: null },
+    costPhasing: { offsets: [{ monthOffset: 0, share: 1 }] },
+  }, {}, { today: new Date("2026-09-15T00:00:00Z") });
+  near(legacy.months[12].overheads, 94_093, 0.01,
+    "without a forward basis it falls back to the resolved array rather than to zero");
+  console.log("✓ the runway is costed from the budget, and degrades rather than empties");
 }
 
 console.log("\nAll overhead basis tests passed.");

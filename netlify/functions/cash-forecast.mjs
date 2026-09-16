@@ -129,6 +129,11 @@ export default async (req) => {
       openingRateSource: openings.openingRateSource,
     },
     monthlyOverheads: overheads.months,
+    // The same twelve resolved without the actuals, for the runway months past
+    // 31 March. See the engine — repeating the resolved array there would carry
+    // what a month HAPPENED to cost into a forecast two years out.
+    monthlyOverheadsForward: overheads.forward,
+    monthlyOverheadsForwardSources: overheads.forwardSources,
     fxRates: { ...assumptions.fxRates, [settlement]: effectiveRate },
   };
 
@@ -184,6 +189,12 @@ export default async (req) => {
       months: overheads.months,
       sources: overheads.sources,
       counts: overheads.counts,
+      // The browser recomputes the forecast while editing, so it needs the same
+      // forward basis the server used or its preview of the runway months
+      // disagrees with the saved one.
+      forward: overheads.forward,
+      forwardSources: overheads.forwardSources,
+      forwardCounts: overheads.forwardCounts,
       // Enough to tell the three "no actuals" cases apart: nothing closed, the
       // P&L not synced, or genuinely no data for those months. The panel used
       // to state that closed months come from the P&L whether or not any
