@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cash Forecast</title>
+<meta name="description" content="Driver-based group cash flow — programs, pax and payment rules drive the twelve-month position, with actuals synced from Xero.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  /* Pacific Discovery brand: topaz #55bbd2, secondary green #81c243, body grey
+     #4a4a4a, Poppins for UI and DM Serif Display for headings. Same tokens as
+     field-budget so the two finance surfaces read as one system. */
+  :root {
+    --topaz: #55bbd2;
+    --topaz-dark: #288195;   /* darkened along the brand hue to clear 4.5:1 with
+                                white text; brand topaz alone is only 2.2:1 */
+    --topaz-darker: #1e6a7a;
+    --topaz-soft: #eaf7fa;
+    --green: #81c243;
+    --ink: #4a4a4a;
+    --over: #b02a37;
+    --over-soft: #fdecee;
+    --warn: #8a5310;
+    --warn-soft: #fdf3e3;
+    --line: #e4e8ef;
+    --sunk: #f6f8fa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: #f5f7fb; color: var(--ink);
+    font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+  }
+  h1, h2 { font-family: "DM Serif Display", Georgia, serif; font-weight: 400; color: #2c2c2c; }
+  h1 { font-size: 30px; margin: 0; }
+  h2 { font-size: 19px; margin: 0 0 10px; display: flex; align-items: baseline; gap: 10px; }
+
+  .wrap { max-width: 1560px; margin: 0 auto; padding: 22px 26px 70px; }
+  .back { color: var(--topaz-dark); text-decoration: none; font-size: 13px; font-weight: 500; }
+  .back:hover { text-decoration: underline; }
+  .lede { color: #6b7280; font-size: 13.5px; margin: 4px 0 0; max-width: 68ch; }
+
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+
+  /* header */
+  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 15px 18px; }
+  .title { display: flex; flex-direction: column; gap: 2px; margin-right: auto; }
+  .fy { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    letter-spacing: .07em; text-transform: uppercase; color: #98a2b3; }
+  .who { display: flex; align-items: center; gap: 11px; margin-left: auto; }
+  .email { font-family: ui-monospace, monospace; font-size: 11px; color: #98a2b3; }
+  .panel { display: flex; flex-direction: column; gap: 16px; }
+
+  /* summary tiles */
+  .tiles { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .tile { background: #fff; padding: 9px 14px; display: flex; flex-direction: column; min-width: 8.5rem; }
+  .tile.alert { background: var(--over-soft); }
+  .tile .k { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: #8a94a3; font-weight: 500; }
+  .tile .v { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; color: #2c2c2c; }
+  .tile .sub { font-size: 11px; color: #98a2b3; }
+  .neg { color: var(--over); }
+
+  .badge { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: #6b7280;
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+  .stamp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+    font-weight: 400; color: #98a2b3; }
+
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink); padding: 7px 14px; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--topaz); outline-offset: 2px; }
+  .btn-primary { background: var(--topaz-dark); border-color: var(--topaz-dark); color: #fff; font-weight: 500; }
+  .btn-primary:disabled { background: #eef1f5; border-color: var(--line); color: #a5adb9; cursor: default; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 18px 0 16px; }
+  .tabs button { border: none; background: none; border-radius: 0; padding: 9px 15px;
+    color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button.on { color: var(--topaz-darker); border-bottom-color: var(--topaz); font-weight: 600; }
+
+  .warnings { list-style: none; margin: 14px 0 0; padding: 11px 15px; display: flex;
+    flex-direction: column; gap: 5px; background: var(--warn-soft);
+    border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; font-size: 13.5px; }
+
+  /* tables
+     NOTE: this class is `cftable`, not `grid`. Tailwind 2 ships a `.grid`
+     utility that sets `display: grid`, which overrides a <table>'s display,
+     turns <thead> into a block, and destroys the shared column model — header
+     cells then size independently of body cells and the columns visibly drift
+     apart. Any class name here must not collide with a Tailwind utility. */
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  table.cftable { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .cftable th, .cftable td { padding: 7px 11px; text-align: right; white-space: nowrap;
+    border-bottom: 1px solid var(--line); }
+  .cftable thead th { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
+    color: #8a94a3; background: var(--sunk); position: sticky; top: 0; }
+  .cftable th.lab { text-align: left; font-weight: 400; color: #6b7280;
+    position: sticky; left: 0; background: #fff; z-index: 1; }
+  .cftable thead th.lab { background: var(--sunk); z-index: 2; }
+  .cftable tbody tr:last-child th, .cftable tbody tr:last-child td { border-bottom: none; }
+  .cftable tr.strong td, .cftable tr.strong th.lab { font-weight: 600; color: #2c2c2c; }
+  .cftable tr.rule td, .cftable tr.rule th.lab { border-top: 2px solid #cfd6e0; font-weight: 600; color: #2c2c2c; }
+  .cftable tr.muted td, .cftable tr.muted th.lab { color: #98a2b3; font-size: 12px; }
+  .cftable tr.sep th.lab { font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: #b0b8c4; padding-top: 14px; }
+  .cftable tr.sep td { border-bottom-color: transparent; }
+  .calc { color: #6b7280; background: var(--sunk); }
+
+  /* The fiscal-year boundary. Everything left of this line is the year the
+     totals and warnings describe; everything right of it is runway with no
+     programs entered yet. The line is solid and the tail is greyed because the
+     two halves of the table are not the same kind of thing, and a reader
+     scanning the closing balance across them needs to see where one stops. */
+  .cftable th.fyend, .cftable td.fyend { border-right: 2px solid #94a3b8; }
+  .cftable th.beyond, .cftable td.beyond { color: #98a2b3; background: repeating-linear-gradient(
+      -45deg, transparent, transparent 7px, rgba(148,163,184,.07) 7px, rgba(148,163,184,.07) 14px); }
+  .cftable thead th.beyond { font-style: italic; }
+  /* A line's shape across the months, at a glance. One bar per observed month,
+     scaled to that line's own peak — the question is "every month or a spike",
+     not "how does this compare to the rent". */
+  .spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 22px; }
+  .spark i { display: block; width: 5px; min-height: 1px; border-radius: 1px;
+    background: #55bbd2; opacity: .85; }
+
+  .beyondnote { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+    background: #fff8e6; border: 1px solid #f0d9a0; color: #6b5525; font-size: 12.5px; }
+
+  .cftable.edit th, .cftable.edit td { padding: 6px 7px; }
+  .cftable.edit input, .cftable.edit select { width: 100%; min-width: 4.4rem; font: inherit; font-size: 12.5px;
+    text-align: right; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px;
+    background: transparent; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cftable.edit select { min-width: 6rem; text-align: left; }
+  .cftable.edit input[type=date] { min-width: 8.6rem; }
+  .cftable.edit th.lab input { text-align: left; min-width: 7.5rem; }
+  .cftable.edit input:hover:not(:disabled), .cftable.edit select:hover:not(:disabled) { border-color: var(--line); }
+  .cftable.edit input:focus, .cftable.edit select:focus { background: #fff; border-color: var(--topaz); }
+  .cftable.edit input:disabled, .cftable.edit select:disabled { color: #6b7280; opacity: 1; }
+  /* No sticky-right here. An earlier attempt pinned the Contribution column
+     with `td.calc:last-of-type`, which matches nothing — :last-of-type picks the
+     last <td> (the delete button), and that has no .calc class. The header's
+     counterpart selector DID match, so one row had a sticky cell and the other
+     did not, and the columns drifted apart. The table scrolls in .scroll; that
+     is enough. */
+  .cur-in { min-width: 3.8rem !important; text-transform: uppercase; }
+  .del { border: none; background: none; color: #b0b8c4; padding: 2px 7px; font-size: 16px; line-height: 1; }
+  .del:hover:not(:disabled) { color: var(--over); }
+
+  .chartwrap { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 10px; }
+  figcaption { font-size: 12.5px; color: #98a2b3; padding-top: 8px; }
+
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 16px; }
+  .two section { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .field { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .field:last-of-type { border-bottom: none; }
+  .field span { color: #6b7280; }
+  .field input { font: inherit; font-variant-numeric: tabular-nums; text-align: right; width: 9.5rem;
+    padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--sunk); color: var(--ink); }
+  .field input:disabled { opacity: .6; }
+  .field.wide { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
+
+  .rates { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0 4px; }
+  .rateopt { display: flex; align-items: baseline; gap: 7px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 11px; cursor: pointer; font-size: 13px; background: var(--sunk); }
+  .rateopt.on { border-color: var(--topaz); background: var(--topaz-soft); }
+  .rateopt .rl { color: #6b7280; }
+  .rateopt .rv { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; color: #2c2c2c; }
+
+  .curve { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+  .curverow { display: grid; grid-template-columns: 2.8rem 4.2rem .9rem 1fr; align-items: center; gap: 7px; font-size: 12.5px; }
+  .curverow > span:first-child { font-family: ui-monospace, monospace; color: #98a2b3; text-align: right; }
+  .curverow input { font: inherit; font-variant-numeric: tabular-nums; text-align: right;
+    padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); color: var(--ink); width: 100%; }
+  .bar { height: 6px; background: #eef1f5; border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--topaz); }
+
+  /* Closed months. Tinted rather than boxed, so a twelve-column table doesn't
+     turn into two visually separate tables. */
+  .cftable .actualcol { background: #f2f8fa; }
+  .cftable thead th.actualcol { background: #e4f1f5; color: var(--topaz-darker); }
+  .cftable thead th.actualcol .amark { display: block; font-size: 8.5px; letter-spacing: .09em;
+    color: var(--topaz-dark); font-weight: 600; margin-top: 1px; }
+  .cftable td.na { color: #b8c0cb; font-style: italic; }
+  /* A forecast figure sitting inside a closed month. Must not read as banked. */
+  .cftable td.stillfc { color: #9aa6b4; font-style: italic; }
+  .cftable td.stillfc.neg { color: #d09a95; }
+  .stillfc-key { color: #9aa6b4; font-style: italic; }
+  .cftable .provisional { opacity: .55; }
+  .cftable tr.var td { font-weight: 600; }
+  .pos { color: #2f7d32; }
+
+  .curverow.near input { border-color: var(--topaz); font-weight: 500; }
+  .curverow.near .bar i { background: var(--topaz); }
+  .btn-diag { font: inherit; font-size: 13px; padding: 7px 13px; cursor: pointer;
+    background: #fff; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); }
+  .btn-diag:hover:not(:disabled) { border-color: var(--topaz); color: var(--topaz); }
+  .btn-diag:disabled { opacity: .5; cursor: default; }
+  .diagout { margin: 0; padding: 12px 14px; background: #f7f9fa; border: 1px solid var(--line);
+    border-radius: 8px; max-height: 460px; overflow: auto; font-size: 11.5px; line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+  td.ohcell { position: relative; }
+  td.ohcell.actual input, td.ohcell.budget input { background: var(--soft, #f4fafc); }
+  td.ohcell.actual input { border-color: var(--topaz); }
+  .ohtag { position: absolute; right: 6px; top: 1px; font-size: 8.5px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--topaz);
+    pointer-events: none; }
+  .recog { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
+  .recog .field { min-width: 150px; }
+  .recog small { display: block; margin-top: 4px; font-size: 11px; }
+  .closebox { background: #fff; border: 1px solid var(--topaz); border-left-width: 3px;
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 4px; }
+  .closebox h2 { margin-bottom: 4px; }
+  .closebox select { font: inherit; font-size: 13.5px; padding: 5px 9px; border: 1px solid var(--line);
+    border-radius: 7px; background: var(--sunk); color: var(--ink); min-width: 16rem; }
+
+  .pc { color: #98a2b3; }
+  .sens { margin-top: 6px; }
+  .sens th.lab { white-space: nowrap; }
+  .openings { display: flex; flex-direction: column; gap: 10px; }
+  .actuals { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .actuals .scroll { border: none; border-radius: 0; }
+  .cur { font-family: ui-monospace, monospace; font-size: 10.5px; color: #98a2b3; }
+  .cftable tr.off { opacity: .45; }
+
+  .empty { background: #fff; border: 1px solid var(--topaz); border-left-width: 3px;
+    border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column;
+    align-items: flex-start; gap: 10px; }
+  .empty h2 { margin: 0; }
+  .empty p { margin: 0; font-size: 13.5px; color: #6b7280; max-width: 78ch; }
+
+  .foot { font-size: 12.5px; color: #98a2b3; margin: 10px 0 0; max-width: 72ch; }
+  .warnfoot { color: var(--warn); }
+  .gate { background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 46px; text-align: center; color: #6b7280; }
+  .spinner { width: 26px; height: 26px; border: 3px solid var(--topaz-soft);
+    border-top-color: var(--topaz); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="back" href="/">&larr; Back to dashboards</a>
+
+  <img src="https://www.pacificdiscovery.org/graphics/logo.png"
+       alt="Pacific Discovery" width="314" height="84"
+       style="height:26px;width:auto;display:block;margin:8px 0 14px">
+
+  <div id="app">
+    <div class="gate"><div class="spinner"></div><p style="margin-top:14px">Loading the model…</p></div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

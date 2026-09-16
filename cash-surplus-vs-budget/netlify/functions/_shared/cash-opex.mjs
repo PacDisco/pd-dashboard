@@ -1,0 +1,325 @@
+// netlify/functions/_shared/cash-opex.mjs
+//
+// Monthly operating expenses from the Xero P&L.
+//
+// WHY THIS EXISTS
+// ---------------
+// The Overheads row is twelve numbers typed once a year, carried over from the
+// workbook, and nothing refreshes them. Five months of real data sitting in Xero
+// showed the annual total is close (about 3% light) but the MONTHLY SHAPE is
+// badly wrong — May overstated by 22,080, June understated by 38,951. A cash
+// forecast lives or dies on which month money leaves, so a right-in-total,
+// wrong-by-month row is exactly the failure that matters.
+//
+// NON-CASH LINES ARE EXCLUDED, AND THAT IS THE WHOLE SUBTLETY
+// -----------------------------------------------------------
+// A P&L operating-expense section is accrual and contains lines that never move
+// cash. Pacific Discovery's carries two large ones — Bank Revaluations and
+// Unrealised Currency Gains — which swing by tens of thousands a month in both
+// directions as the USD balance is remeasured. Feeding those into a cash
+// forecast imports pure noise: June's raw opex looks 33,805 cheaper than it was,
+// purely because the dollar moved.
+//
+// Comparing raw P&L opex against the model overstated the error at 7.4%. Against
+// cash-like opex it is 2.9%. The exclusions are named below rather than inferred,
+// so anyone can see and change what was left out.
+//
+// READ-ONLY. Every request here is a GET.
+
+import { xeroGet } from "./cash-xero.mjs";
+import { monthRange } from "./cash-xero.mjs";
+
+/**
+ * Account names excluded from the cash view of operating expenses.
+ *
+ * Matched case-insensitively against the whole line name. Deliberately a short,
+ * explicit list rather than a clever rule: an over-eager pattern that silently
+ * dropped "Bank Fees" (real cash, 6,454 a year) would be invisible.
+ */
+/**
+ * Bumped whenever a change here would give a DIFFERENT figure for a month that
+ * has already been fetched and stored.
+ *
+ * Closed months are cached forever, because a closed month does not change. But
+ * the parser does, and when it does the cache is the last thing holding the old
+ * wrong numbers. That is exactly what happened with `standardLayout`: August
+ * refetched and came out right at 82,369, while April to July sat on 18,657 /
+ * 131 / 25,170 / 4,687 because nothing ever asked for them again. Deleting the
+ * blobs by hand fixes it once; this fixes it every time.
+ *
+ * History:
+ *   1  first version — no stamp written, so a record with no parserVersion is
+ *      treated as version 1 and refetched.
+ *   2  standardLayout:"true" on the P&L request. Xero was rendering Pacific
+ *      Discovery's custom layout, whose "Operating Expenses" section holds only
+ *      part of the expenses.
+ *   3  (skipped — see 4)
+ *   4  parseDirectCosts added, so every record now carries programCost from the
+ *      P&L's Cost of Sales section. This was added WITHOUT bumping the stamp,
+ *      which is the exact failure the comment above describes, committed again
+ *      one function lower down. Every month was already stored at version 3, so
+ *      isOpexRecordCurrent said "current", nothing refetched, and programCost
+ *      was absent from all of them — which the cost-phasing panel reported,
+ *      accurately and uselessly, as "no program cost recorded".
+ *
+ *      The rule this keeps breaking: bump the stamp in the SAME commit that
+ *      changes what the parser returns, not in the commit that notices.
+ *   5  every expense line stored, not just the twelve biggest. See `lines`
+ *      below for why twelve was the wrong number.
+ *   6  revenue parsed and stored, so a closed month carries all three parts of
+ *      its surplus — revenue, cost of sales, overheads — rather than two.
+ */
+export const OPEX_PARSER_VERSION = 6;
+
+export const NON_CASH_LINES = [
+  /^bank revaluations?$/i,
+  /^unrealised (currency|foreign exchange|fx) (gains?|losses?)$/i,
+  /^depreciation$/i,
+  /^amortisation$/i,
+];
+
+export function isNonCash(name, patterns = NON_CASH_LINES) {
+  const n = String(name ?? "").trim();
+  return patterns.some((p) => p.test(n));
+}
+
+/** Xero renders negatives in parentheses in some report cells. */
+function cellValue(cell) {
+  const raw = cell?.Value;
+  if (raw === undefined || raw === null || raw === "") return 0;
+  const n = Number(String(raw).replace(/[(),$\s]/g, ""));
+  if (Number.isNaN(n)) return 0;
+  return /^\(.*\)$/.test(String(raw)) ? -n : n;
+}
+
+/**
+ * Pull the Operating Expenses section out of a P&L report.
+ *
+ * Sections are matched by title rather than position — a chart of accounts with
+ * no cost-of-sales section would shift every index. Rows nest to varying depth,
+ * so leaves are collected recursively, and SummaryRow totals are skipped so
+ * nothing is counted twice.
+ *
+ * @returns {{lines: Array<{name, amount, nonCash}>, total, cashTotal, excluded, sectionFound}}
+ */
+export function parseOperatingExpenses(report, patterns = NON_CASH_LINES) {
+  const sections = report?.Reports?.[0]?.Rows ?? [];
+  // Every section title, so "the numbers are too small" can be answered by
+  // looking rather than guessing. A custom layout shows up here immediately as
+  // headings that are not the four standard ones.
+  const sectionsSeen = sections
+    .filter((s) => s.RowType === "Section")
+    .map((s) => ({ title: s.Title || "(untitled)", rows: (s.Rows ?? []).length }));
+
+  const section = sections.find(
+    (s) => s.RowType === "Section" && /operating expense/i.test(s.Title ?? ""),
+  );
+  if (!section) {
+    return { lines: [], total: 0, cashTotal: 0, excluded: [], sectionFound: false, sectionsSeen };
+  }
+
+  const lines = [];
+  (function walk(rows) {
+    for (const row of rows ?? []) {
+      if (row.Rows) walk(row.Rows);
+      // SummaryRow is the section's own total — including it would double.
+      if (row.RowType !== "Row") continue;
+      const name = row.Cells?.[0]?.Value;
+      if (!name) continue;
+      const amount = cellValue(row.Cells?.[1]);
+      lines.push({ name, amount, nonCash: isNonCash(name, patterns) });
+    }
+  })(section.Rows);
+
+  const total = lines.reduce((s, l) => s + l.amount, 0);
+  const excluded = lines.filter((l) => l.nonCash);
+  const cashTotal = total - excluded.reduce((s, l) => s + l.amount, 0);
+
+  return { lines, total, cashTotal, excluded, sectionFound: true, sectionsSeen };
+}
+
+/**
+ * Direct program cost for one month, from the same report.
+ *
+ * WHY THIS MATTERS MORE THAN IT LOOKS
+ * -----------------------------------
+ * The forecast needs to know when money goes out on programs. The obvious route
+ * is to tie each supplier payment to a program by its tracking tag — which
+ * depends on whether someone filled that tag in, a question nobody can answer
+ * without measuring, and which fails silently when the answer is "sometimes".
+ *
+ * The P&L already separates program cost from overhead. Cost of Sales IS the
+ * program spend, monthly, on 100% of the money, in a report anyone can open and
+ * check. No attribution, no mapping, no coverage caveat.
+ *
+ * What it gives up: this is accrual, not cash — a supplier bill is booked when
+ * raised, not when paid. For phasing SHARES rather than amounts the difference
+ * is typically under a month, and the caller can compare the total against
+ * actual bank spend to see whether that holds.
+ *
+ * Section titles vary ("Cost of Sales", "Less Cost of Sales", "Direct Costs"),
+ * so it is matched on any of them rather than an exact string.
+ */
+export function parseDirectCosts(report) {
+  return parseSection(report, /cost of sales|direct cost/i);
+}
+
+/**
+ * Revenue for one month, from the same report.
+ *
+ * WHY THIS IS THE ACCRUAL NUMBER AND THAT IS THE POINT
+ * ----------------------------------------------------
+ * This is what the P&L booked as income in the month — Fall's whole season
+ * recognised in August, regardless of when the students' money arrived. It is
+ * deliberately NOT the cash the forecast tracks, and the two differ by the
+ * deferred revenue balance, which for this business runs to seven figures.
+ *
+ * Mixing them is the single easiest way to produce a confident wrong answer
+ * here: a surplus computed from cash receipts would say Pacific Discovery made
+ * a fortune in the months students pay and a loss in the months they travel.
+ * Nothing downstream may add a figure from this function to a figure from the
+ * cash forecast.
+ *
+ * Section titles vary ("Income", "Revenue", "Trading Income", "Turnover").
+ */
+export function parseRevenue(report) {
+  return parseSection(report, /^(income|revenue|trading income|turnover|sales)$/i,
+    /income|revenue|turnover/i);
+}
+
+/**
+ * One titled section of a P&L, as leaf rows.
+ *
+ * Matched on title rather than position — a chart of accounts without a
+ * cost-of-sales section would shift every index. `loose` is a second, wider
+ * pattern tried only if the strict one finds nothing, so "Other Income" is not
+ * mistaken for the main income section while an organisation calling it
+ * "Operating Income" is still found.
+ */
+function parseSection(report, strict, loose = null) {
+  const sections = report?.Reports?.[0]?.Rows ?? [];
+  const pick = (re) => sections.find((s) => s.RowType === "Section" && re.test(s.Title ?? ""));
+  const section = pick(strict) || (loose ? pick(loose) : null);
+  if (!section) return { lines: [], total: 0, sectionFound: false };
+
+  const lines = [];
+  (function walk(rows) {
+    for (const row of rows ?? []) {
+      if (row.Rows) walk(row.Rows);
+      // SummaryRow is the section's own total — counting it would double.
+      if (row.RowType !== "Row") continue;
+      const name = row.Cells?.[0]?.Value;
+      if (!name) continue;
+      lines.push({ name, amount: cellValue(row.Cells?.[1]) });
+    }
+  })(section.Rows);
+
+  return {
+    lines,
+    total: lines.reduce((s, l) => s + l.amount, 0),
+    sectionFound: true,
+    sectionTitle: section.Title || null,
+  };
+}
+
+/**
+ * Operating expenses for one month, cash view.
+ *
+ * One P&L call per month. Cached by the caller the same way bank months are, so
+ * a closed month is fetched once and never again.
+ */
+export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_CASH_LINES) {
+  const { from, to } = monthRange(key);
+  const report = await xeroGet(accessToken, tenantId, "Reports/ProfitAndLoss", {
+    fromDate: from,
+    toDate: to,
+    // Without this, Xero renders the organisation's own custom P&L layout —
+    // which can group accounts under headings of its own and leave the section
+    // called "Operating Expenses" holding only part of the expenses. That is
+    // the shape of the bug this fixes: April read 18,657 against a real 94,093,
+    // May read 131, and no two months were wrong by the same ratio, which is
+    // what a subset looks like rather than a scaling error.
+    standardLayout: "true",
+  });
+  const parsed = parseOperatingExpenses(report, patterns);
+  const direct = parseDirectCosts(report);
+  const revenue = parseRevenue(report);
+
+  return {
+    month: key,
+    parserVersion: OPEX_PARSER_VERSION,
+    // ACCRUAL revenue — what the month booked as income, not what arrived in
+    // the bank. Named `revenue` rather than `income` to keep it distinguishable
+    // from the cash forecast's `cashIn` at every call site.
+    revenue: revenue.total,
+    revenueSectionFound: revenue.sectionFound,
+    revenueSectionTitle: revenue.sectionTitle ?? null,
+    // Program cost, from the same report and the same call. Kept apart from
+    // operating expenses so the two can never be added together by accident —
+    // Overheads is already its own row.
+    programCost: direct.total,
+    programCostSectionFound: direct.sectionFound,
+    programCostTopLines: direct.lines
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+      .slice(0, 12)
+      .map((l) => ({ name: l.name, amount: Math.round(l.amount) })),
+    total: parsed.total,
+    cashTotal: parsed.cashTotal,
+    sectionFound: parsed.sectionFound,
+    sectionsSeen: parsed.sectionsSeen,
+    lineCount: parsed.lines.length,
+    excluded: parsed.excluded.map((l) => ({ name: l.name, amount: l.amount })),
+    // Biggest lines first, so a wrong figure has an obvious place to start.
+    topLines: parsed.lines
+      .filter((l) => !l.nonCash)
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+      .slice(0, 12)
+      .map((l) => ({ name: l.name, amount: Math.round(l.amount) })),
+    /* EVERY LINE, NOT THE TWELVE BIGGEST.
+     *
+     * `topLines` above keeps the twelve largest for a quick look. That is the
+     * wrong basis for asking "what do we spend money on", because the cut-off
+     * moves month to month: a line that is thirteenth in May and eleventh in
+     * June appears to exist in one month and not the other, and any average
+     * taken across months would divide a real annual cost by however many
+     * months it happened to make the cut in. A steady 1,800-a-month
+     * subscription could read as a one-off.
+     *
+     * A P&L operating-expense section runs to a few dozen lines, so keeping all
+     * of them costs nothing worth counting and removes a whole category of
+     * quietly wrong answers. nonCash travels with each line so a cash view can
+     * exclude revaluations without having to re-derive which ones they were.
+     */
+    lines: parsed.lines.map((l) => ({
+      name: l.name,
+      amount: Math.round(l.amount),
+      nonCash: l.nonCash,
+    })),
+    source: "Xero Profit and Loss",
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Is a stored opex record still one this parser would produce?
+ *
+ * Anything written before the stamp existed has no parserVersion, and a record
+ * from a newer deploy than this one is left alone rather than being refetched in
+ * a loop by an older function that happens to still be running.
+ */
+export function isOpexRecordCurrent(record, version = OPEX_PARSER_VERSION) {
+  if (!record) return false;
+  const stored = Number(record.parserVersion ?? 1);
+  return Number.isFinite(stored) && stored >= version;
+}
+
+export default {
+  parseOperatingExpenses,
+  parseDirectCosts,
+  parseRevenue,
+  fetchMonthOpex,
+  isNonCash,
+  isOpexRecordCurrent,
+  NON_CASH_LINES,
+  OPEX_PARSER_VERSION,
+};

@@ -1,0 +1,190 @@
+// test/cash-costs.test.mjs
+//
+// Which route can attribute a cost to a program?
+//
+// Cost phasing is the biggest remaining invention in the forecast, and
+// replacing it needs each outgoing dollar tied to a program. Three routes are
+// possible — line-item tracking, expense account code, and which bank account
+// the money left — and which of them is actually populated is a fact about
+// Pacific Discovery's bookkeeping that nobody can know without measuring.
+//
+// The failure this prevents: picking a route, deriving a curve from the 8% of
+// spend it happens to explain, and having no way to tell. So coverage is
+// reported per route and the numbers below pin how it is counted.
+//
+// Run: node test/cash-costs.test.mjs
+
+import assert from "node:assert/strict";
+import { costSignals, trackingByCategory, trackingOptions } from "../netlify/functions/_shared/cash-costs.mjs";
+
+const near = (a, b, tol, msg) =>
+  assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+
+const ACCOUNTS = [
+  { id: "id-bnz", name: "BNZ Pacific Discovery (BNZ Current Account)", currency: "NZD" },
+  { id: "id-bali", name: "Bali Summer USD", currency: "USD" },
+];
+const byId = new Map(ACCOUNTS.map((a) => [a.id, a]));
+const accounts = {
+  resolve(ref = {}) {
+    const hit = ref.AccountID && byId.get(ref.AccountID);
+    return { name: hit?.name ?? "(unknown account)", currency: hit?.currency ?? ref.CurrencyCode ?? "NZD" };
+  },
+};
+const NZD = ACCOUNTS[0], BALI = ACCOUNTS[1];
+const rates = { NZD: { rate: 1, thin: false }, USD: { rate: 1.72, thin: false } };
+
+// Pacific Discovery tags TWO categories in Xero: Program and Season.
+const line = (LineAmount, AccountCode, program, season) => ({
+  LineAmount, AccountCode,
+  Tracking: [
+    ...(program ? [{ Name: "Program", Option: program }] : []),
+    ...(season ? [{ Name: "Season", Option: season }] : []),
+  ],
+});
+const spend = (Total, acct, lines, Type = "SPEND") => ({
+  Type, Total, CurrencyCode: acct.currency,
+  BankAccount: { AccountID: acct.id }, LineItems: lines,
+});
+
+/* ---------- tracking options ---------- */
+
+{
+  assert.deepEqual(trackingByCategory(line(100, "453", "NZA", "Fall 26")),
+    { Program: "NZA", Season: "Fall 26" }, "both categories are kept apart");
+  assert.deepEqual(trackingByCategory(line(100, "453")), {},
+    "no tracking is nothing, not a guess");
+  assert.deepEqual(trackingByCategory({ Tracking: [{ Name: " Season ", Option: "  Fall 26  " }] }),
+    { Season: "Fall 26" }, "trimmed");
+  // A category with no option chosen is "not tagged", not a category named "".
+  assert.deepEqual(trackingByCategory({ Tracking: [{ Name: "Season", Option: "" }] }), {});
+  assert.deepEqual(trackingByCategory(null), {});
+  console.log("✓ the two tracking categories are read separately");
+}
+
+/* ---------- the three routes, measured against the same money ---------- */
+
+{
+  const s = costSignals({
+    bankTransactions: [
+      // Fully tracked on both categories, NZD.
+      spend(10_000, NZD, [line(10_000, "453", "NZA", "Fall 26")]),
+      // Coded but NOT tracked — the case that decides whether tracking is usable.
+      spend(5_000, NZD, [line(5_000, "477")]),
+      // A USD payment from the per-program account, untracked. The ACCOUNT is
+      // the attribution here, which is why the bank-account route matters.
+      spend(1_000, BALI, [line(1_000, "300")]),
+    ],
+    accounts, impliedRates: rates,
+  });
+
+  // 1,000 USD at the month's implied 1.72 = 1,720 NZD.
+  near(s.totalOut, 16_720, 1, "everything out, in base currency");
+  near(s.byCategory.Program.NZA, 10_000, 1, "the tracked spend is attributed by program");
+  // THE BUG THIS PINS: with two categories, an equal split would file 5,000
+  // under each. They are two views of the same money, not two claims on it.
+  near(s.byCategory.Season["Fall 26"], 10_000, 1, "and the FULL amount by season");
+  near(s.byAccountCode["477"], 5_000, 1, "and the untracked spend still has a code");
+  near(s.byBankAccount["Bali Summer USD"], 1_720, 1, "the USD payment converts at the implied rate");
+
+  assert.equal(s.coverage.Program, 59.8, "Program tagging explains 10,000 of 16,720");
+  assert.equal(s.coverage.Season, 59.8, "and Season the same money");
+  assert.equal(s.coverage.accountCode, 100, "every line carries a code");
+  console.log("✓ all three routes are measured against the same spend");
+}
+
+/* ---------- a bill covering two programs is split, not filed under one ---------- */
+
+{
+  const s = costSignals({
+    bankTransactions: [spend(9_000, NZD, [
+      line(6_000, "453", "NZA", "Fall 26"),
+      line(3_000, "453", "PolyJ", "Fall 26"),
+    ])],
+    accounts, impliedRates: rates,
+  });
+  near(s.byCategory.Program.NZA, 6_000, 1, "split by line amount");
+  near(s.byCategory.Program.PolyJ, 3_000, 1);
+  // Both lines are the same season, so the season bucket holds the whole bill.
+  near(s.byCategory.Season["Fall 26"], 9_000, 1, "and the season sees all of it");
+  assert.equal(s.coverage.Program, 100);
+  console.log("✓ a multi-program bill is split by line, not attributed to the first");
+}
+
+/* ---------- transfers are not costs ---------- */
+
+{
+  const s = costSignals({
+    bankTransactions: [
+      spend(10_000, NZD, [line(10_000, "453", "NZA", "Fall 26")]),
+      // Moving money between the organisation's own accounts. Real, and not a
+      // cost — counting it would inflate every curve it touched.
+      spend(80_000, NZD, [line(80_000, "090")], "SPEND-TRANSFER"),
+    ],
+    accounts, impliedRates: rates,
+  });
+  near(s.totalOut, 10_000, 1, "the transfer is excluded entirely");
+  assert.equal(s.byAccountCode["090"], undefined);
+  console.log("✓ own-account transfers are not treated as program cost");
+}
+
+/* ---------- money with no line detail is counted, not hidden ---------- */
+
+{
+  // A supplier bill paid: the Payment carries no line items, and without the
+  // invoice fetched there is nothing to attribute it by. It is still real money
+  // out, so it must land in the total — otherwise coverage flatters itself.
+  const s = costSignals({
+    payments: [{
+      PaymentType: "ACCPAYPAYMENT", BankAmount: 20_000,
+      Account: { AccountID: NZD.id }, Invoice: { InvoiceID: "inv-1" },
+    }],
+    invoicesById: new Map(),
+    accounts, impliedRates: rates,
+  });
+  near(s.totalOut, 20_000, 1, "unattributable money is still money out");
+  near(s.spendWithoutLineDetail, 20_000, 1, "and is reported as unattributable");
+  assert.equal(s.coverage.Program, undefined, "no category was seen at all");
+  assert.deepEqual(s.categoriesSeen, [], "so none is reported");
+  console.log("✓ spend with no line detail counts against coverage rather than vanishing");
+
+  // With the invoice supplied, the same payment attributes.
+  const withInvoice = costSignals({
+    payments: [{
+      PaymentType: "ACCPAYPAYMENT", BankAmount: 20_000,
+      Account: { AccountID: NZD.id }, Invoice: { InvoiceID: "inv-1" },
+    }],
+    invoicesById: new Map([["inv-1", { LineItems: [line(20_000, "453", "SAS", "Spring 27")] }]]),
+    accounts, impliedRates: rates,
+  });
+  near(withInvoice.byCategory.Program.SAS, 20_000, 1, "a fetched bill attributes to its program");
+  near(withInvoice.byCategory.Season["Spring 27"], 20_000, 1, "and to its season");
+  assert.equal(withInvoice.coverage.Program, 100);
+  console.log("✓ a supplier bill attributes once its invoice lines are available");
+}
+
+/* ---------- an unusable rate is reported, never guessed ---------- */
+
+{
+  const s = costSignals({
+    bankTransactions: [spend(1_000, BALI, [line(1_000, "300", "Bali", "Summer 27")])],
+    accounts,
+    // A month with almost no movement implies a rate from two small numbers.
+    impliedRates: { USD: { rate: 4.2, thin: true } },
+  });
+  near(s.totalOut, 0, 1, "nothing is added to a base-currency total at a bad rate");
+  near(s.unconverted, 1_000, 1, "the amount is reported unconverted instead");
+  console.log("✓ money that cannot be converted honestly is reported, not mixed in");
+}
+
+/* ---------- nothing at all ---------- */
+
+{
+  const s = costSignals({});
+  assert.equal(s.totalOut, 0);
+  assert.deepEqual(s.coverage, { accountCode: 0, bankAccount: 0 });
+  assert.deepEqual(s.categoriesSeen, []);
+  console.log("✓ an empty month reports zero coverage rather than dividing by zero");
+}
+
+console.log("\nAll cost attribution tests passed.");
