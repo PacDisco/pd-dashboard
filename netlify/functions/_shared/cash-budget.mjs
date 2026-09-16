@@ -160,4 +160,88 @@ export function overheadsFromBudget(budget, accountsById, fyStartYear) {
   };
 }
 
-export default { listBudgets, fetchBudget, accountIndex, overheadsFromBudget, classifyLine, periodToSlot };
+/**
+ * Twelve monthly figures for whichever accounts a predicate accepts.
+ *
+ * `overheadsFromBudget` above answers the cash forecast's question and throws
+ * the rest away with a reason. The surplus view needs two of the things it
+ * throws away — budgeted revenue and budgeted cost of sales — so the same walk
+ * is expressed once here and asked three different questions.
+ */
+function collectBudget(budget, accountsById, fyStartYear, accept) {
+  const months = Array(12).fill(0);
+  const included = new Map();
+  const slotsCovered = new Set();
+
+  for (const line of budget?.BudgetLines ?? []) {
+    const account = accountsById.get(line?.AccountID) ?? null;
+    if (!accept(account)) continue;
+    const label = account ? `${account.code ?? "?"} ${account.name}` : (line?.AccountID ?? "unknown");
+
+    let lineTotal = 0;
+    for (const bal of line?.BudgetBalances ?? []) {
+      const slot = periodToSlot(bal?.Period, fyStartYear);
+      if (slot === null) continue;
+      const amount = Number(bal?.Amount) || 0;
+      months[slot] += amount;
+      lineTotal += amount;
+      if (amount !== 0) slotsCovered.add(slot);
+    }
+    included.set(label, (included.get(label) || 0) + lineTotal);
+  }
+
+  return {
+    months: months.map((n) => Math.round(n * 100) / 100),
+    total: Math.round(months.reduce((s, n) => s + n, 0)),
+    included: [...included.entries()]
+      .map(([account, amount]) => ({ account, amount: Math.round(amount) }))
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+    slotsCovered: [...slotsCovered].sort((a, b) => a - b),
+  };
+}
+
+/**
+ * The budget split into the three lines a surplus is made of.
+ *
+ * Revenue comes back POSITIVE, and so do both cost series. Nothing here nets
+ * anything off: the subtraction happens once, in the surplus computation, where
+ * it can be read. A budget module that returned costs as negatives would work
+ * until the day someone added them instead of subtracting, and that mistake is
+ * invisible in a total.
+ *
+ * `overheads` deliberately re-uses overheadsFromBudget's own rule, so the
+ * surplus view and the cash forecast can never disagree about what an overhead
+ * is — a second definition here is a second thing to keep in step.
+ */
+export function budgetSeries(budget, accountsById, fyStartYear) {
+  const overheads = overheadsFromBudget(budget, accountsById, fyStartYear);
+  const revenue = collectBudget(budget, accountsById, fyStartYear,
+    (a) => a?.klass === "REVENUE");
+  const directCosts = collectBudget(budget, accountsById, fyStartYear,
+    (a) => a?.klass === "EXPENSE" && a?.type === "DIRECTCOSTS");
+
+  return {
+    overheads: {
+      months: overheads.months,
+      total: Math.round(overheads.months.reduce((s, n) => s + n, 0)),
+      slotsCovered: overheads.slotsCovered,
+    },
+    revenue,
+    directCosts,
+    // Budgeted surplus, computed here once so the page and any other caller
+    // cannot each do the subtraction slightly differently.
+    surplus: Math.round(
+      revenue.total - directCosts.total - overheads.months.reduce((s, n) => s + n, 0)),
+    // Whether the budget actually covers the whole year. A budget that stops in
+    // December makes a full-year surplus look far better than it is, and the
+    // shortfall is invisible in the total.
+    monthsCovered: [...new Set([
+      ...overheads.slotsCovered, ...revenue.slotsCovered, ...directCosts.slotsCovered,
+    ])].sort((a, b) => a - b),
+  };
+}
+
+export default {
+  listBudgets, fetchBudget, accountIndex, overheadsFromBudget,
+  budgetSeries, classifyLine, periodToSlot,
+};

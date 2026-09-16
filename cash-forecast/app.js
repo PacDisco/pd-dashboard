@@ -229,6 +229,7 @@ function render() {
       state.tab === "forecast" ? forecastView(f)
       : state.tab === "programs" ? programsView(f)
       : state.tab === "payments" ? paymentsView()
+      : state.tab === "surplus" ? surplusPanel()
       : overheadsView()
     }</div>
   `;
@@ -313,6 +314,7 @@ function tabs() {
     ["programs", "Programs & pax"],
     ["payments", "Payment rules"],
     ["overheads", "Overheads"],
+    ["surplus", "Surplus vs budget"],
   ];
   return `<nav class="tabs">${items
     .map(([id, label]) => `<button data-tab="${id}" class="${state.tab === id ? "on" : ""}">${label}</button>`)
@@ -528,6 +530,125 @@ function programsView(f) {
 }
 
 /* ---------------- payment rules ---------------- */
+
+/**
+ * Extrapolated full-year surplus, against budget.
+ *
+ * THE ONE THING A READER MUST NOT DO HERE
+ * ---------------------------------------
+ * Compare these numbers to the Cash flow tab and conclude something is broken.
+ * They are a different question. Revenue counts when it is RECOGNISED — Fall's
+ * whole season in August — not when the student's money arrived, and the gap
+ * between the two is deferred revenue, which on these books runs to seven
+ * figures. So the note at the top of the panel is not decoration; it is the
+ * thing that stops an hour being spent reconciling two numbers that were never
+ * meant to agree.
+ */
+function surplusPanel() {
+  const d = state.surplus;
+
+  if (!d) {
+    return `<section class="closebox">
+      <h2>Surplus vs budget <span class="stamp">profit and loss</span></h2>
+      <p class="foot">Full-year surplus or loss at 31 March: what the books say for the months already closed, plus the pax model for the rest, against what was budgeted in April.</p>
+      <button class="btn-diag" id="loadsurplus" ${state.surplusBusy ? "disabled" : ""}>
+        ${state.surplusBusy ? "Reading…" : "Work out the surplus"}
+      </button>
+    </section>`;
+  }
+  if (d.error) {
+    return `<section class="closebox">
+      <h2>Surplus vs budget</h2>
+      <p class="foot">${escapeHtml(d.error)}${d.hint ? ` ${escapeHtml(d.hint)}` : ""}</p>
+      <button class="btn-diag" id="loadsurplus">Try again</button>
+    </section>`;
+  }
+
+  const m0 = (n) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("en-NZ", { maximumFractionDigits: 0 }));
+  const signed = (n) => (n === null || n === undefined ? "—" : `${n > 0 ? "+" : ""}${m0(n)}`);
+  const L = d.lines ?? {};
+  const v = d.variance;
+
+  const row = (label, key, cls = "") => {
+    const l = L[key] ?? {};
+    const vr = v ? v[key] : null;
+    return `<tr class="${cls}">
+      <th class="lab">${label}</th>
+      <td>${m0(l.budget)}</td>
+      <td>${m0(l.actual)}</td>
+      <td>${m0(l.projected)}</td>
+      <td><b>${m0(l.extrapolated)}</b></td>
+      <td class="${vr > 0.5 ? "pos" : vr < -0.5 ? "neg" : ""}">${signed(vr)}</td>
+    </tr>`;
+  };
+
+  const s = L.surplus ?? {};
+  const ahead = v && v.surplus > 0;
+
+  return `<section class="closebox">
+    <h2>Surplus vs budget
+      <span class="stamp">${d.actualMonths} actual · ${d.projectedMonths} projected</span></h2>
+
+    <p class="foot"><b>This is the P&amp;L, not the bank.</b> Revenue counts in the month it is recognised — a whole season at once, the month before it departs — not when students pay. These figures will not agree with the Cash flow tab, and are not meant to: the difference is deferred revenue.</p>
+
+    <div class="tiles" style="margin:12px 0">
+      <div class="tile"><span class="k">Budgeted</span><span class="v">${m0(s.budget)}</span><span class="sub">agreed in April</span></div>
+      <div class="tile"><span class="k">Actual to date</span><span class="v ${s.actual < 0 ? "neg" : ""}">${m0(s.actual)}</span><span class="sub">${d.lastActualMonth ? `to ${escapeHtml(d.lastActualMonth)}` : "nothing closed yet"}</span></div>
+      <div class="tile ${v && v.surplus < 0 ? "alert" : ""}">
+        <span class="k">Extrapolated FYE</span>
+        <span class="v ${s.extrapolated < 0 ? "neg" : ""}">${m0(s.extrapolated)}</span>
+        <span class="sub">at 31 March</span>
+      </div>
+      ${v ? `<div class="tile ${v.surplus < 0 ? "alert" : ""}">
+        <span class="k">Versus budget</span>
+        <span class="v ${v.surplus > 0.5 ? "pos" : v.surplus < -0.5 ? "neg" : ""}">${signed(v.surplus)}</span>
+        <span class="sub">${ahead ? "ahead of plan" : "behind plan"}</span>
+      </div>` : ""}
+    </div>
+
+    <div class="scroll">
+      <table class="cftable tight">
+        <thead><tr>
+          <th class="lab"></th><th>Budget</th><th>Actual to date</th>
+          <th>Projected</th><th>Extrapolated FYE</th><th>Variance</th>
+        </tr></thead>
+        <tbody>
+          ${row("Revenue", "revenue")}
+          ${row("Cost of sales", "directCosts")}
+          ${row("Overheads", "overheads")}
+          ${row("Surplus / (loss)", "surplus", "rule strong")}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="foot"><b>Variance is stated so that positive is good news on every line.</b> Revenue ahead of budget is positive; costs under budget are also positive. The three add up to the surplus variance, which is what catches a flipped sign.</p>
+    <p class="foot"><b>Projected</b> months come from the pax model — each program's recognised revenue and its costs at the entered pax — with overheads from the Xero budget. So changing pax on the Programs tab moves this number, which is the point of looking at it in September rather than re-reading the budget.</p>
+    ${d.budgetNeedsRefresh ? `<p class="foot"><b>The stored budget predates this view</b> and holds overheads only, so there is nothing to compare revenue or cost of sales against. Diagnostics → Refresh from Xero re-reads it.</p>` : ""}
+    ${(d.warnings ?? []).map((w) => `<p class="foot">${escapeHtml(w)}</p>`).join("")}
+
+    <div class="scroll" style="margin-top:14px">
+      <table class="cftable tight">
+        <thead><tr><th class="lab">Month</th><th>Revenue</th><th>Cost of sales</th><th>Overheads</th><th>Surplus</th><th class="lab">From</th></tr></thead>
+        <tbody>
+          ${(d.months ?? []).map((m) => `
+            <tr class="${m.source === "actual" ? "" : "muted"}">
+              <th class="lab">${escapeHtml(m.key)}</th>
+              <td>${m0(m.revenue)}</td>
+              <td>${m0(m.directCosts)}</td>
+              <td>${m0(m.overheads)}</td>
+              <td class="${m.surplus < -0.5 ? "neg" : ""}">${m0(m.surplus)}</td>
+              <td class="lab"><span class="stamp">${m.source === "actual" ? "books" : "model"}</span>${
+                m.projectedBecause === "no P&L stored for a closed month" ? ' <span class="stamp">not synced</span>' : ""}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+
+    <button class="btn-diag" id="loadsurplus" ${state.surplusBusy ? "disabled" : ""}>
+      ${state.surplusBusy ? "Reading…" : "Re-read"}
+    </button>
+  </section>`;
+}
 
 /**
  * What the overheads are made of.
@@ -1406,6 +1527,22 @@ function wire() {
     } finally {
       // finally, for the same reason as every other busy flag on this page.
       state.curveBusy = false;
+      render();
+    }
+  });
+
+  el("loadsurplus")?.addEventListener("click", async () => {
+    state.surplusBusy = true;
+    render();
+    try {
+      const res = await fetch(`${API}/cash-surplus`, { credentials: "include" });
+      const raw = await res.text();
+      try { state.surplus = JSON.parse(raw); }
+      catch { state.surplus = { error: `Unexpected ${res.status} response` }; }
+    } catch (err) {
+      state.surplus = { error: err.message };
+    } finally {
+      state.surplusBusy = false;
       render();
     }
   });

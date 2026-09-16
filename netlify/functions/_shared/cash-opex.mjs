@@ -66,8 +66,10 @@ import { monthRange } from "./cash-xero.mjs";
  *      changes what the parser returns, not in the commit that notices.
  *   5  every expense line stored, not just the twelve biggest. See `lines`
  *      below for why twelve was the wrong number.
+ *   6  revenue parsed and stored, so a closed month carries all three parts of
+ *      its surplus — revenue, cost of sales, overheads — rather than two.
  */
-export const OPEX_PARSER_VERSION = 5;
+export const OPEX_PARSER_VERSION = 6;
 
 export const NON_CASH_LINES = [
   /^bank revaluations?$/i,
@@ -159,10 +161,45 @@ export function parseOperatingExpenses(report, patterns = NON_CASH_LINES) {
  * so it is matched on any of them rather than an exact string.
  */
 export function parseDirectCosts(report) {
+  return parseSection(report, /cost of sales|direct cost/i);
+}
+
+/**
+ * Revenue for one month, from the same report.
+ *
+ * WHY THIS IS THE ACCRUAL NUMBER AND THAT IS THE POINT
+ * ----------------------------------------------------
+ * This is what the P&L booked as income in the month — Fall's whole season
+ * recognised in August, regardless of when the students' money arrived. It is
+ * deliberately NOT the cash the forecast tracks, and the two differ by the
+ * deferred revenue balance, which for this business runs to seven figures.
+ *
+ * Mixing them is the single easiest way to produce a confident wrong answer
+ * here: a surplus computed from cash receipts would say Pacific Discovery made
+ * a fortune in the months students pay and a loss in the months they travel.
+ * Nothing downstream may add a figure from this function to a figure from the
+ * cash forecast.
+ *
+ * Section titles vary ("Income", "Revenue", "Trading Income", "Turnover").
+ */
+export function parseRevenue(report) {
+  return parseSection(report, /^(income|revenue|trading income|turnover|sales)$/i,
+    /income|revenue|turnover/i);
+}
+
+/**
+ * One titled section of a P&L, as leaf rows.
+ *
+ * Matched on title rather than position — a chart of accounts without a
+ * cost-of-sales section would shift every index. `loose` is a second, wider
+ * pattern tried only if the strict one finds nothing, so "Other Income" is not
+ * mistaken for the main income section while an organisation calling it
+ * "Operating Income" is still found.
+ */
+function parseSection(report, strict, loose = null) {
   const sections = report?.Reports?.[0]?.Rows ?? [];
-  const section = sections.find(
-    (s) => s.RowType === "Section" && /cost of sales|direct cost/i.test(s.Title ?? ""),
-  );
+  const pick = (re) => sections.find((s) => s.RowType === "Section" && re.test(s.Title ?? ""));
+  const section = pick(strict) || (loose ? pick(loose) : null);
   if (!section) return { lines: [], total: 0, sectionFound: false };
 
   const lines = [];
@@ -181,6 +218,7 @@ export function parseDirectCosts(report) {
     lines,
     total: lines.reduce((s, l) => s + l.amount, 0),
     sectionFound: true,
+    sectionTitle: section.Title || null,
   };
 }
 
@@ -205,10 +243,17 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
   });
   const parsed = parseOperatingExpenses(report, patterns);
   const direct = parseDirectCosts(report);
+  const revenue = parseRevenue(report);
 
   return {
     month: key,
     parserVersion: OPEX_PARSER_VERSION,
+    // ACCRUAL revenue — what the month booked as income, not what arrived in
+    // the bank. Named `revenue` rather than `income` to keep it distinguishable
+    // from the cash forecast's `cashIn` at every call site.
+    revenue: revenue.total,
+    revenueSectionFound: revenue.sectionFound,
+    revenueSectionTitle: revenue.sectionTitle ?? null,
     // Program cost, from the same report and the same call. Kept apart from
     // operating expenses so the two can never be added together by accident —
     // Overheads is already its own row.
@@ -271,6 +316,7 @@ export function isOpexRecordCurrent(record, version = OPEX_PARSER_VERSION) {
 export default {
   parseOperatingExpenses,
   parseDirectCosts,
+  parseRevenue,
   fetchMonthOpex,
   isNonCash,
   isOpexRecordCurrent,

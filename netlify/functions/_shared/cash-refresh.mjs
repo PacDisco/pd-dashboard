@@ -32,7 +32,7 @@ import {
   isMonthRecordCurrent, BANKSUMMARY_PARSER_VERSION,
 } from "./cash-xero.mjs";
 import { fetchMonthOpex, isOpexRecordCurrent, OPEX_PARSER_VERSION } from "./cash-opex.mjs";
-import { listBudgets, fetchBudget, accountIndex, overheadsFromBudget } from "./cash-budget.mjs";
+import { listBudgets, fetchBudget, accountIndex, overheadsFromBudget, budgetSeries } from "./cash-budget.mjs";
 import {
   bankAccountIndex, fetchMonthTransactions, isTxRecordCurrent, TX_PARSER_VERSION,
 } from "./cash-bank-tx.mjs";
@@ -212,6 +212,11 @@ export async function refreshBudget(token, tenantId, fy) {
     if (!budget) return out;
 
     const result = overheadsFromBudget(budget, accounts, fy);
+    // Revenue and cost of sales from the same budget, in the same pass. The
+    // cash forecast has no use for either — program costs come from pax — but
+    // the surplus view cannot be computed without them, and fetching the budget
+    // twice to get two views of it would be absurd.
+    const series = budgetSeries(budget, accounts, fy);
     await getStore({ name: "cash-xero-budget", consistency: "strong" })
       .setJSON(`${tenantId}/${fy}`, {
         budgetID: chosen.budgetID,
@@ -221,6 +226,20 @@ export async function refreshBudget(token, tenantId, fy) {
         monthsCovered: result.slotsCovered.length,
         included: result.included,
         excluded: result.excluded,
+        // The three lines a surplus is made of, each POSITIVE. Nothing is
+        // netted off here; the subtraction happens once, where it can be read.
+        series: {
+          revenue: series.revenue.months,
+          directCosts: series.directCosts.months,
+          overheads: series.overheads.months,
+          revenueTotal: series.revenue.total,
+          directCostsTotal: series.directCosts.total,
+          overheadsTotal: series.overheads.total,
+          surplus: series.surplus,
+          monthsCovered: series.monthsCovered,
+          revenueAccounts: series.revenue.included,
+          directCostAccounts: series.directCosts.included,
+        },
         fetchedAt: new Date().toISOString(),
       });
     out.accounts = result.included.length;

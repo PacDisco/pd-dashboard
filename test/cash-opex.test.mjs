@@ -15,6 +15,7 @@ import {
   isNonCash,
   isOpexRecordCurrent,
   OPEX_PARSER_VERSION,
+  parseRevenue,
   NON_CASH_LINES,
 } from "../netlify/functions/_shared/cash-opex.mjs";
 
@@ -208,6 +209,46 @@ const pnl = (opexRows) => ({
     "a version-3 record predates programCost and is stale even though it looks complete");
 
   console.log("✓ a month stored by an older parser refetches; a current one does not");
+}
+
+/* ---- revenue ---- */
+{
+  const report = { Reports: [{ Rows: [
+    { RowType: "Section", Title: "Income", Rows: [
+      { RowType: "Row", Cells: [{ Value: "Program Fees" }, { Value: "1081772" }] },
+      { RowType: "Row", Cells: [{ Value: "Refunds" }, { Value: "(2500)" }] },
+      { RowType: "SummaryRow", Cells: [{ Value: "Total Income" }, { Value: "1079272" }] },
+    ] },
+    { RowType: "Section", Title: "Other Income", Rows: [
+      { RowType: "Row", Cells: [{ Value: "Interest Received" }, { Value: "900" }] },
+    ] },
+  ] }] };
+
+  const r = parseRevenue(report);
+  assert.equal(r.sectionFound, true);
+  assert.equal(r.sectionTitle, "Income");
+  assert.equal(r.total, 1_079_272, "parenthesised refunds are negative, not positive");
+  assert.equal(r.lines.length, 2, "the SummaryRow is skipped — counting it would double");
+
+  // THE TRAP. "Other Income" is a separate section holding interest and sundry
+  // items. A loose /income/ match finds it first on some layouts, and a surplus
+  // built on 900 of interest instead of a million of program fees is wrong in a
+  // way that shows up as a catastrophic loss rather than as an obvious error.
+  assert.ok(!r.lines.some((l) => l.name === "Interest Received"),
+    "Other Income is a different section and must not be mistaken for the main one");
+
+  // An organisation that calls it something else is still found, via the wider
+  // fallback pattern — but only because the strict one matched nothing.
+  const alt = parseRevenue({ Reports: [{ Rows: [
+    { RowType: "Section", Title: "Operating Income", Rows: [
+      { RowType: "Row", Cells: [{ Value: "Fees" }, { Value: "500" }] },
+    ] },
+  ] }] });
+  assert.equal(alt.total, 500, "a non-standard title still resolves");
+
+  assert.equal(parseRevenue({ Reports: [{ Rows: [] }] }).sectionFound, false,
+    "no revenue section reports itself rather than returning a confident zero");
+  console.log("✓ revenue is read from the right section, and says so when it cannot be");
 }
 
 console.log("\nAll opex tests passed.");
