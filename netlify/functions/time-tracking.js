@@ -1085,27 +1085,54 @@ async function handleDeleteProject(caller, body) {
 }
 
 // ----------------------------------------------------- manager: approvals
+/**
+ * Hours per brand on an approved timesheet, rebuilt from the entries locked to
+ * it — payroll needs to see which brand a payout is carrying, and an approval
+ * row only stores the one combined total.
+ *
+ * The entries are the record, not a snapshot taken at approval time: retotalling
+ * after an edit (recomputeApproval) already works that way, so the split moves
+ * with the timesheet instead of drifting away from it. Minutes are EXACT, which
+ * is why they can come to a minute or two either side of the approval's rounded
+ * total_minutes — the client allocates the money against that rounded total, so
+ * the payable figure is the one that is actually split up.
+ *
+ * Empty-string brand is deliberate: it carries both "no project on the entry"
+ * and "project with no brand set" into one bucket the UI labels for itself.
+ */
+const APPROVAL_BRANDS_SQL = `
+  COALESCE((
+    SELECT json_agg(json_build_object('brand', b.brand, 'minutes', b.minutes) ORDER BY b.minutes DESC, b.brand)
+    FROM (
+      SELECT COALESCE(NULLIF(BTRIM(pr.brand), ''), '') AS brand, SUM(e.minutes)::int AS minutes
+      FROM time_entries e
+      LEFT JOIN time_projects pr ON pr.id = e.project_id
+      WHERE e.approval_id = a.id
+      GROUP BY 1
+    ) b
+  ), '[]'::json) AS brand_minutes`;
+
 async function handleApprovals(caller, qs) {
   if (!caller.isManager) return bad('admin role required', 403);
   let cid;
   try { cid = optId('contractor_id', qs.contractor_id); } catch (e) { return bad(e.message); }
   const limit = Math.min(Number(qs.limit) || 50, 200);
-  const rows = cid
-    ? await sql()`
-        SELECT a.*, c.email AS contractor_email, c.full_name AS contractor_name,
-               p.paid, p.due_date AS payment_due_date, p.invoice_file_url
-        FROM time_approvals a
-        JOIN time_contractors c ON c.id = a.contractor_id
-        LEFT JOIN payments p    ON p.id = a.payment_id
-        WHERE a.contractor_id = ${cid}
-        ORDER BY a.period_start DESC LIMIT ${limit}`
-    : await sql()`
-        SELECT a.*, c.email AS contractor_email, c.full_name AS contractor_name,
-               p.paid, p.due_date AS payment_due_date, p.invoice_file_url
-        FROM time_approvals a
-        JOIN time_contractors c ON c.id = a.contractor_id
-        LEFT JOIN payments p    ON p.id = a.payment_id
-        ORDER BY a.period_start DESC LIMIT ${limit}`;
+  // .query() rather than the tagged-template form: the brand aggregate has to
+  // reach Postgres as SQL, and in a tagged template every ${…} is sent as a bind
+  // parameter — the expression would arrive as a text value and fail at run time.
+  // Same reason handleApprove is written this way.
+  const where = cid ? 'WHERE a.contractor_id = $1' : '';
+  const rows = await sql().query(
+    `SELECT a.*, c.email AS contractor_email, c.full_name AS contractor_name,
+            p.paid, p.due_date AS payment_due_date, p.invoice_file_url,
+            ${APPROVAL_BRANDS_SQL}
+     FROM time_approvals a
+     JOIN time_contractors c ON c.id = a.contractor_id
+     LEFT JOIN payments p    ON p.id = a.payment_id
+     ${where}
+     ORDER BY a.period_start DESC LIMIT $${cid ? 2 : 1}`,
+    cid ? [cid, limit] : [limit]
+  );
   return ok({ approvals: rows });
 }
 

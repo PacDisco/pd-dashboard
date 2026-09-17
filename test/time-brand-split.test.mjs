@@ -70,3 +70,49 @@ assert.match(ctx.brandChips(ctx.brandSplit([e({ project_brand: '<img src=x>' })]
 assert.equal(ctx.brandChips([]), '', 'no finished entries ⇒ no breakdown row');
 
 console.log('brand split: all checks passed');
+
+/* ------------------------------------------------ payout allocation */
+const alloc = new Function(`
+  ${src.match(/var BRAND_META = \{[\s\S]*?\};/)[0]}
+  ${src.match(/var NO_BRAND = .*?;/)[0]}
+  ${grab('allocateByBrand')}
+  return allocateByBrand;
+`)();
+
+const cents = (parts) => parts.reduce((s, p) => s + Math.round(p.amount * 100), 0);
+
+// 6. the parts come back to the whole, including the awkward thirds
+for (const [mins, amount] of [
+  [[10, 10, 10], 100],            // 3 × 33.333… — the classic leftover cent
+  [[1, 1, 1, 1, 1, 1, 1], 945.63],
+  [[1335, 210], 945.63],          // a real-shaped week
+  [[7], 0.01],                    // one brand, one cent
+  [[1, 99999], 1009.38],
+]) {
+  const parts = alloc(mins.map((m, i) => ({ brand: `B${i}`, minutes: m })), amount);
+  assert.equal(cents(parts), Math.round(amount * 100),
+    `allocation of ${amount} across ${mins.join('/')} must reconcile to the cent`);
+  assert.ok(parts.every((p) => p.amount >= 0), 'no negative shares');
+}
+
+// 7. a bigger share never gets less money than a smaller one
+const ordered = alloc([
+  { brand: 'Pacific Discovery', minutes: 1335 },
+  { brand: 'Unearthed Education', minutes: 210 },
+  { brand: 'EDA Group', minutes: 97 },
+], 945.63);
+for (let i = 1; i < ordered.length; i++) {
+  assert.ok(ordered[i - 1].amount >= ordered[i].amount, 'more hours must never allocate less money');
+}
+
+// 8. no rate yet ⇒ hours still split, money stays absent rather than showing 0.00
+const noRate = alloc([{ brand: 'Conference', minutes: 90 }], null);
+assert.equal(noRate[0].minutes, 90);
+assert.equal(noRate[0].amount, undefined, 'an unrated timesheet must not invent a payout');
+
+// 9. the server's empty-string bucket becomes the labelled one
+assert.equal(alloc([{ brand: '', minutes: 30 }], 10)[0].brand, 'Unassigned');
+assert.deepEqual(alloc([], 10), []);
+assert.deepEqual(alloc(null, 10), []);
+
+console.log('payout allocation: all checks passed');

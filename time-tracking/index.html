@@ -102,6 +102,8 @@
   .bchip b { font-variant-numeric:tabular-nums; color:#0f172a; font-weight:700; }
   .bchip em { font-style:normal; font-weight:700; color:#b45309; }
   .bchip em.done { color:#94a3b8; font-weight:600; }
+  .bchip-amt { font-variant-numeric:tabular-nums; color:#0f766e; font-weight:700;
+               border-left:1px solid #e2e8f0; padding-left:7px; margin-left:1px; }
   /* No project, or a project with no brand set — called out rather than hidden,
      so unbranded time gets chased up instead of quietly missing from the split. */
   .bchip.b-none { background:#fffbeb; border-color:#fde68a; color:#92400e; }
@@ -382,6 +384,47 @@ function brandSplit(entries) {
   }).map(function (k) { return by[k]; });
 }
 
+/**
+ * Turn an approval's per-brand minutes into a split of what it pays out.
+ *
+ * Two things this has to get right, both of them payroll's problem otherwise:
+ *
+ * 1. The money is allocated against the approval's OWN rounded total, not
+ *    against the exact minutes — that rounded figure is what gets paid, so it is
+ *    what has to be divided up.
+ * 2. The parts have to come back to the whole. Rounding each brand's share to
+ *    cents on its own leaves the sum a cent or two out, which is exactly the
+ *    kind of gap that has to be chased down at reconciliation. So the shares are
+ *    allocated by largest remainder: floor every share, then hand the leftover
+ *    cents out one at a time to the brands with the biggest fractional part.
+ *    The total is then exact by construction, not by luck.
+ *
+ * `amount` may be null — a timesheet approved before a rate was set. The hours
+ * still split; the money just isn't there to split yet.
+ */
+function allocateByBrand(brandMinutes, amount) {
+  var parts = (brandMinutes || []).map(function (b) {
+    return { brand: String(b.brand || '').trim() || NO_BRAND, minutes: b.minutes };
+  });
+  if (!parts.length) return parts;
+
+  var exact = parts.reduce(function (s, p) { return s + p.minutes; }, 0);
+  if (amount == null || !exact) return parts;
+
+  var cents = Math.round(Number(amount) * 100);
+  var scored = parts.map(function (p, i) {
+    var share = (p.minutes / exact) * cents;
+    return { i: i, floor: Math.floor(share), rem: share - Math.floor(share) };
+  });
+  var left = cents - scored.reduce(function (s, x) { return s + x.floor; }, 0);
+  scored.slice()
+    .sort(function (a, b) { return b.rem - a.rem || a.i - b.i; })
+    .slice(0, Math.max(0, left))
+    .forEach(function (x) { x.floor += 1; });
+  scored.forEach(function (x) { parts[x.i].amount = x.floor / 100; });
+  return parts;
+}
+
 /** One pill per brand: name, hours worked, and what's still to approve. */
 function brandChips(split, label) {
   if (!split.length) return '';
@@ -396,6 +439,22 @@ function brandChips(split, label) {
         + ' title="' + esc(s.brand) + ' — ' + s.entries + (s.entries === 1 ? ' entry' : ' entries') + '">'
         + '<i' + (meta ? ' style="background:' + meta.colour + '"' : '') + '></i>'
         + esc(s.brand) + ' <b>' + hours(s.minutes) + ' h</b>' + tail
+        + '</span>';
+    }).join('')
+    + '</div>';
+}
+
+/** The same pills for an approved timesheet: hours and the share of the payout. */
+function payoutChips(parts, currency) {
+  if (!parts.length) return '';
+  return '<div class="bchips">'
+    + '<span class="bchips-lbl">by brand</span>'
+    + parts.map(function (p) {
+      var meta = BRAND_META[p.brand];
+      return '<span class="bchip' + (meta ? '' : ' b-none') + '">'
+        + '<i' + (meta ? ' style="background:' + meta.colour + '"' : '') + '></i>'
+        + esc(p.brand) + ' <b>' + hours(p.minutes) + ' h</b>'
+        + (p.amount == null ? '' : ' <span class="bchip-amt">' + p.amount.toFixed(2) + ' ' + esc(currency || '') + '</span>')
         + '</span>';
     }).join('')
     + '</div>';
@@ -1437,13 +1496,20 @@ function exportCsv() {
   // `Email` is here so the export can be pasted straight back into Bulk import:
   // the person column has to hold something the server can resolve, and two
   // contractors can share a display name.
-  var rows = [['Date', 'Contractor', 'Email', 'Project', 'Code', 'Description', 'Started', 'Finished', 'Hours', 'Status']];
+  // Brand is APPENDED, not slotted in next to Project. A header-less paste back
+  // into Bulk import falls back to this exact column order by position (see
+  // buildImportRows), so inserting a column mid-row would shift Code, Started,
+  // Finished and Hours one place and silently misread every line. On the end it
+  // costs nothing: with a header row the importer ignores it by name, without
+  // one it sits past the last index the fallback map reads.
+  var rows = [['Date', 'Contractor', 'Email', 'Project', 'Code', 'Description', 'Started', 'Finished', 'Hours', 'Status', 'Brand']];
   var src = (tab === 'team' ? TEAM_ENTRIES : ENTRIES).filter(function (e) { return e.ended_at; });
   src.slice().sort(function (a, c) { return ymd(a.work_date).localeCompare(ymd(c.work_date)) || Date.parse(a.started_at) - Date.parse(c.started_at); })
     .forEach(function (e) {
       rows.push([ymd(e.work_date), e.contractor_name || e.contractor_email || '', e.contractor_email || '',
         e.project_name || '', e.project_code || '',
-        e.description || '', hhmm(e.started_at), hhmm(e.ended_at), hours(e.minutes), e.locked ? 'approved' : 'unapproved']);
+        e.description || '', hhmm(e.started_at), hhmm(e.ended_at), hours(e.minutes),
+        e.locked ? 'approved' : 'unapproved', brandOf(e)]);
     });
   if (rows.length === 1) { toast('Nothing to export for this period.', true); return; }
   var csv = rows.map(function (r) {
@@ -1494,13 +1560,23 @@ function renderTeam() {
     var split = brandSplit(TEAM_ENTRIES.filter(function (e) { return e.contractor_id === c.id; }));
     var dim = c.is_active ? '' : ' style="opacity:.55"';
     return '<tr' + dim + (split.length ? ' class="has-brands"' : '') + '>'
-      + '<td><div class="font-semibold text-gray-800">' + esc(name) + (c.timer_running ? ' <span class="pill pill-live">running</span>' : '') + '</div>'
-        + '<div class="text-xs text-gray-400">' + esc(c.email) + '</div></td>'
+      // A contractor row is created from a sign-in, so it starts with an email
+      // and nothing else. The name is editable right here because every other
+      // table — Approved timesheets above all, which is what payroll reads —
+      // falls back to the raw email until someone fills it in.
+      // The running pill goes on the second line beside the email, not next to
+      // the input: on the same line it pushed this column ~60px wider and tipped
+      // the whole table into horizontal scrolling.
+      + '<td><input class="fld font-semibold" style="width:132px" value="' + esc(c.full_name || '') + '"'
+          + ' placeholder="' + esc(c.email) + '" title="Display name — shown on approved timesheets and payments"'
+          + ' onchange="saveContractor(' + c.id + ', {full_name: this.value})">'
+        + '<div class="text-xs text-gray-400 mt-1 flex items-center gap-1">' + esc(c.email)
+        + (c.timer_running ? '<span class="pill pill-live">running</span>' : '') + '</div></td>'
       + '<td><div class="flex items-center gap-1"><input class="fld" style="width:86px" type="number" step="0.01" min="0" value="' + (c.hourly_rate == null ? '' : c.hourly_rate) + '" onchange="saveContractor(' + c.id + ', {hourly_rate: this.value})" placeholder="rate">'
-        + '<select class="fld" style="width:78px" onchange="saveContractor(' + c.id + ', {currency: this.value})">'
+        + '<select class="fld" style="width:72px" onchange="saveContractor(' + c.id + ', {currency: this.value})">'
         + (ME.currencies || ['USD']).map(function (cu) { return '<option' + (cu === c.currency ? ' selected' : '') + '>' + cu + '</option>'; }).join('')
         + '</select></div></td>'
-      + '<td><input class="fld" style="min-width:150px" value="' + esc(c.vendor_name || '') + '" placeholder="' + esc(name) + '" onchange="saveContractor(' + c.id + ', {vendor_name: this.value})"></td>'
+      + '<td><input class="fld" style="width:140px" value="' + esc(c.vendor_name || '') + '" placeholder="' + esc(name) + '" onchange="saveContractor(' + c.id + ', {vendor_name: this.value})"></td>'
       + '<td class="text-right font-semibold mono">' + hours(c.period_minutes) + ' h</td>'
       + '<td class="text-right mono">' + (c.unapproved_minutes ? hours(c.unapproved_minutes) + ' h' : '—') + '</td>'
       + '<td class="text-xs text-gray-500">' + (c.last_logged ? ymd(c.last_logged) : '—') + '</td>'
@@ -1592,7 +1668,8 @@ function renderApprovals(list) {
   }
   $('appr-rows').innerHTML = list.map(function (a) {
     var pushed = !!a.payment_id;
-    return '<tr>'
+    var parts = allocateByBrand(a.brand_minutes, a.amount);
+    return '<tr' + (parts.length ? ' class="has-brands"' : '') + '>'
       + '<td class="font-semibold text-gray-800">' + esc(a.contractor_name || a.contractor_email) + '</td>'
       + '<td class="whitespace-nowrap text-xs text-gray-600">' + ymd(a.period_start) + ' → ' + ymd(a.period_end) + '</td>'
       + '<td class="text-right mono">' + hours(a.total_minutes) + ' h</td>'
@@ -1606,7 +1683,10 @@ function renderApprovals(list) {
           ? '<a class="text-xs lnk" href="/invoices/">open in payments →</a>'
           : '<button class="btn btn-primary" onclick="pushPayment(' + a.id + ')">push to payments</button> '
             + '<button class="btn btn-ghost" onclick="unapprove(' + a.id + ')">undo</button>')
-      + '</td></tr>';
+      + '</td></tr>'
+      + (parts.length
+        ? '<tr class="brand-row"><td colspan="7">' + payoutChips(parts, a.currency) + '</td></tr>'
+        : '');
   }).join('');
 }
 

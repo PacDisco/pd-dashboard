@@ -35,12 +35,26 @@ const ROUTES = {
     { id: 1, email: 'sam@example.com', full_name: 'Sam Rivers', hourly_rate: 45, currency: 'NZD',
       vendor_name: '', is_active: true, period_minutes: 600, period_minutes_exact: 600,
       unapproved_minutes: 600, last_logged: day(17), timer_running: false },
-    { id: 2, email: 'ana@example.com', full_name: 'Ana Mercer', hourly_rate: null, currency: 'NZD',
+    // No name yet — the state every contractor row starts in, and the one the
+    // Approved timesheets table falls back to showing a raw email for.
+    { id: 2, email: 'ana@example.com', full_name: null, hourly_rate: null, currency: 'NZD',
       vendor_name: 'Mercer Ltd', is_active: true, period_minutes: 445, period_minutes_exact: 445,
       unapproved_minutes: 205, last_logged: day(17), timer_running: true },
   ] },
   entries: { entries: ENTRIES, from: day(14), to: day(20), contractor_id: 'all' },
-  approvals: { approvals: [] },
+  approvals: { approvals: [
+    // 22.25 h approved at 42.50/h = 945.63 — the shape payroll actually sees.
+    { id: 31, contractor_id: 1, contractor_email: 'outreach@pacificdiscovery.org', contractor_name: null,
+      period_start: day(7), period_end: day(13), total_minutes: 1335, hourly_rate: 42.5, currency: 'NZD',
+      amount: 945.63, approved_by: 'director@pacificdiscovery.org', payment_id: null, paid: null,
+      brand_minutes: [{ brand: 'Pacific Discovery', minutes: 1125 }, { brand: 'Unearthed Education', minutes: 185 },
+                      { brand: '', minutes: 25 }] },
+    // Approved before a rate was set — hours split, money can't yet.
+    { id: 32, contractor_id: 2, contractor_email: 'operations@unearthededucation.org', contractor_name: 'Ana Mercer',
+      period_start: day(7), period_end: day(13), total_minutes: 930, hourly_rate: null, currency: 'NZD',
+      amount: null, approved_by: 'generalmanager@unearthededucation.org', payment_id: null, paid: null,
+      brand_minutes: [{ brand: 'Unearthed Education', minutes: 930 }] },
+  ] },
   projects: { projects: [] },
 };
 
@@ -83,16 +97,18 @@ assert.ok(chips.some((t) => /^Pure Exploration 5\.92 h 1\.92 to approve$/.test(t
   'partly-approved brand calls out what is still to approve');
 
 // brand rows sit under the right contractor and every finished minute is accounted for
-for (const [name, mins] of [['Sam Rivers', 600], ['Ana Mercer', 445]]) {
-  const row = page.locator('#team-rows tr.has-brands', { hasText: name });
+// Matched on the email, not the name: the name is an editable input now, and an
+// input's value is not text content.
+for (const [who, mins] of [['sam@example.com', 600], ['ana@example.com', 445]]) {
+  const row = page.locator('#team-rows tr.has-brands', { hasText: who });
   const sum = await row.locator('xpath=following-sibling::tr[1]').locator('.bchip b')
     .evaluateAll((els) => els.reduce((s, e) => s + Math.round(parseFloat(e.textContent) * 60), 0));
-  assert.equal(sum, mins, `${name}: brand subtotals must account for all ${mins} worked minutes`);
+  assert.equal(sum, mins, `${who}: brand subtotals must account for all ${mins} worked minutes`);
 }
 if (SHOT) await page.locator('#view-team > div').first().screenshot({ path: `${SHOT}/roster.png` });
 
 // --- the entries modal, grouped by brand
-await page.locator('#team-rows tr', { hasText: 'Sam Rivers' }).getByRole('button', { name: 'entries' }).click();
+await page.locator('#team-rows tr', { hasText: 'sam@example.com' }).getByRole('button', { name: 'entries' }).click();
 await page.waitForSelector('.modal tr.bgrp');
 const groups = await page.$$eval('.modal tr.bgrp', (els) => els.map((e) => ({
   brand: e.querySelector('.bgrp-name').childNodes[1].textContent.trim(),
@@ -110,6 +126,67 @@ assert.equal(groupRows, 5, 'all five of this contractor\'s entries are listed un
 const footTotal = await page.$eval('.modal tfoot td:nth-child(2)', (e) => e.textContent.trim());
 assert.equal(footTotal, '10.00', 'footer total matches the 600 worked minutes');
 if (SHOT) await page.locator('.modal').screenshot({ path: `${SHOT}/modal.png` });
+await page.locator('.modal').getByRole('button', { name: 'Close' }).click();
+
+// --- Approved timesheets: what payroll reads
+const payout = await page.$$eval('#appr-rows tr.brand-row .bchip',
+  (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
+console.log('approved-timesheet chips:\n  ' + payout.join('\n  '));
+assert.ok(payout.some((t) => /^Pacific Discovery 18\.75 h 796\.88 NZD$/.test(t)), 'PD hours and its share of the payout');
+assert.ok(payout.some((t) => /^Unassigned 0\.42 h [\d.]+ NZD$/.test(t)), 'unbranded time is visible to payroll too');
+assert.ok(payout.some((t) => /^Unearthed Education 15\.50 h$/.test(t)), 'an unrated timesheet shows hours and no money');
+
+// the allocated shares reconcile to the approved amount, to the cent
+const paid = await page.$$eval('#appr-rows tr', (rows) => {
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (!rows[i].classList.contains('has-brands')) continue;
+    const total = rows[i].children[3].textContent.trim();
+    const shares = [...rows[i + 1].querySelectorAll('.bchip-amt')].map((e) => parseFloat(e.textContent));
+    out.push({ total, shares });
+  }
+  return out;
+});
+const money = paid.find((r) => r.total.startsWith('945.63'));
+assert.equal(Math.round(money.shares.reduce((s, n) => s + n, 0) * 100), 94563,
+  'per-brand amounts must sum exactly to the approved payout');
+const unrated = paid.find((r) => r.total.includes('no rate'));
+assert.deepEqual(unrated.shares, [], 'no rate ⇒ no invented per-brand amounts');
+if (SHOT) await page.locator('#view-team > div').nth(1).screenshot({ path: `${SHOT}/approved.png` });
+
+// --- an admin can put a name on an email address
+const nameField = page.locator('#team-rows tr', { hasText: 'sam@example.com' }).locator('input').first();
+assert.equal(await nameField.inputValue(), 'Sam Rivers', 'an existing name shows in the field');
+const blank = page.locator('#team-rows tr', { hasText: 'ana@example.com' }).locator('input').first();
+assert.equal(await blank.getAttribute('placeholder'), 'ana@example.com',
+  'with no name set the field falls back to showing the email');
+const patched = page.waitForRequest(
+  (r) => r.method() === 'POST' && /action=save-contractor/.test(r.url()), { timeout: 10000 });
+await blank.fill('Ana Mercer');
+await blank.blur();
+assert.deepEqual(JSON.parse((await patched).postData()), { id: 2, patch: { full_name: 'Ana Mercer' } },
+  'editing the field patches full_name for that contractor');
+
+// --- the CSV export carries the brand
+const csv = await page.evaluate(async () => {
+  // Capture the blob and neuter the anchor click: an actual download would just
+  // hang a headless browser with nowhere to put the file.
+  const realCreate = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+  let blob = null;
+  URL.createObjectURL = (b) => { blob = b; return 'blob:stub'; };
+  URL.revokeObjectURL = () => {};
+  HTMLAnchorElement.prototype.click = function () {};
+  try { document.getElementById('btn-csv').click(); }
+  finally { URL.createObjectURL = realCreate; HTMLAnchorElement.prototype.click = realClick; }
+  return blob ? blob.text() : '';
+});
+const [head, ...body] = csv.replace(/^\uFEFF/, '').split('\r\n');
+assert.equal(head.split(',').pop(), 'Brand', 'Brand is the LAST column — a header-less re-import reads by position');
+assert.deepEqual(head.split(',').slice(0, 10),
+  ['Date', 'Contractor', 'Email', 'Project', 'Code', 'Description', 'Started', 'Finished', 'Hours', 'Status'],
+  'the original ten columns keep their positions, so Bulk import still reads them');
+assert.ok(body.some((r) => r.endsWith(',Pacific Discovery')), 'rows carry their brand');
+assert.ok(body.some((r) => r.endsWith(',Unassigned')), 'unbranded rows say so rather than ending blank');
 
 await browser.close();
 console.log('\nteam brand view: all checks passed');
