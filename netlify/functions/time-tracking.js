@@ -280,7 +280,7 @@ async function targetContractorId(caller, self, requested) {
 const ENTRY_SELECT = `
   SELECT e.id, e.contractor_id, e.project_id, e.work_date, e.started_at, e.ended_at,
          e.minutes, e.description, e.source, e.locked, e.approval_id,
-         p.name AS project_name, p.code AS project_code,
+         p.name AS project_name, p.code AS project_code, p.brand AS project_brand,
          c.email AS contractor_email, c.full_name AS contractor_name
   FROM time_entries e
   LEFT JOIN time_projects p    ON p.id = e.project_id

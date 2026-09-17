@@ -88,6 +88,28 @@
   table.tbl { width:100%; font-size:13px; }
   table.tbl th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; padding:8px 10px; border-bottom:1px solid #eef2f7; }
   table.tbl td { padding:9px 10px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
+  /* Per-brand hours, so an approver can see which brand the period's time was
+     worked against before locking it. The breakdown sits in its own full-width
+     row under the contractor, which keeps the hour columns narrow and gives the
+     brand names room to wrap instead of squeezing into a right-aligned cell. */
+  table.tbl tr.has-brands > td { border-bottom:none; padding-bottom:3px; }
+  table.tbl tr.brand-row > td { padding:0 10px 10px; }
+  .bchips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .bchips-lbl { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; font-weight:700; margin-right:2px; }
+  .bchip { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:11.5px; font-weight:600;
+           background:#f8fafc; border:1px solid #e5e7eb; color:#334155; border-radius:999px; padding:3px 10px; }
+  .bchip i { width:7px; height:7px; border-radius:999px; background:#94a3b8; flex:none; }
+  .bchip b { font-variant-numeric:tabular-nums; color:#0f172a; font-weight:700; }
+  .bchip em { font-style:normal; font-weight:700; color:#b45309; }
+  .bchip em.done { color:#94a3b8; font-weight:600; }
+  /* No project, or a project with no brand set — called out rather than hidden,
+     so unbranded time gets chased up instead of quietly missing from the split. */
+  .bchip.b-none { background:#fffbeb; border-color:#fde68a; color:#92400e; }
+  .bchip.b-none b { color:#92400e; }
+  /* Brand group headers inside the entries modal. */
+  table.tbl tr.bgrp > td { background:#f8fafc; border-bottom:1px solid #eef2f7; padding:7px 10px; }
+  .bgrp-name { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:700; color:#334155; }
+  .bgrp-name i { width:7px; height:7px; border-radius:999px; background:#94a3b8; flex:none; }
   #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; max-width: 340px; }
   #toast.show { opacity: 1; transform: translateY(0); }
   #toast.error { background: #b91c1c; }
@@ -275,6 +297,19 @@
 var API = '/api/time-tracking';
 var BRANDS = ['', 'EDA Group', 'Unearthed Education', 'Pacific Discovery', 'Pure Exploration', 'Conference'];
 
+/* Brand display. The order of the keys is the order the brand breakdown is
+   listed in; anything not in here (a brand that was renamed, or no project at
+   all) falls to the end as "Unassigned". The colour is only ever a dot beside
+   the brand's own name, never the thing that identifies it. */
+var BRAND_META = {
+  'EDA Group':           { colour: '#475569' },
+  'Unearthed Education': { colour: '#7c3aed' },
+  'Pacific Discovery':   { colour: '#0f766e' },
+  'Pure Exploration':    { colour: '#0284c7' },
+  'Conference':          { colour: '#db2777' }
+};
+var NO_BRAND = 'Unassigned';
+
 var ME = null;           // { contractor, isManager, projects, running }
 var PROJECTS = [];
 var RUNNING = null;      // live entry row, or null
@@ -311,6 +346,60 @@ function fmtRange(a, b) {
 }
 function hhmm(iso) { if (!iso) return '—'; var d = new Date(iso); return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
 function hours(min) { return (Math.round((min / 60) * 100) / 100).toFixed(2); }
+
+/* ------------------------------------------------------- hours by brand */
+/* Which brand an entry was worked for. The brand lives on the project, so an
+   entry with no project — or with a project nobody has set a brand on — has no
+   brand of its own and lands in one visible bucket instead of disappearing. */
+function brandOf(e) { return String(e.project_brand || '').trim() || NO_BRAND; }
+
+/**
+ * Split finished entries by brand.
+ *
+ * Minutes stay EXACT here. Billing rounds the TOTAL once, in the function (see
+ * ROUND_TO_MINUTES there), so rounding each brand and adding those up would not
+ * come back to the figure actually approved — the per-brand errors accumulate
+ * instead of cancelling. These subtotals are for reading, never for paying,
+ * which is why they can sit a minute or two either side of the rounded total in
+ * the column above them.
+ */
+function brandSplit(entries) {
+  var by = {};
+  entries.forEach(function (e) {
+    if (!e.ended_at) return;                 // a running timer has no settled duration yet
+    var b = brandOf(e);
+    if (!by[b]) by[b] = { brand: b, minutes: 0, openMinutes: 0, entries: 0 };
+    by[b].minutes += e.minutes;
+    by[b].entries += 1;
+    if (!e.locked) by[b].openMinutes += e.minutes;
+  });
+  var order = Object.keys(BRAND_META);
+  return Object.keys(by).sort(function (a, b) {
+    var ia = order.indexOf(a), ib = order.indexOf(b);
+    if (ia < 0) ia = 99;                     // Unassigned, and any retired brand, last
+    if (ib < 0) ib = 99;
+    return ia - ib || a.localeCompare(b);
+  }).map(function (k) { return by[k]; });
+}
+
+/** One pill per brand: name, hours worked, and what's still to approve. */
+function brandChips(split, label) {
+  if (!split.length) return '';
+  return '<div class="bchips">'
+    + (label ? '<span class="bchips-lbl">' + esc(label) + '</span>' : '')
+    + split.map(function (s) {
+      var meta = BRAND_META[s.brand];
+      var tail = '';
+      if (!s.openMinutes) tail = ' <em class="done">🔒 approved</em>';
+      else if (s.openMinutes !== s.minutes) tail = ' <em>' + hours(s.openMinutes) + ' to approve</em>';
+      return '<span class="bchip' + (meta ? '' : ' b-none') + '"'
+        + ' title="' + esc(s.brand) + ' — ' + s.entries + (s.entries === 1 ? ' entry' : ' entries') + '">'
+        + '<i' + (meta ? ' style="background:' + meta.colour + '"' : '') + '></i>'
+        + esc(s.brand) + ' <b>' + hours(s.minutes) + ' h</b>' + tail
+        + '</span>';
+    }).join('')
+    + '</div>';
+}
 function hm(min) { var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + String(m).padStart(2, '0') + 'm'; }
 function clock(sec) {
   sec = Math.max(0, Math.floor(sec));
@@ -1378,9 +1467,18 @@ async function loadTeam() {
   try {
     var out = await api('GET', 'contractors', undefined, 'from=' + b.from + '&to=' + b.to);
     TEAM = out.contractors || [];
+    // The per-brand split is derived from the entries themselves, so they have to
+    // be in hand BEFORE the roster paints — otherwise the first render shows the
+    // totals with nothing underneath them. Its own try/catch: if the entries call
+    // fails the roster and its approve buttons still work, just without the split.
+    try {
+      var ent = await api('GET', 'entries', undefined, 'contractor_id=all&from=' + b.from + '&to=' + b.to);
+      TEAM_ENTRIES = ent.entries || [];
+    } catch (e) {
+      TEAM_ENTRIES = [];
+      toast('Roster loaded, but the per-brand breakdown is missing: ' + e.message, true);
+    }
     renderTeam();
-    var ent = await api('GET', 'entries', undefined, 'contractor_id=all&from=' + b.from + '&to=' + b.to);
-    TEAM_ENTRIES = ent.entries || [];
     var appr = await api('GET', 'approvals', undefined, 'limit=50');
     renderApprovals(appr.approvals || []);
   } catch (e) { toast(e.message, true); }
@@ -1393,7 +1491,9 @@ function renderTeam() {
   }
   $('team-rows').innerHTML = TEAM.map(function (c) {
     var name = c.full_name || c.email;
-    return '<tr' + (c.is_active ? '' : ' style="opacity:.55"') + '>'
+    var split = brandSplit(TEAM_ENTRIES.filter(function (e) { return e.contractor_id === c.id; }));
+    var dim = c.is_active ? '' : ' style="opacity:.55"';
+    return '<tr' + dim + (split.length ? ' class="has-brands"' : '') + '>'
       + '<td><div class="font-semibold text-gray-800">' + esc(name) + (c.timer_running ? ' <span class="pill pill-live">running</span>' : '') + '</div>'
         + '<div class="text-xs text-gray-400">' + esc(c.email) + '</div></td>'
       + '<td><div class="flex items-center gap-1"><input class="fld" style="width:86px" type="number" step="0.01" min="0" value="' + (c.hourly_rate == null ? '' : c.hourly_rate) + '" onchange="saveContractor(' + c.id + ', {hourly_rate: this.value})" placeholder="rate">'
@@ -1407,7 +1507,10 @@ function renderTeam() {
       + '<td class="text-right whitespace-nowrap">'
         + '<button class="btn btn-ghost" onclick="viewContractorWeek(' + c.id + ')">entries</button> '
         + '<button class="btn btn-primary" onclick="approvePeriod(' + c.id + ')"' + (c.unapproved_minutes ? '' : ' disabled') + '>approve period</button>'
-      + '</td></tr>';
+      + '</td></tr>'
+      + (split.length
+        ? '<tr class="brand-row"' + dim + '><td colspan="7">' + brandChips(split, 'by brand') + '</td></tr>'
+        : '');
   }).join('');
 }
 
@@ -1421,17 +1524,41 @@ function viewContractorWeek(id) {
   var rows = TEAM_ENTRIES.filter(function (e) { return e.contractor_id === id && e.ended_at; })
     .sort(function (a, b) { return ymd(a.work_date).localeCompare(ymd(b.work_date)) || Date.parse(a.started_at) - Date.parse(b.started_at); });
   var total = rows.reduce(function (s, e) { return s + e.minutes; }, 0);
-  $('modal-root').innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal p-5">'
-    + '<h3 class="text-base font-bold text-gray-900">' + esc(c ? (c.full_name || c.email) : 'Entries') + '</h3>'
-    + '<p class="text-xs text-gray-500 mb-3">' + fmtRange(weekBounds().from, weekBounds().to) + ' · ' + hours(total) + ' h</p>'
-    + (rows.length ? '<table class="tbl"><thead><tr><th>Date</th><th>Project</th><th>Times</th><th class="text-right">Hours</th><th></th></tr></thead><tbody>'
-      + rows.map(function (e) {
+  var split = brandSplit(rows);
+
+  // Entries are listed under the brand they were worked for, each brand carrying
+  // its own subtotal, so the hours going onto one brand can be read off without
+  // adding up the rows by hand.
+  var body = split.map(function (s) {
+    var meta = BRAND_META[s.brand];
+    var mine = rows.filter(function (e) { return brandOf(e) === s.brand; });
+    return '<tr class="bgrp"><td colspan="3"><span class="bgrp-name">'
+        + '<i' + (meta ? ' style="background:' + meta.colour + '"' : '') + '></i>' + esc(s.brand)
+        + (meta ? '' : ' <span class="text-xs font-normal" style="color:#92400e">(no brand set on the project)</span>')
+        + '</span></td>'
+      + '<td class="text-right mono font-bold">' + hours(s.minutes) + '</td>'
+      + '<td class="text-xs text-gray-500 whitespace-nowrap">'
+        + (s.openMinutes ? hours(s.openMinutes) + ' to approve' : '🔒 approved') + '</td></tr>'
+      + mine.map(function (e) {
         return '<tr><td class="whitespace-nowrap">' + ymd(e.work_date) + '</td><td>' + esc(e.project_name || '—')
           + (e.description ? '<div class="text-xs text-gray-400">' + esc(e.description) + '</div>' : '') + '</td>'
           + '<td class="text-xs text-gray-500 whitespace-nowrap">' + hhmm(e.started_at) + '→' + hhmm(e.ended_at) + '</td>'
           + '<td class="text-right mono">' + hours(e.minutes) + '</td>'
           + '<td>' + (e.locked ? '<span class="pill pill-lock">🔒</span>' : '') + '</td></tr>';
-      }).join('') + '</tbody></table>'
+      }).join('');
+  }).join('');
+
+  $('modal-root').innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal wide p-5">'
+    + '<h3 class="text-base font-bold text-gray-900">' + esc(c ? (c.full_name || c.email) : 'Entries') + '</h3>'
+    + '<p class="text-xs text-gray-500 mb-3">' + fmtRange(weekBounds().from, weekBounds().to) + ' · ' + hours(total) + ' h</p>'
+    + (rows.length ? brandChips(split, 'by brand')
+      + '<table class="tbl mt-3"><thead><tr><th>Date</th><th>Project</th><th>Times</th><th class="text-right">Hours</th><th></th></tr></thead>'
+      + '<tbody>' + body + '</tbody>'
+      + '<tfoot><tr><td colspan="3" class="text-xs uppercase tracking-wide text-gray-400 font-bold">Total</td>'
+        + '<td class="text-right mono font-bold">' + hours(total) + '</td><td></td></tr></tfoot></table>'
+      + '<p class="text-xs text-gray-400 mt-3">Brand subtotals are exact worked time. The figure that gets'
+        + ' approved and paid is the period total rounded to the nearest quarter hour, so it can sit a'
+        + ' minute or two away from these adding up.</p>'
       : '<p class="text-sm text-gray-400 py-6 text-center">No entries in this period.</p>')
     + '<div class="text-right mt-4"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>'
     + '</div></div>';

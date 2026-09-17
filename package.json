@@ -14,6 +14,8 @@
     "test:time-ui": "node test/timer-ui.smoke.mjs",
     "test:time-import": "node test/time-import.test.mjs",
     "test:time-rounding-db": "node test/time-rounding.db.test.mjs",
+    "test:time-brands": "node test/time-brand-split.test.mjs",
+    "test:time-brands-ui": "node test/time-brand-hours.smoke.mjs",
     "test:shirt": "node test/enrollment-shirt.test.mjs",
     "test:shirt-ui": "node test/shirt-order.smoke.mjs",
     "test:shirt-auth": "node test/shirt-orders-auth.test.mjs",
