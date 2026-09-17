@@ -24,21 +24,24 @@ const ctx = new Function(`
   return { brandOf, brandSplit, brandChips, NO_BRAND };
 `)();
 
+// `brand` is the field the server resolves and the UI totals against; the tests
+// below feed it directly because the entry-vs-project precedence is settled in
+// SQL and covered in test/time-brand-approvals.db.test.mjs.
 const e = (o) => ({ ended_at: '2026-09-15T10:00:00Z', locked: false, minutes: 60, ...o });
 
 // 1. brandOf falls back to one visible bucket
-assert.equal(ctx.brandOf(e({ project_brand: 'Pacific Discovery' })), 'Pacific Discovery');
-assert.equal(ctx.brandOf(e({ project_brand: null })), 'Unassigned');   // no project at all
-assert.equal(ctx.brandOf(e({ project_brand: '   ' })), 'Unassigned');  // project, brand never set
+assert.equal(ctx.brandOf(e({ brand: 'Pacific Discovery' })), 'Pacific Discovery');
+assert.equal(ctx.brandOf(e({ brand: null })), 'Unassigned');   // no project at all
+assert.equal(ctx.brandOf(e({ brand: '   ' })), 'Unassigned');  // project, brand never set
 
 // 2. subtotals are exact and the split accounts for every finished minute
 const rows = [
-  e({ project_brand: 'Pacific Discovery', minutes: 97 }),
-  e({ project_brand: 'Pacific Discovery', minutes: 38, locked: true }),
-  e({ project_brand: 'Unearthed Education', minutes: 143 }),
-  e({ project_brand: null, minutes: 22 }),
-  e({ project_brand: 'EDA Group', minutes: 61 }),
-  e({ project_brand: 'Pacific Discovery', minutes: 55, ended_at: null }), // running — excluded
+  e({ brand: 'Pacific Discovery', minutes: 97 }),
+  e({ brand: 'Pacific Discovery', minutes: 38, locked: true }),
+  e({ brand: 'Unearthed Education', minutes: 143 }),
+  e({ brand: null, minutes: 22 }),
+  e({ brand: 'EDA Group', minutes: 61 }),
+  e({ brand: 'Pacific Discovery', minutes: 55, ended_at: null }), // running — excluded
 ];
 const split = ctx.brandSplit(rows);
 const finished = rows.filter((r) => r.ended_at).reduce((s, r) => s + r.minutes, 0);
@@ -56,7 +59,7 @@ assert.deepEqual(split.map((b) => b.brand),
   ['EDA Group', 'Unearthed Education', 'Pacific Discovery', 'Unassigned']);
 
 // 4. a retired brand still shows up rather than vanishing
-const retired = ctx.brandSplit([e({ project_brand: 'Old Brand Ltd', minutes: 30 })]);
+const retired = ctx.brandSplit([e({ brand: 'Old Brand Ltd', minutes: 30 })]);
 assert.deepEqual(retired.map((b) => b.brand), ['Old Brand Ltd']);
 
 // 5. chips: escaped, labelled, and the approval state called out
@@ -64,9 +67,9 @@ const chips = ctx.brandChips(split, 'by brand');
 assert.match(chips, /Pacific Discovery <b>2\.25 h<\/b> <em>1\.62 to approve<\/em>/);
 assert.match(chips, /class="bchip b-none"[\s\S]*?Unassigned/);
 assert.match(chips, /EDA Group <b>1\.02 h<\/b>(?! <em>)/, 'nothing approved yet ⇒ no "to approve" tail');
-const allLocked = ctx.brandSplit([e({ project_brand: 'Conference', minutes: 45, locked: true })]);
+const allLocked = ctx.brandSplit([e({ brand: 'Conference', minutes: 45, locked: true })]);
 assert.match(ctx.brandChips(allLocked), /🔒 approved/);
-assert.match(ctx.brandChips(ctx.brandSplit([e({ project_brand: '<img src=x>' })])), /&lt;img src=x&gt;/);
+assert.match(ctx.brandChips(ctx.brandSplit([e({ brand: '<img src=x>' })])), /&lt;img src=x&gt;/);
 assert.equal(ctx.brandChips([]), '', 'no finished entries ⇒ no breakdown row');
 
 console.log('brand split: all checks passed');

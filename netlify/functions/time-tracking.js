@@ -15,10 +15,10 @@
  *   Everyone (self-service)
  *     me            GET   -> { contractor, isManager, projects, running }
  *     entries       GET   -> ?from=YYYY-MM-DD&to=YYYY-MM-DD[&contractor_id=] (manager only for others)
- *     start         POST  -> { project_id?, description?, work_date }
+ *     start         POST  -> { project_id?, description?, work_date, brand? }
  *     stop          POST  -> { id? }                        (defaults to own running timer)
  *     discard       POST  -> { id? }                        (throw away a running timer)
- *     create-entry  POST  -> { work_date, started_at, ended_at, project_id?, description? }
+ *     create-entry  POST  -> { work_date, started_at, ended_at, project_id?, description?, brand? }
  *     update-entry  POST  -> { id, patch: {…} }
  *     delete-entry  POST  -> { id }
  *     import-entries POST -> { rows: [...], dry_run } — bulk paste; dry_run
@@ -42,6 +42,13 @@
  *
  * Required env var:
  *   NETLIFY_DATABASE_URL   (auto-injected when Netlify DB / Neon is provisioned)
+ *
+ * Brand: an entry counts towards its project's brand unless it carries one of
+ * its own. Only a divergence is stored (resolveBrandOverride), so a project that
+ * belongs to one brand stays followable — re-brand the project and every past
+ * timesheet that used it moves with it — while a project shared across brands is
+ * split by what the contractor picked at the time. ENTRY_BRAND_SQL is the single
+ * expression that resolves the two.
  *
  * Timezone contract: the CLIENT owns timezones. It sends `work_date` (the local
  * calendar day the work belongs to) plus full ISO instants for started_at /
@@ -277,15 +284,61 @@ async function targetContractorId(caller, self, requested) {
 }
 
 // ------------------------------------------------------------------ queries
+/**
+ * Which brand an entry counts towards.
+ *
+ * The entry's own brand wins; otherwise it inherits its project's. That order is
+ * the whole design: the contractor picks a PROJECT when they tick, so for a
+ * project belonging to one brand the answer follows the project and correcting a
+ * mis-branded project fixes every timesheet that ever used it. A project shared
+ * across brands is the exception, and the exception is recorded on the entry.
+ *
+ * `e.brand` is only ever set when it DIFFERS from the project's — see
+ * resolveBrandOverride(). Storing a copy of the project's brand would quietly
+ * cut the entry loose from it.
+ *
+ * Blank and whitespace fold into '' so a project saved with a space in the brand
+ * field doesn't become a phantom brand of its own. '' means Unassigned.
+ */
+const ENTRY_BRAND_SQL =
+  `COALESCE(NULLIF(BTRIM(e.brand), ''), NULLIF(BTRIM(p.brand), ''), '')`;
+
 const ENTRY_SELECT = `
   SELECT e.id, e.contractor_id, e.project_id, e.work_date, e.started_at, e.ended_at,
          e.minutes, e.description, e.source, e.locked, e.approval_id,
          p.name AS project_name, p.code AS project_code, p.brand AS project_brand,
+         e.brand AS entry_brand, ${ENTRY_BRAND_SQL} AS brand,
          c.email AS contractor_email, c.full_name AS contractor_name
   FROM time_entries e
   LEFT JOIN time_projects p    ON p.id = e.project_id
   JOIN time_contractors c      ON c.id = e.contractor_id
 `;
+
+/**
+ * Normalise a picked brand into what actually gets stored on the entry.
+ *
+ * Returns null — inherit — when the pick matches the project's own brand, or
+ * when nothing was picked. Only a genuine divergence is written, so an entry
+ * logged against a single-brand project keeps following that project even after
+ * someone re-brands it.
+ *
+ * `picked` undefined means the caller didn't offer an opinion at all, which is
+ * different from clearing it: both end at null here, and update-entry only calls
+ * this when it has something to decide.
+ */
+function resolveBrandOverride(picked, projectBrand) {
+  const want = optText(picked, 100);
+  if (want === null) return null;
+  const own = optText(projectBrand, 100);
+  return own !== null && own.toLowerCase() === want.toLowerCase() ? null : want;
+}
+
+/** The brand a project carries, for the comparison above. */
+async function projectBrandOf(projectId) {
+  if (projectId === null || projectId === undefined) return null;
+  const rows = await sql()`SELECT brand FROM time_projects WHERE id = ${projectId}`;
+  return rows.length ? rows[0].brand : null;
+}
 
 async function listProjects(includeInactive) {
   return includeInactive
@@ -352,25 +405,30 @@ async function handleStart(caller, body) {
   const self = await ensureContractor(caller);
   try { assertActive(self); } catch (e) { return bad(e.message, e.status); }
 
-  let workDate, projectId, description;
+  let workDate, projectId, description, brand;
   try {
     workDate    = coerceDate('work_date', body.work_date);
     projectId   = optId('project_id', body.project_id);
     description = optText(body.description);
+    brand       = optText(body.brand, 100);
   } catch (e) { return bad(e.message); }
 
+  let projectBrand = null;
   if (projectId !== null) {
-    const p = await sql()`SELECT id, is_active FROM time_projects WHERE id = ${projectId}`;
+    const p = await sql()`SELECT id, is_active, brand FROM time_projects WHERE id = ${projectId}`;
     if (!p.length) return bad('project not found');
     if (!p[0].is_active) return bad('that project is no longer active');
+    projectBrand = p[0].brand;
   }
+  // Only a divergence from the project is recorded; see resolveBrandOverride.
+  const brandOverride = resolveBrandOverride(brand, projectBrand);
 
   // The partial unique index makes this safe against double-clicks and a second
   // open tab: the insert loses, and we hand back the timer that's already live.
   try {
     const rows = await sql()`
-      INSERT INTO time_entries (contractor_id, project_id, work_date, started_at, description, source)
-      VALUES (${self.id}, ${projectId}, ${workDate}, NOW(), ${description}, 'timer')
+      INSERT INTO time_entries (contractor_id, project_id, work_date, started_at, description, source, brand)
+      VALUES (${self.id}, ${projectId}, ${workDate}, NOW(), ${description}, 'timer', ${brandOverride})
       RETURNING id
     `;
     const entry = await sql().query(`${ENTRY_SELECT} WHERE e.id = $1`, [rows[0].id]);
@@ -427,7 +485,7 @@ async function handleCreateEntry(caller, body) {
   const self = await ensureContractor(caller);
   // A deactivated contractor can't log time by hand either — not just via the timer.
   if (!caller.isManager) { try { assertActive(self); } catch (e) { return bad(e.message, e.status); } }
-  let cid, workDate, startedAt, endedAt, projectId, description;
+  let cid, workDate, startedAt, endedAt, projectId, description, brand;
   try {
     cid         = await targetContractorId(caller, self, body.contractor_id);
     workDate    = coerceDate('work_date', body.work_date);
@@ -435,7 +493,10 @@ async function handleCreateEntry(caller, body) {
     endedAt     = coerceInstant('ended_at', body.ended_at);
     projectId   = optId('project_id', body.project_id);
     description = optText(body.description);
+    brand       = optText(body.brand, 100);
   } catch (e) { return bad(e.message, /own time entries/.test(e.message) ? 403 : 400); }
+
+  const brandOverride = resolveBrandOverride(brand, await projectBrandOf(projectId));
 
   // Stored exact. Rounding happens when hours are totalled, not per entry.
   const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
@@ -444,10 +505,10 @@ async function handleCreateEntry(caller, body) {
 
   const rows = await sql()`
     INSERT INTO time_entries
-      (contractor_id, project_id, work_date, started_at, ended_at, minutes, description, source)
+      (contractor_id, project_id, work_date, started_at, ended_at, minutes, description, source, brand)
     VALUES
       (${cid}, ${projectId}, ${workDate}, ${startedAt.toISOString()}, ${endedAt.toISOString()},
-       ${minutes}, ${description}, 'manual')
+       ${minutes}, ${description}, 'manual', ${brandOverride})
     RETURNING id
   `;
   const entry = await sql().query(`${ENTRY_SELECT} WHERE e.id = $1`, [rows[0].id]);
@@ -481,20 +542,41 @@ async function handleUpdateEntry(caller, body) {
   let startedAt = new Date(row.started_at);
   let endedAt   = new Date(row.ended_at);
   let touchedTimes = false;
+  let finalProjectId = row.project_id;
+  let touchedProject = false;
 
   try {
     for (const key of Object.keys(patch)) {
       const v = patch[key];
       if (key === 'work_date')        { args.push(coerceDate('work_date', v)); sets.push(`work_date = $${args.length}`); }
-      else if (key === 'project_id')  { args.push(optId('project_id', v));     sets.push(`project_id = $${args.length}`); }
+      else if (key === 'project_id')  {
+        finalProjectId = optId('project_id', v); touchedProject = true;
+        args.push(finalProjectId); sets.push(`project_id = $${args.length}`);
+      }
       else if (key === 'description') { args.push(optText(v));                 sets.push(`description = $${args.length}`); }
       else if (key === 'started_at')  { startedAt = coerceInstant('started_at', v); touchedTimes = true; }
       else if (key === 'ended_at')    { endedAt   = coerceInstant('ended_at', v);   touchedTimes = true; }
+      else if (key === 'brand')       { /* handled below — it depends on the final project */ }
       // `locked` is deliberately NOT patchable: unlocking here would leave
       // approval_id set, and the same hours could then be swept into a second
       // approval and paid twice. Use the `unapprove` action instead.
     }
   } catch (e) { return bad(e.message); }
+
+  // The brand is settled against whatever project the entry ends up on, not the
+  // one it started on. Moving an entry to a project that already carries the
+  // brand someone had overridden to drops the override, so the entry goes back
+  // to following its project instead of silently keeping a now-redundant copy.
+  if (patch.brand !== undefined || touchedProject) {
+    let want;
+    try {
+      want = patch.brand !== undefined ? optText(patch.brand, 100) : optText(row.brand, 100);
+    } catch (e) { return bad(e.message); }
+    const resolved = resolveBrandOverride(want, await projectBrandOf(finalProjectId));
+    if (resolved !== (row.brand === null ? null : optText(row.brand, 100))) {
+      args.push(resolved); sets.push(`brand = $${args.length}`);
+    }
+  }
 
   if (touchedTimes) {
     const minutes = Math.round((endedAt.getTime() - startedAt.getTime()) / 60000);
@@ -571,7 +653,10 @@ const MAX_IMPORT_ROWS = 500;
 
 /** Build the lookup tables an import needs, in two queries rather than 2N. */
 async function importLookups(caller) {
-  const projects = await sql()`SELECT id, name, code, is_active FROM time_projects`;
+  // `brand` is needed to tell an imported row that simply repeats its project's
+  // brand from one that genuinely diverges — without it every row carrying a
+  // Brand column would be stored as an override and stop following its project.
+  const projects = await sql()`SELECT id, name, code, brand, is_active FROM time_projects`;
   const byKey = new Map();
   for (const p of projects) {
     // Code first: it's the shorter, more deliberate identifier, so if a code and
@@ -593,7 +678,7 @@ function resolveProject(byKey, raw) {
   const hit = byKey.get(`c:${key}`) || byKey.get(`n:${key}`);
   if (!hit) throw new Error(`no project called "${String(raw).trim()}" — check the spelling or add it under Projects first`);
   if (hit.is_active === false) throw new Error(`project "${hit.name}" is archived — reactivate it under Projects first`);
-  return { id: hit.id, name: hit.name };
+  return { id: hit.id, name: hit.name, brand: hit.brand };
 }
 
 /**
@@ -630,6 +715,11 @@ function validateImportRow(raw, ctx) {
     contractor_name: contractor.full_name || contractor.email,
     project_id: project.id,
     project_name: project.name,
+    // A Brand column is optional. It only records a divergence from the
+    // project's own brand, exactly as the timer does, so a file exported from
+    // this dashboard and pasted straight back keeps its overrides and leaves
+    // everything else following its project.
+    brand: resolveBrandOverride(raw.brand, project.brand),
     work_date: workDate,
     started_at: startedAt.toISOString(),
     ended_at: endedAt.toISOString(),
@@ -751,18 +841,18 @@ async function handleImportEntries(caller, body) {
   if (!importable.length) return bad('nothing left to import');
 
   const batchId = randomUUID();
-  const cols = 10;
+  const cols = 11;
   const values = [];
   const args = [];
   importable.forEach((r, i) => {
     const b = i * cols;
-    values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10})`);
+    values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11})`);
     args.push(r.contractor_id, r.project_id, r.work_date, r.started_at, r.ended_at,
-      r.minutes, r.description, 'import', false, batchId);
+      r.minutes, r.description, 'import', false, batchId, r.brand === undefined ? null : r.brand);
   });
   const inserted = await sql().query(
     `INSERT INTO time_entries
-       (contractor_id, project_id, work_date, started_at, ended_at, minutes, description, source, locked, import_batch_id)
+       (contractor_id, project_id, work_date, started_at, ended_at, minutes, description, source, locked, import_batch_id, brand)
      VALUES ${values.join(', ')}
      RETURNING id`,
     args
@@ -1097,16 +1187,22 @@ async function handleDeleteProject(caller, body) {
  * total_minutes — the client allocates the money against that rounded total, so
  * the payable figure is the one that is actually split up.
  *
- * Empty-string brand is deliberate: it carries both "no project on the entry"
- * and "project with no brand set" into one bucket the UI labels for itself.
+ * It resolves the brand per entry (ENTRY_BRAND_SQL's rule, inlined because this
+ * aggregate aliases the tables differently), so a project shared across brands
+ * splits here the way the contractor recorded it rather than collapsing into the
+ * project's single default.
+ *
+ * Empty-string brand is deliberate: it carries "no project on the entry", "no
+ * brand on the project" and "blank brand" into one bucket the UI labels itself.
  */
 const APPROVAL_BRANDS_SQL = `
   COALESCE((
     SELECT json_agg(json_build_object('brand', b.brand, 'minutes', b.minutes) ORDER BY b.minutes DESC, b.brand)
     FROM (
-      SELECT COALESCE(NULLIF(BTRIM(pr.brand), ''), '') AS brand, SUM(e.minutes)::int AS minutes
+      SELECT COALESCE(NULLIF(BTRIM(e.brand), ''), NULLIF(BTRIM(p.brand), ''), '') AS brand,
+             SUM(e.minutes)::int AS minutes
       FROM time_entries e
-      LEFT JOIN time_projects pr ON pr.id = e.project_id
+      LEFT JOIN time_projects p ON p.id = e.project_id
       WHERE e.approval_id = a.id
       GROUP BY 1
     ) b

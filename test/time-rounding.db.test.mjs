@@ -101,7 +101,8 @@ async function setup() {
       id serial PRIMARY KEY, contractor_id int NOT NULL, project_id int,
       work_date date NOT NULL, started_at timestamptz, ended_at timestamptz,
       minutes int, description text, source text,
-      locked boolean NOT NULL DEFAULT false, approval_id int, import_batch_id uuid);
+      locked boolean NOT NULL DEFAULT false, approval_id int, import_batch_id uuid,
+      brand text);
   `);
   await q(`INSERT INTO time_contractors (email, full_name, hourly_rate) VALUES
     ('jake@test','Jake',80), ('sam@test','Sam',60), ('norate@test','No Rate',NULL)`);

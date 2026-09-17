@@ -102,6 +102,14 @@
   .bchip b { font-variant-numeric:tabular-nums; color:#0f172a; font-weight:700; }
   .bchip em { font-style:normal; font-weight:700; color:#b45309; }
   .bchip em.done { color:#94a3b8; font-weight:600; }
+  /* The brand on a single entry, in a list of entries. */
+  .btag { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; white-space:nowrap;
+          background:#f1f5f9; color:#475569; border-radius:999px; padding:1px 8px; vertical-align:1px; }
+  .btag i { width:6px; height:6px; border-radius:999px; background:#94a3b8; flex:none; }
+  .btag.b-none { background:#fffbeb; color:#92400e; }
+  /* Booked against something other than the project's own brand — flagged
+     because it is the one case where the project doesn't tell you the answer. */
+  .btag.btag-over { box-shadow:inset 0 0 0 1px #c7d2fe; background:#eef2ff; color:#3730a3; }
   .bchip-amt { font-variant-numeric:tabular-nums; color:#0f766e; font-weight:700;
                border-left:1px solid #e2e8f0; padding-left:7px; margin-left:1px; }
   /* No project, or a project with no brand set — called out rather than hidden,
@@ -164,7 +172,11 @@
         <label class="lbl">Project</label>
         <select id="t-project" class="fld"></select>
       </div>
-      <div class="md:col-span-8">
+      <div class="md:col-span-3">
+        <label class="lbl">Brand <span class="font-normal opacity-75">(who it's for)</span></label>
+        <select id="t-brand" class="fld"></select>
+      </div>
+      <div class="md:col-span-5">
         <label class="lbl">What are you working on? <span class="font-normal opacity-75">(optional)</span></label>
         <input id="t-desc" class="fld" placeholder="Rebuilding the enrolment funnel report">
       </div>
@@ -350,10 +362,18 @@ function hhmm(iso) { if (!iso) return '—'; var d = new Date(iso); return d.toL
 function hours(min) { return (Math.round((min / 60) * 100) / 100).toFixed(2); }
 
 /* ------------------------------------------------------- hours by brand */
-/* Which brand an entry was worked for. The brand lives on the project, so an
-   entry with no project — or with a project nobody has set a brand on — has no
-   brand of its own and lands in one visible bucket instead of disappearing. */
-function brandOf(e) { return String(e.project_brand || '').trim() || NO_BRAND; }
+/* Which brand an entry was worked for. The server resolves this — the entry's
+   own brand if it carries one, otherwise its project's — and sends the answer
+   as `brand`. An entry with no project, or a project nobody has set a brand on,
+   has no brand either way and lands in one visible bucket instead of vanishing.
+   `entry_brand` is the raw override and is only for the pickers and the marker
+   below; never total against it. */
+function brandOf(e) { return String(e.brand || '').trim() || NO_BRAND; }
+
+/* True when this entry was deliberately booked against something other than its
+   project's own brand — worth showing, because it is the one case where the
+   project no longer tells you where the hours went. */
+function hasBrandOverride(e) { return !!String(e.entry_brand || '').trim(); }
 
 /**
  * Split finished entries by brand.
@@ -423,6 +443,16 @@ function allocateByBrand(brandMinutes, amount) {
     .forEach(function (x) { x.floor += 1; });
   scored.forEach(function (x) { parts[x.i].amount = x.floor / 100; });
   return parts;
+}
+
+/** The brand an individual entry counted towards, for a list of entries. */
+function brandTag(e) {
+  var b = brandOf(e);
+  var meta = BRAND_META[b];
+  var over = hasBrandOverride(e);
+  return '<span class="btag' + (meta ? '' : ' b-none') + (over ? ' btag-over' : '') + '"'
+    + ' title="' + esc(b) + (over ? ' — set on this entry, not inherited from the project' : '') + '">'
+    + '<i' + (meta ? ' style="background:' + meta.colour + '"' : '') + '></i>' + esc(b) + '</span>';
 }
 
 /** One pill per brand: name, hours worked, and what's still to approve. */
@@ -527,6 +557,10 @@ async function boot() {
   if (ME.isManager) { $('tab-team').classList.remove('hidden'); $('tab-admin').classList.remove('hidden'); }
 
   fillProjectSelect($('t-project'), PROJECTS, RUNNING ? RUNNING.project_id : null);
+  fillBrandSelect($('t-brand'), $('t-project').value, RUNNING ? RUNNING.entry_brand : undefined);
+  // Changing the project re-defaults the brand. Anyone deliberately splitting a
+  // shared project sets it after picking, which is the rarer move.
+  $('t-project').onchange = function () { fillBrandSelect($('t-brand'), this.value, undefined); };
   fillSelect($('p-brand'), BRANDS);
   renderTimer();
   await loadWeek();
@@ -542,6 +576,38 @@ function fillProjectSelect(sel, projects, selected) {
   }
   sel.innerHTML = opts.join('');
 }
+/**
+ * The brands a person can pick from: the standing list, plus anything already in
+ * use on a project. The second half matters — a brand added to a project but not
+ * to BRANDS would otherwise be invisible here and unselectable, which is exactly
+ * the sort of gap that puts hours under the wrong name.
+ */
+function brandChoices() {
+  var seen = {}, out = [];
+  BRANDS.concat((PROJECTS || []).map(function (p) { return String(p.brand || '').trim(); }))
+    .forEach(function (b) { if (!(b in seen)) { seen[b] = 1; out.push(b); } });
+  return out;
+}
+
+/**
+ * Fill a brand picker, defaulting to what the chosen project carries.
+ *
+ * `selected` undefined means "follow the project", which is the normal case and
+ * the reason nobody has to think about this field: pick the project, the right
+ * brand is already there. It only needs touching for a project that spans
+ * brands.
+ */
+function fillBrandSelect(sel, projectId, selected) {
+  var proj = (PROJECTS || []).filter(function (p) { return String(p.id) === String(projectId); })[0];
+  var fallback = proj ? String(proj.brand || '').trim() : '';
+  var want = selected === undefined || selected === null ? fallback : String(selected).trim();
+  sel.innerHTML = brandChoices().map(function (b) {
+    return '<option value="' + esc(b) + '"' + (b === want ? ' selected' : '') + '>'
+      + (b ? esc(b) : '— ' + NO_BRAND.toLowerCase() + ' —')
+      + (b && b === fallback ? ' (project default)' : '') + '</option>';
+  }).join('');
+}
+
 function fillSelect(sel, values) {
   sel.innerHTML = values.map(function (v) { return '<option value="' + esc(v) + '">' + (v ? esc(v) : '— none —') + '</option>'; }).join('');
 }
@@ -553,6 +619,7 @@ function renderTimer() {
   $('btn-stop').classList.toggle('hidden', !running);
   $('btn-discard').classList.toggle('hidden', !running);
   $('t-project').disabled = running;
+  $('t-brand').disabled = running;
   $('t-desc').disabled = running;
   $('timer-state').innerHTML = running
     ? '<span class="dot"></span> <span class="align-middle">Running</span>'
@@ -562,8 +629,9 @@ function renderTimer() {
   if (running) {
     var pn = RUNNING.project_name ? esc(RUNNING.project_name) : 'No project';
     var d = RUNNING.description ? ' · ' + esc(RUNNING.description) : '';
-    $('tick-meta').innerHTML = pn + d + ' · started ' + hhmm(RUNNING.started_at);
+    $('tick-meta').innerHTML = pn + ' · ' + esc(brandOf(RUNNING)) + d + ' · started ' + hhmm(RUNNING.started_at);
     $('t-project').value = RUNNING.project_id || '';
+    fillBrandSelect($('t-brand'), RUNNING.project_id, RUNNING.entry_brand);
     $('t-desc').value = RUNNING.description || '';
     if (!tickHandle) tickHandle = setInterval(paintTick, 1000);
     paintTick();
@@ -585,6 +653,7 @@ async function startTimer() {
   try {
     var out = await api('POST', 'start', {
       project_id: $('t-project').value || null,
+      brand: $('t-brand').value || null,
       description: $('t-desc').value || null,
       work_date: todayStr()
     });
@@ -692,6 +761,7 @@ function entryRow(e) {
     + '<div class="text-sm font-semibold text-gray-900 mono" style="width:74px">' + dur + '</div>'
     + '<div class="flex-1 min-w-0">'
       + '<div class="text-sm text-gray-800">' + (e.project_name ? esc(e.project_name) : '<span class="text-gray-400">No project</span>')
+      + ' ' + brandTag(e)
       + ' <span class="text-xs text-gray-400 ml-1">' + hhmm(e.started_at) + ' → ' + (live ? 'now' : hhmm(e.ended_at)) + '</span></div>'
       + (e.description ? '<div class="text-xs text-gray-500 mt-0.5 truncate">' + esc(e.description) + '</div>' : '')
     + '</div>'
@@ -714,8 +784,9 @@ function manualEntryModal(existing) {
     + '<h3 class="text-base font-bold text-gray-900 mb-1">' + (e ? 'Edit entry' : 'Add an entry by hand') + '</h3>'
     + '<p class="text-xs text-gray-500 mb-4">For when the timer wasn\'t running. Enter the times you actually worked, or just the hours.</p>'
     + '<div class="grid grid-cols-1 md:grid-cols-12 gap-3">'
-      + '<div class="md:col-span-6"><label class="lbl">Date</label><input id="m-date" type="date" class="fld" value="' + dateVal + '"></div>'
-      + '<div class="md:col-span-6"><label class="lbl">Project</label><select id="m-project" class="fld"></select></div>'
+      + '<div class="md:col-span-12"><label class="lbl">Date</label><input id="m-date" type="date" class="fld" value="' + dateVal + '"></div>'
+      + '<div class="md:col-span-7"><label class="lbl">Project</label><select id="m-project" class="fld"></select></div>'
+      + '<div class="md:col-span-5"><label class="lbl">Brand <span class="text-gray-400 font-normal">(who it\'s for)</span></label><select id="m-brand" class="fld"></select></div>'
       + '<div class="md:col-span-12"><div class="inline-flex mb-1"><button id="m-mode-times" class="segbtn active">Start / finish</button><button id="m-mode-hours" class="segbtn">Just hours</button></div></div>'
       + '<div class="md:col-span-6 m-times"><label class="lbl">Started</label><input id="m-start" type="time" class="fld" value="' + startVal + '"></div>'
       + '<div class="md:col-span-6 m-times"><label class="lbl">Finished</label><input id="m-end" type="time" class="fld" value="' + endVal + '"></div>'
@@ -729,6 +800,11 @@ function manualEntryModal(existing) {
     + '</div></div></div>';
 
   fillProjectSelect($('m-project'), PROJECTS, e ? e.project_id : ($('t-project').value || null));
+  // An existing entry keeps whatever it was recorded against — including an
+  // override — rather than being silently re-defaulted to its project's brand
+  // the moment someone opens it to fix a typo in the description.
+  fillBrandSelect($('m-brand'), $('m-project').value, e ? e.entry_brand : undefined);
+  $('m-project').onchange = function () { fillBrandSelect($('m-brand'), this.value, undefined); };
   $('m-mode-times').onclick = function () { setMode('times'); };
   $('m-mode-hours').onclick = function () { setMode('hours'); };
   function setMode(mode) {
@@ -784,14 +860,16 @@ async function saveManual(existing) {
         id: existing.id,
         patch: {
           work_date: date, started_at: startIso, ended_at: endIso,
-          project_id: $('m-project').value || null, description: $('m-desc').value || null
+          project_id: $('m-project').value || null, brand: $('m-brand').value || null,
+          description: $('m-desc').value || null
         }
       });
       toast(out && out.approvalRetotalled ? 'Entry updated — approved timesheet re-totalled' : 'Entry updated');
     } else {
       await api('POST', 'create-entry', {
         work_date: date, started_at: startIso, ended_at: endIso,
-        project_id: $('m-project').value || null, description: $('m-desc').value || null
+        project_id: $('m-project').value || null, brand: $('m-brand').value || null,
+        description: $('m-desc').value || null
       });
       toast('Entry added');
     }
@@ -879,7 +957,10 @@ var IMPORT_ALIASES = {
   start:       ['started', 'start', 'start time', 'begin', 'time in'],
   end:         ['finished', 'finish', 'end', 'end time', 'time out'],
   hours:       ['hours', 'hrs', 'hour', 'duration', 'decimal hours'],
-  email:       ['email', 'e-mail', 'contractor email', 'staff email']
+  email:       ['email', 'e-mail', 'contractor email', 'staff email'],
+  // Optional. Present in this dashboard's own export, so a file exported and
+  // pasted back keeps whatever was booked against a shared project.
+  brand:       ['brand', 'company', 'entity', 'business unit']
 };
 var IMPORT_ALIASES_WEAK = {
   project:     ['code', 'job', 'client', 'task name'],
@@ -889,6 +970,13 @@ var IMPORT_ALIASES_WEAK = {
   hours:       ['qty', 'quantity', 'time'],
   email:       ['contractor', 'person', 'who', 'staff', 'user', 'name']
 };
+
+/* See the call site: the no-brand label never comes back in as a brand. */
+function importBrandCell(raw) {
+  var v = String(raw == null ? '' : raw).trim();
+  if (!v) return undefined;
+  return v.toLowerCase() === NO_BRAND.toLowerCase() ? undefined : v;
+}
 
 function normHeader(cell) {
   return String(cell == null ? '' : cell).trim().toLowerCase().replace(/\s+/g, ' ');
@@ -1030,7 +1118,9 @@ function buildImportRows(text) {
     // No header row: fall back to the column order this dashboard's own CSV
     // export uses — Date, Contractor, Email, Project, Code, Description,
     // Started, Finished, Hours, Status.
-    map = { date: 0, email: 2, project: 3, description: 5, start: 6, end: 7, hours: 8 };
+    // Brand is column 10 in the export and is read here too — it was appended
+    // rather than inserted precisely so these indices did not have to move.
+    map = { date: 0, email: 2, project: 3, description: 5, start: 6, end: 7, hours: 8, brand: 10 };
   }
 
   var rows = [], errors = [], slashDates = false;
@@ -1087,6 +1177,13 @@ function buildImportRows(text) {
       ended_at: endIso,
       project: cell('project'),
       description: cell('description'),
+      // The server decides what to do with this: a brand matching the project's
+      // own is stored as nothing at all, so only a real divergence survives.
+      // "Unassigned" is this dashboard's LABEL for having no brand, not a brand
+      // anyone can be booked to — the CSV export writes it for readability, so
+      // it has to be read back as nothing or a round-trip would invent a brand
+      // by that name.
+      brand: importBrandCell(cell('brand')),
       contractor_email: email || undefined
     });
   }
@@ -1712,7 +1809,9 @@ async function loadProjects() {
   try {
     var out = await api('GET', 'projects');
     PROJECTS = out.projects || [];
+    var keepBrand = $('t-brand').value;
     fillProjectSelect($('t-project'), PROJECTS, RUNNING ? RUNNING.project_id : $('t-project').value);
+    fillBrandSelect($('t-brand'), $('t-project').value, RUNNING ? RUNNING.entry_brand : keepBrand);
     renderProjects();
   } catch (e) { toast(e.message, true); }
 }

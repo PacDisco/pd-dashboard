@@ -96,7 +96,8 @@ async function setup() {
       id serial PRIMARY KEY, contractor_id int NOT NULL, project_id int,
       work_date date NOT NULL, started_at timestamptz, ended_at timestamptz,
       minutes int, description text, source text,
-      locked boolean NOT NULL DEFAULT false, approval_id int, import_batch_id uuid);
+      locked boolean NOT NULL DEFAULT false, approval_id int, import_batch_id uuid,
+      brand text);
     CREATE TABLE payments (id serial PRIMARY KEY, paid boolean, due_date date, invoice_file_url text);
   `);
   await q(`INSERT INTO time_contractors (email, full_name, hourly_rate) VALUES ('sam@test','Sam',60)`);
@@ -208,6 +209,115 @@ try {
     const a = await latest();
     assert.ok(Array.isArray(a.brand_minutes), 'always an array — the client maps over it unguarded');
     assert.equal(a.brand_minutes.length, 0);
+  });
+
+  console.log('\nan entry can be booked against a brand other than its project\'s');
+
+  const reset = async () => {
+    await q(`UPDATE time_entries SET locked = false, approval_id = NULL`);
+    await q(`DELETE FROM time_approvals`);
+    await q(`DELETE FROM time_entries`);
+  };
+  const tick = (payload) => call('POST', asUser,
+    { action: 'create-entry', work_date: '2026-08-20',
+      started_at: '2026-08-20T21:00:00Z', ended_at: '2026-08-20T23:00:00Z', ...payload });
+
+  await test('picking nothing inherits the project — and stores no override', async () => {
+    await reset();
+    const r = await tick({ project_id: 1 });
+    assert.equal(r.status, 200, r.body.error);
+    assert.equal(r.body.entry.brand, 'Pacific Discovery', 'resolved brand follows the project');
+    assert.equal(r.body.entry.entry_brand, null, 'nothing pinned to the row');
+  });
+
+  await test('picking the project\'s own brand still stores no override', async () => {
+    await reset();
+    const r = await tick({ project_id: 1, brand: 'Pacific Discovery' });
+    assert.equal(r.body.entry.entry_brand, null,
+      'a copy of the project brand would quietly cut the entry loose from it');
+    assert.equal(r.body.entry.brand, 'Pacific Discovery');
+  });
+
+  await test('picking a different brand is recorded on the entry', async () => {
+    await reset();
+    const r = await tick({ project_id: 1, brand: 'Unearthed Education' });
+    assert.equal(r.body.entry.entry_brand, 'Unearthed Education');
+    assert.equal(r.body.entry.brand, 'Unearthed Education', 'the override wins over the project');
+    assert.equal(r.body.entry.project_brand, 'Pacific Discovery', 'the project is unchanged');
+  });
+
+  await test('one shared project splits across brands on the timesheet', async () => {
+    await reset();
+    await tick({ project_id: 1 });                                  // 120 min, inherits PD
+    await tick({ project_id: 1, brand: 'Unearthed Education' });    // 120 min, override
+    await tick({ project_id: 1, brand: 'Pure Exploration' });       // 120 min, override
+    await approveWeek();
+    assert.deepEqual(splitOf(await latest()), {
+      'Pacific Discovery': 120, 'Unearthed Education': 120, 'Pure Exploration': 120,
+    }, 'the whole point: three brands out of one project');
+  });
+
+  await test('re-branding the project moves the entries that never overrode it', async () => {
+    await reset();
+    await tick({ project_id: 1 });                                  // inherits
+    await tick({ project_id: 1, brand: 'Unearthed Education' });    // pinned
+    await approveWeek();
+    await q(`UPDATE time_projects SET brand = 'Pure Exploration' WHERE id = 1`);
+    assert.deepEqual(splitOf(await latest()), {
+      'Pure Exploration': 120, 'Unearthed Education': 120,
+    }, 'the inheriting entry follows the fix; the deliberate one holds');
+    await q(`UPDATE time_projects SET brand = 'Pacific Discovery' WHERE id = 1`);
+  });
+
+  await test('moving an entry onto a project that already has that brand drops the override', async () => {
+    await reset();
+    const r = await tick({ project_id: 1, brand: 'Unearthed Education' });
+    const moved = await call('POST', asUser,
+      { action: 'update-entry', id: r.body.entry.id, patch: { project_id: 2 } });
+    assert.equal(moved.status, 200, moved.body.error);
+    assert.equal(moved.body.entry.entry_brand, null,
+      'project 2 IS Unearthed — keeping a copy would stop it following that project');
+    assert.equal(moved.body.entry.brand, 'Unearthed Education', 'and the answer is unchanged');
+  });
+
+  await test('an override survives a move to a project with a different brand', async () => {
+    await reset();
+    const r = await tick({ project_id: 2, brand: 'Pacific Discovery' });
+    const moved = await call('POST', asUser,
+      { action: 'update-entry', id: r.body.entry.id, patch: { description: 'typo fix' } });
+    assert.equal(moved.body.entry.entry_brand, 'Pacific Discovery', 'an unrelated edit must not clear it');
+  });
+
+  await test('clearing the brand hands the entry back to its project', async () => {
+    await reset();
+    const r = await tick({ project_id: 1, brand: 'Unearthed Education' });
+    const cleared = await call('POST', asUser,
+      { action: 'update-entry', id: r.body.entry.id, patch: { brand: '' } });
+    assert.equal(cleared.body.entry.entry_brand, null);
+    assert.equal(cleared.body.entry.brand, 'Pacific Discovery');
+  });
+
+  await test('a blank or whitespace brand is never a brand of its own', async () => {
+    await reset();
+    const r = await tick({ project_id: 4, brand: '   ' });   // project 4's brand is whitespace
+    assert.equal(r.body.entry.entry_brand, null);
+    assert.equal(r.body.entry.brand, '', 'falls into the Unassigned bucket, not a phantom brand');
+  });
+
+  await test('an imported row carries a Brand column the same way', async () => {
+    await reset();
+    const r = await call('POST', asUser, { action: 'import-entries', dry_run: false, rows: [
+      { line: 1, work_date: '2026-08-20', started_at: '2026-08-20T21:00:00Z',
+        ended_at: '2026-08-20T22:00:00Z', project: 'WEB', brand: 'Unearthed Education' },
+      { line: 2, work_date: '2026-08-20', started_at: '2026-08-20T22:00:00Z',
+        ended_at: '2026-08-20T23:00:00Z', project: 'WEB', brand: 'Pacific Discovery' },
+      { line: 3, work_date: '2026-08-20', started_at: '2026-08-20T23:00:00Z',
+        ended_at: '2026-08-21T00:00:00Z', project: 'WEB' },
+    ] });
+    assert.equal(r.status, 200, r.body.error);
+    const got = await q(`SELECT brand FROM time_entries ORDER BY started_at`);
+    assert.deepEqual(got.map((x) => x.brand), ['Unearthed Education', null, null],
+      'only the divergent row is pinned; the one repeating the project brand is not');
   });
 
   console.log('\nand it stays behind the admin boundary');
