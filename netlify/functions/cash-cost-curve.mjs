@@ -107,7 +107,7 @@ export default async (req) => {
   if (!txMonths.length && !profile.perYear.length) {
     return json({
       error: "No stored months yet.",
-      hint: "Run Diagnostics → Force refetch every month first.",
+      hint: "Run Overheads → Diagnostics → Force refetch every month first.",
     }, 409);
   }
 

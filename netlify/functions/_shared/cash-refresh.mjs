@@ -345,14 +345,36 @@ export async function refreshTransactions(token, tenantId, fy, { force = false, 
  * handful of calls and never the thing that gets starved.
  */
 export async function refreshAll(token, tenantId, fy, { force = false, budget = UNLIMITED } = {}) {
+  /* ORDER: CHEAPEST AND MOST USEFUL FIRST.
+   *
+   * This used to run months → transactions → opex → budget, and that ordering
+   * quietly broke three features at once.
+   *
+   * The transaction pass is by far the heaviest: two years of months, each one
+   * three paged Xero endpoints plus a batch of supplier bills — six or more
+   * calls per month, twenty-four months. It routinely consumes the whole
+   * twelve-minute allowance on its own. Everything behind it therefore never
+   * ran, and the symptom was not an error: overheads stayed on an old parser,
+   * cost phasing said "no program cost recorded", and the surplus view said
+   * nothing had been closed off. Three different panels reporting three
+   * different problems, all caused by a pass that never got a turn.
+   *
+   * The P&L pass is ONE call per month and it is what the overheads, the cost
+   * profile and the surplus all read. The budget is a handful of calls and it
+   * is the entire right-hand column of the surplus view. Both now go first.
+   *
+   * Transactions go last because they are the only pass that degrades
+   * gracefully: they drive reconciliation detail and tracking coverage, so a
+   * partial pull is genuinely useful and the next run continues where this one
+   * stopped. Nothing else has that property. */
   const months = await refreshMonths(token, tenantId, fy, { force, budget });
-  const transactions = await refreshTransactions(token, tenantId, fy, { force, budget });
   const opex = await refreshOpex(token, tenantId, fy, { force, budget });
   // Skipped rather than half-run when the budget has gone: a partial budget
   // write would look like a complete one.
   const budgetResult = budget.expired() || !budget.take()
     ? { accounts: 0, description: null, error: null, skipped: true }
     : await refreshBudget(token, tenantId, fy);
+  const transactions = await refreshTransactions(token, tenantId, fy, { force, budget });
 
   const remaining = months.remaining + transactions.remaining + opex.remaining +
     (budgetResult.skipped ? 1 : 0);

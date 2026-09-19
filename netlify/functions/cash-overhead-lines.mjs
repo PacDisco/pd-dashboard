@@ -42,7 +42,7 @@ export default async (req) => {
   if (!months.length) {
     return json({
       error: "No stored P&L months yet.",
-      hint: "Run Diagnostics → Refresh from Xero first.",
+      hint: "Run Overheads → Diagnostics → Refresh Xero data now first.",
     }, 409);
   }
 

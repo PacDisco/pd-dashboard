@@ -70,6 +70,7 @@ export default async (req) => {
     budgetSeries: budgetInfo?.series ?? null,
     overheadsForward: overheads.forward,
     overheadBasis: assumptions.overheadBasis ?? "total",
+    budgetStoredWithoutSeries: Boolean(budgetInfo) && !budgetInfo.series,
   });
 
   return json({

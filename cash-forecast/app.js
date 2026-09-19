@@ -587,13 +587,16 @@ function surplusPanel() {
 
   return `<section class="closebox">
     <h2>Surplus vs budget
-      <span class="stamp">${d.actualMonths} actual · ${d.projectedMonths} projected</span></h2>
+      <span class="stamp">${d.actualMonths} actual · ${d.projectedMonths} projected${
+        d.unsyncedClosedMonths ? ` · ${d.unsyncedClosedMonths} not read` : ""}</span></h2>
 
     <p class="foot"><b>This is the P&amp;L, not the bank.</b> Revenue counts in the month it is recognised — a whole season at once, the month before it departs — not when students pay. These figures will not agree with the Cash flow tab, and are not meant to: the difference is deferred revenue.</p>
 
     <div class="tiles" style="margin:12px 0">
       <div class="tile"><span class="k">Budgeted</span><span class="v">${m0(s.budget)}</span><span class="sub">agreed in April</span></div>
-      <div class="tile"><span class="k">Actual to date</span><span class="v ${s.actual < 0 ? "neg" : ""}">${m0(s.actual)}</span><span class="sub">${d.lastActualMonth ? `to ${escapeHtml(d.lastActualMonth)}` : "nothing closed yet"}</span></div>
+      <div class="tile"><span class="k">Actual to date</span><span class="v ${s.actual < 0 ? "neg" : ""}">${m0(s.actual)}</span><span class="sub">${d.lastActualMonth ? `to ${escapeHtml(d.lastActualMonth)}`
+        : d.closedRangeMonths ? `${d.closedRangeMonths} closed, P&amp;L not read`
+        : "nothing closed yet"}</span></div>
       <div class="tile ${v && v.surplus < 0 ? "alert" : ""}">
         <span class="k">Extrapolated FYE</span>
         <span class="v ${s.extrapolated < 0 ? "neg" : ""}">${m0(s.extrapolated)}</span>
@@ -622,23 +625,69 @@ function surplusPanel() {
     </div>
 
     <p class="foot"><b>Variance is stated so that positive is good news on every line.</b> Revenue ahead of budget is positive; costs under budget are also positive. The three add up to the surplus variance, which is what catches a flipped sign.</p>
+    ${(() => {
+      /* THE TRUE-UP, SHOWN. It rescales every projected cost figure, which is
+       * consequential and otherwise completely invisible on screen. */
+      const t = d.trueUp;
+      if (!t?.applied) return "";
+      const over = t.closedGap > 0;
+      return `<p class="foot"><b>Program costs are trued up.</b>
+        The model puts ${m0(t.modelYearTotal)} of program cost in the year. ${m0(t.incurredInClosed)} of that is already in the books, so the ${m0(t.remaining)} still to come is spread across the remaining months — rather than replaying the planned curve, which would have made the year's total depend on when the money happened to go out.
+        ${Math.abs(t.closedGap) > 0.5 ? `The closed months ran <b>${m0(Math.abs(t.closedGap))} ${over ? "above" : "below"}</b> what the curve expected of them (${t.closedGapPct != null ? `${Math.abs(t.closedGapPct)}%` : ""}), so what remains is scaled by ${t.factor}.` : "They came in on the curve, so nothing was rescaled."}</p>`;
+    })()}
+
+    ${(() => {
+      /* The revenue check, beside the cost true-up so the difference between
+       * them is visible: one corrects, the other only reports. */
+      const v = d.revenueCheck;
+      if (!v || !v.plannedInClosed) return "";
+      if (v.missingSeasonMonths?.length || v.surpriseSeasonMonths?.length) {
+        // The warnings above already say this loudly and in full; repeating it
+        // here would dilute rather than reinforce.
+        return "";
+      }
+      const over = v.gap > 0;
+      const material = Math.abs(v.gapPct ?? 0) >= 1;
+      return `<p class="foot"><b>Revenue is checked, not corrected.</b>
+        The model expected the closed months to recognise ${m0(v.plannedInClosed)}; the books show ${m0(v.bookedInClosed)}${
+          material ? ` — <b>${m0(Math.abs(v.gap))} ${over ? "ahead" : "short"}</b>, ${Math.abs(v.gapPct)}%` : ", within 1%"}.
+        ${material
+          ? `That is pax or price moving, not timing, so the months still to come are deliberately left alone — inflating Spring to make up a shortfall in Fall would hide the thing worth knowing. If the same gap holds for the seasons ahead, the extrapolation is ${over ? "understated" : "overstated"} by roughly ${Math.abs(v.gapPct)}%.`
+          : `Pax and prices are holding against what is entered, which is what makes the projected months trustworthy.`}</p>`;
+    })()}
+
     <p class="foot"><b>Projected</b> months come from the pax model — each program's recognised revenue and its costs at the entered pax — with overheads from the Xero budget. So changing pax on the Programs tab moves this number, which is the point of looking at it in September rather than re-reading the budget.</p>
-    ${d.budgetNeedsRefresh ? `<p class="foot"><b>The stored budget predates this view</b> and holds overheads only, so there is nothing to compare revenue or cost of sales against. Diagnostics → Refresh from Xero re-reads it.</p>` : ""}
     ${(d.warnings ?? []).map((w) => `<p class="foot">${escapeHtml(w)}</p>`).join("")}
 
     <div class="scroll" style="margin-top:14px">
       <table class="cftable tight">
-        <thead><tr><th class="lab">Month</th><th>Revenue</th><th>Cost of sales</th><th>Overheads</th><th>Surplus</th><th class="lab">From</th></tr></thead>
+        <thead><tr><th class="lab">Month</th><th>Revenue</th><th class="lab">vs model</th><th>Cost of sales</th><th>Overheads</th><th>Surplus</th><th class="lab">From</th></tr></thead>
         <tbody>
           ${(d.months ?? []).map((m) => `
             <tr class="${m.source === "actual" ? "" : "muted"}">
               <th class="lab">${escapeHtml(m.key)}</th>
               <td>${m0(m.revenue)}</td>
+              ${/* What the model expected of this month, for closed months only.
+                   A blank here on a month the model thought would carry a season
+                   is the recognition-month bug, visible at a glance. */""}
+              <td class="lab">${m.source === "actual" && m.revenuePlanned > 0.5
+                ? `<span class="stamp" title="Model expected ${m0(m.revenuePlanned)}">${
+                    Math.abs(m.revenue - m.revenuePlanned) < Math.max(1_000, m.revenuePlanned * 0.01)
+                      ? "on model"
+                      : `${m.revenue > m.revenuePlanned ? "+" : ""}${m0(m.revenue - m.revenuePlanned)}`}</span>`
+                : m.source === "actual" && m.revenue > 50_000
+                  ? '<span class="stamp" title="The model expected nothing here">unexpected</span>'
+                  : ""}</td>
               <td>${m0(m.directCosts)}</td>
               <td>${m0(m.overheads)}</td>
               <td class="${m.surplus < -0.5 ? "neg" : ""}">${m0(m.surplus)}</td>
               <td class="lab"><span class="stamp">${m.source === "actual" ? "books" : "model"}</span>${
-                m.projectedBecause === "no P&L stored for a closed month" ? ' <span class="stamp">not synced</span>' : ""}</td>
+                m.projectedBecause === "no P&L stored for a closed month" ? ' <span class="stamp">not synced</span>' : ""}${
+                // A projected month whose cost was rescaled says so, with what
+                // the curve had originally planned for it — otherwise the only
+                // way to notice is to add the column up.
+                m.trueUpApplied && Math.abs(m.directCostsAsPlanned - m.directCosts) > 0.5
+                  ? ` <span class="stamp" title="Phasing curve planned ${m0(m.directCostsAsPlanned)}">trued up</span>` : ""}</td>
             </tr>`).join("")}
         </tbody>
       </table>
@@ -720,7 +769,7 @@ function overheadLinesPanel() {
       ${c.lines ? `<b>${c.lines} lines make up ${c.sharePct}% of it</b> — that is the conversation.` : ""}</p>
     <p class="foot"><b>${money0(d.steadyTotal)}</b> of it is steady, month after month — contracts, subscriptions, people — and <b>${money0(d.lumpyTotal)}</b> arrives in lumps. The first is renegotiated, the second is decided one at a time, and they are rarely the same meeting.</p>
     ${basisPicker}
-    ${d.truncatedMonths?.length ? `<p class="foot"><b>${d.truncatedMonths.length} month${d.truncatedMonths.length === 1 ? " was" : "s were"} stored before every line was kept</b> (${d.truncatedMonths.map(escapeHtml).join(", ")}), so only their twelve biggest lines are here. Anything smaller is missing from those months and its yearly figure is understated. Diagnostics → Refresh from Xero rewrites them.</p>` : ""}
+    ${d.truncatedMonths?.length ? `<p class="foot"><b>${d.truncatedMonths.length} month${d.truncatedMonths.length === 1 ? " was" : "s were"} stored before every line was kept</b> (${d.truncatedMonths.map(escapeHtml).join(", ")}), so only their twelve biggest lines are here. Anything smaller is missing from those months and its yearly figure is understated. Overheads → Diagnostics → Refresh Xero data now rewrites them.</p>` : ""}
     <div class="scroll">
       <table class="cftable tight">
         <thead><tr>
@@ -839,9 +888,9 @@ function costCurvePanel() {
   /* What to DO about it, which is different for each cause and was previously
    * left as an exercise. */
   const D = {
-    "nothing-fetched": "No month has been fetched yet. Run <b>Diagnostics → Refresh from Xero</b> and let it finish.",
-    "opex-stale": `The P&amp;L months in store were written before this code could read Cost of Sales, so they hold overheads but no program cost. The version stamp is now bumped, so <b>Diagnostics → Refresh from Xero</b> rewrites them. Nothing is wrong with the books.`,
-    "history-short": "The refresh gets through the current year first and stops when its time is up, so the prior year is still short. Run <b>Diagnostics → Refresh from Xero</b> again — each run keeps what it got and carries on.",
+    "nothing-fetched": "No month has been fetched yet. Run <b>Overheads → Diagnostics → Refresh Xero data now</b> and let it finish.",
+    "opex-stale": `The P&amp;L months in store were written before this code could read Cost of Sales, so they hold overheads but no program cost. The version stamp is now bumped, so <b>Overheads → Diagnostics → Refresh Xero data now</b> rewrites them. Nothing is wrong with the books.`,
+    "history-short": "The refresh gets through the current year first and stops when its time is up, so the prior year is still short. Run <b>Overheads → Diagnostics → Refresh Xero data now</b> again — each run keeps what it got and carries on.",
   }[ev.diagnosis];
 
   const evidenceBlock = !ev.tx ? "" : `
