@@ -11,10 +11,12 @@
  *   CASH        when students actually pay — deposits at booking, balance a set
  *               number of days before departure. This drives the bank position.
  *
- *   RECOGNITION when revenue moves from deferred to sales — September for Fall,
- *               January for Spring, June for Summer, being the month before each
- *               season starts. This drives the P&L view and reconciles to Xero,
- *               where the gap between the two sits in deferred revenue.
+ *   RECOGNITION when revenue moves from deferred to sales. Income for a season
+ *               arrives over the months up to AND INCLUDING its departure month,
+ *               so the engine holds the DEADLINE — the departure month — and
+ *               leaves the run-up to the books. This drives the P&L view and
+ *               reconciles to Xero, where the gap between the two timelines sits
+ *               in deferred revenue.
  *
  * Conflating those two is what makes the current workbook hard to trust.
  */
@@ -112,16 +114,44 @@ function shiftDays(iso, days) {
     return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 /**
- * The month a program's revenue is recognised in: the most recent occurrence of
- * the season's recognition month strictly before the program starts.
+ * The month by which a program's revenue must be fully recognised: the month it
+ * departs in.
  *
- * A Fall program departing October 2026 recognises in September 2026. One
- * departing December 2026 also recognises in September 2026 — same season, same
- * recognition event.
+ * THIS REPLACED A SEASON-LEVEL CONSTANT, AND THE DIFFERENCE MATTERS
+ * -----------------------------------------------------------------
+ * The model used to hold one recognition month per season — Fall = August — and
+ * land the whole season there in a single lump. Pacific Discovery's books do
+ * something else: income for a season arrives over the months up to AND
+ * INCLUDING the departure month. Summer departs 2 July and booked 140,439 in
+ * June with 568 in July. Fall departs 10 September and booked 1,085,804 in
+ * August with the remainder still landing in September.
+ *
+ * With a single month the model was wrong twice over. It put Fall a month early,
+ * so once August closed the model's figure was discarded and September — where
+ * the rest actually lands — was projected at zero. The season's tail existed in
+ * neither column. And the closed-month comparison then read a season that had
+ * not finished as a 25% pax shortfall, which is how a timing artefact gets
+ * reported as a commercial problem.
+ *
+ * So the deadline is what the model holds, and the run-up is left to the books.
+ * Whatever has been recognised by the last closed month is fact; the remainder
+ * lands here. That cannot be wrong about the YEAR, which is the number being
+ * reported, and it is honest about being approximate month to month.
  */
-export function recognitionMonthFor(program, recognitionMonths) {
-    const target = recognitionMonths[program.season];
+export function recognitionMonthFor(program) {
     const start = parseISODate(program.startDate);
+    return { year: start.year, month: start.month };
+}
+
+/**
+ * The old season-constant behaviour, kept only so a saved model that still has
+ * `recognitionMonths` can be compared against the new placement while someone
+ * decides. Nothing in the forecast calls this.
+ */
+export function legacyRecognitionMonthFor(program, recognitionMonths) {
+    const target = recognitionMonths?.[program.season];
+    const start = parseISODate(program.startDate);
+    if (!target) return { year: start.year, month: start.month };
     // Search back from the departure month INCLUSIVE.
     //
     // Starting at -1 looks right — "the month before the season starts" — but it
@@ -416,11 +446,32 @@ export function buildForecast(assumptions, actualsByMonth = {}, { today = new Da
                 months[slot].programCostsOut += totalCost * point.share;
             }
         }
-        /* ---- recognition ---- */
-        const rec = recognitionMonthFor(program, assumptions.recognitionMonths);
+        /* ---- recognition ----
+         *
+         * The deadline is the departure month. Income for a season arrives over
+         * the months up to and including it, and the ENGINE does not model that
+         * run-up — it places the whole season at the deadline and leaves the
+         * shape to the books.
+         *
+         * That is deliberate and it is stated rather than hidden: the engine
+         * cannot see the P&L (it is pure, and it runs in the browser during an
+         * edit), so it has no way to know what has already been recognised. The
+         * surplus view does know, and it is where the netting happens — closed
+         * months carry the books, and only the unrecognised remainder is left
+         * to land at the deadline. The engine's job is to say WHEN a season must
+         * be complete by; the surplus view's job is to say how much of it is
+         * still outstanding. */
+        const rec = recognitionMonthFor(program);
         const recSlot = dateToHorizonSlot(fy, rec.year, rec.month, horizon);
         if (recSlot !== null) {
             months[recSlot].recognisedRevenue += grossRevenue;
+            // Named so the surplus view can net a part-recognised season against
+            // its own deadline rather than against a month.
+            months[recSlot].recognitionDeadlineFor ??= [];
+            months[recSlot].recognitionDeadlineFor.push({
+                programId: program.id, name: program.name, season: program.season,
+                grossRevenue, departs: program.startDate,
+            });
         }
         else if (rec.year * 12 + rec.month < fy * 12 + 4) {
             // Recognised in a prior year — its cash is not this year's deferred balance.
@@ -429,10 +480,10 @@ export function buildForecast(assumptions, actualsByMonth = {}, { today = new Da
             // error otherwise: the revenue vanishes from the year and deferred
             // goes negative by the same amount. Either way nobody should have to
             // infer it from a negative balance.
-            warnings.push(`${program.name} recognises in ${rec.year}-${String(rec.month).padStart(2, "0")}, before this fiscal year — its revenue is not in the year at all. Check the departure date against the ${program.season} recognition month.`);
+            warnings.push(`${program.name} departs ${program.startDate}, so its revenue is fully recognised by ${rec.year}-${String(rec.month).padStart(2, "0")} — before this fiscal year opened. None of it is in the year. Check the departure date.`);
         }
         else {
-            warnings.push(`${program.name} recognises in ${rec.year}-${String(rec.month).padStart(2, "0")}, after this fiscal year — its revenue falls outside the year shown.`);
+            warnings.push(`${program.name} departs ${program.startDate}, so its revenue is recognised by ${rec.year}-${String(rec.month).padStart(2, "0")} — past the end of the table, so it is not counted here.`);
         }
         contributions.push({
             programId: program.id,

@@ -221,6 +221,69 @@ export function surplusView({
   const bookedRevenueInClosed = raw(actualRows, (r) => r.revenue);
   const revenueGap = bookedRevenueInClosed - plannedRevenueInClosed;
 
+  /* ---- a season that is still landing ----
+   *
+   * Income for a season arrives over the months up to AND INCLUDING its
+   * departure month. The engine places the whole season at that deadline,
+   * because it cannot see the P&L; what it cannot know is how much has already
+   * been recognised on the way there.
+   *
+   * Fall 2026 is the case that forced this. It departs 10 September. The books
+   * recognised 1,085,804 in August — a closed month, so that figure is fact and
+   * the model's August was discarded. September is still open, and the model's
+   * deadline sits there holding the WHOLE season. Left alone the year would
+   * count Fall nearly twice: once as booked in August, once as projected in
+   * September.
+   *
+   * So the revenue already booked in closed months is consumed against the
+   * deadlines it must belong to, CHRONOLOGICALLY, and only the unrecognised
+   * remainder is left at each deadline.
+   *
+   * Chronological, not proportional, and that is the whole subtlety: spreading
+   * August's early recognition across every open deadline would quietly reduce
+   * Spring 2027 — a season that has not begun recognising and has nothing to do
+   * with it — by nearly half.
+   */
+  /* Every deadline in the year, earliest first, and the pool of revenue the
+   * closed months have already booked. The pool is consumed against the
+   * deadlines in order — the only defensible assignment when the P&L gives a
+   * monthly total and not a per-season split.
+   *
+   * A CLOSED deadline whose share of the pool falls short has genuinely come in
+   * light: its window has passed and nothing more is coming. An OPEN one is
+   * simply still landing, and the shortfall is what remains to be recognised. */
+  const deadlines = months
+    .filter((r) => r.revenuePlanned > 0)
+    .sort((a, b) => a.slot - b.slot);
+
+  let pool = bookedRevenueInClosed;
+  let earlyRecognitionTotal = 0;
+  const settledShort = [];
+
+  for (const row of deadlines) {
+    const applied = Math.min(Math.max(pool, 0), row.revenuePlanned);
+    pool -= applied;
+    const remainder = row.revenuePlanned - applied;
+
+    if (row.source === "actual") {
+      // The deadline has passed. The books are the answer and the remainder is
+      // a real shortfall, not something still to arrive.
+      if (remainder > 0) settledShort.push({ key: row.key, expected: row.revenuePlanned, short: remainder });
+      continue;
+    }
+    // Still open: whatever the books have not yet recognised lands here.
+    row.revenueAlreadyRecognised = applied;
+    row.revenue = remainder;
+    row.surplus = row.revenue - row.directCosts - row.overheads;
+    earlyRecognitionTotal += applied;
+  }
+
+  // Booked more than every deadline in the year can account for. Either a
+  // season from outside the year recognised here, or the model is short a
+  // program — both worth saying rather than dropping.
+  const unexplainedEarly = Math.max(0, pool);
+  const settledShortfall = settledShort.reduce((s, x) => s + x.short, 0);
+
   /* A SEASON ON THE WRONG SIDE OF THE SEAM.
    *
    * Because revenue is season-sized and lands whole, a recognition month that
@@ -241,10 +304,30 @@ export function surplusView({
    * rounding difference.
    */
   const SEASON_SIZED = 50_000;
-  const missingSeasons = actualRows.filter(
-    (r) => r.revenuePlanned > SEASON_SIZED && r.revenue < r.revenuePlanned * 0.2);
-  const surpriseSeasons = actualRows.filter(
-    (r) => r.revenue > SEASON_SIZED && r.revenuePlanned < r.revenue * 0.2);
+  /* THESE USED TO BE MONTH-BY-MONTH AND THAT IS NOW WRONG.
+   *
+   * They compared each closed month's booked revenue against what the model
+   * expected of THAT month. Under the old one-month-per-season rule that was
+   * the only comparison available. Under the deadline rule the run-up lands in
+   * earlier months by design, so a month with revenue the model did not expect
+   * is the normal case, and a deadline month showing only a tail is too.
+   *
+   * Left alone they fired on exactly the shape they were built to catch: with
+   * September closed, August read as a season "counted TWICE" and September as
+   * a season "MISSING from the year", when between them they were simply one
+   * season landing correctly.
+   *
+   * The netting above already answers both questions properly — revenue no
+   * deadline can absorb is `unexplainedEarly`, and a deadline that has passed
+   * without being satisfied is in `settledShort`. So these now read off that
+   * rather than guessing from a single month.
+   */
+  const missingSeasons = settledShort
+    .filter((x) => x.short > SEASON_SIZED && x.short > x.expected * 0.8)
+    .map((x) => ({ key: x.key, revenuePlanned: x.expected, revenue: x.expected - x.short }));
+  const surpriseSeasons = unexplainedEarly > SEASON_SIZED
+    ? [{ key: actualRows[actualRows.length - 1]?.key ?? "", revenue: unexplainedEarly, revenuePlanned: 0 }]
+    : [];
   // A surprise in a closed month matters most when the model ALSO has a season
   // of similar size still to come — that is the doubling case rather than
   // simply a month the model mistimed.
@@ -273,6 +356,57 @@ export function surplusView({
   const directCosts = line((r) => r.directCosts);
   const overheads = line((r) => r.overheads);
   const surplus = line((r) => r.surplus);
+
+  /* ---- where we are right now ----
+   *
+   * WHY THIS IS NOT JUST `actual`
+   * -----------------------------
+   * The `actual` column has been there all along, but it had nothing to be
+   * measured against: the Budget column is the WHOLE YEAR, so putting five
+   * months of trading next to twelve months of plan tells you nothing except
+   * that five is less than twelve.
+   *
+   * This restricts the budget to the same months that are closed, so the two
+   * sides cover the same period and the difference means something: are we
+   * ahead or behind plan as at the last closed month.
+   */
+  const toDateLine = (pick) => {
+    const actual = sum(actualRows, pick);
+    const budget = budgetSeries ? sum(actualRows, (r) => (r.budget ? pick(r.budget) : 0)) : null;
+    return { actual, budget, variance: budget === null ? null : actual - budget };
+  };
+  const toDate = {
+    months: actualRows.length,
+    throughMonth: actualRows.length ? actualRows[actualRows.length - 1].key : null,
+    revenue: toDateLine((r) => r.revenue),
+    directCosts: toDateLine((r) => r.directCosts),
+    overheads: toDateLine((r) => r.overheads),
+    surplus: toDateLine((r) => r.surplus),
+  };
+  // Costs favourable when UNDER, same convention as the full-year variance, so
+  // positive is good news on every line in both places.
+  if (toDate.directCosts.variance !== null) toDate.directCosts.variance *= -1;
+  if (toDate.overheads.variance !== null) toDate.overheads.variance *= -1;
+
+  /* IS A YEAR-TO-DATE COMPARISON EVEN FAIR?
+   *
+   * Only if the budget is phased the way the business actually trades. Xero
+   * budgets are very often entered as one annual figure divided by twelve, and
+   * against a business that books a whole season in a single month that shape
+   * is not merely imprecise — it is wrong in a way that swings wildly by month.
+   * In August, when Fall recognises, a flat budget makes the year look
+   * spectacular; in April it makes it look dire. Neither is a finding.
+   *
+   * A genuinely seasonal budget has its revenue concentrated. If no single
+   * month holds more than a quarter of it, the budget is close to flat and the
+   * comparison is called out rather than presented as a result.
+   */
+  const budgetRevenueTotal = budgetSeries
+    ? months.reduce((s, r) => s + (r.budget?.revenue ?? 0), 0) : 0;
+  const budgetPeakShare = budgetRevenueTotal > 0
+    ? Math.max(...months.map((r) => (r.budget?.revenue ?? 0) / budgetRevenueTotal))
+    : null;
+  const budgetLooksFlat = budgetPeakShare !== null && budgetPeakShare < 0.25;
 
   const variance = budgetSeries
     ? {
@@ -315,6 +449,10 @@ export function surplusView({
   if (stale.length) {
     warnings.push(`${stale.map((m) => m.key).join(", ")} ${stale.length === 1 ? "is" : "are"} closed off but ${stale.length === 1 ? "has" : "have"} no P&L stored, so ${stale.length === 1 ? "it is" : "they are"} projected rather than read. Overheads → Diagnostics → Refresh Xero data now.`);
   }
+  if (budgetLooksFlat && actualRows.length && actualRows.length < 12) {
+    warnings.push(`The budget's revenue is spread fairly evenly across the year — no month holds more than ${Math.round(budgetPeakShare * 100)}% of it — while the business books a whole season in a single month. So the year-to-date comparison swings hard with which seasons have recognised so far and is not a reliable read on whether you are ahead or behind. The full-year figures are unaffected.`);
+  }
+
   /* A MISPLACED SEASON COMES FIRST, above everything else here.
    *
    * Every other warning on this panel is worth tens of thousands. These two are
@@ -322,18 +460,37 @@ export function surplusView({
    * was set to recognise in September for a season departing 1 September: the
    * revenue left the fiscal year entirely and deferred revenue went negative by
    * the same amount. Nobody spotted it from the totals. */
-  for (const m of missingSeasons) {
-    warnings.push(`${m.key}: the model expects ${Math.round(m.revenuePlanned).toLocaleString("en-NZ")} of revenue to be recognised this month and the books show ${Math.round(m.revenue).toLocaleString("en-NZ")}. The month is closed, so the model's figure is discarded and that season is MISSING from the year. Either Xero recognised it in a different month, or the recognition month on the Overheads tab is wrong for that season.`);
+  for (const x of settledShort) {
+    if (x.short <= Math.max(20_000, x.expected * 0.05)) continue;
+    const whole = x.short > x.expected * 0.8;
+    warnings.push(`${x.key}: a season was due to be fully recognised by this month — the model expects ${Math.round(x.expected).toLocaleString("en-NZ")} — and the books came in ${Math.round(x.short).toLocaleString("en-NZ")} short${whole ? ", which is essentially the whole season" : ""}. The month is closed, so nothing more is coming: this is pax or price, or a departure date that does not match what Xero recognised.`);
   }
-  for (const m of surpriseSeasons) {
-    warnings.push(`${m.key}: the books recognised ${Math.round(m.revenue).toLocaleString("en-NZ")} this month and the model expected ${Math.round(m.revenuePlanned).toLocaleString("en-NZ")}. If the model also projects that season into a later month, it is counted TWICE${projectedSeasonTotal > SEASON_SIZED ? ` — there is ${Math.round(projectedSeasonTotal).toLocaleString("en-NZ")} of projected revenue still to come, which is worth checking against the programs` : ""}. Check the season's recognition month against its departure date.`);
+  if (unexplainedEarly > SEASON_SIZED) {
+    warnings.push(`The closed months booked ${Math.round(unexplainedEarly).toLocaleString("en-NZ")} of revenue that no season in this year can account for — every deadline is already fully covered. Either a season from outside the year recognised here, or a program is missing from the model.`);
+  }
+
+  if (earlyRecognitionTotal > 20_000) {
+    const still = deadlines.filter(
+      (r) => r.source === "projected" && (r.revenueAlreadyRecognised ?? 0) > 0);
+    warnings.push(`${Math.round(earlyRecognitionTotal).toLocaleString("en-NZ")} of a season still in flight has already been recognised in the closed months. Income arrives up to and including the departure month, so only the remainder is left at ${still.map((r) => r.key).join(", ") || "its deadline"} — without this the year would count that season close to twice.`);
   }
 
   /* Revenue against the books, when the months line up.
    *
-   * With the seasons in the right months this is the real question: are pax and
-   * prices holding? Five per cent of a season is a couple of students. */
-  if (!missingSeasons.length && !surpriseSeasons.length
+   * GATED ON THE DEADLINE HAVING PASSED, and that gate is the point.
+   *
+   * A season mid-flight is indistinguishable from a pax shortfall: both look
+   * like the books coming in under the model. I read August exactly that way
+   * and told Jake the model was carrying 25% too many students, when what had
+   * actually happened was that Fall had not finished recognising. The check was
+   * right that the numbers disagreed and wrong about every conclusion drawn
+   * from it.
+   *
+   * So it stays quiet while any season is still landing, and speaks only once
+   * every deadline in the closed range has passed — at which point a gap IS a
+   * pax or price problem and nothing else. */
+  const seasonStillLanding = earlyRecognitionTotal > 0;
+  if (!missingSeasons.length && !surpriseSeasons.length && !seasonStillLanding
       && plannedRevenueInClosed > 0
       && Math.abs(revenueGap) > Math.max(20_000, plannedRevenueInClosed * 0.05)) {
     const over = revenueGap > 0;
@@ -411,10 +568,27 @@ export function surplusView({
       missingSeasonMonths: missingSeasons.map((m) => m.key),
       surpriseSeasonMonths: surpriseSeasons.map((m) => m.key),
       projectedRevenueRemaining: Math.round(projectedSeasonTotal),
-      basis: "A season recognises whole, in one month, so this is a pax and price check — not a timing one. Nothing here is rescaled.",
+      // A season part-recognised in the closed months, netted off its own
+      // deadline so the year does not count it twice.
+      earlyRecognition: Math.round(earlyRecognitionTotal),
+      unexplainedEarly: Math.round(unexplainedEarly),
+      settledShortfall: Math.round(settledShortfall),
+      settledShort: settledShort.map((x) => ({
+        month: x.key, expected: Math.round(x.expected), short: Math.round(x.short),
+      })),
+      seasonStillLanding,
+      basis: "Income for a season arrives up to and including its departure month. Whatever the closed months booked is netted off that season's deadline, chronologically. The pax-and-price check stays silent while a season is still landing, because mid-flight and short look identical.",
     },
     lastActualMonth: actualRows.length ? actualRows[actualRows.length - 1].key : null,
     lines: { revenue, directCosts, overheads, surplus },
+    // Where the business is as at the last closed month, against the budget for
+    // those same months. Same period both sides — which the full-year Budget
+    // column is not.
+    toDate: {
+      ...toDate,
+      budgetLooksFlat,
+      budgetPeakSharePct: budgetPeakShare === null ? null : Math.round(budgetPeakShare * 1000) / 10,
+    },
     variance,
     basis: {
       overheadBasis,

@@ -63,8 +63,14 @@ const budgetSeries = {
   // April must carry the P&L's revenue, NOT the model's (which is zero for
   // April). And the model's April must not also be added.
   near(r.lines.revenue.actual, 30_000, 0.01, "actual revenue is April + May from the books");
-  near(r.lines.revenue.projected, 1_000_000, 0.01, "projected revenue is the model's August");
-  near(r.lines.revenue.extrapolated, 1_030_000, 0.01, "and the two are added exactly once");
+  // 30,000 was booked in April and May, months the model expected nothing in.
+  // That can only be a season recognising early on its way to a later deadline,
+  // so it is netted off that deadline rather than added to it: 1,000,000 less
+  // 30,000 already in the books.
+  near(r.lines.revenue.projected, 970_000, 0.01, "the deadline carries only what is still outstanding");
+  near(r.lines.revenue.extrapolated, 1_000_000, 0.01,
+    "so the year holds at the season's own total — NOT 1,030,000, which would count the early part twice");
+  near(r.revenueCheck.earlyRecognition, 30_000, 0.01, "and the netting is reported, not silent");
 
   // THE DOUBLE COUNT. If April were taken from both sides, revenue would come
   // out at 1,030,000 + April's model figure. It is zero for April here, so the
@@ -428,8 +434,11 @@ const budgetSeries = {
 
   assert.deepEqual(r.revenueCheck.missingSeasonMonths, [KEYS[4]]);
   near(r.lines.revenue.extrapolated, 0, 0.01, "the season really is gone from the year");
-  assert.ok(r.warnings.some((w) => w.includes("MISSING from the year")),
-    `a vanished season must be stated in those terms — got: ${r.warnings.join(" | ")}`);
+  assert.equal(r.revenueCheck.settledShortfall, 1_000_000,
+    "the deadline passed unsatisfied, so the whole season is a settled shortfall");
+  assert.ok(r.warnings.some((w) => w.includes("nothing more is coming")
+                                && w.includes("essentially the whole season")),
+    `a deadline that passed empty must say so — got: ${r.warnings.join(" | ")}`);
 
   // The opposite shape: the books recognise a season the model did not expect
   // in that month. If the model also projects one later, it is in twice.
@@ -444,11 +453,26 @@ const budgetSeries = {
     opexByMonth: surprise, forecastMonths: later, budgetSeries,
     overheadsForward: Array(12).fill(62_000),
   });
-  assert.deepEqual(r2.revenueCheck.surpriseSeasonMonths, [KEYS[2]]);
-  assert.ok(r2.warnings.some((w) => w.includes("counted TWICE")),
-    `the doubling case must say so — got: ${r2.warnings.join(" | ")}`);
-  near(r2.lines.revenue.extrapolated, 1_800_000, 0.01,
-    "and the total really is doubled — which is why it has to be caught here");
+  // Nothing is double counted any more, and nothing is unexplained either: the
+  // 900,000 booked in June is consumed against the January deadline, which is
+  // exactly what it is — a season recognising early.
+  assert.deepEqual(r2.revenueCheck.surpriseSeasonMonths, [],
+    "revenue a later deadline can absorb is the normal case, not a surprise");
+  assert.equal(r2.revenueCheck.unexplainedEarly, 0);
+  assert.ok(r2.warnings.some((w) => w.includes("still in flight")),
+    `it is reported as a season landing early — got: ${r2.warnings.join(" | ")}`);
+
+  // THIS ASSERTION USED TO DEMAND 1,800,000 — the doubled total — on the
+  // grounds that the detector existed because the arithmetic really did double.
+  // It no longer does: the netting consumes the 900,000 booked in June against
+  // the deadline in January, so the year holds at the season's own value. The
+  // detector stays because the SHAPE is still worth flagging — a season landing
+  // in a month the model did not expect usually means a wrong departure date —
+  // but it is now a warning about the inputs rather than a guard against the
+  // total being wrong.
+  near(r2.lines.revenue.extrapolated, 900_000, 0.01,
+    "the season is counted once, not twice — the netting removes the double count");
+  near(r2.revenueCheck.earlyRecognition, 900_000, 0.01, "all of it recognised early");
   console.log("✓ a season on the wrong side of the seam is caught in both directions");
 }
 
@@ -491,6 +515,162 @@ const budgetSeries = {
   near(r.lines.overheads.extrapolated, 1_434_000, 0.01,
     "so an overhead overrun flows straight through to the year, as it should");
   console.log("✓ overheads pass through untouched — an overrun is not cancelled out");
+}
+
+/* ---- surplus as at the last closed month ---- */
+{
+  // Five months closed. The budget is seasonal, matching how the business
+  // actually trades: Fall recognises in August, which is inside the closed
+  // range, so a year-to-date comparison is meaningful here.
+  const o = {};
+  for (const k of KEYS.slice(0, 5)) o[k] = { revenue: 0, programCost: 50_000, total: 60_000 };
+  o[KEYS[4]] = { revenue: 1_000_000, programCost: 50_000, total: 60_000 };
+
+  const r = surplusView({
+    fiscalYearStartYear: 2026, actualsThroughMonth: KEYS[4],
+    opexByMonth: o, forecastMonths, budgetSeries,
+    overheadsForward: Array(12).fill(62_000),
+  });
+
+  assert.equal(r.toDate.months, 5);
+  assert.equal(r.toDate.throughMonth, KEYS[4]);
+
+  // THE POINT OF THIS BLOCK: the budget side must cover the SAME five months,
+  // not the whole year. The full-year budget revenue is 1,200,000 and so is the
+  // five-month figure here only because the fixture puts it all in August —
+  // costs are where a whole-year budget would show up as obviously wrong.
+  assert.equal(r.toDate.revenue.budget, 1_200_000, "August is the only budgeted revenue month");
+  assert.equal(r.toDate.directCosts.budget, 275_000, "five months at 55,000 — NOT the year's 660,000");
+  assert.equal(r.toDate.overheads.budget, 310_000, "five months at 62,000");
+
+  assert.equal(r.toDate.revenue.actual, 1_000_000);
+  assert.equal(r.toDate.directCosts.actual, 250_000);
+  assert.equal(r.toDate.surplus.actual, 1_000_000 - 250_000 - 300_000);
+  assert.equal(r.toDate.surplus.budget, 1_200_000 - 275_000 - 310_000);
+
+  // Favourable is positive on every line here too, or the two variance blocks
+  // on the same screen would use opposite conventions.
+  assert.equal(r.toDate.revenue.variance, -200_000, "revenue behind plan is negative");
+  assert.equal(r.toDate.directCosts.variance, 25_000, "costs under budget is positive");
+  assert.ok(r.toDate.overheads.variance > 0, "overheads under budget is positive");
+  assert.equal(
+    r.toDate.surplus.variance,
+    r.toDate.revenue.variance + r.toDate.directCosts.variance + r.toDate.overheads.variance,
+    "and the parts reconcile, which is what catches a flipped sign");
+  console.log("✓ to-date figures are measured against the same months' budget");
+}
+
+/* ---- a flat budget makes the to-date comparison meaningless ---- */
+{
+  // Xero budgets are very often one annual figure divided by twelve. Against a
+  // business that books a season in a single month, that shape makes the
+  // year-to-date read swing wildly — spectacular the month Fall recognises,
+  // dire the month before. It has to be called out, not presented as a result.
+  const flat = {
+    revenue: Array(12).fill(100_000),
+    directCosts: Array(12).fill(55_000),
+    overheads: Array(12).fill(62_000),
+    monthsCovered: [0,1,2,3,4,5,6,7,8,9,10,11],
+  };
+  const o = {};
+  for (const k of KEYS.slice(0, 5)) o[k] = { revenue: 0, programCost: 50_000, total: 60_000 };
+  o[KEYS[4]] = { revenue: 1_000_000, programCost: 50_000, total: 60_000 };
+
+  const r = surplusView({
+    fiscalYearStartYear: 2026, actualsThroughMonth: KEYS[4],
+    opexByMonth: o, forecastMonths, budgetSeries: flat,
+    overheadsForward: Array(12).fill(62_000),
+  });
+  assert.equal(r.toDate.budgetLooksFlat, true);
+  assert.ok(r.warnings.some((w) => w.includes("spread fairly evenly")),
+    `a flat budget must be named — got: ${r.warnings.join(" | ")}`);
+
+  // And a genuinely seasonal budget must NOT trip it.
+  const seasonal = surplusView({
+    fiscalYearStartYear: 2026, actualsThroughMonth: KEYS[4],
+    opexByMonth: o, forecastMonths, budgetSeries,
+    overheadsForward: Array(12).fill(62_000),
+  });
+  assert.equal(seasonal.toDate.budgetLooksFlat, false, "a season-shaped budget is fine");
+  console.log("✓ a flat budget is called out before anyone reads a YTD variance from it");
+}
+
+/* ---- no closed months, and a finished year ---- */
+{
+  const fresh = surplusView({
+    fiscalYearStartYear: 2026, actualsThroughMonth: null,
+    opexByMonth: {}, forecastMonths, budgetSeries,
+    overheadsForward: Array(12).fill(62_000),
+  });
+  assert.equal(fresh.toDate.months, 0);
+  assert.equal(fresh.toDate.throughMonth, null);
+  assert.equal(fresh.toDate.surplus.actual, 0, "zero, not NaN");
+  assert.ok(!fresh.warnings.some((w) => w.includes("spread fairly evenly")),
+    "no closed months means no YTD comparison to warn about");
+  console.log("✓ to-date degrades cleanly with nothing closed");
+}
+
+/* ---- Fall 2026: the case that forced the rule change ---- */
+{
+  // The real shape. Fall departs 10 September, so its deadline is September.
+  // The books recognised 1,085,804 in August — closed, therefore fact. The
+  // remainder lands in September, which is still open.
+  //
+  // Under the old rule the model put the whole season in August; August closed;
+  // the model's figure was discarded; September was projected at zero. The tail
+  // existed in NEITHER column and the year was short by it.
+  const SEASON = 1_357_051;   // model: pax x price
+  const BOOKED_AUG = 1_085_804;
+  const fall = KEYS.map((key, i) => ({
+    key,
+    recognisedRevenue: i === 5 ? SEASON : 0,   // deadline = September, slot 5
+    programCostsOut: 50_000,
+    overheads: 60_000,
+  }));
+  const o = {};
+  for (const k of KEYS.slice(0, 5)) o[k] = { revenue: 0, programCost: 50_000, total: 60_000 };
+  o[KEYS[4]] = { revenue: BOOKED_AUG, programCost: 50_000, total: 60_000 };
+
+  const r = surplusView({
+    fiscalYearStartYear: 2026, actualsThroughMonth: KEYS[4],
+    opexByMonth: o, forecastMonths: fall,
+    overheadsForward: Array(12).fill(62_000),
+  });
+
+  near(r.revenueCheck.earlyRecognition, BOOKED_AUG, 1,
+    "August's booking is recognised early against September's deadline");
+  const sep = r.months.find((m) => m.key === KEYS[5]);
+  near(sep.revenue, SEASON - BOOKED_AUG, 1, "September carries only what is outstanding");
+  near(r.lines.revenue.extrapolated, SEASON, 1,
+    "and the year holds at the season's own value — counted once");
+
+  // THE GATE. A season mid-flight looks exactly like a pax shortfall: the books
+  // are 271,247 under the model. I read precisely this as "the model is
+  // carrying 25% too many students" and told Jake so. It must stay silent until
+  // the deadline has passed.
+  assert.equal(r.revenueCheck.seasonStillLanding, true);
+  assert.ok(!r.warnings.some((w) => w.includes("pax or prices have moved")
+                                 || w.includes("booked") && w.includes("less revenue")),
+    `no shortfall may be claimed while a season is landing — got: ${r.warnings.join(" | ")}`);
+  assert.ok(r.warnings.some((w) => w.includes("still in flight")),
+    "it says what is actually happening instead");
+
+  // Once September closes and the season really did come in short, the same
+  // check must speak. Here the books complete at 1,150,000 against a model of
+  // 1,357,051 — a genuine 207,051 shortfall, and now it IS a pax or price
+  // problem because there is nothing left to land.
+  const closed = { ...o };
+  closed[KEYS[5]] = { revenue: 1_150_000 - BOOKED_AUG, programCost: 50_000, total: 60_000 };
+  const after = surplusView({
+    fiscalYearStartYear: 2026, actualsThroughMonth: KEYS[5],
+    opexByMonth: closed, forecastMonths: fall,
+    overheadsForward: Array(12).fill(62_000),
+  });
+  near(after.lines.revenue.extrapolated, 1_150_000, 1, "the year is what the books say");
+  assert.equal(after.revenueCheck.seasonStillLanding, false, "nothing left in flight");
+  assert.ok(after.warnings.some((w) => w.includes("less revenue than the model expected")),
+    `once the deadline passes the shortfall must be named — got: ${after.warnings.join(" | ")}`);
+  console.log("✓ a season straddling the month end is netted, not judged");
 }
 
 console.log("\nAll surplus tests passed.");

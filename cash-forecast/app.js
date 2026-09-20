@@ -569,13 +569,21 @@ function surplusPanel() {
   const L = d.lines ?? {};
   const v = d.variance;
 
+  const td = d.toDate;
+
   const row = (label, key, cls = "") => {
     const l = L[key] ?? {};
     const vr = v ? v[key] : null;
+    // Year-to-date budget and variance, for the closed months only. Without
+    // these the Actual column has nothing to be judged against — twelve months
+    // of plan beside five months of trading is not a comparison.
+    const t = td?.[key] ?? {};
     return `<tr class="${cls}">
       <th class="lab">${label}</th>
-      <td>${m0(l.budget)}</td>
+      <td>${m0(t.budget)}</td>
       <td>${m0(l.actual)}</td>
+      <td class="${t.variance > 0.5 ? "pos" : t.variance < -0.5 ? "neg" : ""}">${signed(t.variance)}</td>
+      <td class="fyend">${m0(l.budget)}</td>
       <td>${m0(l.projected)}</td>
       <td><b>${m0(l.extrapolated)}</b></td>
       <td class="${vr > 0.5 ? "pos" : vr < -0.5 ? "neg" : ""}">${signed(vr)}</td>
@@ -594,9 +602,14 @@ function surplusPanel() {
 
     <div class="tiles" style="margin:12px 0">
       <div class="tile"><span class="k">Budgeted</span><span class="v">${m0(s.budget)}</span><span class="sub">agreed in April</span></div>
-      <div class="tile"><span class="k">Actual to date</span><span class="v ${s.actual < 0 ? "neg" : ""}">${m0(s.actual)}</span><span class="sub">${d.lastActualMonth ? `to ${escapeHtml(d.lastActualMonth)}`
+      <div class="tile"><span class="k">Surplus to date</span><span class="v ${s.actual < 0 ? "neg" : ""}">${m0(s.actual)}</span><span class="sub">${d.lastActualMonth ? `to ${escapeHtml(d.lastActualMonth)}`
         : d.closedRangeMonths ? `${d.closedRangeMonths} closed, P&amp;L not read`
         : "nothing closed yet"}</span></div>
+      ${td?.surplus?.variance != null ? `<div class="tile ${td.surplus.variance < 0 ? "alert" : ""}">
+        <span class="k">vs budget to date</span>
+        <span class="v ${td.surplus.variance > 0.5 ? "pos" : td.surplus.variance < -0.5 ? "neg" : ""}">${signed(td.surplus.variance)}</span>
+        <span class="sub">against ${m0(td.surplus.budget)} planned</span>
+      </div>` : ""}
       <div class="tile ${v && v.surplus < 0 ? "alert" : ""}">
         <span class="k">Extrapolated FYE</span>
         <span class="v ${s.extrapolated < 0 ? "neg" : ""}">${m0(s.extrapolated)}</span>
@@ -611,10 +624,18 @@ function surplusPanel() {
 
     <div class="scroll">
       <table class="cftable tight">
-        <thead><tr>
-          <th class="lab"></th><th>Budget</th><th>Actual to date</th>
-          <th>Projected</th><th>Extrapolated FYE</th><th>Variance</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th class="lab"></th>
+            <th colspan="3">As at ${escapeHtml(td?.throughMonth ?? "—")} · ${td?.months ?? 0} month${td?.months === 1 ? "" : "s"}</th>
+            <th colspan="4" class="fystart">Full year to 31 March</th>
+          </tr>
+          <tr>
+            <th class="lab"></th>
+            <th>Budget to date</th><th>Actual to date</th><th>Variance</th>
+            <th class="fyend">Budget</th><th>Projected</th><th>Extrapolated FYE</th><th>Variance</th>
+          </tr>
+        </thead>
         <tbody>
           ${row("Revenue", "revenue")}
           ${row("Cost of sales", "directCosts")}
@@ -623,6 +644,23 @@ function surplusPanel() {
         </tbody>
       </table>
     </div>
+
+    ${(() => {
+      /* THE CAVEAT THAT HAS TO SIT WITH THE TO-DATE NUMBER.
+       *
+       * A season's revenue recognises whole, in one month, while its costs are
+       * incurred over the months around it. So right after a recognition month
+       * the year-to-date surplus is flattered by a season's revenue against a
+       * fraction of its cost — and right before one it looks dire. Neither is a
+       * result, and the figure invites being read as one. */
+      if (!td?.months || td.months >= 12) return "";
+      const gm = td.revenue.actual > 0
+        ? Math.round((1 - td.directCosts.actual / td.revenue.actual) * 100) : null;
+      return `<p class="foot"><b>Read the to-date surplus carefully.</b>
+        A season's revenue lands in one month; its costs are spread over the months around it. So the figure runs high just after a recognition month and low just before one${
+          gm != null ? `, and the ${gm}% gross margin it implies over these ${td.months} months is a timing artefact rather than the margin the programs actually make` : ""}.
+        The full-year columns are where the two line up.</p>`;
+    })()}
 
     <p class="foot"><b>Variance is stated so that positive is good news on every line.</b> Revenue ahead of budget is positive; costs under budget are also positive. The three add up to the surplus variance, which is what catches a flipped sign.</p>
     ${(() => {
@@ -1257,24 +1295,34 @@ function overheadSourcePanel(ro) {
  * A value this consequential should not be reachable only by re-seeding.
  */
 function recognitionControl(ro) {
-  const a = state.assumptions;
-  const rm = a.recognitionMonths || {};
+  /* THE CONTROL IS GONE, AND THE EXPLANATION REPLACED IT.
+   *
+   * This used to be three dropdowns — one recognition month per season — and
+   * they were the wrong shape for what the books do. Income for a season
+   * arrives over the months up to AND INCLUDING its departure month, so there
+   * is no single month to pick: the deadline is the departure date, which is
+   * already on the Programs tab.
+   *
+   * Leaving the dropdowns would mean keeping a setting that changes nothing,
+   * which is worse than removing it. What is left says where the behaviour now
+   * comes from, because someone who remembers the control will come looking.
+   */
+  const programs = (state.assumptions.programs ?? []).filter((p) => p.active);
+  const bySeason = {};
+  for (const p of programs) {
+    const m = Number(String(p.startDate ?? "").slice(5, 7));
+    if (!m) continue;
+    (bySeason[p.season] ??= new Set()).add(m);
+  }
   const labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const after = (m) => labels[m % 12];
 
   return `<section class="closebox">
-    <h2>Revenue recognition</h2>
-    <p class="foot">The month each season's revenue moves from deferred to sales — the month before the season starts. This does not move any cash; it moves when the revenue is earned.</p>
-    <div class="recog">
-      ${["Fall", "Spring", "Summer"].map((season) => `
-        <label class="field"><span>${season}</span>
-          <select data-recog="${season}" ${ro ? "disabled" : ""}>
-            ${labels.map((l, i) => `<option value="${i + 1}" ${Number(rm[season]) === i + 1 ? "selected" : ""}>${l}</option>`).join("")}
-          </select>
-          <small class="foot">season starts ${after(Number(rm[season]) || 1)}</small>
-        </label>`).join("")}
-    </div>
-    <p class="foot">Check these against the Sales Income line on your P&amp;L: the month a season recognises should carry that season's revenue. A season set to the month it actually departs recognises a year early and disappears from the year entirely.</p>
+    <h2>Revenue recognition <span class="stamp">from departure dates</span></h2>
+    <p class="foot">A season's income is recognised over the months <b>up to and including the month it departs</b>. The model holds that deadline and lets the books hold the run-up: whatever has been recognised by the last closed month is fact, and only the remainder is left to land at the deadline.</p>
+    <p class="foot">There is nothing to set here. The deadline is each program's own departure date on the Programs tab, so two programs in the same season departing in different months no longer share a recognition month — which is what the old per-season setting forced them to do.</p>
+    ${Object.keys(bySeason).length ? `<p class="foot">${Object.entries(bySeason).map(([season, set]) =>
+      `<span class="stamp">${escapeHtml(season)} recognises by ${[...set].sort((a, b) => a - b).map((m) => labels[m - 1]).join(", ")}</span>`).join(" ")}</p>` : ""}
+    <p class="foot">Worth checking against the Income line on your P&amp;L: a season's revenue should be complete by the end of its departure month. If a departure date is wrong, the revenue lands in the wrong month — or outside the year — and the Surplus tab will say so once that month closes.</p>
   </section>`;
 }
 
@@ -1528,14 +1576,11 @@ function wire() {
       touch();
     }));
 
-  document.querySelectorAll("[data-recog]").forEach((input) =>
-    input.addEventListener("change", (e) => {
-      state.assumptions.recognitionMonths = {
-        ...state.assumptions.recognitionMonths,
-        [e.target.dataset.recog]: Number(e.target.value),
-      };
-      touch();
-    }));
+  // The per-season recognition dropdowns are gone — the deadline comes from
+  // each program's departure date now — so there is nothing left to wire. The
+  // stored `recognitionMonths` is left alone rather than deleted: it costs
+  // nothing, and stripping a field out of everyone's saved model to tidy up is
+  // how a rollback stops working.
 
   document.querySelectorAll("[data-diag]").forEach((b) =>
     b.addEventListener("click", async () => {

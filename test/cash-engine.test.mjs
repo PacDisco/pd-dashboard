@@ -13,26 +13,45 @@ assert.equal(dateToFiscalSlot(2026, 2026, 3), null, "Mar 2026 is the prior fisca
 assert.equal(dateToFiscalSlot(2026, 2027, 4), null, "Apr 2027 is the next fiscal year");
 console.log("✓ fiscal calendar");
 /* ---------- recognition timing ---------- */
-const rec = { Fall: 9, Spring: 1, Summer: 6 };
+//
+// THE RULE CHANGED, AND THESE ASSERTIONS CHANGED WITH IT.
+//
+// The model used to hold one recognition month per season — Fall = September —
+// and land a whole season there. Pacific Discovery's books do something else:
+// income for a season arrives over the months up to AND INCLUDING the departure
+// month. Summer departs 2 July and booked 140,439 in June with 568 in July;
+// Fall departs 10 September and booked 1,085,804 in August with the remainder
+// landing in September.
+//
+// So the engine now holds the DEADLINE — the departure month — and leaves the
+// run-up to the books. The old assertions below said "the month before", which
+// is where the bulk lands but not where the season completes, and that one
+// month of difference is what put Fall's tail in neither column.
 const prog = (over) => ({
     id: "p", name: "TEST", season: "Fall", startDate: "2026-10-05", endDate: "2026-12-10",
     price: 15500, currency: "NZD", costCurrency: "NZD",
     fixedCost: 100000, variableCostPerPax: 5000,
     paxForecast: 10, active: true, ...over,
 });
-assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-10-05" }), rec), { year: 2026, month: 9 }, "Fall departing Oct 26 recognises Sept 26");
-assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-12-01" }), rec), { year: 2026, month: 9 }, "later Fall departure still recognises Sept 26");
-assert.deepEqual(recognitionMonthFor(prog({ season: "Spring", startDate: "2027-02-10" }), rec), { year: 2027, month: 1 }, "Spring departing Feb 27 recognises Jan 27");
-assert.deepEqual(recognitionMonthFor(prog({ season: "Summer", startDate: "2026-07-01" }), rec), { year: 2026, month: 6 }, "Summer departing Jul 26 recognises Jun 26");
-// Edge: a program departing IN its own recognition month recognises THAT month.
-//
-// This assertion previously demanded the opposite — a look-back of twelve months
-// — on the reasoning that recognition is "the month before the season starts".
-// That reasoning is wrong at the boundary, and the test defended the bug: a Fall
-// cohort departing in September had its revenue recognised in September of the
-// PREVIOUS year, which put it outside the fiscal year altogether and dragged
-// deferred revenue negative by the whole cohort's value to compensate.
-assert.deepEqual(recognitionMonthFor(prog({ season: "Fall", startDate: "2026-09-15" }), rec), { year: 2026, month: 9 }, "departure in the recognition month recognises that month");
+assert.deepEqual(recognitionMonthFor(prog({ startDate: "2026-10-05" })), { year: 2026, month: 10 }, "a program departing Oct 26 is fully recognised by Oct 26");
+assert.deepEqual(recognitionMonthFor(prog({ startDate: "2026-12-01" })), { year: 2026, month: 12 }, "and a later departure by ITS own month, not a shared season month");
+assert.deepEqual(recognitionMonthFor(prog({ season: "Spring", startDate: "2027-02-10" })), { year: 2027, month: 2 }, "Spring departing Feb 27 completes in Feb 27");
+assert.deepEqual(recognitionMonthFor(prog({ season: "Summer", startDate: "2026-07-01" })), { year: 2026, month: 7 }, "Summer departing Jul 26 completes in Jul 26");
+
+// Two programs in the same season departing in different months no longer share
+// a recognition month. That was the point of the season constant and it was the
+// thing making it wrong — a December departure does not finish recognising in
+// September.
+assert.notDeepEqual(
+    recognitionMonthFor(prog({ startDate: "2026-10-05" })),
+    recognitionMonthFor(prog({ startDate: "2026-12-01" })),
+    "same season, different departures, different deadlines");
+
+// The old edge case is now impossible by construction rather than by a
+// look-back guard: a program can never recognise in a year other than the one
+// it departs in, so the twelve-month error that took a whole cohort out of the
+// fiscal year cannot recur.
+assert.deepEqual(recognitionMonthFor(prog({ startDate: "2026-09-15" })), { year: 2026, month: 9 }, "departure month is the deadline, always");
 console.log("✓ recognition timing");
 /* ---------- cash: deposits and balances ---------- */
 function base() {
@@ -51,12 +70,8 @@ function base() {
 }
 {
     const a = base();
-    // Set recognition explicitly rather than inheriting the default. The default
-    // is Pacific Discovery's — Fall recognises in August, because their Fall
-    // departs 1 September. This fixture departs in October, so September is its
-    // month before. Pinning it here keeps the test about the MECHANICS of
-    // recognition rather than about one organisation's calendar.
-    a.recognitionMonths = { Fall: 9, Spring: 1, Summer: 6 };
+    // No recognitionMonths any more: the deadline comes from each program's own
+    // departure date. This fixture departs 1 October, so October is its month.
     a.programs = [prog({
             id: "nza", name: "NZA", season: "Fall",
             startDate: "2026-10-01", endDate: "2026-12-01",
@@ -72,15 +87,19 @@ function base() {
     near(f.totals.cashIn, 20 * 15500, 0.01, "cash in = pax × price");
     // Cost: 142,113 + 20 × 3,557 = 213,253, all in October.
     near(by("2026-10").programCostsOut, 213_253, 0.01, "program cost in the departure month");
-    // Recognition: all of it in September, none of it spread.
-    near(by("2026-09").recognisedRevenue, 310_000, 0.01, "recognised in Sept");
+    // Recognition: the engine places the whole season at its DEADLINE, the
+    // departure month. It does not model the run-up — the books hold that, and
+    // the surplus view nets what has already been recognised off this figure.
+    near(by("2026-10").recognisedRevenue, 310_000, 0.01, "recognised by the departure month");
+    near(by("2026-09").recognisedRevenue, 0, 0.01, "and not a month early");
     near(f.totals.recognisedRevenue, 310_000, 0.01);
     assert.equal(f.months.filter((m) => m.recognisedRevenue > 0).length, 1, "recognition is a single event, not a spread");
     console.log("✓ deposit / balance / cost / recognition placement");
     // Deferred revenue: rises as cash arrives, drops to zero on recognition.
     near(by("2026-04").deferredRevenueBalance, 20_000, 0.01, "deferred after deposits");
     near(by("2026-08").deferredRevenueBalance, 310_000, 0.01, "deferred peaks pre-recognition");
-    near(by("2026-09").deferredRevenueBalance, 0, 0.01, "deferred clears on recognition");
+    near(by("2026-09").deferredRevenueBalance, 310_000, 0.01, "still deferred the month before departure");
+    near(by("2026-10").deferredRevenueBalance, 0, 0.01, "deferred clears at the deadline");
     near(by("2027-03").deferredRevenueBalance, 0, 0.01, "stays clear");
     console.log("✓ deferred revenue behaviour");
     // Roll-forward integrity: closing must chain, with no gaps.
@@ -470,30 +489,36 @@ console.log("\nAll treasury tests passed.");
   console.log("✓ an empty season does not create a phantom row");
 }
 
-/* ---------- a program departing in its own recognition month ---------- */
+/* ---------- the deadline is the departure month, whatever the season ---------- */
 
 {
-  // The bug this catches cost a full year of Fall revenue. Searching back from
-  // the month BEFORE departure means a Fall program departing 1 September skips
-  // September 2026 and matches September 2025 — the revenue leaves the fiscal
-  // year entirely, and deferred revenue goes negative by the same amount to
-  // balance. The table looks plausible; only the deferred row gives it away.
-  const oct = recognitionMonthFor({ season: "Fall", startDate: "2026-10-01" }, { Fall: 9 });
-  assert.deepEqual(oct, { year: 2026, month: 9 }, "the normal case is unchanged");
+  // WHAT THIS BLOCK USED TO DEFEND, AND WHY IT CHANGED.
+  //
+  // The original bug cost a full year of Fall revenue: searching back from the
+  // month BEFORE departure meant a Fall program departing 1 September skipped
+  // September 2026 and matched September 2025, so the revenue left the fiscal
+  // year and deferred went negative to balance. The fix then was an inclusive
+  // look-back.
+  //
+  // The rule has since been replaced outright. Income for a season arrives up
+  // to and including the departure month, so the deadline IS the departure
+  // month and there is nothing to search back for. The class of bug this block
+  // was written for is now unreachable by construction — a program cannot
+  // recognise in a month it does not depart in — so what is asserted here is
+  // that property, rather than the guard that used to approximate it.
+  for (const [start, expect] of [
+    ["2026-10-01", { year: 2026, month: 10 }],
+    ["2026-09-01", { year: 2026, month: 9 }],
+    ["2026-09-15", { year: 2026, month: 9 }],
+    ["2026-12-10", { year: 2026, month: 12 }],
+  ]) {
+    assert.deepEqual(recognitionMonthFor({ season: "Fall", startDate: start }), expect,
+      `${start} is recognised by its own departure month`);
+  }
+  console.log("✓ the deadline is the departure month, and the day is irrelevant");
 
-  const sep = recognitionMonthFor({ season: "Fall", startDate: "2026-09-01" }, { Fall: 9 });
-  assert.deepEqual(sep, { year: 2026, month: 9 },
-    "departing in the recognition month recognises that month, not a year earlier");
-
-  const midSep = recognitionMonthFor({ season: "Fall", startDate: "2026-09-15" }, { Fall: 9 });
-  assert.deepEqual(midSep, { year: 2026, month: 9 }, "the day of the month is irrelevant");
-
-  const dec = recognitionMonthFor({ season: "Fall", startDate: "2026-12-10" }, { Fall: 9 });
-  assert.deepEqual(dec, { year: 2026, month: 9 }, "a later departure still recognises in September");
-  console.log("✓ departing in the recognition month no longer jumps back a year");
-
-  // End to end: the revenue must actually land in the year, and deferred must
-  // not be dragged negative to compensate.
+  // End to end: the revenue must land in the year, and deferred must not be
+  // dragged negative to compensate.
   const a = base();
   a.programs = [prog({
     id: "sep-fall", name: "September Fall", season: "Fall",
@@ -503,16 +528,15 @@ console.log("\nAll treasury tests passed.");
   const f = buildForecast(a);
 
   assert.ok(f.totals.recognisedRevenue > 0, "Fall revenue is recognised inside the year");
-  // With Pacific Discovery's real constant (Fall = August) a 1 September
-  // departure recognises in August — the month before, which is what the rule
-  // has always meant. Slot 4 is August; slot 0 is April.
-  assert.equal(f.months[4].recognisedRevenue, f.totals.recognisedRevenue,
-    "and it lands in August, the month before departure");
-  assert.equal(f.months[5].recognisedRevenue, 0, "not September");
+  // Slot 5 is September — the departure month, and now the deadline. Slot 4 is
+  // August, where the old season constant put it.
+  assert.equal(f.months[5].recognisedRevenue, f.totals.recognisedRevenue,
+    "it lands in September, the month it departs");
+  assert.equal(f.months[4].recognisedRevenue, 0, "not August, a month early");
 
   // A positive opening is legitimate — deposits collected before 1 April for a
-  // September departure. A NEGATIVE one is the signature of the bug: revenue
-  // recognised in a prior year with none of its cash there to offset.
+  // September departure. A NEGATIVE one is the signature of the original bug:
+  // revenue recognised in a prior year with none of its cash there to offset.
   assert.ok(f.totals.deferredOpening >= 0,
     `deferred opening must not be negative, got ${f.totals.deferredOpening}`);
   assert.ok(f.months.every((m) => m.deferredRevenueBalance > -1),
