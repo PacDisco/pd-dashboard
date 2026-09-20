@@ -135,6 +135,20 @@
 
   /* Gross margin bands. A number alone does not show that 10% and 49% are
      different kinds of program; the tint does it without a legend. */
+  /* Two lines per column header: the label, and what it actually covers. */
+  .cftable thead th .colsub { display: block; margin-top: 3px; font-family: var(--sans, inherit);
+    font-size: 10px; font-weight: 400; letter-spacing: 0; text-transform: none;
+    color: #a6b0bd; white-space: normal; max-width: 12ch; margin-left: auto; }
+  .cftable thead th.lab .colsub { margin-left: 0; text-align: left; }
+  /* A working, not a result. Muted so the eye lands on the two bold columns. */
+  .cftable th.working, .cftable td.working { color: #98a2b3; background: var(--sunk); }
+  .cftable td.budgetcol { color: #6b7280; }
+  .cftable th.lab .rowsub { display: block; font-size: 10.5px; color: #a6b0bd; margin-top: 2px; }
+
+  /* The answer, stated before the table that derives it. */
+  .headline { margin: 14px 0 4px; font-size: 16px; line-height: 1.5; color: #2c2c2c; }
+  .headline b { font-variant-numeric: tabular-nums; }
+
   .gp-thin { color: #b02a37; }
   .gp-fair { color: #9a6b1f; }
   .gp-good { color: #2f7d32; }

@@ -651,8 +651,16 @@ function surplusPanel() {
   const v = d.variance;
 
   const td = d.toDate;
+  const f0 = d.fiscalYearStartYear;
+  const fyStartKey = `${f0}-04`;
+  const MONTHNAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const monthName = (key) => {
+    if (!key) return "—";
+    const m = Number(String(key).slice(5, 7));
+    return MONTHNAMES[m - 1] ? `${MONTHNAMES[m - 1]} ${String(key).slice(2, 4)}` : key;
+  };
 
-  const row = (label, key, cls = "") => {
+  const row = (label, key, cls = "", sub = "") => {
     const l = L[key] ?? {};
     const vr = v ? v[key] : null;
     // Year-to-date budget and variance, for the closed months only. Without
@@ -660,12 +668,18 @@ function surplusPanel() {
     // of plan beside five months of trading is not a comparison.
     const t = td?.[key] ?? {};
     return `<tr class="${cls}">
-      <th class="lab">${label}</th>
+      <th class="lab">${label}${sub ? `<span class="rowsub">${sub}</span>` : ""}</th>
       <td>${m0(t.budget)}</td>
       <td>${m0(l.actual)}</td>
       <td class="${t.variance > 0.5 ? "pos" : t.variance < -0.5 ? "neg" : ""}">${signed(t.variance)}</td>
-      <td class="fyend">${m0(l.budget)}</td>
-      <td>${m0(l.projected)}</td>
+      <td class="fyend budgetcol">${m0(l.budget)}</td>
+      ${/* A WORKING, NOT AN ANSWER, and styled to say so.
+           On its own this column reads as seven catastrophic months: Fall's
+           revenue recognised in August, which is closed, while three-quarters
+           of Fall's costs land September to November, which is here. The
+           surplus row of this column has no meaning by itself — only the two
+           bold columns either side of it are results. */""}
+      <td class="working">${m0(l.projected)}</td>
       <td><b>${m0(l.extrapolated)}</b></td>
       <td class="${vr > 0.5 ? "pos" : vr < -0.5 ? "neg" : ""}">${signed(vr)}</td>
     </tr>`;
@@ -679,25 +693,54 @@ function surplusPanel() {
       <span class="stamp">${d.actualMonths} actual · ${d.projectedMonths} projected${
         d.unsyncedClosedMonths ? ` · ${d.unsyncedClosedMonths} not read` : ""}</span></h2>
 
+    ${(() => {
+      /* THE ANSWER, IN WORDS, FIRST.
+       *
+       * Everything below this is working. The panel had the number but wrapped
+       * it in four paragraphs of caveats, and the question "so what was the
+       * budget and what are we getting" had to be asked three separate times.
+       * Caveats that bury the answer are not caution, they are just noise. */
+      if (s.budget === null || s.budget === undefined) return "";
+      const gap = v?.surplus;
+      const word = gap > 500 ? "ahead of" : gap < -500 ? "behind" : "in line with";
+      return `<p class="headline">
+        Budgeted <b>${signed(s.budget)}</b> for the year.
+        Tracking to <b class="${s.extrapolated < 0 ? "neg" : "pos"}">${signed(s.extrapolated)}</b>.
+        ${gap == null ? "" : `That is <b>${m0(Math.abs(gap))} ${word}</b> plan.`}
+      </p>`;
+    })()}
+
     <p class="foot"><b>This is the P&amp;L, not the bank.</b> Revenue counts in the month it is recognised — a whole season at once, the month before it departs — not when students pay. These figures will not agree with the Cash flow tab, and are not meant to: the difference is deferred revenue.</p>
 
+    ${/* FIVE TILES THAT SAY WHICH PERIOD THEY COVER.
+         Two of them used to read "vs budget to date" and "Versus budget",
+         which are different questions wearing near-identical labels, and
+         "Extrapolated FYE" is a phrase nobody outside a finance team uses. */""}
     <div class="tiles" style="margin:12px 0">
-      <div class="tile"><span class="k">Budgeted</span><span class="v">${m0(s.budget)}</span><span class="sub">agreed in April</span></div>
-      <div class="tile"><span class="k">Surplus to date</span><span class="v ${s.actual < 0 ? "neg" : ""}">${m0(s.actual)}</span><span class="sub">${d.lastActualMonth ? `to ${escapeHtml(d.lastActualMonth)}`
-        : d.closedRangeMonths ? `${d.closedRangeMonths} closed, P&amp;L not read`
-        : "nothing closed yet"}</span></div>
+      <div class="tile">
+        <span class="k">Plan for the year</span>
+        <span class="v">${m0(s.budget)}</span>
+        <span class="sub">budget set in April</span>
+      </div>
+      <div class="tile">
+        <span class="k">Actual so far</span>
+        <span class="v ${s.actual < 0 ? "neg" : ""}">${m0(s.actual)}</span>
+        <span class="sub">${d.lastActualMonth ? `${td?.months ?? 0} months to ${escapeHtml(monthName(d.lastActualMonth))}`
+          : d.closedRangeMonths ? `${d.closedRangeMonths} closed, P&amp;L not read`
+          : "nothing closed yet"}</span>
+      </div>
       ${td?.surplus?.variance != null ? `<div class="tile ${td.surplus.variance < 0 ? "alert" : ""}">
-        <span class="k">vs budget to date</span>
+        <span class="k">…vs plan so far</span>
         <span class="v ${td.surplus.variance > 0.5 ? "pos" : td.surplus.variance < -0.5 ? "neg" : ""}">${signed(td.surplus.variance)}</span>
-        <span class="sub">against ${m0(td.surplus.budget)} planned</span>
+        <span class="sub">against ${m0(td.surplus.budget)} planned for those months</span>
       </div>` : ""}
       <div class="tile ${v && v.surplus < 0 ? "alert" : ""}">
-        <span class="k">Extrapolated FYE</span>
+        <span class="k">Forecast for the year</span>
         <span class="v ${s.extrapolated < 0 ? "neg" : ""}">${m0(s.extrapolated)}</span>
-        <span class="sub">at 31 March</span>
+        <span class="sub">actual so far plus the rest</span>
       </div>
       ${v ? `<div class="tile ${v.surplus < 0 ? "alert" : ""}">
-        <span class="k">Versus budget</span>
+        <span class="k">…vs plan for the year</span>
         <span class="v ${v.surplus > 0.5 ? "pos" : v.surplus < -0.5 ? "neg" : ""}">${signed(v.surplus)}</span>
         <span class="sub">${ahead ? "ahead of plan" : "behind plan"}</span>
       </div>` : ""}
@@ -706,22 +749,32 @@ function surplusPanel() {
     <div class="scroll">
       <table class="cftable tight">
         <thead>
+          ${/* EVERY COLUMN SAYS WHAT PERIOD IT COVERS AND WHERE IT CAME FROM.
+               Two columns both headed "Variance" and one headed "Budget" next
+               to another headed "Budget to date" is a table you have to be told
+               how to read — and Jake had to ask three times. The second line of
+               each header is the part that was missing. */""}
           <tr>
             <th class="lab"></th>
-            <th colspan="3">As at ${escapeHtml(td?.throughMonth ?? "—")} · ${td?.months ?? 0} month${td?.months === 1 ? "" : "s"}</th>
-            <th colspan="4" class="fystart">Full year to 31 March</th>
+            <th colspan="3">Months already closed · ${escapeHtml(monthName(fyStartKey))} to ${escapeHtml(monthName(td?.throughMonth))}</th>
+            <th colspan="4" class="fystart">The whole year · ${escapeHtml(monthName(fyStartKey))} ${f0} to March ${String(f0 + 1).slice(2)}</th>
           </tr>
           <tr>
-            <th class="lab"></th>
-            <th>Budget to date</th><th>Actual to date</th><th>Variance</th>
-            <th class="fyend">Budget</th><th>Projected</th><th>Extrapolated FYE</th><th>Variance</th>
+            <th class="lab"><span class="colsub">All figures NZD</span></th>
+            <th>Budget<span class="colsub">for these ${td?.months ?? 0} months</span></th>
+            <th>Actual<span class="colsub">from the books</span></th>
+            <th>Difference<span class="colsub">actual vs budget</span></th>
+            <th class="fyend">Budget<span class="colsub">for the full year</span></th>
+            <th class="working">Still to come<span class="colsub">forecast, ${12 - (td?.months ?? 0)} months</span></th>
+            <th>Full-year forecast<span class="colsub">actual + still to come</span></th>
+            <th>Difference<span class="colsub">forecast vs budget</span></th>
           </tr>
         </thead>
         <tbody>
-          ${row("Revenue", "revenue")}
-          ${row("Cost of sales", "directCosts")}
-          ${row("Overheads", "overheads")}
-          ${row("Surplus / (loss)", "surplus", "rule strong")}
+          ${row("Revenue", "revenue", "", "what the programs earn")}
+          ${row("Cost of sales", "directCosts", "", "running the programs")}
+          ${row("Overheads", "overheads", "", "running the company")}
+          ${row("Surplus / (loss)", "surplus", "rule strong", "revenue less both")}
         </tbody>
       </table>
     </div>
