@@ -122,6 +122,13 @@
   /* The left edge of the full-year block, so "as at August" and "full year"
      read as two separate questions rather than one long row of numbers. */
   .cftable th.fystart { border-left: 2px solid #94a3b8; }
+  /* Where the fiscal year turns in a list of programs. Quiet enough not to
+     compete with the rows, distinct enough to break twenty of them into
+     seasons. */
+  .cftable tr.fyrule th.lab { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #94a3b8;
+    padding-top: 16px; }
+  .cftable tr.fyrule th, .cftable tr.fyrule td { border-bottom: 2px solid #cbd5e1; }
   .cftable th.beyond, .cftable td.beyond { color: #98a2b3; background: repeating-linear-gradient(
       -45deg, transparent, transparent 7px, rgba(148,163,184,.07) 7px, rgba(148,163,184,.07) 14px); }
   .cftable thead th.beyond { font-style: italic; }

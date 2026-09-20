@@ -501,9 +501,38 @@ function programsView(f) {
           <th>Revenue</th><th>Total cost</th><th>Contribution</th><th></th>
         </tr></thead>
         <tbody>
-          ${state.assumptions.programs.map((p, i) => {
+          ${(() => {
+            /* SORTED BY DEPARTURE, BUT THE INDEX MUST NOT MOVE.
+             *
+             * Every input on a row carries data-i, and the handlers use it to
+             * reach into state.assumptions.programs. Sorting the array itself,
+             * or re-indexing after the sort, would mean typing in one row and
+             * editing a different program — silently, and only for the rows
+             * that moved. So the ORIGINAL index travels with each row and only
+             * the display order changes.
+             *
+             * A program with no usable departure date sorts last rather than
+             * throwing the order: that is where a freshly added row sits, which
+             * is also where someone expects to find it. */
+            const rows = state.assumptions.programs
+              .map((p, i) => ({ p, i, key: /^\d{4}-\d{2}-\d{2}$/.test(String(p.startDate ?? "")) ? p.startDate : "9999-99-99" }))
+              .sort((a, b) => a.key.localeCompare(b.key) || String(a.p.name).localeCompare(String(b.p.name)));
+
+            // A thin rule where the fiscal year turns, so twenty-odd rows read
+            // as a few seasons rather than one long list.
+            const fyOf = (iso) => {
+              const y = Number(iso.slice(0, 4)); const m = Number(iso.slice(5, 7));
+              return Number.isFinite(y) && Number.isFinite(m) ? (m >= 4 ? y : y - 1) : null;
+            };
+            let lastFy = null;
+
+            return rows.map(({ p, i, key }) => {
             const c = byId[p.id];
-            return `<tr data-i="${i}" class="${p.active ? "" : "off"}">
+            const fy = key === "9999-99-99" ? null : fyOf(key);
+            const turned = fy !== null && lastFy !== null && fy !== lastFy;
+            if (fy !== null) lastFy = fy;
+            return `${turned ? `<tr class="fyrule"><th class="lab">FY ${fy}/${String(fy + 1).slice(2)}</th><td colspan="13"></td></tr>` : ""}
+            <tr data-i="${i}" class="${p.active ? "" : "off"}">
               <th class="lab"><input data-f="name" value="${escapeAttr(p.name)}" ${ro ? "disabled" : ""}></th>
               <td><select data-f="season" ${ro ? "disabled" : ""}>
                 ${["Fall", "Spring", "Summer"].map((s) => `<option ${p.season === s ? "selected" : ""}>${s}</option>`).join("")}
@@ -521,12 +550,14 @@ function programsView(f) {
               <td class="calc ${c && c.contribution < 0 ? "neg" : ""}">${c ? money(c.contribution) : "—"}</td>
               <td><button class="del" data-del="${i}" ${ro ? "disabled" : ""} title="Remove">×</button></td>
             </tr>`;
-          }).join("")}
+            }).join("");
+          })()}
         </tbody>
       </table>
     </div>
     ${ro ? "" : `<button id="addprog" class="btn-primary" style="margin-top:14px">Add program</button>`}
-    <p class="foot">Programs sell in USD and pay suppliers in NZD, so price and cost convert at different rates. Revenue is recognised in the month before the season starts — September, January and June — regardless of when the cash arrives. Cash timing comes from the payment rules.</p>`;
+    <p class="foot">Sorted by departure date, with a rule where the fiscal year turns. Editing a row still edits the program it names — the order on screen changes, the underlying list does not.</p>
+    <p class="foot">Programs sell in USD and pay suppliers in NZD, so price and cost convert at different rates. Revenue is recognised over the months <b>up to and including the departure month</b>, so the departure date on this tab is what decides when a season lands in the P&amp;L — not the season name. Cash timing is separate again, and comes from the payment rules.</p>`;
 }
 
 /* ---------------- payment rules ---------------- */
