@@ -498,7 +498,11 @@ function programsView(f) {
           <th class="lab">Program</th><th>Season</th><th>Departs</th><th>Returns</th>
           <th>Price</th><th>Sells in</th><th>Pax</th>
           <th>Fixed cost</th><th>Var / pax</th><th>Costs in</th>
-          <th>Revenue</th><th>Total cost</th><th>Contribution</th><th></th>
+          ${/* "Contribution" was already revenue less total cost — gross profit
+               under a name that made it easy to miss. Renamed, and given the
+               percentage beside it, because the dollar figure alone does not
+               show that Aus Bali runs at 10% while NZA runs at 49%. */""}
+          <th>Revenue</th><th>Total cost</th><th>Gross profit</th><th>GP %</th><th></th>
         </tr></thead>
         <tbody>
           ${(() => {
@@ -526,12 +530,41 @@ function programsView(f) {
             };
             let lastFy = null;
 
-            return rows.map(({ p, i, key }) => {
+            /* A subtotal for the year just ended, emitted at the rule.
+             *
+             * With four seasons on screen the per-program margins are the
+             * interesting part, but the question underneath them is whether a
+             * year's programs generate enough gross profit to cover the year's
+             * overheads at all. That is a comparison nobody can do by eye down
+             * a column of eleven numbers. */
+            const subtotal = (fyEnded) => {
+              const inYear = rows.filter((r) => r.key !== "9999-99-99" && fyOf(r.key) === fyEnded);
+              const agg = inYear.reduce((s, r) => {
+                const c = byId[r.p.id];
+                if (!c) return s;
+                return { pax: s.pax + (r.p.paxForecast || 0), rev: s.rev + c.grossRevenue, gp: s.gp + c.contribution };
+              }, { pax: 0, rev: 0, gp: 0 });
+              if (!agg.rev) return "";
+              const pct = (agg.gp / agg.rev) * 100;
+              return `<tr class="fysub">
+                <th class="lab">FY ${fyEnded}/${String(fyEnded + 1).slice(2)} · ${inYear.length} program${inYear.length === 1 ? "" : "s"}</th>
+                <td colspan="5"></td>
+                <td>${agg.pax}</td>
+                <td colspan="3"></td>
+                <td>${money(agg.rev)}</td>
+                <td>${money(agg.rev - agg.gp)}</td>
+                <td class="${agg.gp < 0 ? "neg" : ""}">${money(agg.gp)}</td>
+                <td class="${pct < 20 ? "gp-thin" : pct < 35 ? "gp-fair" : "gp-good"}">${pct.toFixed(1)}%</td>
+                <td></td></tr>`;
+            };
+
+            return rows.map(({ p, i, key }, rowIndex) => {
             const c = byId[p.id];
             const fy = key === "9999-99-99" ? null : fyOf(key);
             const turned = fy !== null && lastFy !== null && fy !== lastFy;
+            const closing = turned ? subtotal(lastFy) : "";
             if (fy !== null) lastFy = fy;
-            return `${turned ? `<tr class="fyrule"><th class="lab">FY ${fy}/${String(fy + 1).slice(2)}</th><td colspan="13"></td></tr>` : ""}
+            return `${closing}${turned ? `<tr class="fyrule"><th class="lab">FY ${fy}/${String(fy + 1).slice(2)}</th><td colspan="14"></td></tr>` : ""}
             <tr data-i="${i}" class="${p.active ? "" : "off"}">
               <th class="lab"><input data-f="name" value="${escapeAttr(p.name)}" ${ro ? "disabled" : ""}></th>
               <td><select data-f="season" ${ro ? "disabled" : ""}>
@@ -545,18 +578,35 @@ function programsView(f) {
               <td><input type="number" data-f="fixedCost" value="${p.fixedCost}" step="1000" ${ro ? "disabled" : ""}></td>
               <td><input type="number" data-f="variableCostPerPax" value="${p.variableCostPerPax}" step="100" ${ro ? "disabled" : ""}></td>
               <td><input data-f="costCurrency" class="cur-in" value="${escapeAttr(p.costCurrency || "NZD")}" ${ro ? "disabled" : ""}></td>
+              ${(() => {
+                // Margin on REVENUE, not markup on cost. Those differ by ten
+                // points or more and the second flatters: the workbook's 36.16%
+                // is contribution over cost, which on revenue is 26.6%.
+                const gp = c ? c.contribution : null;
+                const pct = c && c.grossRevenue > 0 ? (gp / c.grossRevenue) * 100 : null;
+                const band = pct === null ? "" : pct < 0 ? "neg" : pct < 20 ? "gp-thin" : pct < 35 ? "gp-fair" : "gp-good";
+                return `
               <td class="calc">${c ? money(c.grossRevenue) : "—"}</td>
               <td class="calc">${c ? money(c.totalCost) : "—"}</td>
-              <td class="calc ${c && c.contribution < 0 ? "neg" : ""}">${c ? money(c.contribution) : "—"}</td>
+              <td class="calc ${gp !== null && gp < 0 ? "neg" : ""}">${c ? money(gp) : "—"}</td>
+              <td class="calc ${band}">${pct === null ? "—" : `${pct.toFixed(1)}%`}</td>`;
+              })()}
               <td><button class="del" data-del="${i}" ${ro ? "disabled" : ""} title="Remove">×</button></td>
             </tr>`;
-            }).join("");
+            }).join("")
+            // The final year has no rule after it to hang its subtotal on, so
+            // it is closed off explicitly. Without this the last — and usually
+            // the least complete — year is the only one with no total, which is
+            // exactly the one someone would assume had been counted.
+            + subtotal(lastFy);
           })()}
         </tbody>
       </table>
     </div>
     ${ro ? "" : `<button id="addprog" class="btn-primary" style="margin-top:14px">Add program</button>`}
-    <p class="foot">Sorted by departure date, with a rule where the fiscal year turns. Editing a row still edits the program it names — the order on screen changes, the underlying list does not.</p>
+    <p class="foot">Sorted by departure date, with a subtotal at each fiscal year end. Editing a row still edits the program it names — the order on screen changes, the underlying list does not.</p>
+    <p class="foot"><b>Gross profit</b> is revenue less that program's own costs — what it contributes before any overhead. <b>GP %</b> states it against revenue, not as a markup on cost: the two differ by ten points or more and the markup always flatters. Red is under 20%, amber under 35%.</p>
+    <p class="foot">Nothing here carries overheads. A program showing a positive gross profit is not necessarily paying for itself — the year's overheads have to come out of the subtotal, which is the comparison the Surplus tab makes.</p>
     <p class="foot">Programs sell in USD and pay suppliers in NZD, so price and cost convert at different rates. Revenue is recognised over the months <b>up to and including the departure month</b>, so the departure date on this tab is what decides when a season lands in the P&amp;L — not the season name. Cash timing is separate again, and comes from the payment rules.</p>`;
 }
 
