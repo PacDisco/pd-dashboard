@@ -237,6 +237,16 @@ export async function refreshBudget(token, tenantId, fy) {
           overheadsTotal: series.overheads.total,
           surplus: series.surplus,
           monthsCovered: series.monthsCovered,
+          /* PER-ACCOUNT, AND PER-MONTH WITHIN EACH ACCOUNT.
+           *
+           * Annual totals per account were enough to answer "what is in the
+           * budget". They are not enough to put a budget column beside a P&L
+           * line for the months already closed, which is the only comparison
+           * that means anything in September: twelve months of plan beside
+           * five months of trading reads as a catastrophic underspend on every
+           * row. The monthly detail is what lets the budget be cut to the same
+           * period as the actuals. */
+          overheadAccounts: result.included,
           revenueAccounts: series.revenue.included,
           directCostAccounts: series.directCosts.included,
         },

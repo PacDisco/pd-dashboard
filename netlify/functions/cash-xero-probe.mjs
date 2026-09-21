@@ -487,7 +487,11 @@ export default async (req) => {
         budgetTotal: Math.round(result.months.reduce((s, n) => s + n, 0)),
         modelTotal: Math.round((a.monthlyOverheads ?? []).reduce((s, n) => s + Number(n), 0)),
         monthsWithBudget: result.slotsCovered.length,
-        includedAccounts: result.included,
+        // Account and annual amount only. Each entry now also carries a
+        // twelve-month split, which the P&L needs and a probe response does
+        // not — forty accounts of monthly detail would bury the two figures
+        // anyone actually opens this endpoint to read.
+        includedAccounts: result.included.map(({ account, amount }) => ({ account, amount })),
         excludedAccounts: result.excluded,
         periodsSeen: result.periodsSeen,
       });

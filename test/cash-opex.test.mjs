@@ -208,6 +208,15 @@ const pnl = (opexRows) => ({
   assert.equal(isOpexRecordCurrent({ parserVersion: 3 }), false,
     "a version-3 record predates programCost and is stale even though it looks complete");
 
+  // And again at 7, where revenueLines and programCostLines were added. A
+  // version-6 record carries the income and cost-of-sales TOTALS, so nothing on
+  // the page looks broken — the P&L simply cannot be opened, and every line of
+  // both sections lands in "not itemised".
+  assert.ok(OPEX_PARSER_VERSION >= 7,
+    "records written before the income and cost-of-sales lines were kept must refetch");
+  assert.equal(isOpexRecordCurrent({ parserVersion: 6 }), false,
+    "a version-6 record has the totals but no lines to open, and is stale");
+
   console.log("✓ a month stored by an older parser refetches; a current one does not");
 }
 

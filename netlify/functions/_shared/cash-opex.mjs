@@ -68,8 +68,17 @@ import { monthRange } from "./cash-xero.mjs";
  *      below for why twelve was the wrong number.
  *   6  revenue parsed and stored, so a closed month carries all three parts of
  *      its surplus — revenue, cost of sales, overheads — rather than two.
+ *   7  EVERY line of income and of cost of sales stored, not just the section
+ *      total and the twelve biggest costs. Version 5 did exactly this for
+ *      operating expenses and for the same reason; the other two sections were
+ *      left as totals, which meant the P&L could be shown but not opened. A
+ *      total with no lines under it is a number you have to take on trust, and
+ *      "why is cost of sales up" had no answer on the page.
+ *
+ *      Stamped here, in the commit that changes the shape — see version 4 for
+ *      what happens when it is stamped in the commit that notices instead.
  */
-export const OPEX_PARSER_VERSION = 6;
+export const OPEX_PARSER_VERSION = 7;
 
 export const NON_CASH_LINES = [
   /^bank revaluations?$/i,
@@ -254,6 +263,18 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
     revenue: revenue.total,
     revenueSectionFound: revenue.sectionFound,
     revenueSectionTitle: revenue.sectionTitle ?? null,
+    /* EVERY income line, for the same reason `lines` below keeps every expense
+     * line: a section total is a number you can read but not question. An
+     * income section runs to a handful of accounts — student fees, interest,
+     * sundry — and knowing which of them moved is the difference between "we
+     * are 40,000 light" and "one deposit run has not been coded yet".
+     *
+     * Xero renders income as positive here. Nothing in this module flips a
+     * sign; the subtraction happens once, downstream, where it can be read. */
+    revenueLines: revenue.lines.map((l) => ({
+      name: l.name,
+      amount: Math.round(l.amount),
+    })),
     // Program cost, from the same report and the same call. Kept apart from
     // operating expenses so the two can never be added together by accident —
     // Overheads is already its own row.
@@ -263,6 +284,20 @@ export async function fetchMonthOpex(accessToken, tenantId, key, patterns = NON_
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
       .slice(0, 12)
       .map((l) => ({ name: l.name, amount: Math.round(l.amount) })),
+    /* EVERY cost-of-sales line. `programCostTopLines` above keeps the twelve
+     * biggest for a quick look, and carries exactly the flaw described under
+     * `lines` below: the cut-off moves month to month, so a supplier who is
+     * thirteenth in May and eleventh in June appears to exist in one month and
+     * not the other, and any average across months divides a real annual cost
+     * by however many months it happened to make the cut in.
+     *
+     * Kept separate from `lines` — which is operating expenses — because the
+     * two must never be added together. Cost of sales is already its own row
+     * everywhere downstream. */
+    programCostLines: direct.lines.map((l) => ({
+      name: l.name,
+      amount: Math.round(l.amount),
+    })),
     total: parsed.total,
     cashTotal: parsed.cashTotal,
     sectionFound: parsed.sectionFound,

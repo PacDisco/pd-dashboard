@@ -132,23 +132,40 @@ export function overheadsFromBudget(budget, accountsById, fyStartYear) {
       continue;
     }
 
-    let lineTotal = 0;
+    if (!included.has(label)) {
+      included.set(label, {
+        code: account?.code ?? null,
+        // The bare account name, kept alongside the "code name" label, because
+        // that is what the P&L prints and therefore the only thing a budget
+        // line can be matched to a reported line by.
+        name: account?.name ?? label,
+        amount: 0,
+        months: Array(12).fill(0),
+      });
+    }
+    const entry = included.get(label);
     for (const bal of line?.BudgetBalances ?? []) {
       periodsSeen.add(bal?.Period);
       const slot = periodToSlot(bal?.Period, fyStartYear);
       if (slot === null) continue;
       const amount = Number(bal?.Amount) || 0;
       months[slot] += amount;
-      lineTotal += amount;
+      entry.months[slot] += amount;
+      entry.amount += amount;
       if (amount !== 0) slotsCovered.add(slot);
     }
-    included.set(label, (included.get(label) || 0) + lineTotal);
   }
 
   return {
     months: months.map((n) => Math.round(n * 100) / 100),
     included: [...included.entries()]
-      .map(([account, amount]) => ({ account, amount: Math.round(amount) }))
+      .map(([account, v]) => ({
+        account,
+        code: v.code,
+        name: v.name,
+        amount: Math.round(v.amount),
+        months: v.months.map((n) => Math.round(n)),
+      }))
       .sort((a, b) => b.amount - a.amount),
     excluded: [...excluded.entries()]
       .map(([account, v]) => ({ account, reason: v.reason, amount: Math.round(v.amount) }))
@@ -178,23 +195,37 @@ function collectBudget(budget, accountsById, fyStartYear, accept) {
     if (!accept(account)) continue;
     const label = account ? `${account.code ?? "?"} ${account.name}` : (line?.AccountID ?? "unknown");
 
-    let lineTotal = 0;
+    if (!included.has(label)) {
+      included.set(label, {
+        code: account?.code ?? null,
+        name: account?.name ?? label,
+        amount: 0,
+        months: Array(12).fill(0),
+      });
+    }
+    const entry = included.get(label);
     for (const bal of line?.BudgetBalances ?? []) {
       const slot = periodToSlot(bal?.Period, fyStartYear);
       if (slot === null) continue;
       const amount = Number(bal?.Amount) || 0;
       months[slot] += amount;
-      lineTotal += amount;
+      entry.months[slot] += amount;
+      entry.amount += amount;
       if (amount !== 0) slotsCovered.add(slot);
     }
-    included.set(label, (included.get(label) || 0) + lineTotal);
   }
 
   return {
     months: months.map((n) => Math.round(n * 100) / 100),
     total: Math.round(months.reduce((s, n) => s + n, 0)),
     included: [...included.entries()]
-      .map(([account, amount]) => ({ account, amount: Math.round(amount) }))
+      .map(([account, v]) => ({
+        account,
+        code: v.code,
+        name: v.name,
+        amount: Math.round(v.amount),
+        months: v.months.map((n) => Math.round(n)),
+      }))
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
     slotsCovered: [...slotsCovered].sort((a, b) => a - b),
   };

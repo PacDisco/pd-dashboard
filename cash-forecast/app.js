@@ -29,6 +29,14 @@ const state = {
   diagBusy: null,
   costCurve: null,
   curveBusy: false,
+  // The P&L tab. `pnlOpen` is which sections and accounts are expanded, keyed
+  // "<section>" and "<section>::<account name>", kept here rather than in the
+  // DOM so a re-render does not collapse everything the reader had opened.
+  pnl: null,
+  pnlBusy: false,
+  pnlBasis: "total",
+  pnlByMonth: false,
+  pnlOpen: {},
   dirty: false,
   tab: "forecast",
   saving: false,
@@ -230,6 +238,7 @@ function render() {
       : state.tab === "programs" ? programsView(f)
       : state.tab === "payments" ? paymentsView()
       : state.tab === "surplus" ? surplusPanel()
+      : state.tab === "pnl" ? pnlPanel()
       : overheadsView()
     }</div>
   `;
@@ -315,6 +324,7 @@ function tabs() {
     ["payments", "Payment rules"],
     ["overheads", "Overheads"],
     ["surplus", "Surplus vs budget"],
+    ["pnl", "P&L"],
   ];
   return `<nav class="tabs">${items
     .map(([id, label]) => `<button data-tab="${id}" class="${state.tab === id ? "on" : ""}">${label}</button>`)
@@ -966,6 +976,242 @@ function overheadLinesPanel() {
     <p class="foot"><b>Pattern</b> compares a line's biggest month against its own average. Steady means it lands most months at a similar size. <i>Lumpy ×4</i> means one month was four times the average — an event, not a run rate.</p>
     <button class="btn-diag" id="loadohlines" ${state.ohLinesBusy ? "disabled" : ""}>
       ${state.ohLinesBusy ? "Reading…" : "Re-read"}
+    </button>
+  </section>`;
+}
+
+/**
+ * The profit and loss, openable.
+ *
+ * WHY THIS IS A SEPARATE TAB FROM "SURPLUS VS BUDGET"
+ * ---------------------------------------------------
+ * They read the same books and they answer different questions. The Surplus tab
+ * is a forecast: five months of actual plus seven months of pax model, against
+ * the budget, ending in one number for 31 March. This tab is the statement —
+ * only what has actually been reported, with every account under it. Nothing
+ * here is projected, and the year-end column is the budget rather than a
+ * forecast, because a P&L that quietly contains a guess is not a P&L.
+ *
+ * So the two tabs will show different full-year figures, and should. If they
+ * agreed, one of them would be lying about what it is.
+ *
+ * THE COLUMN THAT MATTERS
+ * -----------------------
+ * "Budget" here is cut to the months that have closed. Five months of trading
+ * against a twelve-month plan reads as a spectacular underspend on every single
+ * row, and it is the single easiest way to come away from this page with
+ * entirely the wrong impression. The full-year budget is still shown, in its
+ * own column past a rule, because it is what the year gets judged against — but
+ * it is not the comparison.
+ */
+function pnlPanel() {
+  const d = state.pnl;
+  const basis = state.pnlBasis ?? "total";
+
+  /* One definition of the controls, used on both the error path and the loaded
+   * one. Two copies of the same radio group is two places for the value to
+   * drift apart, and the drift shows up as a picker that does nothing. */
+  const controls = (withMonths) => `
+    <div class="rates" style="margin:10px 0">
+      ${withMonths ? `<label class="rateopt ${state.pnlByMonth ? "on" : ""}">
+        <input type="checkbox" id="pnlbymonth" ${state.pnlByMonth ? "checked" : ""}>
+        <span class="rl">Show month by month</span>
+      </label>` : ""}
+      ${[["total", "The P&L as Xero prints it"], ["cash", "Cash only"]].map(([id, label]) => `
+        <label class="rateopt ${basis === id ? "on" : ""}">
+          <input type="radio" name="pnlbasis" value="${id}" ${basis === id ? "checked" : ""}>
+          <span class="rl">${label}</span>
+        </label>`).join("")}
+    </div>`;
+
+  if (!d) {
+    return `<section class="closebox">
+      <h2>Profit and loss <span class="stamp">from the books</span></h2>
+      <p class="foot">The statement for the year so far — income, cost of sales and operating expenses — with every account underneath, against the budget for the same months. Reads what is already stored; no Xero calls.</p>
+      <button class="btn-diag" id="loadpnl" ${state.pnlBusy ? "disabled" : ""}>
+        ${state.pnlBusy ? "Reading…" : "Open the P&L"}
+      </button>
+    </section>`;
+  }
+  if (d.error) {
+    return `<section class="closebox">
+      <h2>Profit and loss</h2>
+      <p class="foot">${escapeHtml(d.error)}${d.hint ? ` ${escapeHtml(d.hint)}` : ""}</p>
+      ${controls(false)}
+      <button class="btn-diag" id="loadpnl">Try again</button>
+    </section>`;
+  }
+
+  const m0 = (n) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("en-NZ", { maximumFractionDigits: 0 }));
+  const signed = (n) => (n === null || n === undefined ? "—" : `${n > 0 ? "+" : ""}${m0(n)}`);
+  const vcls = (n) => (n === null || n === undefined ? "" : n > 0.5 ? "pos" : n < -0.5 ? "neg" : "");
+  const MONTHNAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const shortMonth = (key) => {
+    if (!key) return "—";
+    const m = Number(String(key).slice(5, 7));
+    return `${MONTHNAMES[m - 1] ?? key} ${String(key).slice(2, 4)}`;
+  };
+
+  const open = state.pnlOpen ?? {};
+  const byMonth = Boolean(state.pnlByMonth);
+  const closed = new Set(d.closedSlots ?? []);
+  const twist = (id) => `<span class="twist">${open[id] ? "▾" : "▸"}</span>`;
+
+  /* Two column sets, because they answer different questions and mixing them
+   * gives a table nobody can read: the summary is "how are we doing against
+   * plan", the monthly view is "when did it happen". */
+  const headCells = byMonth
+    ? `${(d.monthKeys ?? []).map((k, i) => `<th class="${closed.has(i) ? "actualcol" : "na"}">${shortMonth(k)}</th>`).join("")}
+       <th class="fystart">Total<span class="colsub">${d.monthsClosed} closed months</span></th>`
+    : `<th>Actual<span class="colsub">${d.monthsClosed} months to ${escapeHtml(shortMonth(d.lastActualMonth))}</span></th>
+       <th class="budgetcol">Budget<span class="colsub">same ${d.monthsClosed} months</span></th>
+       <th>Difference<span class="colsub">actual vs budget</span></th>
+       <th class="fystart budgetcol">Budget<span class="colsub">the full year</span></th>`;
+  const colCount = byMonth ? 13 : 4;
+
+  /* A row's figures. `o` is anything with months/total/budgetToDate/
+   * varianceToDate/budgetTotal — a section, a line, a derived subtotal — so
+   * every row in the table is rendered by the same function and cannot drift
+   * from the one above it. */
+  const cells = (o) => byMonth
+    ? `${(o.months ?? Array(12).fill(0)).map((v, i) =>
+         `<td class="${closed.has(i) ? "actualcol" : "na"}">${closed.has(i) ? m0(v) : ""}</td>`).join("")}
+       <td class="fystart"><b>${m0(o.total)}</b></td>`
+    : `<td><b>${m0(o.total)}</b></td>
+       <td class="budgetcol">${m0(o.budgetToDate)}</td>
+       <td class="${vcls(o.varianceToDate)}" ${o.budgetToDate ? `title="${Math.round((o.varianceToDate / Math.abs(o.budgetToDate)) * 100)}% of budget"` : ""}>${signed(o.varianceToDate)}</td>
+       <td class="fystart budgetcol">${m0(o.budgetTotal)}</td>`;
+
+  const sectionRows = (s) => {
+    const isOpen = open[s.id];
+    const head = `
+      <tr class="pnlsec ${isOpen ? "on" : ""}" data-pnl="${s.id}">
+        <th class="lab">${twist(s.id)}${escapeHtml(s.title)}
+          <span class="rowsub">${escapeHtml(s.note ?? "")}</span></th>
+        ${cells(s)}
+      </tr>`;
+    if (!isOpen) return head;
+
+    const lineRows = s.lines.map((l) => {
+      const lid = `${s.id}::${l.name}`;
+      const lineOpen = open[lid];
+      const r = `
+        <tr class="pnlline ${lineOpen ? "on" : ""}" data-pnl="${escapeHtml(lid)}">
+          <th class="lab">${byMonth ? "" : twist(lid)}${escapeHtml(l.name)}${
+            l.budgetStatus === "unbudgeted" ? ' <span class="stamp tag-un">not in budget</span>' : ""}${
+            l.budgetStatus === "nonCash" ? ' <span class="stamp">non-cash</span>' : ""}</th>
+          ${cells(l)}
+        </tr>`;
+      // In the monthly view every row already shows its months, so opening a
+      // line would repeat the row it sits on.
+      if (!lineOpen || byMonth) return r;
+      return r + `
+        <tr class="pnlmonths">
+          <th class="lab"></th>
+          <td colspan="${colCount}">
+            <table class="minimonths">
+              <tr>${(d.monthKeys ?? []).map((k, i) =>
+                `<th class="${closed.has(i) ? "" : "na"}">${shortMonth(k)}</th>`).join("")}</tr>
+              <tr>${(l.months ?? []).map((v, i) =>
+                `<td class="${closed.has(i) ? "" : "na"}">${closed.has(i) ? m0(v) : "—"}</td>`).join("")}</tr>
+              ${l.budgetMonths ? `<tr class="bud">${l.budgetMonths.map((v) =>
+                `<td>${m0(v)}</td>`).join("")}</tr>` : ""}
+            </table>
+            <span class="minilegend">actual${l.budgetMonths ? " · budget" : " · no budget for this account"}${
+              closed.size < 12 ? ` · months past ${escapeHtml(shortMonth(d.lastActualMonth))} have not been reported yet` : ""}</span>
+          </td>
+        </tr>`;
+    }).join("");
+
+    /* THE ROW THAT KEEPS THE DRILL-DOWN HONEST.
+     *
+     * The section total comes from the P&L's own total, not from adding the
+     * lines up. When the two differ — a month stored before every line was
+     * kept — the difference is shown as its own row rather than left for the
+     * reader to discover by adding a column of forty numbers. */
+    const residual = s.residual?.material ? `
+      <tr class="pnlline muted">
+        <th class="lab">Not itemised<span class="rowsub">months stored before every line was kept — refresh to fill in</span></th>
+        ${cells({ months: s.residual.months, total: s.residual.total, budgetToDate: null, varianceToDate: null, budgetTotal: null })}
+      </tr>` : "";
+
+    const budgetOnly = s.budgetOnly?.length ? `
+      <tr class="pnlline sep"><th class="lab" colspan="${colCount + 1}">Budgeted, nothing spent yet</th></tr>` +
+      s.budgetOnly.map((b) => `
+        <tr class="pnlline muted">
+          <th class="lab">${escapeHtml(b.name)}</th>
+          ${byMonth
+            ? `${Array(12).fill(0).map(() => `<td class="na"></td>`).join("")}<td class="fystart">0</td>`
+            : `<td>0</td><td class="budgetcol">${m0(b.budgetToDate)}</td>
+               <td class="${vcls(b.budgetToDate)}">${signed(b.budgetToDate)}</td>
+               <td class="fystart budgetcol">${m0(b.budgetTotal)}</td>`}
+        </tr>`).join("") : "";
+
+    return head + lineRows + residual + budgetOnly;
+  };
+
+  const derivedRow = (o, cls) => `
+    <tr class="${cls}">
+      <th class="lab">${escapeHtml(o.title)}</th>
+      ${cells(o)}
+    </tr>`;
+
+  const [income, cos, oh] = d.sections;
+  const gp = d.grossProfit;
+  const sp = d.surplus;
+
+  return `<section class="closebox">
+    <h2>Profit and loss
+      <span class="stamp">${d.monthsClosed} month${d.monthsClosed === 1 ? "" : "s"} reported${
+        basis === "cash" ? " · cash only" : ""}</span></h2>
+
+    ${(() => {
+      /* THE ANSWER FIRST, IN WORDS. Same reason as the Surplus tab: a page that
+       * opens with a table makes the reader do the arithmetic that the page was
+       * built to do for them. */
+      if (!d.monthsClosed) return "";
+      return `<p class="headline">
+        Over ${d.monthsClosed} month${d.monthsClosed === 1 ? "" : "s"} to ${escapeHtml(shortMonth(d.lastActualMonth))}:
+        income <b>${m0(income.total)}</b>, less cost of sales <b>${m0(cos.total)}</b>,
+        leaves <b>${m0(gp.total)}</b>${d.grossMarginPct != null ? ` — a <b>${d.grossMarginPct}%</b> gross margin` : ""}.
+        Operating expenses took <b>${m0(oh.total)}</b>, for a
+        <b class="${sp.total < 0 ? "neg" : "pos"}">${signed(sp.total)}</b> ${sp.total < 0 ? "loss" : "surplus"}.
+      </p>`;
+    })()}
+
+    <p class="foot"><b>This is what the books reported, not a forecast.</b> Only closed months are here, and the year-end column is the budget rather than an extrapolation. The Surplus tab answers the other question — where the full year lands — by adding the pax model to these months, so the two tabs will not show the same year-end figure.</p>
+
+    ${controls(true)}
+
+    <p class="foot">Click any line to open it. ${byMonth
+      ? "Blank months have not been reported yet — they are not zeros."
+      : "Sections open into their accounts; an account opens into its twelve months against budget."}</p>
+
+    <div class="scroll">
+      <table class="cftable tight pnl">
+        <thead>
+          <tr>
+            <th class="lab"><span class="colsub">All figures NZD</span></th>
+            ${headCells}
+          </tr>
+        </thead>
+        <tbody>
+          ${sectionRows(income)}
+          ${sectionRows(cos)}
+          ${derivedRow(gp, "rule strong")}
+          ${sectionRows(oh)}
+          ${derivedRow(sp, "rule strong")}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="foot"><b>Difference is stated so that positive is good news on every row.</b> Income above budget is positive; costs under budget are also positive. The three sections' differences add to the surplus difference, which is the check that catches a flipped sign.</p>
+    ${oh.unbudgetedTotal || cos.unbudgetedTotal ? `<p class="foot"><b>${m0(Math.abs(oh.unbudgetedTotal + cos.unbudgetedTotal))} has been spent on accounts with no budget line at all</b>, marked <i>not in budget</i>. That is not an overspend against a plan — there was no plan — so it never appears in any variance above, which is exactly why it is worth looking at.</p>` : ""}
+    ${d.budgetDescription ? `<p class="foot">Budget: ${escapeHtml(d.budgetDescription)}.</p>` : ""}
+    ${(d.warnings ?? []).map((w) => `<p class="foot">${escapeHtml(w)}</p>`).join("")}
+
+    <button class="btn-diag" id="loadpnl" ${state.pnlBusy ? "disabled" : ""}>
+      ${state.pnlBusy ? "Reading…" : "Re-read"}
     </button>
   </section>`;
 }
@@ -1774,6 +2020,50 @@ function wire() {
       render();
     }
   });
+
+  el("loadpnl")?.addEventListener("click", async () => {
+    state.pnlBusy = true;
+    render();
+    try {
+      const basis = state.pnlBasis ?? "total";
+      const res = await fetch(`${API}/cash-pnl?basis=${basis}`, { credentials: "include" });
+      const raw = await res.text();
+      try { state.pnl = JSON.parse(raw); }
+      catch { state.pnl = { error: `Unexpected ${res.status} response` }; }
+    } catch (err) {
+      state.pnl = { error: err.message };
+    } finally {
+      // finally, for the same reason as every other busy flag on this page: a
+      // success path that returns early leaves the button reading "Reading…"
+      // for ever, which looks exactly like a request that hung.
+      state.pnlBusy = false;
+      render();
+    }
+  });
+
+  document.querySelectorAll("[name=pnlbasis]").forEach((r) =>
+    r.addEventListener("change", () => {
+      state.pnlBasis = r.value;
+      // Re-reads rather than filtering in the browser. Which lines are non-cash
+      // is the parser's own judgement, and a second copy of it here is a second
+      // thing to keep in step.
+      el("loadpnl")?.click();
+    }));
+
+  el("pnlbymonth")?.addEventListener("change", (e) => {
+    // Purely a view change — same data, different columns — so no refetch.
+    state.pnlByMonth = e.target.checked;
+    render();
+  });
+
+  document.querySelectorAll("[data-pnl]").forEach((row) =>
+    row.addEventListener("click", (e) => {
+      // A click anywhere on the row, except on a control inside it.
+      if (e.target.closest("input, select, button, a")) return;
+      const id = row.dataset.pnl;
+      state.pnlOpen = { ...(state.pnlOpen ?? {}), [id]: !(state.pnlOpen ?? {})[id] };
+      render();
+    }));
 
   el("loadohlines")?.addEventListener("click", async () => {
     state.ohLinesBusy = true;
