@@ -21,11 +21,11 @@ definitions can never drift between the two pages.
 
 | File | What it is |
 |---|---|
-| `marketing-performance/index.html` | The page. Self-contained, dark, Chart.js from CDN — same shell as `sales-funnel`. |
+| `marketing-performance/index.html` | The page. Self-contained, dark, Chart.js from CDN — same shell as `sales-funnel`. Also carries the Export report button, the `#print-report` container and its print stylesheet. |
 | `marketing-performance/dashboard.json` | Manifest entry. Category `Outreach`, roles `admin, outreach, operations, admissions`. |
 | `netlify/functions/marketing-spend.mjs` | Neon-backed store for monthly ad spend. `GET ?action=list`, `POST ?action=upsert`. |
 | `MIGRATION-marketing-spend.sql` | The `marketing_spend` table. Idempotent. |
-| `test/marketing-performance.smoke.mjs` | Playwright smoke test against mocked API payloads. |
+| `test/marketing-performance.smoke.mjs` | Playwright smoke test against mocked API payloads, including the exported report. |
 | `test/jotform-attribution.test.mjs` | Unit test for the Jotform field matcher, replaying a real submission. No browser needed. |
 | `netlify/functions/sales-funnel-data.mjs` | **Modified.** Adds the Offline drill-down breakout and splits the two kinds of "no self-reported answer". Also read by `/sales-funnel/` — see below. |
 | `package.json` | One line added: `test:marketing`. |
@@ -87,6 +87,43 @@ Three details worth knowing:
 
 A failure fetching period B is not fatal — you lose the deltas, not the
 dashboard.
+
+## Exporting the report
+
+**Export report**, next to Apply, turns whatever is currently on screen into a
+one-page A4 document and opens the browser's print dialog — choose *Save as
+PDF* (or *Destination → Save as PDF* in Chrome) to get a file you can attach to
+an email.
+
+What comes out is the headline and the months, nothing else: four KPI tiles —
+Sessions, Leads, Opportunities, Sales — each with its year-on-year change and
+the prior figure, then a month-by-month table of the same four metrics with
+this period, the comparison period and the delta. Tick **Compare to** first and
+the export is a period-on-period report; leave it off and it is a single-period
+one, with the comparison columns gone rather than empty.
+
+Points worth knowing:
+
+- **It exports the window on screen, not a fixed range.** Change the dates,
+  press Apply, then Export. No second fetch happens, so the printed figures are
+  the ones you were just looking at and cannot drift from them.
+- **Ad spend and cost-per-sale are deliberately left out.** Spend is hand-entered
+  and usually covers fewer months than the range, so the tile on screen carries
+  a qualifier explaining what it is blended over. Lifted out of that context and
+  mailed to a director, the number gets quoted back without the asterisk.
+- **The deltas are the same objects as the badges on screen.** Both call
+  `changeOf()`, so a printed percentage can never disagree with the dashboard it
+  came from — including the ±1% flat band and the "new" reading for a zero base.
+- **Ctrl/Cmd+P works too.** A `beforeprint` listener builds the report, so
+  printing directly gives the one-pager rather than eleven pages of dark
+  dashboard — or the blank sheet an empty print container would produce.
+- **It is its own markup, not a restyled dashboard.** `#print-report` is hidden
+  on screen and is the only element the printer sees. The two want opposite
+  layouts, and six KPI tiles wrapping across a 1280px grid do not become an A4
+  header row by changing colours.
+
+The smoke test asserts the exported totals and deltas match the dashboard's own,
+which is the failure that would otherwise be found in a board meeting.
 
 ## Inside Offline Sources
 

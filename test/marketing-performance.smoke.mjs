@@ -595,15 +595,31 @@ await page.waitForTimeout(400);
 check("cmp: comparison range revealed", await page.locator("#from-b").isVisible());
 check("cmp: YoY preset active by default", await page.locator("#cmp-yoy").evaluate((e) => e.classList.contains("active")));
 
-// Range A is Sep 25 – Aug 26; YoY must be exactly twelve months earlier.
+// YoY must be exactly twelve months earlier than whatever range A is.
+// Derived from the inputs rather than hardcoded: the page defaults to the
+// last twelve months, so a literal expectation here passes only during the
+// month it was written and then fails every rollover, which trains everyone
+// to ignore a red run.
+const shiftYM = (ym, n) => {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+const rangeA = [await page.locator("#from").inputValue(), await page.locator("#to").inputValue()];
 const [fB, tB] = [await page.locator("#from-b").inputValue(), await page.locator("#to-b").inputValue()];
-check("cmp: YoY range is A minus 12 months", fB === "2024-09" && tB === "2025-08", `${fB}..${tB}`);
+check("cmp: YoY range is A minus 12 months",
+  fB === shiftYM(rangeA[0], -12) && tB === shiftYM(rangeA[1], -12), `${fB}..${tB} for A ${rangeA.join("..")}`);
 
-// Previous period must be the same LENGTH as A, immediately before it.
+// Previous period must be the same LENGTH as A, immediately before it. For a
+// twelve-month A that lands on the same window as YoY; the assertion is the
+// derivation, not the coincidence.
 await page.locator("#cmp-prev").click();
 await page.waitForTimeout(600);
 const [pF, pT] = [await page.locator("#from-b").inputValue(), await page.locator("#to-b").inputValue()];
-check("cmp: previous period is same length, immediately prior", pF === "2024-09" && pT === "2025-08", `${pF}..${pT}`);
+const lenA = (Number(rangeA[1].slice(0, 4)) - Number(rangeA[0].slice(0, 4))) * 12
+  + (Number(rangeA[1].slice(5)) - Number(rangeA[0].slice(5))) + 1;
+check("cmp: previous period is same length, immediately prior",
+  pT === shiftYM(rangeA[0], -1) && pF === shiftYM(pT, -(lenA - 1)), `${pF}..${pT} for A ${rangeA.join("..")}`);
 
 await page.locator("#cmp-yoy").click();
 await page.waitForTimeout(600);
@@ -618,6 +634,50 @@ check("cmp: trend chart gained prior series", trendDatasets === 6, `datasets=${t
 
 await page.screenshot({ path: join(here, "..", "marketing-performance-compare.png"), fullPage: true });
 
+// --- exported report ---
+// The export is what leaves the building, so the thing worth asserting is not
+// that it renders but that it agrees with the screen it came from: same
+// totals, same deltas. A report that quietly disagreed with the dashboard
+// would be discovered in a board meeting.
+console.log("\n  exported report:\n");
+const report = await page.evaluate(() => {
+  buildPrintReport();
+  const el = document.getElementById("print-report");
+  return {
+    text: el.innerText,
+    hiddenOnScreen: getComputedStyle(el).display === "none",
+    tiles: [...el.querySelectorAll(".pr-kpi")].length,
+    deltas: [...el.querySelectorAll(".pr-kpi .pr-delta")].map((e) => e.innerText.trim()),
+    rows: [...el.querySelectorAll("tbody tr")].length,
+    totals: [...el.querySelectorAll("tr.total td.n")].map((e) => e.innerText.trim()),
+  };
+});
+const screenDeltas = await page.evaluate(() =>
+  [...document.querySelectorAll("#kpis .delta")].map((e) => e.innerText.trim()));
+
+check("export: invisible on screen", report.hiddenOnScreen);
+check("export: four headline tiles", report.tiles === 4, `tiles=${report.tiles}`);
+check("export: a row per month plus a total", report.rows === MONTHS.length + 1, `rows=${report.rows}`);
+check("export: names both periods", /compared with/.test(report.text));
+// Screen order is spend, sessions, leads, opps, sales, cost-per-sale; the
+// report carries the middle four.
+check("export: deltas match the dashboard badges",
+  JSON.stringify(report.deltas) === JSON.stringify(screenDeltas.slice(1, 5)),
+  `report=${report.deltas} screen=${screenDeltas.slice(1, 5)}`);
+check("export: totals match the funnel payload",
+  report.totals.includes(funnel.contacts.reduce((a, b) => a + b, 0).toLocaleString("en-NZ")),
+  report.totals.join(" / "));
+check("export: button enabled once data has loaded", !(await page.locator("#export").isDisabled()));
+
+// Ctrl/Cmd+P must produce the report too — an empty print container would
+// send a blank sheet to the printer.
+const rebuilt = await page.evaluate(() => {
+  document.getElementById("print-report").innerHTML = "";
+  window.dispatchEvent(new Event("beforeprint"));
+  return document.getElementById("print-report").innerText;
+});
+check("export: beforeprint rebuilds it for a direct print", /Marketing Performance/.test(rebuilt));
+
 // Identical periods must read as flat, not as a spurious move.
 await page.locator("#from-b").fill(await page.locator("#from").inputValue());
 await page.locator("#to-b").fill(await page.locator("#to").inputValue());
@@ -631,6 +691,13 @@ await page.waitForTimeout(1200);
 check("cmp: unchecking removes deltas", (await page.locator("#kpis .kpi .delta").count()) === 0);
 check("cmp: unchecking restores single-period table",
   (await page.locator("#cost-table thead th.cmp").count()) === 0);
+const single = await page.evaluate(() => {
+  buildPrintReport();
+  return document.getElementById("print-report").innerText;
+});
+check("export: single-period report claims no comparison", !/compared with/.test(single));
+check("export: single-period report still carries the months",
+  new RegExp(MONTHS.length > 0 ? "Total" : "").test(single));
 
 await page.screenshot({ path: join(here, "..", "marketing-performance-preview.png"), fullPage: true });
 console.log("\n  screenshot → marketing-performance-preview.png");

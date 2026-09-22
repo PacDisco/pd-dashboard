@@ -196,6 +196,89 @@
   tr.unrecovered td { color: var(--muted); font-style: italic; }
   .footnote { color: var(--muted); font-size: 12px; line-height: 1.65; margin-top: 32px; max-width: 900px; }
   .footnote strong { color: var(--text); }
+
+  /* ============================================================
+     Export report
+     ------------------------------------------------------------
+     A one-page, light-themed rendering of the figures already on
+     screen, built into #print-report and shown only to the printer.
+     Deliberately NOT a restyle of the dashboard: the dashboard is
+     dark, half of it is caveat prose, and an executive wants the
+     headline and the months, on paper, in monochrome-safe ink.
+
+     It is its own markup rather than a print stylesheet over the
+     live DOM because the two want opposite layouts — six KPI tiles
+     wrapping across a 1280px grid do not become an A4 header row by
+     changing colours.
+     ============================================================ */
+  #print-report { display: none; }
+
+  @media print {
+    /* Hide the application whole — anything added to <body> later is
+       hidden by default rather than turning up uninvited on page 3. */
+    body > * { display: none !important; }
+    body > #print-report { display: block !important; }
+
+    @page { size: A4; margin: 14mm 13mm 12mm 13mm; }
+
+    html, body {
+      background: #fff !important;
+      /* The tile rules and delta colours carry meaning, so keep them
+         when the browser would otherwise drop backgrounds. Every one
+         of them is also legible in greyscale. */
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    #print-report {
+      color: #0b0b0b; background: #fff;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 10pt; line-height: 1.45;
+    }
+    #print-report .pr-head { border-bottom: 2px solid #0b0b0b; padding-bottom: 9px; margin-bottom: 16px; }
+    #print-report h1 {
+      font-family: 'Fraunces', Georgia, serif; font-weight: 500;
+      font-size: 19pt; margin: 0 0 2px; letter-spacing: -.01em;
+    }
+    #print-report .pr-period { color: #52514e; font-size: 9.5pt; margin: 0; }
+    #print-report h2 { font-size: 11.5pt; margin: 0 0 9px; font-weight: 600; }
+    #print-report section { margin-bottom: 17px; }
+
+    #print-report .pr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+    #print-report .pr-kpi { border: 1px solid #e4e3de; border-radius: 6px; padding: 10px 11px 9px; background: #f7f6f3; }
+    #print-report .pr-kpi .k-label { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; color: #52514e; font-weight: 600; }
+    #print-report .pr-kpi .k-value { font-family: 'Fraunces', Georgia, serif; font-size: 23pt; font-weight: 500; line-height: 1.1; margin: 3px 0 1px; font-variant-numeric: tabular-nums; }
+    #print-report .pr-kpi .k-was { font-size: 8pt; color: #8a8880; margin-left: 6px; }
+    #print-report .pr-kpi .k-sub { font-size: 7.5pt; color: #8a8880; margin-top: 6px; border-top: 1px solid #e4e3de; padding-top: 5px; }
+    #print-report .pr-delta { font-size: 8.5pt; font-weight: 700; }
+    #print-report .pr-delta.up { color: #0f7a4d; }
+    #print-report .pr-delta.down { color: #b4362f; }
+    #print-report .pr-delta.flat, #print-report .pr-delta.new { color: #52514e; }
+
+    /* The dashboard's own table rules (dark fills, uppercase muted headers,
+       hover states) are written for the screen and would otherwise come
+       through here — a black total row on white paper. Reset first, then
+       restyle, rather than out-specifying each one individually. */
+    #print-report table, #print-report tr, #print-report th, #print-report td {
+      background: transparent !important; color: inherit;
+      text-transform: none; letter-spacing: normal; white-space: normal;
+    }
+    #print-report table { border-collapse: collapse; width: 100%; font-size: 9pt; }
+    #print-report caption { text-align: left; font-size: 8.5pt; color: #8a8880; padding-bottom: 5px; }
+    #print-report th, #print-report td { padding: 5.5px 6px; border-bottom: 1px solid #e4e3de; }
+    #print-report thead th { font-size: 8pt; text-transform: uppercase; letter-spacing: .05em; color: #52514e; text-align: center; font-weight: 600; }
+    #print-report thead tr:last-child th { border-bottom: 1px solid #0b0b0b; }
+    #print-report tbody th { text-align: left; font-weight: 600; white-space: nowrap; color: #0b0b0b; font-size: 9pt; }
+    #print-report td.n { text-align: right; font-variant-numeric: tabular-nums; }
+    #print-report td.prior { color: #8a8880; }
+    #print-report td.d { font-size: 8.5pt; color: #52514e; text-align: right; font-variant-numeric: tabular-nums; }
+    #print-report td.d.up { color: #0f7a4d; }
+    #print-report td.d.down { color: #b4362f; }
+    #print-report tr.total th, #print-report tr.total td { border-top: 1px solid #0b0b0b; border-bottom: none; font-weight: 700; padding-top: 6px; }
+    /* A row split across a page break is unreadable; so is a header
+       stranded at the foot of one. */
+    #print-report tr { break-inside: avoid; }
+    #print-report thead { display: table-header-group; }
+    #print-report .pr-foot { margin-top: 14px; padding-top: 7px; border-top: 1px solid #e4e3de; font-size: 7.5pt; color: #8a8880; }
+  }
 </style>
 </head>
 <body>
@@ -219,6 +302,8 @@
     <button class="pill" data-preset="6">Last 6 months</button>
     <button class="pill" data-preset="3">Last 3 months</button>
     <button class="primary" id="refresh">Apply</button>
+    <button class="ghost" id="export" disabled
+      title="Build a one-page report of the figures currently on screen and open the print dialog">Export report</button>
   </section>
 
   <section class="ranges" id="compare-row">
@@ -333,6 +418,10 @@
   </p>
 </div>
 
+<!-- Filled by buildPrintReport() on Export; invisible on screen, and the only
+     thing the printer sees. -->
+<div id="print-report" role="document" aria-hidden="true"></div>
+
 <script>
 /* ============================================================
    Marketing Performance
@@ -383,14 +472,21 @@ function rangeLength(fromYM, toYM) {
 /* A percentage move is only meaningful against a non-zero base. Going 0 → 5 is
    "new", not "+infinity"; 0 → 0 is nothing at all. Anything inside ±1% reads as
    flat so noise doesn't get dressed up as a trend. */
-function deltaBadge(curr, prev) {
+function changeOf(curr, prev) {
   if (prev === 0 || prev == null) {
-    return curr > 0 ? '<span class="delta new">new</span>' : '<span class="delta flat">—</span>';
+    return curr > 0 ? { cls: 'new', text: 'new' } : { cls: 'flat', text: '—' };
   }
   const pct = ((curr - prev) / prev) * 100;
   const sign = pct >= 0 ? '+' : '';
-  const cls = pct > 1 ? 'up' : pct < -1 ? 'down' : 'flat';
-  return `<span class="delta ${cls}">${sign}${pct.toFixed(0)}%</span>`;
+  return { cls: pct > 1 ? 'up' : pct < -1 ? 'down' : 'flat', text: `${sign}${pct.toFixed(0)}%`, pct };
+}
+/* The badge and the exported report are the same judgement rendered twice, so
+   they read it from changeOf() rather than each implementing the rule. A
+   printed figure that disagreed with the screen it came from would be worse
+   than no export at all. */
+function deltaBadge(curr, prev) {
+  const c = changeOf(curr, prev);
+  return `<span class="delta ${c.cls}">${c.text}</span>`;
 }
 /* Cost per outcome is inverted: paying less is better, so a fall is good news.
    Rendering it with the same colour logic as volume would be actively
@@ -440,6 +536,8 @@ const els = {
   cmpPrev:   document.getElementById('cmp-prev'),
   fxRate:    document.getElementById('fx-rate'),
   fxNote:    document.getElementById('fx-note'),
+  exportBtn: document.getElementById('export'),
+  printReport: document.getElementById('print-report'),
 };
 
 const SKELS = ['cost', 'hs', 'jf', 'offline', 'trend', 'spend'];
@@ -1278,6 +1376,136 @@ function emptySpend(months) {
   };
 }
 
+/* ============================================================
+   Export report
+   ------------------------------------------------------------
+   Builds the printable one-pager from the data already in state —
+   no refetch, so what prints is exactly the window on screen,
+   including whichever comparison period is selected.
+
+   Four metrics only. Ad spend and cost-per-sale are deliberately
+   left off: spend is hand-entered and usually covers fewer months
+   than the range, so a blended cost figure lifted out of its
+   caveat and mailed to a director is a number that will be quoted
+   back without the asterisk.
+   ============================================================ */
+const PRINT_METRICS = [
+  { label: 'Sessions',      key: 'traffic',       sub: 'Website visits' },
+  { label: 'Leads',         key: 'contacts',      sub: 'PD-tagged contacts' },
+  { label: 'Opportunities', key: 'opportunities', sub: 'Application fee paid' },
+  { label: 'Sales',         key: 'totalSales',    sub: 'Deposit received' },
+];
+
+function fmtMonthLong(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+function periodLabel(months) {
+  if (!months || !months.length) return '';
+  return `${fmtMonthLong(months[0])} – ${fmtMonthLong(months[months.length - 1])}`;
+}
+/* Period B is read by position, not by calendar month — the same rule the
+   trend chart uses. Index past the end of a shorter B returns null and prints
+   as an em dash rather than a zero, which would be a claim. */
+function atIndex(arr, i) {
+  const v = arr && arr[i];
+  return Number.isFinite(Number(v)) ? Number(v) : null;
+}
+
+function buildPrintReport() {
+  const f = state.funnel;
+  if (!f) return false;
+  const B = state.funnelB;
+  const months = f.months || [];
+  const cmp = !!B;
+
+  const kpis = PRINT_METRICS.map((m) => {
+    const a = sum(f[m.key]);
+    const b = cmp ? sum(B[m.key]) : null;
+    const c = cmp ? changeOf(a, b) : null;
+    return `
+      <div class="pr-kpi">
+        <div class="k-label">${esc(m.label)}</div>
+        <div class="k-value">${int(a)}</div>
+        <div>${c ? `<span class="pr-delta ${c.cls}">${c.text}</span>` : ''}${
+          cmp ? `<span class="k-was">vs ${int(b)} last period</span>` : ''}</div>
+        <div class="k-sub">${esc(m.sub)}</div>
+      </div>`;
+  }).join('');
+
+  const groupHead = PRINT_METRICS
+    .map((m) => `<th colspan="${cmp ? 3 : 1}">${esc(m.label)}</th>`).join('');
+  const subHead = cmp
+    ? PRINT_METRICS.map(() => '<th>This</th><th>Prior</th><th>&Delta;</th>').join('')
+    : '';
+
+  const bodyRows = months.map((ym, i) => {
+    const cells = PRINT_METRICS.map((m) => {
+      const a = atIndex(f[m.key], i) || 0;
+      if (!cmp) return `<td class="n">${int(a)}</td>`;
+      const b = atIndex(B[m.key], i);
+      const c = b == null ? null : changeOf(a, b);
+      return `<td class="n">${int(a)}</td>`
+        + `<td class="n prior">${b == null ? '—' : int(b)}</td>`
+        + `<td class="d ${c ? c.cls : ''}">${c ? c.text : '—'}</td>`;
+    }).join('');
+    return `<tr><th scope="row">${esc(fmtMonthLabel(ym))}</th>${cells}</tr>`;
+  }).join('');
+
+  const totalCells = PRINT_METRICS.map((m) => {
+    const a = sum(f[m.key]);
+    if (!cmp) return `<td class="n">${int(a)}</td>`;
+    const b = sum(B[m.key]);
+    const c = changeOf(a, b);
+    return `<td class="n">${int(a)}</td><td class="n prior">${int(b)}</td>`
+      + `<td class="d ${c.cls}">${c.text}</td>`;
+  }).join('');
+
+  const caption = cmp
+    ? 'Each metric shows this period, the comparison period, and the change. Months align by position, not by calendar date.'
+    : 'Monthly figures across the selected range.';
+
+  els.printReport.innerHTML = `
+    <div class="pr-head">
+      <h1>Marketing Performance${cmp ? ' — Period on Period' : ''}</h1>
+      <p class="pr-period">Pacific Discovery · ${esc(periodLabel(months))}${
+        cmp ? ` compared with ${esc(periodLabel(B.months))}` : ''}</p>
+    </div>
+
+    <section>
+      <h2>Headline</h2>
+      <div class="pr-kpis">${kpis}</div>
+    </section>
+
+    <section>
+      <h2>Monthly detail</h2>
+      <table>
+        <caption>${caption}</caption>
+        <thead>
+          <tr><th${cmp ? ' rowspan="2"' : ''}></th>${groupHead}</tr>
+          ${cmp ? `<tr>${subHead}</tr>` : ''}
+        </thead>
+        <tbody>
+          ${bodyRows}
+          <tr class="total"><th scope="row">Total</th>${totalCells}</tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="pr-foot">${new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
+  return true;
+}
+
+function exportReport() {
+  if (!buildPrintReport()) return;
+  window.print();
+}
+
+/* Someone who reaches for Ctrl/Cmd+P instead of the button gets the report
+   too, rather than eleven pages of dark dashboard or — since the print
+   container starts empty — one blank sheet. */
+window.addEventListener('beforeprint', () => { buildPrintReport(); });
+
 /* -------- orchestration -------- */
 function renderTrafficNotice() {
   const s = state.funnel.trafficSource;
@@ -1318,11 +1546,15 @@ function rerender() {
   seedFxFromStored();
   renderSpendTable();
   updateSaveBar();
+  els.exportBtn.disabled = false;
 }
 
 async function load() {
   els.refresh.disabled = true;
   els.refresh.textContent = 'Loading…';
+  // Exporting mid-fetch would print the previous window under the new
+  // window's heading. Re-enabled by rerender() once the data has landed.
+  els.exportBtn.disabled = true;
   els.error.classList.add('hidden');
   showSkeletons(true);
 
@@ -1441,6 +1673,7 @@ document.querySelectorAll('[data-preset]').forEach((btn) => {
 });
 els.refresh.addEventListener('click', load);
 els.saveBtn.addEventListener('click', saveSpend);
+els.exportBtn.addEventListener('click', exportReport);
 
 /* Switching metric or view is a re-read of data already in hand — no refetch,
    so the panel flips instantly and the two can be flicked between. */
