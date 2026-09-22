@@ -97,6 +97,9 @@ const payload = {
   cash: cash.byBudget.filter((r) => r.budget_id === "peru"),
   cashByPerson: cash.byPerson,
   cashUnresolved: 0,
+  // Quoted against NZD. The Peru leg stores 2.10 PEN per NZD; the market says
+  // 2.52, so the stored rate is ~17% out and should be flagged.
+  market: { base: "NZD", date: "2026-09-22", source: "ECB via Frankfurter", rates: { PEN: 2.52, THB: 21.4 } },
   generatedAt: new Date().toISOString(),
 };
 
@@ -112,8 +115,19 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
 const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
-await page.route("**/api/budget-admin**", (route) =>
-  route.fulfill({ json: /action=entries/.test(route.request().url()) ? { entries } : payload }));
+const posted = [];
+await page.route("**/api/budget-admin**", (route) => {
+  const url = route.request().url();
+  if (route.request().method() === "POST") {
+    posted.push(JSON.parse(route.request().postData() || "{}"));
+    return route.fulfill({ json: { id: "copy1", name: "copy", categories: 3, assigned: [] } });
+  }
+  if (/action=entries/.test(url)) return route.fulfill({ json: { entries } });
+  if (/action=fx/.test(url)) {
+    return route.fulfill({ json: { market: { base: "PEN", date: "2026-09-22", source: "ECB via Frankfurter", rates: { NZD: 0.45, USD: 0.27 } } } });
+  }
+  return route.fulfill({ json: payload });
+});
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 
@@ -419,6 +433,43 @@ await check("reopening the ledger starts from a clear search", async () => {
   assert.equal(await page.inputValue("#lgSearch"), "", "a search is about one question, not a standing filter");
   assert.equal(await shownRows(), entries.length);
   await page.click("#closeLedger");
+});
+
+// ── planning-rate drift, and duplicating a budget ───────────────────────────
+
+await check("a planning rate that has drifted from the market is flagged", async () => {
+  const chip = page.locator('.bcard[data-budget="peru"] .drift').first();
+  assert.equal(await chip.count(), 1);
+  assert.match((await chip.textContent()).trim(), /-17% vs market/);
+  assert.match(await chip.getAttribute("title"), /market is around 2\.5200/);
+});
+
+await check("a leg whose rate matches the market is left alone", async () => {
+  // Thailand stores 21.5 against a market 21.4 — well inside the threshold, and
+  // a chip on every leg would train people to ignore all of them.
+  assert.equal(await page.locator('.bcard[data-budget="thailand"] .drift').count(), 0);
+});
+
+await check("duplicating suggests next year's name and copies no entries", async () => {
+  await page.locator('.bcard[data-budget="peru"] [data-duplicate]').click();
+  await page.waitForSelector("#dupDlg[open]", { timeout: 5000 });
+  assert.equal(await page.inputValue("#d-name"), "Peru — Feb 2027", "the year steps forward");
+  assert.equal(await page.inputValue("#d-start"), "", "dates start blank, not last season's");
+  assert.equal(await page.isChecked("#d-people"), false, "instructors are opt-in");
+  assert.match(await page.locator("#dupDlg .hint").last().textContent(), /No entries are copied/);
+});
+
+await check("the duplicate request carries what the dialog showed", async () => {
+  posted.length = 0;
+  await page.fill("#d-name", "Peru — Feb 2027");
+  await page.check("#d-people");
+  await page.click("#d-save");
+  await page.waitForTimeout(400);
+  const body = posted.find((b) => b.budget_id);
+  assert.ok(body, "a duplicate was posted");
+  assert.equal(body.name, "Peru — Feb 2027");
+  assert.equal(body.copy_assignments, true);
+  assert.equal(body.starts_on, null);
 });
 
 await check("no uncaught page errors", async () => {

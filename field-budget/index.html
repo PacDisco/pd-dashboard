@@ -90,6 +90,13 @@
   .leg-head > span:first-child { flex:1; min-width:0; }
   .leg-head .minibar { flex:none; align-self:center; width:90px; }
   .leg-head .leg-over { color:var(--over); }
+  /* A planning rate that has wandered. Amber, not red: nothing is wrong with
+     the numbers, they are just measured against an old rate. */
+  .drift {
+    font-size:10.5px; font-weight:600; margin-left:8px; cursor:help;
+    color:#8a6100; background:#fdf3d4; border:1px solid #f0dda0;
+    border-radius:9999px; padding:1px 8px; white-space:nowrap;
+  }
   .leg-name { font-weight:600; }
   .leg-cur {
     font-size:11px; font-weight:600; color:var(--topaz-dark); background:var(--topaz-soft);
@@ -366,6 +373,37 @@
 </dialog>
 
 <!-- Ledger -->
+<dialog id="dupDlg" class="rounded-xl p-0 w-full max-w-md">
+  <div class="p-6">
+    <h2 class="text-lg mb-1">Duplicate budget</h2>
+    <p class="hint" id="dupFrom" style="margin-top:0"></p>
+
+    <label for="d-name">New name</label>
+    <input id="d-name" placeholder="Fall 2027 — Polynesian Journey">
+
+    <div class="two">
+      <div><label for="d-start">Starts</label><input id="d-start" type="date"></div>
+      <div><label for="d-end">Ends</label><input id="d-end" type="date"></div>
+    </div>
+
+    <label class="lg-check" style="margin-top:14px">
+      <input id="d-people" type="checkbox"> Also copy the assigned instructors
+    </label>
+
+    <p class="hint">
+      Legs, categories, subcategories, allocations and planning rates are copied.
+      <strong>No entries are copied</strong> — the new budget starts at zero spent.
+    </p>
+
+    <p id="d-err" class="err hidden"></p>
+
+    <div class="flex justify-end gap-2 mt-5">
+      <button id="d-cancel" class="btn-quiet px-4 py-2 text-sm" type="button">Cancel</button>
+      <button id="d-save" class="btn-primary px-5 py-2 text-sm" type="button">Duplicate</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="ledgerDlg" class="rounded-xl p-0 w-full max-w-4xl">
   <div class="p-6">
     <div class="flex items-center justify-between mb-4">
@@ -493,6 +531,38 @@ function treeFor(budgetId) {
   return all.filter((c) => !c.parent_id).map((leg) => shape(leg, 1));
 }
 
+/* ------------------------------------------------------------------ fx ---
+   Planning rates are typed in once and never revisited, so the card says when
+   one has wandered away from the market. Nothing is recalculated: the stored
+   rate remains what entries were measured against, and changing it is the
+   admin's decision. See netlify/functions/_shared/field-fx.mjs. */
+
+const DRIFT_THRESHOLD = 0.05;
+
+// Units of `to` per 1 unit of `from`, from a table quoted against one base.
+function crossRate(market, from, to) {
+  if (!market || !market.rates) return null;
+  const f = normCur(from), t = normCur(to), mb = normCur(market.base);
+  if (!f || !t) return null;
+  if (f === t) return 1;
+  const at = (c) => {
+    if (c === mb) return 1;
+    const v = Number(market.rates[c]);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  const a = at(f), b = at(t);
+  return a === null || b === null ? null : b / a;
+}
+
+// What the leg's stored rate is against what the market says today.
+function legDrift(leg, base) {
+  const stored = Number((leg.rates || {})[base]);
+  const live = crossRate(DATA.market, base, leg.currency);
+  if (!Number.isFinite(stored) || stored <= 0 || live === null) return null;
+  const pct = (stored - live) / live;
+  return { stored, live, pct, drifted: Math.abs(pct) >= DRIFT_THRESHOLD };
+}
+
 // A leg's rates map is expressed in LEG-currency units per 1 unit of the other
 // currency, so converting the leg's own total into base means dividing.
 function toBase(amount, leg, base) {
@@ -606,9 +676,14 @@ function render() {
         ? Math.min(100, (leg.spent / leg.allocated) * 100)
         : (leg.spent > 0 ? 100 : 0);
       const overspent = leg.spent > leg.allocated;
+      const drift = legDrift(leg, base);
       return `<section class="leg">
         <div class="leg-head">
-          <span><span class="leg-name">${esc(leg.name)}</span><span class="leg-cur">${esc(leg.currency || '—')}</span></span>
+          <span><span class="leg-name">${esc(leg.name)}</span><span class="leg-cur">${esc(leg.currency || '—')}</span>${
+            drift && drift.drifted
+              ? `<span class="drift" title="Planning rate ${drift.stored} ${esc(leg.currency)} per ${esc(base)}; the market is around ${drift.live.toFixed(4)} today. Stored figures are unchanged — edit the budget to update the rate.">rate ${
+                  (drift.pct > 0 ? '+' : '') + Math.round(drift.pct * 100)}% vs market</span>`
+              : ''}</span>
           <span class="minibar ${overspent ? 'over' : ''}" title="${Math.round(pct)}% spent">
             <span style="width:${pct}%"></span>
           </span>
@@ -729,6 +804,8 @@ function render() {
             <input data-assign-input placeholder="Add instructor emails, comma separated" style="flex:1;min-width:220px">
             <button data-assign class="btn-quiet text-sm px-4 py-1.5">Assign</button>
             <button data-edit class="btn-quiet text-sm px-4 py-1.5">Edit</button>
+            <button data-duplicate class="btn-quiet text-sm px-4 py-1.5"
+              title="Copy the legs, categories and allocations into a new budget with nothing spent against it">Duplicate</button>
             <button data-ledger class="btn-quiet text-sm px-4 py-1.5">View entries</button>
             <button data-status="${b.status === 'active' ? 'closed' : 'active'}" class="btn-quiet text-sm px-4 py-1.5">
               ${b.status === 'active' ? 'Close' : 'Reopen'}
@@ -787,6 +864,7 @@ $('list').addEventListener('click', async (ev) => {
     }
     if (ev.target.matches('[data-code]')) return openCode(ev.target.dataset.code);
     if (ev.target.matches('[data-edit]')) return openEdit(budgetId);
+    if (ev.target.matches('[data-duplicate]')) return openDuplicate(budgetId);
     if (ev.target.matches('[data-ledger]')) return openLedger(budgetId);
   } catch (e) { showErr(e.message); }
 });
@@ -858,6 +936,75 @@ $('c-clear').addEventListener('click', async () => {
     load();
   } catch (e) { $('c-err').textContent = e.message; $('c-err').classList.remove('hidden'); }
 });
+
+/* ------------------------------------------------------------ duplicate ---
+   Reuses the shape a programme was planned in — legs, currencies, planning
+   rates, categories and allocations — with nothing spent against it. Entries
+   are never copied: a ledger belongs to the programme it was spent on, and a
+   copy carrying last season's spend would report against this season's
+   allocations. */
+
+let DUP_ID = null;
+
+function openDuplicate(budgetId) {
+  const b = DATA.budgets.find((x) => x.id === budgetId);
+  if (!b) return;
+  DUP_ID = budgetId;
+  const legs = treeFor(budgetId);
+  const nCats = legs.reduce((n, l) => n + 1 + l.kids.length + l.kids.reduce((m, k) => m + k.kids.length, 0), 0);
+  const people = DATA.assignments.filter((a) => a.budget_id === budgetId).length;
+
+  $('dupFrom').textContent =
+    `From “${b.name}” — ${legs.length} leg${legs.length === 1 ? '' : 's'}, ${nCats} categor${nCats === 1 ? 'y' : 'ies'}, ${people} instructor${people === 1 ? '' : 's'}.`;
+  // A year is the usual gap, and it is easier to correct a suggestion than to
+  // type a name from scratch.
+  $('d-name').value = nextSeasonName(b.name);
+  // Dates are deliberately left blank rather than carried over: a copy that
+  // opens already holding February's dates is one nobody remembers to fix.
+  $('d-start').value = '';
+  $('d-end').value = '';
+  $('d-people').checked = false;
+  $('d-err').classList.add('hidden');
+  $('dupDlg').showModal();
+  $('d-name').focus();
+  $('d-name').select();
+}
+
+// "Fall 2026 - Polynesian Journey" -> "Fall 2027 - Polynesian Journey".
+// Only the first standalone 4-digit year, and only one that looks like a year.
+function nextSeasonName(name) {
+  const m = String(name || '').match(/\b(20\d{2})\b/);
+  if (!m) return `${name} (copy)`;
+  return name.replace(m[1], String(Number(m[1]) + 1));
+}
+
+$('d-cancel').addEventListener('click', () => $('dupDlg').close());
+$('d-save').addEventListener('click', (ev) => busy(ev.target, 'Duplicating…', async () => {
+  const err = $('d-err');
+  err.classList.add('hidden');
+  const name = $('d-name').value.trim();
+  if (!name) { err.textContent = 'Give the new budget a name.'; err.classList.remove('hidden'); return; }
+  try {
+    const r = await api('?action=duplicate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        budget_id: DUP_ID, name,
+        starts_on: $('d-start').value || null,
+        ends_on: $('d-end').value || null,
+        copy_assignments: $('d-people').checked,
+      }),
+    });
+    $('dupDlg').close();
+    await load();
+    // Open the copy, since the next thing anyone does is check it.
+    OPEN.add(r.id);
+    render();
+    flash(`Duplicated — ${r.categories} categor${r.categories === 1 ? 'y' : 'ies'} copied, no entries.`);
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
+}));
 
 /* --------------------------------------------------------------- ledger --- */
 
@@ -1334,7 +1481,11 @@ function addLegCard(leg = null) {
 
     <div class="subhead">Planning rates <span class="legcurlabel"></span></div>
     <div class="rates"></div>
-    <button class="mt-1 text-sm lnk addrate" type="button">+ Add currency</button>
+    <div class="flex gap-3 items-center flex-wrap mt-1">
+      <button class="text-sm lnk addrate" type="button">+ Add currency</button>
+      <button class="text-sm lnk fetchrates" type="button">Use today's rates</button>
+      <span class="ratenote hint" style="margin:0"></span>
+    </div>
     <p class="hint rateNote"></p>
 
     <div class="subhead">Categories</div>
@@ -1363,6 +1514,48 @@ function addLegCard(leg = null) {
   cur.addEventListener('blur', () => { cur.value = normCur(cur.value); syncCur(); });
 
   card.querySelector('.addrate').addEventListener('click', () => { addRateRow(rates); syncCur(); });
+
+  /* Fill the rate boxes from today's market.
+     It writes into the form, not the database — the stored planning rate is
+     what every entry on this leg was measured against, so replacing it is a
+     decision the admin makes and saves, not something a button does behind
+     them. Rows the admin has already typed into are left alone unless they
+     ask again. */
+  const note = card.querySelector('.ratenote');
+  card.querySelector('.fetchrates').addEventListener('click', async (ev) => {
+    const legCur = normCur(card.querySelector('.legcur').value);
+    const rows = [...rates.querySelectorAll('.raterow')];
+    const codes = rows.map((r) => normCur(r.querySelector('.ratecur').value)).filter(Boolean);
+    if (!legCur) { note.textContent = 'Set this leg\u2019s currency first.'; return; }
+    if (!codes.length) { note.textContent = 'Add a currency to fetch a rate for.'; return; }
+
+    note.textContent = 'Fetching\u2026';
+    try {
+      const { market, error } = await api(
+        `?action=fx&base=${encodeURIComponent(legCur)}&symbols=${encodeURIComponent([...codes, legCur].join(','))}`);
+      if (!market) { note.textContent = error || 'No rate source is reachable right now.'; return; }
+
+      let filled = 0, missed = [];
+      for (const row of rows) {
+        const code = normCur(row.querySelector('.ratecur').value);
+        if (!code) continue;
+        // The stored map is LEG units per 1 unit of `code`, which is what the
+        // response is quoted in when we ask with the leg as the base.
+        const rate = crossRate(market, code, legCur);
+        if (rate === null) { missed.push(code); continue; }
+        row.querySelector('.rateval').value = Number(rate.toPrecision(6));
+        filled++;
+      }
+      recalcTotal();
+      note.textContent = [
+        filled ? `${filled} rate${filled === 1 ? '' : 's'} set from ${market.source}, ${market.date}.` : '',
+        missed.length ? `No rate for ${missed.join(', ')}.` : '',
+        'Mid-market — your bank\u2019s spread sits on top.',
+      ].filter(Boolean).join(' ');
+    } catch (e) {
+      note.textContent = e.message;
+    }
+  });
   card.querySelector('.addcat').addEventListener('click', () => {
     addCatRow(catlist).querySelector('.cname').focus();
   });

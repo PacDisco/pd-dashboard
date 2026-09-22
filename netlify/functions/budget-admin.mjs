@@ -22,6 +22,9 @@
 //                          cash, cashByPerson }   cash = drawn/spent/held per
 //                          instructor per currency; see _shared/field-cash.mjs
 //   GET   entries     ?budget=<id>  -> { entries }
+//   GET   fx          ?symbols=USD,PEN[&base=NZD] -> today's market rates, for
+//                     the "use today's rate" button. Best-effort: null on any
+//                     upstream failure, never an error the page has to handle.
 //   GET   export      ?budget=<id>  -> text/csv, for reconciliation
 //   POST  create      { name, currency, default_rate, categories[], emails[] }
 //   POST  update      { budget_id, name?, default_rate?, starts_on?, ends_on?,
@@ -31,6 +34,9 @@
 // its own alongside children with theirs, and totals roll up. The database
 // enforces the single level with a trigger — see
 // MIGRATION-field-budget-subcategories.sql.
+//   POST  duplicate   { budget_id, name, starts_on?, ends_on?, copy_assignments? }
+//                     -> a new budget with the same leg/category tree and
+//                     allocations, and no entries. See handleDuplicate.
 //   POST  assign      { budget_id, emails[] }
 //   POST  unassign    { budget_id, email }
 //   POST  set-status  { budget_id, status }  active | closed
@@ -50,6 +56,12 @@ import { neon } from "@neondatabase/serverless";
 import { verifiedUser } from "./_shared/identity.mjs";
 import { hashCode, codeProblem } from "./_shared/access-code.mjs";
 import { foldCash } from "./_shared/field-cash.mjs";
+// The CSV, with every line converted to the base currency and totalled. It
+// also owns the minor-unit helpers now, so there is one copy of the
+// zero-decimal / three-decimal currency lists rather than two that can drift.
+import { buildExportCsv } from "./_shared/field-export.mjs";
+import { fetchSpot, cleanCodes } from "./_shared/field-fx.mjs";
+import { planCategoryCopy } from "./_shared/field-duplicate.mjs";
 
 const WRITE_ROLES = ["admin", "programs", "operations"];
 
@@ -86,21 +98,10 @@ function normaliseEmail(raw) {
 // boundary rather than scattering Number() through the page.
 const money = (v) => (v === null || v === undefined ? null : Number(v));
 
-// Not every currency has 100 minor units: VND, JPY and CLP have none, a few Gulf
-// currencies use 1000. Only matters where figures leave the system as decimals.
-const ZERO_DECIMAL = new Set(["BIF","CLP","DJF","GNF","ISK","JPY","KMF","KRW",
-  "PYG","RWF","UGX","VND","VUV","XAF","XOF","XPF"]);
-const THREE_DECIMAL = new Set(["BHD","IQD","JOD","KWD","LYD","OMR","TND"]);
-const decimals = (cur) => ZERO_DECIMAL.has(cur) ? 0 : (THREE_DECIMAL.has(cur) ? 3 : 2);
 const asDay = (v) => {
   if (!v) return null;
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   return String(v).slice(0, 10);
-};
-
-const asDecimal = (minorAmount, cur) => {
-  const d = decimals(cur);
-  return (Number(minorAmount) / Math.pow(10, d)).toFixed(d);
 };
 
 // Keep only well-formed { CUR: positiveNumber } pairs. A bad rate silently
@@ -172,6 +173,15 @@ async function handleList() {
 
   const cash = foldCash(cashRows.map((r) => ({ ...r, total: money(r.total) })));
 
+  // Today's rates for every currency on the page, so a planning rate that has
+  // drifted away from the market can be pointed out. One call covers every
+  // budget; a failure is a missing warning, never a missing page.
+  const base = (budgets.find((b) => b.base_currency)?.base_currency || "NZD").toUpperCase();
+  const market = await fetchSpot(base, [
+    ...categories.map((c) => c.currency),
+    ...budgets.map((b) => b.base_currency),
+  ]).catch(() => null);
+
   return json(200, {
     budgets: budgets.map((b) => ({
       ...b,
@@ -196,6 +206,9 @@ async function handleList() {
     cash: cash.byBudget,
     cashByPerson: cash.byPerson,
     cashUnresolved: cash.unresolved,
+    // Decoration: the page renders identically without it, minus the drift
+    // warnings. Never let a rate lookup decide whether budgets load.
+    market,
     generatedAt: new Date().toISOString(),
   });
 }
@@ -229,6 +242,22 @@ async function handleEntries(budgetId) {
   });
 }
 
+/**
+ * Today's market rates, for the "use today's rates" button in the leg editor.
+ *
+ * Deliberately does NOT write anything. Filling the box is the admin's decision
+ * and the stored planning rate is what entries are measured against — silently
+ * updating it would move every unconverted figure on the leg under them.
+ */
+async function handleFx(params) {
+  const base = (params?.base || "NZD").toUpperCase();
+  const symbols = cleanCodes(String(params?.symbols || "").split(","));
+  if (!symbols.length) return json(400, { error: "symbols is required" });
+  const market = await fetchSpot(base, symbols).catch(() => null);
+  if (!market) return json(200, { market: null, error: "No rate source is reachable right now." });
+  return json(200, { market });
+}
+
 // CSV for reconciliation against the bank statement. Amounts are written as
 // decimals here because this is leaving the system for a spreadsheet.
 async function handleExport(budgetId) {
@@ -236,11 +265,14 @@ async function handleExport(budgetId) {
   const db = sql();
   const [[budget], rows] = await Promise.all([
     db`select * from budgets where id = ${budgetId}`,
-    // Walk up to the leg so each row carries the leg it belongs to and the
-    // currency its budget_amount is denominated in.
+    // Walk up to the leg so each row carries the leg it belongs to, the
+    // currency its budget_amount is denominated in, and the leg's rates map —
+    // which is what turns every line into the base currency.
     db`select e.*, c.name as category_name,
-              coalesce(l1.name, l2.name, c.name) as leg_name,
-              coalesce(l1.currency, l2.currency, c.currency) as leg_currency
+              p.name as parent_name,
+              coalesce(l1.name, l2.name, c.name)             as leg_name,
+              coalesce(l1.currency, l2.currency, c.currency) as leg_currency,
+              coalesce(l1.rates, l2.rates, c.rates, '{}'::jsonb) as leg_rates
          from entries e
          left join categories c  on c.id  = e.category_id
          left join categories p  on p.id  = c.parent_id
@@ -251,29 +283,19 @@ async function handleExport(budgetId) {
   ]);
   if (!budget) return json(404, { error: "No such budget" });
 
-  const esc = (v) => {
-    const s = v === null || v === undefined ? "" : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const head = [
-    "date", "leg", "type", "instructor", "category", "description", "method",
-    "amount", "currency", "rate", "amount_in_leg_currency", "leg_currency",
-    `actual_${(budget.base_currency || "NZD").toLowerCase()}`, "receipt",
-  ];
-  const lines = [head.join(",")];
-  for (const e of rows) {
-    lines.push([
-      e.spent_on, e.leg_name || "", e.entry_type, e.email, e.category_name || "",
-      e.description, e.payment_method,
-      asDecimal(e.amount, e.currency), e.currency, Number(e.rate),
-      asDecimal(e.budget_amount, e.leg_currency || e.currency), e.leg_currency || "",
-      e.actual_base === null ? "" : asDecimal(e.actual_base, budget.base_currency || "NZD"),
-      e.receipt_link || "",
-    ].map(esc).join(","));
-  }
+  const csv = buildExportCsv(budget, rows.map((e) => ({
+    ...e,
+    spent_on: asDay(e.spent_on),
+    amount: money(e.amount),
+    budget_amount: money(e.budget_amount),
+    actual_base: money(e.actual_base),
+    // `p` is the row's parent, which for a depth-2 category IS the leg. Naming
+    // it twice in the path would read "Peru › Peru › Food".
+    parent_name: e.parent_name === e.leg_name ? null : e.parent_name,
+  })));
 
   const slug = budget.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-  return new Response(lines.join("\n"), {
+  return new Response(csv, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
@@ -489,6 +511,100 @@ async function handleUpdate(body) {
   return json(200, { id, categories: rows.length });
 }
 
+/**
+ * Copy a budget's structure into a new one, with nothing spent against it.
+ *
+ * The thing being reused is the shape a programme was planned in: the legs,
+ * their currencies and planning rates, the categories and subcategories, and
+ * what each was allocated. Rebuilding that by hand for next season is an hour
+ * of typing and a good chance of a category quietly going missing.
+ *
+ * Entries are never copied. A ledger belongs to the programme it was spent on,
+ * and a copy carrying last season's spend would report against this season's
+ * allocations — which is the bug this feature would otherwise be.
+ *
+ * Assignments are opt-in. A new season usually means different instructors, and
+ * silently granting last season's staff access to a live budget is not a
+ * default worth having.
+ *
+ * Planning rates come across as they were. They are a deliberate decision
+ * someone made, and the card flags one that has drifted from the market rather
+ * than this quietly repricing a programme at whatever today's rate happens to
+ * be — see _shared/field-fx.mjs.
+ */
+async function handleDuplicate(body) {
+  const db = sql();
+  const sourceId = body.budget_id;
+  if (!sourceId) return json(400, { error: "budget_id is required" });
+
+  const name = (body.name || "").trim();
+  if (!name) return json(400, { error: "Give the new budget a name." });
+
+  const [[source], cats] = await Promise.all([
+    db`select * from budgets where id = ${sourceId}`,
+    // Parents before children, so a subcategory's new parent id always exists
+    // by the time it is inserted.
+    db`with recursive tree as (
+         select c.*, 1 as depth from categories c
+          where c.budget_id = ${sourceId} and c.parent_id is null
+         union all
+         select c.*, t.depth + 1 from categories c
+           join tree t on c.parent_id = t.id
+       )
+       select * from tree order by depth, sort_order, id`,
+  ]);
+  if (!source) return json(404, { error: "No such budget" });
+
+  const id = `bud_${crypto.randomUUID().slice(0, 8)}`;
+
+  // Dates default to blank rather than to last season's. A copy that opens
+  // already carrying February's dates is one nobody remembers to correct.
+  const startsOn = body.starts_on || null;
+  const endsOn = body.ends_on || null;
+
+  await db`
+    insert into budgets (id, name, currency, base_currency, default_rate,
+                         funded_base, starts_on, ends_on, status)
+    values (${id}, ${name}, ${source.currency}, ${source.base_currency},
+            ${source.default_rate}, ${source.funded_base},
+            ${startsOn}, ${endsOn}, 'active')`;
+
+  // Parents before children, with every parent_id remapped to the copy's own
+  // ids. Worked out in one pass with no database in the way — see
+  // _shared/field-duplicate.mjs for why that is where the risk lives.
+  let plan;
+  try {
+    plan = planCategoryCopy(cats, id, () => `cat_${crypto.randomUUID().slice(0, 8)}`);
+  } catch (err) {
+    return json(500, { error: `Couldn't copy the categories: ${err.message}` });
+  }
+  for (const c of plan) {
+    await db`
+      insert into categories (id, budget_id, name, allocated, sort_order,
+                              parent_id, currency, rates)
+      values (${c.id}, ${c.budget_id}, ${c.name}, ${c.allocated}, ${c.sort_order},
+              ${c.parent_id}, ${c.currency}, ${JSON.stringify(c.rates)}::jsonb)`;
+  }
+
+  let assigned = [];
+  if (body.copy_assignments) {
+    const people = await db`select email from assignments where budget_id = ${sourceId}`;
+    for (const p of people) {
+      await db`insert into assignments (budget_id, email) values (${id}, ${p.email})
+               on conflict do nothing`;
+      assigned.push(p.email);
+    }
+  }
+
+  return json(201, {
+    id,
+    name,
+    categories: plan.length,
+    assigned,
+    copied_from: sourceId,
+  });
+}
+
 async function handleAssign(body) {
   const db = sql();
   if (!body.budget_id) return json(400, { error: "budget_id is required" });
@@ -580,6 +696,10 @@ export default async (req) => {
       if (action === "list") return await handleList();
       if (action === "entries") return await handleEntries(url.searchParams.get("budget"));
       if (action === "export") return await handleExport(url.searchParams.get("budget"));
+      if (action === "fx") return await handleFx({
+        base: url.searchParams.get("base"),
+        symbols: url.searchParams.get("symbols"),
+      });
       return json(400, { error: `Unknown action "${action}".` });
     }
 
@@ -590,6 +710,7 @@ export default async (req) => {
       }
       if (action === "create") return await handleCreate(body);
       if (action === "update") return await handleUpdate(body);
+      if (action === "duplicate") return await handleDuplicate(body);
       if (action === "assign") return await handleAssign(body);
       if (action === "unassign") return await handleUnassign(body);
       if (action === "set-status") return await handleSetStatus(body);

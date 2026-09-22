@@ -301,6 +301,122 @@ progress bar, and the base-currency conversion. A leg balance on its own is a
 number with nothing to judge it against — USD 2,904 left is healthy on a 3k leg
 and alarming on a 30k one.
 
+## Planning rates and the market
+
+A leg's planning rate is typed in by hand and then never revisited. Nothing
+refreshed it and nothing noticed when it drifted, so a rate entered in June
+quietly skewed every unreconciled line on that leg by October.
+
+Two small things now address that, and neither changes how anything is
+converted:
+
+- **Use today's rates**, in the leg editor. Fills the rate boxes from the market
+  so setting up a budget doesn't start with a guess. It writes into the form,
+  not the database — saving is still the admin's decision.
+- **A drift chip on the leg**, when the stored rate sits more than 5% from
+  today's market: `rate -17% vs market`, with the two figures in the tooltip.
+
+The stored rate remains what entries were measured against. Recalculating
+history when the market moves is exactly what this system rules out — change a
+rate in April and February's balances stay put — so the chip is a prompt to a
+human, not an automatic correction.
+
+Source is the ECB reference series via Frankfurter, falling back to
+exchangerate-api, the same pair Cash Forecast uses. One spot call covers every
+currency on the page and is cached in the warm container for six hours. Neither
+source is a dealing rate, so a fetched rate is a better starting guess than a
+remembered one, not a settled figure — `actual_nzd` at reconciliation remains
+the only exact number. **FX is decoration**: if the rate service is unreachable
+the page loads identically, minus the chips.
+
+`netlify/functions/_shared/field-fx.mjs`, covered by `npm run test:fx`.
+
+## Duplicating a budget
+
+**Duplicate** on a budget card copies the shape a programme was planned in —
+legs, their currencies and planning rates, categories, subcategories and
+allocations — into a new budget with nothing spent against it.
+
+- **Entries are never copied.** A ledger belongs to the programme it was spent
+  on; a copy carrying last season's spend would report against this season's
+  allocations.
+- **Assignments are opt-in.** A new season usually means different instructors,
+  and silently granting last season's staff access to a live budget is not a
+  default worth having.
+- **Dates start blank** rather than carrying the old season's. A copy that opens
+  already holding February's dates is one nobody remembers to correct.
+- **The name steps forward a year** where it contains one, so
+  "Fall 2026 - Polynesian Journey" suggests "Fall 2027 - …". It's a suggestion
+  in an editable box.
+- **Planning rates come across as they were**, because they were a decision
+  someone made. The drift chip above flags one that has since gone stale.
+
+The risky part is the category tree: every row needs a fresh id whose parent
+points at the copy's parent rather than the original's. The database would
+accept a dangling reference — the id exists — and the copy would then report
+part of its spend into last season's programme. So the ordering and remapping
+happen in one pass with no database in the way, and a child whose parent wasn't
+copied is an error rather than a row pointing somewhere wrong:
+`netlify/functions/_shared/field-duplicate.mjs`, `npm run test:duplicate`.
+
+## The CSV export
+
+**Download CSV** gives one row per entry with every line converted to the base
+currency, and a totals block underneath.
+
+### Two NZD columns, on purpose
+
+A converted figure and a known one are different facts, and the export won't
+print them as the same number.
+
+| Column | What it is |
+|---|---|
+| `leg_per_nzd` | the leg's planning rate used for the conversion |
+| `nzd_estimate` | the leg amount at that rate — an estimate, and named one |
+| `actual_nzd` | what the money really cost, filled in at reconciliation |
+| `nzd` | `actual_nzd` when it exists, otherwise the estimate. The column to sum |
+| `nzd_source` | `actual` or `estimate`, so a total leaning on guesses is visible |
+
+Programme cost in NZD is properly the sum of funding events — cash was bought at
+a known rate at the counter, card charges landed on the NZD account at the
+bank's. Converting each expense at a rate someone typed in weeks earlier
+estimates a number you will later have exactly. That estimate is useful — you
+can't wait for reconciliation to see roughly where a programme sits — but it
+stops being useful the moment it's mistaken for the settled figure, which is why
+it keeps its own column and its own label.
+
+A leg with no base rate leaves the cell **blank rather than zero**: a zero sums
+silently into a total and understates it. Those rows are excluded from every
+total and counted in a note at the bottom.
+
+Cash movements get no estimate. A withdrawal is a funding event, so its true
+cost belongs in `actual_nzd` rather than being inferred from a planning rate.
+They keep their row, and their `actual_nzd` when it's been filled in.
+
+### Totals
+
+Below a blank line, under their own header, so selecting the entry rows and
+summing `nzd` can't pick up a subtotal:
+
+```
+TOTALS (NZD)
+scope,name,entries,nzd
+leg,Hawaii,6,2158.76
+category,Hawaii › Pre-Program › Food,4,640.76
+method,card,3,1807.65
+total,,7,3565.01
+```
+
+Per leg, per category path, per payment method, then overall — followed by a
+note saying how much of the total is estimated rather than settled.
+
+Totals accumulate in minor units from the same figures printed on each row, so
+the bottom of the file always adds up to the rows above it rather than being
+computed separately and landing a cent out.
+
+The arithmetic is `netlify/functions/_shared/field-export.mjs`, covered by
+`npm run test:export`.
+
 ## The ledger
 
 **View entries** opens grouped by budget category, down the same tree the budget
