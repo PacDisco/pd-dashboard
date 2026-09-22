@@ -32,8 +32,38 @@ const categories = [
     sort_order: 1, depth: 1, currency: "PEN", rates: { NZD: 2.1, USD: 3.34 } },
   { id: "cat_food", budget_id: "peru", name: "Food", parent_id: "leg_peru",
     allocated: 1448880, sort_order: 1, depth: 2, rates: {} },
+  { id: "cat_groceries", budget_id: "peru", name: "Groceries", parent_id: "cat_food",
+    allocated: 800000, sort_order: 1, depth: 3, rates: {} },
   { id: "leg_thai", budget_id: "thailand", name: "Thailand", parent_id: null,
     allocated: 500000, sort_order: 1, depth: 1, currency: "THB", rates: { NZD: 21.5 } },
+];
+
+// The ledger dialog fetches these separately.
+const entries = [
+  { id: "e1", budget_id: "peru", category_id: "cat_groceries", email: "katie@pd.org",
+    entry_type: "expense", spent_on: "2026-02-10", amount: 12000, currency: "PEN", rate: 1,
+    budget_amount: 12000, payment_method: "cash", description: "Market run",
+    leg_name: "Peru", leg_currency: "PEN", receipt_link: null, corrects_id: null },
+  { id: "e2", budget_id: "peru", category_id: "cat_groceries", email: "manuel@pd.org",
+    entry_type: "expense", spent_on: "2026-02-11", amount: 8000, currency: "PEN", rate: 1,
+    budget_amount: 8000, payment_method: "cash", description: "Fruit",
+    leg_name: "Peru", leg_currency: "PEN", receipt_link: "https://drive/x", corrects_id: null },
+  { id: "e3", budget_id: "peru", category_id: "cat_food", email: "katie@pd.org",
+    entry_type: "expense", spent_on: "2026-02-12", amount: 25000, currency: "PEN", rate: 1,
+    budget_amount: 25000, payment_method: "card", description: "Group dinner",
+    leg_name: "Peru", leg_currency: "PEN", receipt_link: null, corrects_id: null },
+  { id: "e4", budget_id: "peru", category_id: null, email: "katie@pd.org",
+    entry_type: "withdrawal", spent_on: "2026-02-09", amount: 200000, currency: "PEN", rate: 1,
+    budget_amount: 0, payment_method: "cash", description: "ATM, Cusco",
+    leg_name: null, leg_currency: null, receipt_link: null, corrects_id: null },
+  { id: "e5", budget_id: "peru", category_id: "cat_gone", email: "katie@pd.org",
+    entry_type: "expense", spent_on: "2026-02-08", amount: 4000, currency: "PEN", rate: 1,
+    budget_amount: 4000, payment_method: "cash", description: "Old category",
+    leg_name: "Peru", leg_currency: "PEN", receipt_link: null, corrects_id: null },
+  { id: "e6", budget_id: "peru", category_id: "cat_groceries", email: "katie@pd.org",
+    entry_type: "correction", spent_on: "2026-02-11", amount: -8000, currency: "PEN", rate: 1,
+    budget_amount: -8000, payment_method: "cash", description: "Duplicate",
+    leg_name: "Peru", leg_currency: "PEN", receipt_link: null, corrects_id: "e2" },
 ];
 const assignments = [
   { budget_id: "peru", email: "katie@pd.org", role: "instructor" },
@@ -58,7 +88,10 @@ const cash = foldCash(ledger);
 
 const payload = {
   budgets, categories, assignments,
-  spend: [{ budget_id: "peru", category_id: "cat_food", spent: 75000, n: 4 }],
+  spend: [
+    { budget_id: "peru", category_id: "cat_groceries", spent: 12000, n: 3 },
+    { budget_id: "peru", category_id: "cat_food", spent: 25000, n: 1 },
+  ],
   receipts: [{ budget_id: "peru", n: 2 }],
   codes: [{ email: "katie@pd.org", code_set_at: "2026-01-20T00:00:00Z", last_login_at: null, locked_until: null }],
   cash: cash.byBudget.filter((r) => r.budget_id === "peru"),
@@ -79,7 +112,8 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
 const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
-await page.route("**/api/budget-admin**", (route) => route.fulfill({ json: payload }));
+await page.route("**/api/budget-admin**", (route) =>
+  route.fulfill({ json: /action=entries/.test(route.request().url()) ? { entries } : payload }));
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 
@@ -154,8 +188,8 @@ await check("each instructor pill carries what they're holding", async () => {
 await check("each leg shows what's left of its own allocation", async () => {
   const leg = (await page.locator(".leg-head").first().textContent()).replace(/\s+/g, " ").trim();
   assert.match(leg, /^Peru/, `unexpected leg header "${leg}"`);
-  assert.match(leg, /PEN 13,738\.80/, `remaining missing from "${leg}"`);       // 14,488.80 − 750
-  assert.match(leg, /of PEN 14,488\.80/, `allocation missing from "${leg}"`);
+  assert.match(leg, /PEN 7,630\.00/, `remaining missing from "${leg}"`);        // 8,000 − 370
+  assert.match(leg, /of PEN 8,000\.00/, `allocation missing from "${leg}"`);
   assert.match(leg, /≈ NZD/, "the base-currency conversion should survive alongside it");
 });
 
@@ -164,8 +198,90 @@ await check("a leg carries its own progress bar", async () => {
   assert.equal(await page.locator(".leg-head .minibar").count(), 2);
   const width = await page.locator(".leg-head .minibar span").first()
     .evaluate((el) => el.style.width);
-  assert.match(width, /^5\.17/, `750 spent of 14,488.80 is ~5%, got ${width}`);
+  assert.match(width, /^4\.625/, `370 spent of 8,000 is ~4.6%, got ${width}`);
 });
+
+// ── ledger, grouped by budget category ──────────────────────────────────────
+
+await page.locator('.bcard[data-budget="peru"] [data-ledger]').click();
+await page.waitForSelector(".lg-leg", { timeout: 5000 });
+
+await check("entries open grouped by category, under their leg", async () => {
+  const legs = await page.locator(".lg-leg").allTextContents();
+  assert.match(legs[0].replace(/\s+/g, " ").trim(), /^Peru PEN/, `first section should be the leg, got "${legs[0]}"`);
+  const cats = await page.locator(".lg-cat .nm").allTextContents();
+  assert.deepEqual(cats, ["Food", "Groceries"], "tree order, and a parent with its own direct spend gets its own group");
+});
+
+await check("a subcategory shows its path", async () => {
+  const crumb = await page.locator('.lg-cat[data-cat="cat_groceries"] .crumb').first().textContent();
+  assert.match(crumb, /Food ›/, `expected the parent in the breadcrumb, got "${crumb}"`);
+});
+
+await check("a leaf group reads its subtotal against its allocation", async () => {
+  const sub = (await page.locator('.lg-cat[data-cat="cat_groceries"] .sub').textContent()).replace(/\s+/g, " ");
+  // 120 + 80 − 80 corrected = PEN 120, against Groceries' own PEN 8,000
+  assert.match(sub, /PEN 120\.00 of PEN 8,000\.00/, `got "${sub}"`);
+});
+
+await check("a parent with subcategories doesn't compare a direct subtotal to a roll-up", async () => {
+  // Food's allocation on the card is the sum of its children. Printing
+  // "PEN 250.00 of PEN 8,000.00" here would invite subtracting one from the
+  // other, and the difference would mean nothing.
+  const sub = (await page.locator('.lg-cat[data-cat="cat_food"] .sub').textContent()).replace(/\s+/g, " ").trim();
+  assert.equal(sub, "PEN 250.00 logged directly here", `got "${sub}"`);
+});
+
+await check("column headers appear once, on the first group shown", async () => {
+  const heads = await page.locator("#ledgerBody .lg-tbl thead").count();
+  // One for the first category group, one for the differently-shaped
+  // cash-movements and uncategorised sections.
+  assert.equal(heads, 3, "headers should not repeat above every category");
+  const firstTable = page.locator("#ledgerBody .lg-tbl").first();
+  assert.equal(await firstTable.locator("thead").count(), 1, "the first group is the one that carries them");
+});
+
+await check("a corrected entry and its correction both stay, struck through", async () => {
+  assert.equal(await page.locator(".lg-tbl tr.voided").count(), 1, "the voided original");
+  const body = await page.locator("#ledgerBody").textContent();
+  assert.match(body, /correction/);
+  assert.match(body, /corrected/);
+});
+
+await check("cash movements get their own section rather than vanishing", async () => {
+  const sections = (await page.locator(".lg-leg").allTextContents()).map((t) => t.replace(/\s+/g, " "));
+  assert.ok(sections.some((t) => /Cash movements/.test(t)), JSON.stringify(sections));
+  const body = await page.locator("#ledgerBody").textContent();
+  assert.match(body, /ATM, Cusco/);
+});
+
+await check("an entry on a deleted category is surfaced, not dropped", async () => {
+  const sections = (await page.locator(".lg-leg").allTextContents()).map((t) => t.replace(/\s+/g, " "));
+  assert.ok(sections.some((t) => /Uncategorised/.test(t)), JSON.stringify(sections));
+  assert.match(await page.locator("#ledgerBody").textContent(), /Old category/);
+});
+
+await check("every entry appears exactly once across the groups", async () => {
+  // The failure that would matter: a row quietly falling between two groups.
+  const rows = await page.locator("#ledgerBody .lg-tbl tbody tr").count();
+  assert.equal(rows, entries.length, "grouped view must account for every entry");
+});
+
+await check("the date view still works and shows leg and category columns", async () => {
+  await page.click("#byDate");
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator(".lg-leg").count(), 0, "no group headings in the flat view");
+  const rows = await page.locator("#ledgerBody .lg-tbl tbody tr").count();
+  assert.equal(rows, entries.length);
+  const head = await page.locator("#ledgerBody .lg-tbl thead").textContent();
+  assert.match(head, /Leg/);
+  assert.match(head, /Category/);
+  await page.click("#byCat");
+  await page.waitForTimeout(150);
+  assert.ok(await page.locator(".lg-leg").count() > 0, "toggling back restores the grouping");
+});
+
+await page.click("#closeLedger");
 
 await check("no uncaught page errors", async () => {
   assert.deepEqual(errors, []);

@@ -301,6 +301,36 @@ progress bar, and the base-currency conversion. A leg balance on its own is a
 number with nothing to judge it against — USD 2,904 left is healthy on a 3k leg
 and alarming on a 30k one.
 
+## The ledger
+
+**View entries** opens grouped by budget category, down the same tree the budget
+card draws and in the same order — a category that looks overspent up there can
+be opened here and read line by line. **By date** switches to the flat
+chronological list.
+
+Each group carries its own subtotal, because "where did that go" is almost
+always the reason for opening it and a list of rows with no total attached
+doesn't answer it. Only expenses and the corrections against them count, which
+is the rule the gauges use.
+
+**A leaf reads against its allocation.** A parent that also has subcategories
+does not: the allocation shown on the card is the roll-up of its children, so
+putting a direct-only subtotal beside it would invite subtracting one from the
+other and getting a number that means nothing. Those groups say
+"X logged directly here" instead, and only leaves take the overspend colour.
+
+Two sections sit below the legs rather than being dropped:
+
+- **Cash movements** — withdrawals, exchanges and transfers carry no
+  `category_id` because they move money between pockets and currencies instead
+  of spending it.
+- **Uncategorised** — entries whose category has since been removed from the
+  budget. Deletion is blocked while a category has spend against it, so this
+  should stay empty; it exists so that if one ever appears it is visible rather
+  than silently missing from every total.
+
+Corrected entries keep their strike-through and both rows stay, as before.
+
 ## Known gaps
 
 - **Cash on hand assumes the field app signs movements as documented.** An
@@ -308,6 +338,13 @@ and alarming on a 30k one.
   columns exist so a wrong sign reads as an obviously wrong subtotal rather than
   a quietly wrong balance — check one real budget against a known float before
   trusting it.
+- **A parent category's own allocation is lost when it has children.**
+  `treeFor()` computes a node with children as the sum of its children, so an
+  allocation set directly on a parent alongside subcategories never reaches a
+  total. The "Subcategories" section above says displayed totals are own plus
+  children; the code and the "Category tree" section say otherwise. The ledger
+  sidesteps it by reporting direct spend separately, but the budget card still
+  understates any parent set up that way.
 - **Nothing reconciles a counted pocket against the figure.** Held is what the
   ledger says should be there; there is no place to record what actually was.
 - **Unbudgeted spend is flagged but not alerted.** A category with zero

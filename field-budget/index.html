@@ -141,6 +141,36 @@
   .cash .elsewhere { font-size:11px; color:#797979; }
   .cash tfoot td { border-top:2px solid var(--topaz-soft); font-weight:600; }
 
+  /* Ledger grouped by budget category. */
+  .seg { display:inline-flex; border:2px solid #dee2e6; border-radius:70px; overflow:hidden; }
+  .seg button {
+    font-size:12px; padding:6px 14px; background:#fff; color:var(--ink); font-weight:500;
+  }
+  .seg button + button { border-left:1px solid #e5e7eb; }
+  .seg button.on { background:var(--topaz-dark); color:#fff; }
+  .lg-leg {
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    font-weight:600; font-size:14px; margin:22px 0 0;
+    padding-bottom:6px; border-bottom:2px solid var(--topaz-soft);
+  }
+  .lg-leg:first-child { margin-top:4px; }
+  .lg-cat {
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    margin:14px 0 2px; font-size:13px;
+  }
+  .lg-cat .nm { font-weight:600; }
+  .lg-cat .crumb { color:#9ca3af; font-weight:400; }
+  .lg-cat .sub { font-size:11.5px; color:#797979; white-space:nowrap; }
+  .lg-cat .sub.over { color:var(--over); font-weight:600; }
+  .lg-tbl { width:100%; font-size:13px; border-collapse:collapse; }
+  .lg-tbl th {
+    text-align:left; font-size:10.5px; font-weight:500; color:#9ca3af;
+    text-transform:uppercase; letter-spacing:.06em; padding:4px 8px 4px 0; border-bottom:1px solid #f3f4f6;
+  }
+  .lg-tbl td { padding:6px 8px 6px 0; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+  .lg-tbl .voided { opacity:.5; text-decoration:line-through; }
+  .lg-empty { font-size:12px; color:#9ca3af; padding:6px 0 10px; }
+
   .people { margin-top:16px; padding-top:14px; border-top:1px solid #e5e7eb; }
   .pill .cash-held { color:#2f5d16; font-weight:600; }
   .pill .cash-held.short { color:var(--over); }
@@ -319,7 +349,11 @@
   <div class="p-6">
     <div class="flex items-center justify-between mb-4">
       <h2 id="ledgerTitle" class="text-lg">Entries</h2>
-      <div class="flex gap-2">
+      <div class="flex gap-2 items-center">
+        <span class="seg" role="group" aria-label="Group entries">
+          <button id="byCat" class="on" type="button">By category</button>
+          <button id="byDate" type="button">By date</button>
+        </span>
         <a id="csvLink" class="btn-quiet px-4 py-2 text-sm" href="#">Download CSV</a>
         <button id="closeLedger" class="btn-quiet px-4 py-2 text-sm">Close</button>
       </div>
@@ -796,6 +830,9 @@ $('c-clear').addEventListener('click', async () => {
 
 /* --------------------------------------------------------------- ledger --- */
 
+let LEDGER = null;            // { budgetId, entries } for the open dialog
+let LEDGER_VIEW = 'category';  // 'category' | 'date'
+
 async function openLedger(budgetId) {
   const b = DATA.budgets.find((x) => x.id === budgetId);
   $('ledgerTitle').textContent = `${b.name} — entries`;
@@ -804,42 +841,171 @@ async function openLedger(budgetId) {
   $('ledgerDlg').showModal();
   try {
     const { entries } = await api(`?action=entries&budget=${encodeURIComponent(budgetId)}`);
-    if (!entries.length) {
-      $('ledgerBody').innerHTML = '<p class="hint py-6">Nothing logged yet.</p>';
-      return;
-    }
-    // An entry with a correction against it stays in the ledger — that is the
-    // point of an append-only record — but must not read as live spend.
-    const voided = new Set(entries.filter((e) => e.corrects_id).map((e) => e.corrects_id));
-    $('ledgerBody').innerHTML = `<table class="w-full text-sm">
-      <thead class="text-xs border-b" style="color:#797979">
-        <tr><th class="text-left py-2">Date</th><th class="text-left">Leg</th><th class="text-left">Who</th>
-        <th class="text-left">Category</th><th class="text-left">Description</th>
-        <th class="text-right">Paid</th><th class="text-right">Against budget</th>
-        <th class="text-center">Receipt</th></tr>
-      </thead>
-      <tbody>${entries.map((e) => `<tr class="border-b" style="border-color:#f3f4f6${
-        voided.has(e.id) ? ';opacity:.5;text-decoration:line-through' : ''}">
-        <td class="py-2 num whitespace-nowrap">${esc(String(e.spent_on || '').slice(0, 10) || '—')}</td>
-        <td class="text-xs" style="color:#797979">${esc(e.leg_name || '')}</td>
-        <td style="color:#797979">${esc((e.email || '').split('@')[0])}</td>
-        <td>${esc(e.category_name || e.entry_type)}${
-          e.entry_type === 'correction' ? ' <span class="warn">correction</span>' : ''}${
-          voided.has(e.id) ? ' <span class="warn">corrected</span>' : ''}</td>
-        <td style="color:#797979">${esc(e.description)}</td>
-        <td class="num text-right whitespace-nowrap">${fmt(e.amount, e.currency)}</td>
-        <td class="num text-right whitespace-nowrap">${
-          e.entry_type === 'expense' || e.entry_type === 'correction'
-            ? fmt(e.budget_amount, e.leg_currency || e.currency)
-            : '<span style="color:#d1d5db">—</span>'}</td>
-        <td class="text-center">${e.receipt_link
-          ? `<a href="${esc(e.receipt_link)}" target="_blank" rel="noopener" class="lnk">view</a>`
-          : '<span style="color:#d1d5db">—</span>'}</td>
-      </tr>`).join('')}</tbody></table>`;
+    LEDGER = { budgetId, entries };
+    drawLedger();
   } catch (e) {
+    LEDGER = null;
     $('ledgerBody').innerHTML = `<p class="err py-6">${esc(e.message)}</p>`;
   }
 }
+
+function setLedgerView(view) {
+  LEDGER_VIEW = view;
+  $('byCat').classList.toggle('on', view === 'category');
+  $('byDate').classList.toggle('on', view === 'date');
+  if (LEDGER) drawLedger();
+}
+$('byCat').addEventListener('click', () => setLedgerView('category'));
+$('byDate').addEventListener('click', () => setLedgerView('date'));
+
+function drawLedger() {
+  const { budgetId, entries } = LEDGER;
+  if (!entries.length) {
+    $('ledgerBody').innerHTML = '<p class="hint py-6">Nothing logged yet.</p>';
+    return;
+  }
+  // An entry with a correction against it stays in the ledger — that is the
+  // point of an append-only record — but must not read as live spend.
+  const voided = new Set(entries.filter((e) => e.corrects_id).map((e) => e.corrects_id));
+  $('ledgerBody').innerHTML = LEDGER_VIEW === 'category'
+    ? ledgerByCategory(budgetId, entries, voided)
+    : ledgerByDate(entries, voided);
+}
+
+/* Shared row rendering. `cols` drops the columns a grouped view already states
+   in its header, so the same markup serves both. */
+function ledgerRows(entries, voided, cols) {
+  const head = cols.head === false ? '' : [
+    '<th>Date</th>',
+    cols.leg ? '<th>Leg</th>' : '',
+    '<th>Who</th>',
+    cols.category ? '<th>Category</th>' : '',
+    '<th>Description</th>',
+    '<th class="text-right">Paid</th>',
+    '<th class="text-right">Against budget</th>',
+    '<th class="text-center">Receipt</th>',
+  ].join('');
+  const body = entries.map((e) => `<tr class="${voided.has(e.id) ? 'voided' : ''}">
+      <td class="num whitespace-nowrap">${esc(String(e.spent_on || '').slice(0, 10) || '—')}</td>
+      ${cols.leg ? `<td class="text-xs" style="color:#797979">${esc(e.leg_name || '')}</td>` : ''}
+      <td style="color:#797979">${esc((e.email || '').split('@')[0])}</td>
+      ${cols.category ? `<td>${esc(e.category_name || e.entry_type)}</td>` : ''}
+      <td style="color:#797979">${esc(e.description)}${
+        e.entry_type === 'correction' ? ' <span class="warn">correction</span>' : ''}${
+        voided.has(e.id) ? ' <span class="warn">corrected</span>' : ''}${
+        !cols.category && !e.category_id ? ` <span class="text-xs" style="color:#9ca3af">${esc(e.entry_type)}</span>` : ''}</td>
+      <td class="num text-right whitespace-nowrap">${fmt(e.amount, e.currency)}</td>
+      <td class="num text-right whitespace-nowrap">${
+        e.entry_type === 'expense' || e.entry_type === 'correction'
+          ? fmt(e.budget_amount, e.leg_currency || e.currency)
+          : '<span style="color:#d1d5db">—</span>'}</td>
+      <td class="text-center">${e.receipt_link
+        ? `<a href="${esc(e.receipt_link)}" target="_blank" rel="noopener" class="lnk">view</a>`
+        : '<span style="color:#d1d5db">—</span>'}</td>
+    </tr>`).join('');
+  return `<table class="lg-tbl">${head ? `<thead><tr>${head}</tr></thead>` : ''}<tbody>${body}</tbody></table>`;
+}
+
+function ledgerByDate(entries, voided) {
+  return ledgerRows(entries, voided, { leg: true, category: true });
+}
+
+/* ------------------------------------------------------------- by category --
+   Grouped down the same tree the budget card draws, in the same order, so a
+   category that looks overspent up there can be opened here and read line by
+   line. Each group carries its own subtotal against its allocation — the whole
+   reason for looking is usually "where did that go", and a group of entries
+   with no total attached doesn't answer it.
+
+   Only expenses and their corrections count towards a category subtotal, which
+   is the same rule the gauges use. Cash movements carry no category at all and
+   get their own section rather than being dropped. */
+
+function ledgerByCategory(budgetId, entries, voided) {
+  const legs = treeFor(budgetId);
+  // Column headers once, above the first group. Repeating them between every
+  // category turns a page of numbers into a page of labels.
+  let first = true;
+  const cols = () => { const c = { leg: false, category: false, head: first }; first = false; return c; };
+  const byCategory = new Map();
+  const uncategorised = [];
+  const movements = [];
+
+  const known = new Set();
+  const walk = (n) => { known.add(n.id); n.kids.forEach(walk); };
+  legs.forEach(walk);
+
+  for (const e of entries) {
+    if (!e.category_id) { movements.push(e); continue; }
+    if (!known.has(e.category_id)) { uncategorised.push(e); continue; }
+    if (!byCategory.has(e.category_id)) byCategory.set(e.category_id, []);
+    byCategory.get(e.category_id).push(e);
+  }
+
+  // Spend as the gauges count it: expenses plus the corrections against them.
+  const subtotal = (rows) => rows.reduce((n, e) =>
+    n + (e.entry_type === 'expense' || e.entry_type === 'correction' ? (e.budget_amount || 0) : 0), 0);
+
+  const section = (node, legCurrency, crumbs) => {
+    const own = byCategory.get(node.id) || [];
+    const path = [...crumbs, node.name];
+    // This node's own rows are rendered BEFORE recursing, so the one set of
+    // column headers lands on the first group that appears on screen rather
+    // than on whichever descendant happened to be visited first.
+    const ownRows = own.length ? ledgerRows(own, voided, cols()) : '';
+    const kids = node.kids.map((k) => section(k, legCurrency, path)).join('');
+    if (!own.length) return kids;   // a pure roll-up adds a heading and nothing else
+
+    const spent = subtotal(own);
+    // Only a leaf's subtotal is comparable to its allocation, so only a leaf
+    // gets the overspend colour — see `measure` below.
+    const over = !node.kids.length && node.allocated > 0 && node.spent > node.allocated;
+    const label = path.length > 1
+      ? `<span class="crumb">${esc(path.slice(0, -1).join(' › '))} › </span><span class="nm">${esc(node.name)}</span>`
+      : `<span class="nm">${esc(node.name)}</span>`;
+
+    // A group's subtotal only covers the entries listed under it. For a leaf
+    // that is the whole story, so it reads against the allocation. For a parent
+    // that also has subcategories it is NOT: the allocation shown on the budget
+    // card is the roll-up of its children, and putting a direct-only subtotal
+    // next to it would invite subtracting one from the other. Say which it is
+    // instead — the roll-up is already on the card above.
+    const measure = node.kids.length
+      ? `${fmt(spent, legCurrency)} logged directly here`
+      : `${fmt(spent, legCurrency)}${node.allocated > 0
+          ? ` of ${fmt(node.allocated, legCurrency)}`
+          : ' · unbudgeted'}`;
+
+    return `<div class="lg-cat" data-cat="${esc(node.id)}">
+        <span>${label} <span class="crumb">· ${own.length} entr${own.length === 1 ? 'y' : 'ies'}</span></span>
+        <span class="sub num ${over ? 'over' : ''}">${measure}</span>
+      </div>
+      ${ownRows}${kids}`;
+  };
+
+  const legBlocks = legs.map((leg) => {
+    const inner = leg.kids.map((k) => section(k, leg.currency, [])).join('')
+      + section({ ...leg, kids: [] }, leg.currency, []);   // spend logged straight at the leg
+    return `<div class="lg-leg">
+        <span>${esc(leg.name)} <span class="leg-cur">${esc(leg.currency || '—')}</span></span>
+        <span class="num">${fmt(leg.spent, leg.currency)} of ${fmt(leg.allocated, leg.currency)}</span>
+      </div>
+      ${inner || '<p class="lg-empty">Nothing logged against this leg yet.</p>'}`;
+  }).join('');
+
+  const extra = (title, rows, note) => rows.length ? `<div class="lg-leg">
+      <span>${esc(title)}</span><span class="num">${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}</span>
+    </div>
+    <p class="lg-empty">${esc(note)}</p>
+    ${ledgerRows(rows, voided, { leg: true, category: false, head: true })}` : '';
+
+  return legBlocks
+    + extra('Cash movements', movements,
+        'Withdrawals, exchanges and transfers. They move money between pockets and currencies rather than spending it, so they belong to no category.')
+    + extra('Uncategorised', uncategorised,
+        'Logged against a category that has since been removed from this budget.');
+}
+
 $('closeLedger').addEventListener('click', () => $('ledgerDlg').close());
 
 /* --------------------------------------------------------------- editor ---
