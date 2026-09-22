@@ -1,8 +1,0 @@
-{
-  "title": "Cashflow Forecast",
-  "description": "Compare cashflow forecast versions — live from Google Drive.",
-  "category": "Finance",
-  "icon": "💰",
-  "colors": ["#2563eb", "#0ea5e9"],
-  "allowedRoles": ["admin", "operations"]
-}
