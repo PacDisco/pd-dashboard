@@ -281,7 +281,115 @@ await check("the date view still works and shows leg and category columns", asyn
   assert.ok(await page.locator(".lg-leg").count() > 0, "toggling back restores the grouping");
 });
 
-await page.click("#closeLedger");
+// ── search and the corrections toggle ───────────────────────────────────────
+
+const shownRows = () => page.locator("#ledgerBody .lg-tbl tbody tr").count();
+
+await check("search narrows to matching entries and says how many", async () => {
+  await page.fill("#lgSearch", "market");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), 1);
+  assert.match(await page.locator("#lgCount").textContent(), /1 of 6 entries match/);
+  assert.match(await page.locator("#ledgerBody").textContent(), /Market run/);
+});
+
+await check("a search hit is highlighted where it matched", async () => {
+  const hit = await page.locator(".lg-hit").first().textContent();
+  assert.match(hit.toLowerCase(), /market/);
+});
+
+await check("groups with no match drop out entirely", async () => {
+  // Only Groceries should survive "market" — no empty headings left behind.
+  const cats = await page.locator(".lg-cat .nm").allTextContents();
+  assert.deepEqual(cats, ["Groceries"]);
+  assert.equal(await page.locator(".lg-leg").count(), 1, "the cash-movements section should go too");
+});
+
+await check("a filtered subtotal never sits next to an allocation", async () => {
+  // Comparing "what matched" to "what was budgeted" would be two different
+  // populations in one sentence.
+  const sub = (await page.locator('.lg-cat[data-cat="cat_groceries"] .sub').textContent()).replace(/\s+/g, " ").trim();
+  assert.equal(sub, "PEN 120.00 in 1 shown", `got "${sub}"`);
+});
+
+await check("search matches people and amounts, not just descriptions", async () => {
+  await page.fill("#lgSearch", "manuel");
+  await page.waitForTimeout(150);
+  assert.ok(await shownRows() >= 1, "by instructor");
+  await page.fill("#lgSearch", "181.27");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), 0, "no such amount in this fixture");
+  await page.fill("#lgSearch", "80.00");
+  await page.waitForTimeout(150);
+  assert.ok(await shownRows() >= 1, "by the amount as it's displayed");
+});
+
+await check("every term has to match, so a second word narrows", async () => {
+  await page.fill("#lgSearch", "katie market");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), 1);
+  await page.fill("#lgSearch", "manuel market");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), 0, "manuel didn't log the market run");
+  assert.match(await page.locator("#ledgerBody").textContent(), /Nothing matches/);
+});
+
+await check("clearing the search brings everything back", async () => {
+  await page.fill("#lgSearch", "");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), entries.length);
+});
+
+await check("hiding corrections drops the correction and the row it voids", async () => {
+  await page.uncheck("#lgCorr");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), entries.length - 2, "both halves of the pair go");
+  assert.equal(await page.locator(".lg-tbl tr.voided").count(), 0);
+  const body = await page.locator("#ledgerBody").textContent();
+  assert.ok(!/Duplicate/.test(body), "the correction itself is gone");
+  assert.ok(!/Fruit/.test(body), "and so is the entry it voided");
+  assert.match(await page.locator("#lgCount").textContent(), /2 corrected rows hidden · totals unchanged/);
+});
+
+await check("hiding corrections moves no subtotal", async () => {
+  // The pair sums to zero, so this is a promise the UI makes and should keep.
+  const sub = (await page.locator('.lg-cat[data-cat="cat_groceries"] .sub').textContent()).replace(/\s+/g, " ").trim();
+  assert.equal(sub, "PEN 120.00 of PEN 8,000.00", `got "${sub}"`);
+});
+
+await check("the corrections toggle applies to the date view too", async () => {
+  await page.click("#byDate");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), entries.length - 2);
+  await page.click("#byCat");
+  await page.waitForTimeout(150);
+  await page.check("#lgCorr");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), entries.length);
+});
+
+await check("search and the corrections toggle compose", async () => {
+  await page.uncheck("#lgCorr");
+  await page.fill("#lgSearch", "fruit");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), 0, "a voided entry stays hidden even when searched for");
+  await page.check("#lgCorr");
+  await page.waitForTimeout(150);
+  assert.equal(await shownRows(), 1);
+  await page.fill("#lgSearch", "");
+  await page.waitForTimeout(150);
+});
+
+await check("reopening the ledger starts from a clear search", async () => {
+  await page.fill("#lgSearch", "market");
+  await page.waitForTimeout(100);
+  await page.click("#closeLedger");
+  await page.locator('.bcard[data-budget="peru"] [data-ledger]').click();
+  await page.waitForSelector(".lg-leg", { timeout: 5000 });
+  assert.equal(await page.inputValue("#lgSearch"), "", "a search is about one question, not a standing filter");
+  assert.equal(await shownRows(), entries.length);
+  await page.click("#closeLedger");
+});
 
 await check("no uncaught page errors", async () => {
   assert.deepEqual(errors, []);

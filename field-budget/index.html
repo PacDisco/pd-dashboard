@@ -162,6 +162,18 @@
   .lg-cat .crumb { color:#9ca3af; font-weight:400; }
   .lg-cat .sub { font-size:11.5px; color:#797979; white-space:nowrap; }
   .lg-cat .sub.over { color:var(--over); font-weight:600; }
+  .lg-bar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+  .lg-search {
+    display:flex; align-items:center; gap:8px; flex:1; min-width:220px;
+    border:1px solid #d1d5db; border-radius:8px; padding:7px 11px; background:#fff;
+  }
+  .lg-search:focus-within { outline:2px solid var(--topaz-dark); outline-offset:-1px; }
+  .lg-search svg { flex:none; color:#9ca3af; }
+  .lg-search input { border:0; padding:0; font-size:13px; }
+  .lg-search input:focus { outline:none; }
+  .lg-check { display:inline-flex; align-items:center; gap:7px; font-size:13px; white-space:nowrap; cursor:pointer; }
+  .lg-check input { width:16px; height:16px; accent-color:var(--topaz-dark); cursor:pointer; }
+  .lg-hit { background:#fdf3d4; border-radius:2px; }
   .lg-tbl { width:100%; font-size:13px; border-collapse:collapse; }
   .lg-tbl th {
     text-align:left; font-size:10.5px; font-weight:500; color:#9ca3af;
@@ -358,7 +370,17 @@
         <button id="closeLedger" class="btn-quiet px-4 py-2 text-sm">Close</button>
       </div>
     </div>
-    <div id="ledgerBody" class="overflow-x-auto" style="max-height:65vh"></div>
+    <div class="lg-bar">
+      <label class="lg-search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="lgSearch" type="search" placeholder="Search description, person, category, amount…" autocomplete="off">
+      </label>
+      <label class="lg-check">
+        <input id="lgCorr" type="checkbox" checked> Show corrections
+      </label>
+      <span id="lgCount" class="hint" style="margin:0"></span>
+    </div>
+    <div id="ledgerBody" class="overflow-x-auto" style="max-height:62vh"></div>
   </div>
 </dialog>
 
@@ -830,13 +852,21 @@ $('c-clear').addEventListener('click', async () => {
 
 /* --------------------------------------------------------------- ledger --- */
 
-let LEDGER = null;            // { budgetId, entries } for the open dialog
+let LEDGER = null;             // { budgetId, entries } for the open dialog
 let LEDGER_VIEW = 'category';  // 'category' | 'date'
+let LEDGER_Q = '';             // search text
+let LEDGER_CORR = true;        // show corrections and the entries they void
 
 async function openLedger(budgetId) {
   const b = DATA.budgets.find((x) => x.id === budgetId);
   $('ledgerTitle').textContent = `${b.name} — entries`;
   $('csvLink').href = `${API}?action=export&budget=${encodeURIComponent(budgetId)}`;
+  // A search is about one question on one budget; carrying it into the next
+  // one opens a ledger that looks half empty for no visible reason. The
+  // corrections checkbox is a standing preference, so that one stays.
+  LEDGER_Q = '';
+  $('lgSearch').value = '';
+  $('lgCount').textContent = '';
   $('ledgerBody').innerHTML = '<div class="flex justify-center py-10"><div class="spinner"></div></div>';
   $('ledgerDlg').showModal();
   try {
@@ -857,19 +887,93 @@ function setLedgerView(view) {
 }
 $('byCat').addEventListener('click', () => setLedgerView('category'));
 $('byDate').addEventListener('click', () => setLedgerView('date'));
+$('lgSearch').addEventListener('input', (e) => { LEDGER_Q = e.target.value; if (LEDGER) drawLedger(); });
+$('lgCorr').addEventListener('change', (e) => { LEDGER_CORR = e.target.checked; if (LEDGER) drawLedger(); });
+
+/* ------------------------------------------------------------- filtering ---
+   Everything an entry could reasonably be searched by, lowercased once and
+   cached on the row. Amounts go in twice — as typed ("245.00") and as digits
+   ("24500") — because people search for what they can see on a receipt, and
+   the minor-unit figure is what a developer would reach for. */
+function haystack(e) {
+  if (e._hay) return e._hay;
+  const dec = (v, c) => (Number(v || 0) / minorUnits(c || 'NZD')).toFixed(decimals(c || 'NZD'));
+  e._hay = [
+    e.spent_on, e.email, (e.email || '').split('@')[0],
+    e.category_name, e.leg_name, e.entry_type, e.payment_method, e.description,
+    e.currency, dec(e.amount, e.currency), Math.abs(Number(e.amount || 0)),
+    e.leg_currency, dec(e.budget_amount, e.leg_currency || e.currency),
+  ].join(' ').toLowerCase();
+  return e._hay;
+}
+
+/**
+ * The rows to draw, and what was taken out to get there.
+ *
+ * Hiding corrections hides BOTH the correction and the entry it voids — the
+ * pair is what an undo looks like in an append-only ledger, and dropping only
+ * one half would leave spend on screen that doesn't count, or a negative with
+ * nothing to explain it. Because the two always sum to zero, every subtotal is
+ * identical either way; the list gets shorter and no number moves.
+ *
+ * Search is all-terms-must-match, so "katie food" narrows rather than widens.
+ */
+function ledgerFiltered() {
+  const { entries } = LEDGER;
+  const voided = new Set(entries.filter((e) => e.corrects_id).map((e) => e.corrects_id));
+  let rows = entries;
+  let hiddenPairs = 0;
+
+  if (!LEDGER_CORR) {
+    const before = rows.length;
+    rows = rows.filter((e) => e.entry_type !== 'correction' && !voided.has(e.id));
+    hiddenPairs = before - rows.length;
+  }
+
+  const q = LEDGER_Q.trim().toLowerCase();
+  const terms = q ? q.split(/\s+/) : [];
+  if (terms.length) rows = rows.filter((e) => terms.every((t) => haystack(e).includes(t)));
+
+  return { rows, voided, terms, hiddenPairs, total: entries.length };
+}
 
 function drawLedger() {
   const { budgetId, entries } = LEDGER;
   if (!entries.length) {
+    $('lgCount').textContent = '';
     $('ledgerBody').innerHTML = '<p class="hint py-6">Nothing logged yet.</p>';
     return;
   }
-  // An entry with a correction against it stays in the ledger — that is the
-  // point of an append-only record — but must not read as live spend.
-  const voided = new Set(entries.filter((e) => e.corrects_id).map((e) => e.corrects_id));
+  const f = ledgerFiltered();
+
+  const bits = [];
+  if (f.terms.length) bits.push(`${f.rows.length} of ${f.total} entries match`);
+  else bits.push(`${f.rows.length} entr${f.rows.length === 1 ? 'y' : 'ies'}`);
+  if (f.hiddenPairs) bits.push(`${f.hiddenPairs} corrected row${f.hiddenPairs === 1 ? '' : 's'} hidden · totals unchanged`);
+  $('lgCount').textContent = bits.join(' · ');
+
+  if (!f.rows.length) {
+    $('ledgerBody').innerHTML = `<p class="hint py-6">Nothing matches “${esc(LEDGER_Q.trim())}”.</p>`;
+    return;
+  }
+
   $('ledgerBody').innerHTML = LEDGER_VIEW === 'category'
-    ? ledgerByCategory(budgetId, entries, voided)
-    : ledgerByDate(entries, voided);
+    ? ledgerByCategory(budgetId, f)
+    : ledgerRows(f.rows, f.voided, { leg: true, category: true, head: true, terms: f.terms });
+}
+
+// Mark the searched terms in the text that matched, so a hit in a long
+// description doesn't have to be hunted for. Escaping happens first, then the
+// marks are inserted — never the other way round.
+function mark(value, terms) {
+  const out = esc(value ?? '');
+  if (!terms || !terms.length) return out;
+  const pattern = terms
+    .filter(Boolean)
+    .map((t) => esc(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  if (!pattern) return out;
+  return out.replace(new RegExp(`(${pattern})`, 'gi'), '<span class="lg-hit">$1</span>');
 }
 
 /* Shared row rendering. `cols` drops the columns a grouped view already states
@@ -885,12 +989,13 @@ function ledgerRows(entries, voided, cols) {
     '<th class="text-right">Against budget</th>',
     '<th class="text-center">Receipt</th>',
   ].join('');
+  const t = cols.terms;
   const body = entries.map((e) => `<tr class="${voided.has(e.id) ? 'voided' : ''}">
       <td class="num whitespace-nowrap">${esc(String(e.spent_on || '').slice(0, 10) || '—')}</td>
       ${cols.leg ? `<td class="text-xs" style="color:#797979">${esc(e.leg_name || '')}</td>` : ''}
-      <td style="color:#797979">${esc((e.email || '').split('@')[0])}</td>
-      ${cols.category ? `<td>${esc(e.category_name || e.entry_type)}</td>` : ''}
-      <td style="color:#797979">${esc(e.description)}${
+      <td style="color:#797979">${mark((e.email || '').split('@')[0], t)}</td>
+      ${cols.category ? `<td>${mark(e.category_name || e.entry_type, t)}</td>` : ''}
+      <td style="color:#797979">${mark(e.description, t)}${
         e.entry_type === 'correction' ? ' <span class="warn">correction</span>' : ''}${
         voided.has(e.id) ? ' <span class="warn">corrected</span>' : ''}${
         !cols.category && !e.category_id ? ` <span class="text-xs" style="color:#9ca3af">${esc(e.entry_type)}</span>` : ''}</td>
@@ -906,10 +1011,6 @@ function ledgerRows(entries, voided, cols) {
   return `<table class="lg-tbl">${head ? `<thead><tr>${head}</tr></thead>` : ''}<tbody>${body}</tbody></table>`;
 }
 
-function ledgerByDate(entries, voided) {
-  return ledgerRows(entries, voided, { leg: true, category: true });
-}
-
 /* ------------------------------------------------------------- by category --
    Grouped down the same tree the budget card draws, in the same order, so a
    category that looks overspent up there can be opened here and read line by
@@ -921,12 +1022,14 @@ function ledgerByDate(entries, voided) {
    is the same rule the gauges use. Cash movements carry no category at all and
    get their own section rather than being dropped. */
 
-function ledgerByCategory(budgetId, entries, voided) {
+function ledgerByCategory(budgetId, f) {
+  const { rows: entries, voided, terms } = f;
+  const searching = terms.length > 0;
   const legs = treeFor(budgetId);
   // Column headers once, above the first group. Repeating them between every
   // category turns a page of numbers into a page of labels.
   let first = true;
-  const cols = () => { const c = { leg: false, category: false, head: first }; first = false; return c; };
+  const cols = () => { const c = { leg: false, category: false, head: first, terms }; first = false; return c; };
   const byCategory = new Map();
   const uncategorised = [];
   const movements = [];
@@ -959,7 +1062,7 @@ function ledgerByCategory(budgetId, entries, voided) {
     const spent = subtotal(own);
     // Only a leaf's subtotal is comparable to its allocation, so only a leaf
     // gets the overspend colour — see `measure` below.
-    const over = !node.kids.length && node.allocated > 0 && node.spent > node.allocated;
+    const over = !searching && !node.kids.length && node.allocated > 0 && node.spent > node.allocated;
     const label = path.length > 1
       ? `<span class="crumb">${esc(path.slice(0, -1).join(' › '))} › </span><span class="nm">${esc(node.name)}</span>`
       : `<span class="nm">${esc(node.name)}</span>`;
@@ -970,11 +1073,17 @@ function ledgerByCategory(budgetId, entries, voided) {
     // card is the roll-up of its children, and putting a direct-only subtotal
     // next to it would invite subtracting one from the other. Say which it is
     // instead — the roll-up is already on the card above.
-    const measure = node.kids.length
-      ? `${fmt(spent, legCurrency)} logged directly here`
-      : `${fmt(spent, legCurrency)}${node.allocated > 0
-          ? ` of ${fmt(node.allocated, legCurrency)}`
-          : ' · unbudgeted'}`;
+    // While a search is narrowing the list, the subtotal is of what's shown —
+    // so it must not sit next to an allocation as though it were the whole
+    // category. Say "in N shown" instead of quietly comparing two different
+    // populations.
+    const measure = searching
+      ? `${fmt(spent, legCurrency)} in ${own.length} shown`
+      : node.kids.length
+        ? `${fmt(spent, legCurrency)} logged directly here`
+        : `${fmt(spent, legCurrency)}${node.allocated > 0
+            ? ` of ${fmt(node.allocated, legCurrency)}`
+            : ' · unbudgeted'}`;
 
     return `<div class="lg-cat" data-cat="${esc(node.id)}">
         <span>${label} <span class="crumb">· ${own.length} entr${own.length === 1 ? 'y' : 'ies'}</span></span>
@@ -986,6 +1095,9 @@ function ledgerByCategory(budgetId, entries, voided) {
   const legBlocks = legs.map((leg) => {
     const inner = leg.kids.map((k) => section(k, leg.currency, [])).join('')
       + section({ ...leg, kids: [] }, leg.currency, []);   // spend logged straight at the leg
+    // A search that matches nothing in this leg drops the leg entirely rather
+    // than leaving a heading over an empty space.
+    if (searching && !inner) return '';
     return `<div class="lg-leg">
         <span>${esc(leg.name)} <span class="leg-cur">${esc(leg.currency || '—')}</span></span>
         <span class="num">${fmt(leg.spent, leg.currency)} of ${fmt(leg.allocated, leg.currency)}</span>
@@ -997,7 +1109,7 @@ function ledgerByCategory(budgetId, entries, voided) {
       <span>${esc(title)}</span><span class="num">${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}</span>
     </div>
     <p class="lg-empty">${esc(note)}</p>
-    ${ledgerRows(rows, voided, { leg: true, category: false, head: true })}` : '';
+    ${ledgerRows(rows, voided, { leg: true, category: false, head: true, terms })}` : '';
 
   return legBlocks
     + extra('Cash movements', movements,

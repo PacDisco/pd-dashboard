@@ -331,6 +331,32 @@ Two sections sit below the legs rather than being dropped:
 
 Corrected entries keep their strike-through and both rows stay, as before.
 
+### Search
+
+One box, matching across description, instructor, category, leg, entry type,
+payment method, date, currency and amount — the amount both as displayed
+("245.00") and in minor units ("24500"), because people search for what's on the
+receipt. Every term has to match, so a second word narrows rather than widens,
+and hits are highlighted where they matched.
+
+While a search is narrowing the list, a group's subtotal is of what's shown and
+says so — "USD 426.27 in 2 shown" rather than sitting next to an allocation as
+though the two covered the same entries. Groups and legs with no match drop out
+rather than leaving headings over empty space. The search clears when the dialog
+is reopened: it answers one question about one budget and shouldn't quietly
+follow you into the next.
+
+### Show corrections
+
+On by default. Turning it off hides the correction **and** the entry it voids —
+the pair is what an undo looks like in an append-only ledger, and dropping half
+of it would leave either spend on screen that doesn't count or a negative with
+nothing to explain it.
+
+Because the two always sum to zero, **every subtotal is identical either way**.
+The list gets shorter and no number moves, which is what the count line says.
+The setting is a standing preference and survives reopening the dialog.
+
 ## Known gaps
 
 - **Cash on hand assumes the field app signs movements as documented.** An
