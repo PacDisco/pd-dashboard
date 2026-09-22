@@ -258,61 +258,82 @@
     .role-editor label.checked { background: rgba(124,155,255,.15); color: var(--accent); border-color: rgba(124,155,255,.3); }
     .role-editor input { display: none; }
 
-    /* --- Person-first access editor --- */
-    .access-layout { display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start; }
-    .people-pane { border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); overflow: hidden; }
-    .people-filter {
-      width: 100%; border: 0; border-bottom: 1px solid var(--border);
-      background: transparent; color: var(--text); font-family: inherit;
-      font-size: 13px; padding: 10px 12px;
+    /* --- Access matrix: dashboards down the side, people across the top --- */
+    .access-toolbar {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 14px;
     }
-    .people-filter:focus { outline: none; border-bottom-color: var(--accent); }
-    .people-list { max-height: 46vh; overflow-y: auto; }
-    .person {
-      display: block; width: 100%; text-align: left; cursor: pointer;
-      background: transparent; border: 0; border-bottom: 1px solid var(--border);
-      color: var(--text); font-family: inherit; padding: 10px 12px;
+    .access-toolbar input[type="search"] {
+      flex: 1 1 220px; min-width: 180px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 8px 12px;
+      font-size: 13px; font-family: inherit;
     }
-    .person:last-child { border-bottom: 0; }
-    .person:hover { background: var(--card); }
-    .person.active { background: rgba(124,155,255,.14); box-shadow: inset 3px 0 0 var(--accent); }
-    .person .who { font-size: 13px; font-weight: 600; }
-    .person .meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-    .person .meta.pending { color: var(--accent-2); }
+    .access-toolbar input[type="search"]:focus { outline: none; border-color: var(--accent); }
+    .access-toolbar .hint { color: var(--text-dim); font-size: 12px; }
 
-    .grant-pane { min-width: 0; }
-    .grant-head {
-      display: flex; justify-content: space-between; align-items: baseline;
-      gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+    /* Horizontal scroll, because the column count grows with the team. The
+       dashboard column is sticky so you never lose track of which row you're
+       ticking once you've scrolled past a few people. */
+    .matrix-scroll {
+      overflow: auto; max-height: 52vh;
+      border: 1px solid var(--border); border-radius: 10px;
     }
-    .grant-head h3 { margin: 0; font-size: 16px; }
-    .grant-head .sub { color: var(--text-dim); font-size: 12px; }
-    .grant-actions { display: flex; gap: 6px; }
-    .grant-group { margin-bottom: 14px; }
-    .grant-group > h4 {
-      margin: 0 0 6px; font-size: 11px; letter-spacing: .12em;
-      text-transform: uppercase; color: var(--text-dim); font-weight: 500;
+    .matrix { border-collapse: separate; border-spacing: 0; font-size: 13px; width: max-content; min-width: 100%; }
+    .matrix th, .matrix td { border-bottom: 1px solid var(--border); }
+    .matrix thead th {
+      position: sticky; top: 0; z-index: 3;
+      background: var(--bg-soft);
+      vertical-align: bottom; padding: 10px 6px;
+      font-weight: 500; text-align: center;
     }
-    .grant-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
-    .grant-item {
-      display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
-      border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px 10px; background: var(--bg-soft); font-size: 13px;
+    .matrix .col-dash {
+      position: sticky; left: 0; z-index: 4;
+      background: var(--bg-soft); text-align: left;
+      min-width: 210px; max-width: 260px; padding: 10px 12px;
     }
-    .grant-item:hover { background: var(--card); }
-    .grant-item.on { border-color: rgba(124,155,255,.45); background: rgba(124,155,255,.1); }
-    .grant-item input { margin: 2px 0 0; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-    .grant-item .t { font-weight: 500; }
-    .grant-item .s { color: var(--text-dim); font-size: 11px; }
+    .matrix tbody .col-dash { z-index: 2; background: var(--card); }
+    .matrix tbody tr:hover .col-dash { background: var(--card-hover); }
+    .matrix tbody tr:hover td { background: rgba(124,155,255,.05); }
+    .matrix .d-title { font-weight: 600; display: block; }
+    .matrix .d-slug { color: var(--text-dim); font-size: 11px; }
+    .matrix td.cell { text-align: center; padding: 8px 6px; min-width: 92px; }
+    /* Amber, matching the "roles" badge in the header, so a provisional column
+       reads as one thing top to bottom rather than as faint noise. */
+    .matrix td.cell.inherited { background: rgba(216,166,87,.11); }
+    .matrix input[type="checkbox"] { width: 17px; height: 17px; cursor: pointer; accent-color: var(--accent); }
+    .matrix input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .55; }
+
+    .col-person { cursor: pointer; }
+    .col-person .pname {
+      display: block; font-size: 12px; font-weight: 600; color: var(--text);
+      max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      margin: 0 auto;
+    }
+    .col-person .pmeta {
+      display: block; font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--text-dim); margin-top: 3px;
+    }
+    .col-person .pmeta.admin { color: var(--accent-2); }
+    .col-person .pmeta.roles { color: #d8a657; }
+    .col-person:hover .pname { color: var(--accent); }
+    .row-toggle {
+      background: transparent; border: 0; padding: 0; margin: 0; cursor: pointer;
+      color: inherit; font: inherit; text-align: left; width: 100%;
+    }
+    .row-toggle:hover .d-title { color: var(--accent); }
+
     .banner {
       border: 1px solid var(--border); background: var(--bg-soft);
       border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
       color: var(--text-dim); font-size: 13px; line-height: 1.5;
     }
     .banner strong { color: var(--text); }
-    @media (max-width: 720px) {
-      .access-layout { grid-template-columns: 1fr; }
-      .people-list { max-height: 30vh; }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; color: var(--text-dim); font-size: 12px; }
+    .legend .swatch {
+      display: inline-block; width: 11px; height: 11px; border-radius: 3px;
+      background: rgba(216,166,87,.3); border: 1px solid rgba(216,166,87,.45);
+      margin-right: 6px; vertical-align: -1px;
     }
 
     .toast {
@@ -385,9 +406,10 @@
       <div class="modal-body">
         <div id="tabAccess">
           <div class="banner">
-            Pick a person, then tick the dashboards they should see. <strong>Admins always see everything.</strong>
-            Anyone who hasn't been given a list yet still gets access from their old role —
-            saving their list moves them across for good.
+            Tick who gets which dashboard. <strong>Admins always see everything.</strong>
+            A shaded column means that person has no saved list yet and is still running on their
+            old role — ticking anything in it writes down exactly what you can see and switches
+            them across for good.
           </div>
           <div id="accessContent"><div class="loading">Loading…</div></div>
         </div>
@@ -435,7 +457,6 @@
       user: null, roles: [], isAdmin: false,
       grants: {},              // saved server state: { email: [slug, …] }
       draftGrants: null,       // in-flight edits in admin modal
-      selectedEmail: null,     // person being edited
       peopleFilter: "",
       users: []                // loaded on admin modal open
     };
@@ -668,142 +689,149 @@
       return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
     }
 
+    /**
+     * Dashboards down the side, people across the top — same shape as the old
+     * role grid, with a column per person instead of a column per role.
+     *
+     * A person who has never been assigned anything shows their role-derived
+     * access in a shaded column marked "roles". Touching any cell in that
+     * column first materialises exactly what's on screen into their own list,
+     * then applies the change — so switching someone across can only ever do
+     * what you can see it doing.
+     */
+    function roleDerivedList(p) {
+      return STATE.dashboards
+        .filter(d => (d.allowedRoles || []).some(r => p.roles.includes(r)))
+        .map(d => d.slug);
+    }
+    function isInherited(p) {
+      return !p.roles.includes("admin") && !Array.isArray(STATE.draftGrants[p.email]);
+    }
+    function displayList(p) {
+      if (p.roles.includes("admin")) return STATE.dashboards.map(d => d.slug);
+      const explicit = STATE.draftGrants[p.email];
+      return Array.isArray(explicit) ? explicit : roleDerivedList(p);
+    }
+    /** Turn an inherited column into a real list without changing what it shows. */
+    function materialize(p) {
+      if (isInherited(p)) STATE.draftGrants[p.email] = roleDerivedList(p);
+      return STATE.draftGrants[p.email];
+    }
+
     function renderAccess() {
-      const people = peopleForAccess();
-      if (!people.length) {
+      const everyone = peopleForAccess();
+      if (!everyone.length) {
         $("accessContent").innerHTML = `<div class="empty">No people yet — invite someone from the People &amp; powers tab.</div>`;
         return;
       }
-      if (!STATE.selectedEmail || !people.some(p => p.email === STATE.selectedEmail)) {
-        STATE.selectedEmail = people[0].email;
-      }
+      const q = STATE.peopleFilter.trim().toLowerCase();
+      const people = everyone.filter(p => !q || p.email.includes(q) || p.name.toLowerCase().includes(q));
+
+      // Keep the reading position across re-renders — the table is wide and
+      // re-rendering from the top on every tick would be maddening.
+      const prev = document.querySelector(".matrix-scroll");
+      const keep = prev ? { x: prev.scrollLeft, y: prev.scrollTop } : null;
+
+      const head = people.map(p => {
+        const badge = p.roles.includes("admin")
+          ? `<span class="pmeta admin">admin</span>`
+          : !p.known
+            ? `<span class="pmeta">removed</span>`
+            : isInherited(p)
+              ? `<span class="pmeta roles">roles</span>`
+              : `<span class="pmeta">${displayList(p).length}</span>`;
+        const title = `${p.name} · ${p.email}${p.invited ? " · invited, pending" : ""}\nClick to give them everything / nothing`;
+        return `<th class="col-person" data-email="${esc(p.email)}" title="${esc(title)}">
+          <span class="pname">${esc(p.name)}</span>${badge}
+        </th>`;
+      }).join("");
+
+      const rows = STATE.dashboards.map(d => `
+        <tr data-slug="${esc(d.slug)}">
+          <td class="col-dash">
+            <button class="row-toggle" data-slug="${esc(d.slug)}" title="Give this dashboard to everyone shown / no one">
+              <span class="d-title">${d.icon || "📊"} ${esc(d.title || d.slug)}</span>
+              <span class="d-slug">${esc(d.slug)}</span>
+            </button>
+          </td>
+          ${people.map(p => {
+            const personIsAdmin = p.roles.includes("admin");
+            const on = displayList(p).includes(d.slug);
+            return `<td class="cell${isInherited(p) ? " inherited" : ""}">
+              <input type="checkbox" data-email="${esc(p.email)}" data-slug="${esc(d.slug)}"
+                     ${on ? "checked" : ""} ${personIsAdmin ? "disabled" : ""}
+                     aria-label="${esc(d.title || d.slug)} — ${esc(p.name)}" />
+            </td>`;
+          }).join("")}
+        </tr>`).join("");
+
       $("accessContent").innerHTML = `
-        <div class="access-layout">
-          <div class="people-pane">
-            <input class="people-filter" id="peopleFilter" type="search" placeholder="Filter people…" value="${esc(STATE.peopleFilter)}" />
-            <div class="people-list" id="peopleList"></div>
-          </div>
-          <div class="grant-pane" id="grantPane"></div>
+        <div class="access-toolbar">
+          <input id="peopleFilter" type="search" placeholder="Filter people…" value="${esc(STATE.peopleFilter)}" />
+          <span class="hint">${people.length} of ${everyone.length} ${everyone.length === 1 ? "person" : "people"} · click a name or a dashboard to fill that whole column or row</span>
+        </div>
+        <div class="matrix-scroll">
+          <table class="matrix">
+            <thead><tr><th class="col-dash">Dashboard</th>${head}</tr></thead>
+            <tbody>${rows || `<tr><td class="col-dash" colspan="${people.length + 1}" style="color:var(--text-dim)">No dashboards found.</td></tr>`}</tbody>
+          </table>
+        </div>
+        <div class="legend">
+          <span><span class="swatch"></span>Shaded column = no list saved yet; still running on this person's roles.</span>
+          <span><strong style="color:var(--accent-2)">admin</strong> = sees everything, present and future.</span>
         </div>`;
+
+      const scroll = document.querySelector(".matrix-scroll");
+      if (scroll && keep) { scroll.scrollLeft = keep.x; scroll.scrollTop = keep.y; }
+
       $("peopleFilter").addEventListener("input", e => {
         STATE.peopleFilter = e.target.value;
-        renderPeopleList();
+        renderAccess();
+        $("peopleFilter").focus();
       });
-      renderPeopleList();
-      renderGrantPane();
-    }
 
-    function accessSummary(p) {
-      if (p.roles.includes("admin")) return "admin · everything";
-      const list = STATE.draftGrants[p.email];
-      if (!Array.isArray(list)) return "not assigned · using roles";
-      if (!list.length) return "no dashboards";
-      return `${list.length} dashboard${list.length === 1 ? "" : "s"}`;
-    }
-
-    function renderPeopleList() {
-      const q = STATE.peopleFilter.trim().toLowerCase();
-      const people = peopleForAccess()
-        .filter(p => !q || p.email.includes(q) || p.name.toLowerCase().includes(q));
-      const list = $("peopleList");
-      list.innerHTML = people.map(p => `
-        <button class="person${p.email === STATE.selectedEmail ? " active" : ""}" data-email="${esc(p.email)}">
-          <div class="who">${esc(p.name)}</div>
-          <div class="meta${p.invited ? " pending" : ""}">${esc(p.email)}${p.invited ? " · invited" : ""}</div>
-          <div class="meta">${esc(accessSummary(p))}</div>
-        </button>`).join("") ||
-        `<div style="padding:14px;color:var(--text-dim);font-size:12px">No one matches.</div>`;
-      list.querySelectorAll(".person").forEach(btn => {
-        btn.addEventListener("click", () => {
-          STATE.selectedEmail = btn.dataset.email;
-          renderPeopleList();
-          renderGrantPane();
-        });
-      });
-    }
-
-    function renderGrantPane() {
-      const pane = $("grantPane");
-      const p = peopleForAccess().find(x => x.email === STATE.selectedEmail);
-      if (!p) { pane.innerHTML = ""; return; }
-
-      const personIsAdmin = p.roles.includes("admin");
-      const list = Array.isArray(STATE.draftGrants[p.email]) ? STATE.draftGrants[p.email] : null;
-
-      const groups = {};
-      for (const d of STATE.dashboards) {
-        const cat = d.category || "General";
-        if (!groups[cat]) groups[cat] = [];
-        groups[cat].push(d);
-      }
-
-      const otherRoles = p.roles.filter(r => r !== BASELINE_ROLE);
-      const notices = [];
-      if (personIsAdmin) {
-        notices.push(`<div class="banner">This person is an <strong>admin</strong> — they see every dashboard, including ones added later. Drop the admin role on the People &amp; powers tab to assign dashboards one by one.</div>`);
-      } else if (!list) {
-        notices.push(`<div class="banner">Nothing assigned yet, so this person's access still comes from their roles (${esc(otherRoles.join(", ") || "none")}). Tick what they should see and press <strong>Save access</strong> — that switches them over for good.</div>`);
-      }
-      if (!p.known) {
-        notices.push(`<div class="banner">No Identity user with this address — it's a leftover from an earlier save. Clear it with <strong>None</strong> and save.</div>`);
-      }
-
-      const body = Object.keys(groups).sort().map(cat => `
-        <div class="grant-group">
-          <h4>${esc(cat)}</h4>
-          <div class="grant-items">
-            ${groups[cat].map(d => {
-              const on = personIsAdmin || (list ? list.includes(d.slug) : false);
-              return `<label class="grant-item${on ? " on" : ""}" data-slug="${esc(d.slug)}">
-                <input type="checkbox" ${on ? "checked" : ""} ${personIsAdmin ? "disabled" : ""} />
-                <span>
-                  <span class="t">${d.icon || "📊"} ${esc(d.title || d.slug)}</span><br>
-                  <span class="s">${esc(d.slug)}</span>
-                </span>
-              </label>`;
-            }).join("")}
-          </div>
-        </div>`).join("");
-
-      pane.innerHTML = `
-        <div class="grant-head">
-          <div>
-            <h3>${esc(p.name)}</h3>
-            <div class="sub">${esc(p.email)}</div>
-          </div>
-          <div class="grant-actions">
-            <button class="btn btn-sm" id="grantAll" ${personIsAdmin ? "disabled" : ""}>All</button>
-            <button class="btn btn-sm" id="grantNone" ${personIsAdmin ? "disabled" : ""}>None</button>
-          </div>
-        </div>
-        ${notices.join("")}
-        ${body}`;
-
-      pane.querySelectorAll(".grant-item").forEach(label => {
-        const cb = label.querySelector("input");
-        if (!cb || cb.disabled) return;
+      $("accessContent").querySelectorAll(".matrix input[type=checkbox]").forEach(cb => {
+        if (cb.disabled) return;
         cb.addEventListener("change", () => {
-          const slug = label.dataset.slug;
-          const cur = Array.isArray(STATE.draftGrants[p.email]) ? STATE.draftGrants[p.email] : [];
-          STATE.draftGrants[p.email] = cb.checked
-            ? [...new Set([...cur, slug])]
-            : cur.filter(s => s !== slug);
-          label.classList.toggle("on", cb.checked);
-          renderPeopleList();
+          const person = everyone.find(x => x.email === cb.dataset.email);
+          if (!person) return;
+          const cur = materialize(person);
+          STATE.draftGrants[person.email] = cb.checked
+            ? [...new Set([...cur, cb.dataset.slug])]
+            : cur.filter(s => s !== cb.dataset.slug);
+          renderAccess();
           markDirty();
         });
       });
 
-      if (!personIsAdmin) {
-        $("grantAll").addEventListener("click", () => {
-          STATE.draftGrants[p.email] = STATE.dashboards.map(d => d.slug);
-          renderPeopleList(); renderGrantPane(); markDirty();
+      // Column header → all / nothing for that person.
+      $("accessContent").querySelectorAll(".col-person").forEach(th => {
+        th.addEventListener("click", () => {
+          const person = everyone.find(x => x.email === th.dataset.email);
+          if (!person || person.roles.includes("admin")) return;
+          const full = displayList(person).length === STATE.dashboards.length;
+          STATE.draftGrants[person.email] = full ? [] : STATE.dashboards.map(d => d.slug);
+          renderAccess();
+          markDirty();
         });
-        $("grantNone").addEventListener("click", () => {
-          STATE.draftGrants[p.email] = [];
-          renderPeopleList(); renderGrantPane(); markDirty();
+      });
+
+      // Row label → give this dashboard to everyone shown, or take it off them.
+      $("accessContent").querySelectorAll(".row-toggle").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const slug = btn.dataset.slug;
+          const targets = people.filter(x => !x.roles.includes("admin"));
+          const everyoneHasIt = targets.length > 0 && targets.every(x => displayList(x).includes(slug));
+          for (const person of targets) {
+            const cur = materialize(person);
+            STATE.draftGrants[person.email] = everyoneHasIt
+              ? cur.filter(s => s !== slug)
+              : [...new Set([...cur, slug])];
+          }
+          renderAccess();
+          markDirty();
         });
-      }
+      });
     }
 
     function markDirty() { setStatus("Unsaved changes"); }

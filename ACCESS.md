@@ -44,14 +44,26 @@ read, because it supplies the `allowedRoles` used by the step-3 fallback.
 
 ## Using it
 
-**Manage access → Dashboard access.** Pick a person on the left, tick their
-dashboards on the right, press *Save access*. A person with no list yet says so,
-and names the roles currently carrying them.
+**Manage access → Dashboard access.** Same table as before — dashboards down the
+side — but the columns are people now, not roles. Tick the cells.
 
-**Seed from roles** fills every person's list with exactly what their roles give
+- Clicking a **person's name** gives them everything, or takes it all away.
+- Clicking a **dashboard name** gives that dashboard to everyone currently shown
+  (respecting the people filter), or takes it off them.
+- An **amber-shaded column** is someone with no saved list yet: the ticks show
+  what their roles give them today. Touching any cell in that column first
+  writes down exactly what's on screen, then applies your change — so switching
+  someone across can only ever do what you can see it doing.
+- An **admin** column is ticked throughout and locked. Drop the admin role on the
+  People & powers tab to assign them dashboards individually.
+
+**Seed from roles** fills every column with exactly what that person's roles give
 them today. It only stages the lists — nothing is written until you press *Save
 access* — so you can review before committing. Running it once and saving is the
 clean way to switch the whole team over without changing anyone's access.
+
+Nothing is sent for people you never touched, so they keep falling back to roles
+until you get to them.
 
 ## What roles still do
 

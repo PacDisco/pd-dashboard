@@ -107,49 +107,90 @@ await check("grid tags read role-based before anything is assigned", async () =>
 });
 
 await page.click("#adminBtn");
-await page.waitForSelector(".person", { timeout: 10000 });
+await page.waitForSelector(".matrix", { timeout: 10000 });
 
-await check("everyone in Identity is listed, by name", async () => {
-  const names = await page.locator(".person .who").allTextContents();
+const cell = (email, slug) => page.locator(`.matrix input[data-email="${email}"][data-slug="${slug}"]`);
+const colHeader = (email) => page.locator(`.col-person[data-email="${email}"]`);
+
+await check("there is a column per person, in name order", async () => {
+  const names = await page.locator(".col-person .pname").allTextContents();
   assert.deepEqual(names, ["Jake", "Megan Nyhuis", "New Person"]);
 });
 
-await check("an admin's row says so, and their checkboxes are locked", async () => {
-  await page.locator('.person[data-email="jake@example.com"]').click();
-  assert.match(await page.locator(".person.active .meta").last().textContent(), /admin/);
-  assert.equal(await page.locator(".grant-item input:disabled").count(), DASHBOARDS.length);
+await check("there is a row per dashboard", async () => {
+  assert.equal(await page.locator(".matrix tbody tr").count(), DASHBOARDS.length);
 });
 
-await check("an unassigned person is flagged as still running on roles", async () => {
-  await page.locator('.person[data-email="megan@example.com"]').click();
-  assert.match(await page.locator("#grantPane .banner").first().textContent(), /still comes from their roles/);
-  assert.equal(await page.locator(".grant-item input:checked").count(), 0);
+await check("an admin's column is ticked throughout and locked", async () => {
+  assert.equal(await colHeader("jake@example.com").locator(".pmeta.admin").count(), 1);
+  const boxes = page.locator('.matrix input[data-email="jake@example.com"]');
+  assert.equal(await boxes.count(), DASHBOARDS.length);
+  for (let i = 0; i < DASHBOARDS.length; i++) {
+    assert.equal(await boxes.nth(i).isChecked(), true);
+    assert.equal(await boxes.nth(i).isDisabled(), true);
+  }
 });
 
-await check("ticking a dashboard updates that person's summary", async () => {
-  await page.locator('.grant-item[data-slug="invoices"] input').check();
-  await page.locator('.grant-item[data-slug="pipeline"] input').check();
-  assert.match(await page.locator(".person.active .meta").last().textContent(), /2 dashboards/);
+await check("an unassigned column is shaded and shows what roles give them", async () => {
+  assert.equal(await colHeader("megan@example.com").locator(".pmeta.roles").count(), 1);
+  // Megan is `admissions` → pipeline only.
+  assert.equal(await cell("megan@example.com", "pipeline").isChecked(), true);
+  assert.equal(await cell("megan@example.com", "flights").isChecked(), false);
+  assert.equal(await cell("megan@example.com", "invoices").isChecked(), false);
+  assert.equal(await page.locator('.matrix td.cell.inherited input[data-email="megan@example.com"]').count(), DASHBOARDS.length);
 });
 
-await check("All / None act on the selected person only", async () => {
-  await page.click("#grantNone");
-  assert.match(await page.locator(".person.active .meta").last().textContent(), /no dashboards/);
-  await page.click("#grantAll");
-  assert.equal(await page.locator(".grant-item input:checked").count(), DASHBOARDS.length);
-  await page.click("#grantNone");
-  await page.locator('.grant-item[data-slug="pipeline"] input').check();
+await check("ticking an inherited cell keeps what was on screen and adds the change", async () => {
+  await cell("megan@example.com", "invoices").check();
+  // pipeline came from her role and must survive being written down.
+  assert.equal(await cell("megan@example.com", "pipeline").isChecked(), true);
+  assert.equal(await cell("megan@example.com", "invoices").isChecked(), true);
+  assert.equal(await cell("megan@example.com", "flights").isChecked(), false);
+  assert.equal(await colHeader("megan@example.com").locator(".pmeta.roles").count(), 0, "column should no longer read as role-based");
+  assert.equal((await colHeader("megan@example.com").locator(".pmeta").textContent()).trim(), "2");
+});
+
+await check("unticking removes just that one", async () => {
+  await cell("megan@example.com", "invoices").uncheck();
+  assert.equal((await colHeader("megan@example.com").locator(".pmeta").textContent()).trim(), "1");
+});
+
+await check("clicking a person's name fills then clears their column", async () => {
+  await colHeader("newbie@example.com").click();
+  for (const d of DASHBOARDS) assert.equal(await cell("newbie@example.com", d.slug).isChecked(), true);
+  await colHeader("newbie@example.com").click();
+  for (const d of DASHBOARDS) assert.equal(await cell("newbie@example.com", d.slug).isChecked(), false);
+});
+
+await check("clicking a person's name does nothing to an admin", async () => {
+  await colHeader("jake@example.com").click();
+  const boxes = page.locator('.matrix input[data-email="jake@example.com"]');
+  for (let i = 0; i < DASHBOARDS.length; i++) assert.equal(await boxes.nth(i).isChecked(), true);
+});
+
+await check("clicking a dashboard gives it to everyone shown, then takes it back", async () => {
+  await page.locator('.row-toggle[data-slug="flights"]').click();
+  assert.equal(await cell("megan@example.com", "flights").isChecked(), true);
+  assert.equal(await cell("newbie@example.com", "flights").isChecked(), true);
+  await page.locator('.row-toggle[data-slug="flights"]').click();
+  assert.equal(await cell("megan@example.com", "flights").isChecked(), false);
+  assert.equal(await cell("newbie@example.com", "flights").isChecked(), false);
+});
+
+await check("filtering narrows the columns", async () => {
+  await page.fill("#peopleFilter", "megan");
+  assert.equal(await page.locator(".col-person").count(), 1);
+  await page.fill("#peopleFilter", "");
+  assert.equal(await page.locator(".col-person").count(), 3);
 });
 
 await check("seeding from roles reproduces today's access", async () => {
   page.once("dialog", (d) => d.accept());
   await page.click("#seedBtn");
   await page.waitForTimeout(150);
-  await page.locator('.person[data-email="megan@example.com"]').click();
-  // admissions → pipeline only
-  const checked = await page.locator(".grant-item input:checked").count();
-  assert.equal(checked, 1);
-  assert.equal(await page.locator('.grant-item[data-slug="pipeline"] input').isChecked(), true);
+  assert.equal(await cell("megan@example.com", "pipeline").isChecked(), true);
+  assert.equal(await cell("megan@example.com", "invoices").isChecked(), false);
+  for (const d of DASHBOARDS) assert.equal(await cell("newbie@example.com", d.slug).isChecked(), false, "no roles → nothing");
 });
 
 await check("Save sends one grants map keyed by lowercased email", async () => {
@@ -163,14 +204,11 @@ await check("Save sends one grants map keyed by lowercased email", async () => {
 });
 
 await check("nobody gets a baseline role they don't need", async () => {
-  // newbie ended up with an empty list, so there's nothing to reach — and
-  // handing out `member` regardless would be quiet privilege creep.
   assert.deepEqual(patchedRoles, []);
 });
 
 await check("granting a role-less person gets them the member role", async () => {
-  await page.locator('.person[data-email="newbie@example.com"]').click();
-  await page.locator('.grant-item[data-slug="flights"] input').check();
+  await cell("newbie@example.com", "flights").check();
   await page.click("#savePermsBtn");
   await page.waitForTimeout(400);
   assert.equal(patchedRoles.length, 1, "expected exactly one role PATCH");
