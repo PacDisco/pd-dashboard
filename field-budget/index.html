@@ -174,6 +174,15 @@
   .lg-check { display:inline-flex; align-items:center; gap:7px; font-size:13px; white-space:nowrap; cursor:pointer; }
   .lg-check input { width:16px; height:16px; accent-color:var(--topaz-dark); cursor:pointer; }
   .lg-hit { background:#fdf3d4; border-radius:2px; }
+  /* Cash vs card. Cash borrows the green of the cash-on-hand block above,
+     because these are the rows that move that balance. */
+  .pm {
+    display:inline-block; font-size:10.5px; font-weight:600; letter-spacing:.04em;
+    text-transform:uppercase; border-radius:9999px; padding:1px 8px; white-space:nowrap;
+  }
+  .pm-cash { color:#2f5d16; background:#eef7e6; border:1px solid #cfe6bb; }
+  .pm-card { color:var(--topaz-dark); background:var(--topaz-soft); border:1px solid #cce8ef; }
+  .pm-none { color:#9ca3af; background:#f7f7f7; border:1px solid #e5e7eb; }
   .lg-tbl { width:100%; font-size:13px; border-collapse:collapse; }
   .lg-tbl th {
     text-align:left; font-size:10.5px; font-weight:500; color:#9ca3af;
@@ -962,6 +971,24 @@ function drawLedger() {
     : ledgerRows(f.rows, f.voided, { leg: true, category: true, head: true, terms: f.terms });
 }
 
+/**
+ * How it was paid for. Worth its own column rather than being folded into the
+ * description: it is what decides whether a row touches the cash on hand above,
+ * and the two kinds of spend reconcile against different things — a card charge
+ * against the bank statement, cash against what's in the pocket.
+ *
+ * Cash movements have no choice about it, but they still say "cash" rather than
+ * going blank: a column of dashes reads as missing data.
+ */
+function paymentPill(e) {
+  const m = String(e.payment_method || '').toLowerCase();
+  if (m === 'cash') return '<span class="pm pm-cash">cash</span>';
+  if (m === 'card') return '<span class="pm pm-card">card</span>';
+  return m
+    ? `<span class="pm pm-none">${esc(m)}</span>`
+    : '<span class="pm pm-none">—</span>';
+}
+
 // Mark the searched terms in the text that matched, so a hit in a long
 // description doesn't have to be hunted for. Escaping happens first, then the
 // marks are inserted — never the other way round.
@@ -985,6 +1012,7 @@ function ledgerRows(entries, voided, cols) {
     '<th>Who</th>',
     cols.category ? '<th>Category</th>' : '',
     '<th>Description</th>',
+    '<th class="text-center">Method</th>',
     '<th class="text-right">Paid</th>',
     '<th class="text-right">Against budget</th>',
     '<th class="text-center">Receipt</th>',
@@ -999,6 +1027,7 @@ function ledgerRows(entries, voided, cols) {
         e.entry_type === 'correction' ? ' <span class="warn">correction</span>' : ''}${
         voided.has(e.id) ? ' <span class="warn">corrected</span>' : ''}${
         !cols.category && !e.category_id ? ` <span class="text-xs" style="color:#9ca3af">${esc(e.entry_type)}</span>` : ''}</td>
+      <td class="text-center">${paymentPill(e)}</td>
       <td class="num text-right whitespace-nowrap">${fmt(e.amount, e.currency)}</td>
       <td class="num text-right whitespace-nowrap">${
         e.entry_type === 'expense' || e.entry_type === 'correction'

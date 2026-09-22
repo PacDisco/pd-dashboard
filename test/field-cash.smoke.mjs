@@ -241,6 +241,36 @@ await check("column headers appear once, on the first group shown", async () => 
   assert.equal(await firstTable.locator("thead").count(), 1, "the first group is the one that carries them");
 });
 
+await check("every row says how it was paid for", async () => {
+  const head = await page.locator("#ledgerBody .lg-tbl thead").first().textContent();
+  assert.match(head, /Method/);
+  // One pill per row, nothing blank — a column of dashes would read as
+  // missing data rather than as a cash movement.
+  const pills = await page.locator("#ledgerBody .lg-tbl tbody .pm").count();
+  const rows = await page.locator("#ledgerBody .lg-tbl tbody tr").count();
+  assert.equal(pills, rows);
+});
+
+await check("cash and card are told apart, and the card charge is the card one", async () => {
+  const cardRow = page.locator("#ledgerBody .lg-tbl tbody tr", { hasText: "Group dinner" });
+  assert.equal(await cardRow.locator(".pm-card").count(), 1, "the card expense");
+  const cashRow = page.locator("#ledgerBody .lg-tbl tbody tr", { hasText: "Market run" });
+  assert.equal(await cashRow.locator(".pm-cash").count(), 1, "the cash expense");
+  // A withdrawal has no choice about it but still reads as cash.
+  const atm = page.locator("#ledgerBody .lg-tbl tbody tr", { hasText: "ATM, Cusco" });
+  assert.equal(await atm.locator(".pm-cash").count(), 1);
+});
+
+await check("searching by payment method works", async () => {
+  await page.fill("#lgSearch", "card");
+  await page.waitForTimeout(150);
+  const rows = await page.locator("#ledgerBody .lg-tbl tbody tr").count();
+  assert.equal(rows, 1, "only the card charge");
+  assert.match(await page.locator("#ledgerBody").textContent(), /Group dinner/);
+  await page.fill("#lgSearch", "");
+  await page.waitForTimeout(150);
+});
+
 await check("a corrected entry and its correction both stay, struck through", async () => {
   assert.equal(await page.locator(".lg-tbl tr.voided").count(), 1, "the voided original");
   const body = await page.locator("#ledgerBody").textContent();

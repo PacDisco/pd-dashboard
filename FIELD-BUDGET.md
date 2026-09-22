@@ -331,6 +331,17 @@ Two sections sit below the legs rather than being dropped:
 
 Corrected entries keep their strike-through and both rows stay, as before.
 
+### Method
+
+Every row carries a cash / card pill. It gets a column rather than being folded
+into the description because it decides whether a row touches the cash on hand —
+and because the two reconcile against different things: a card charge against
+the bank statement, cash against what's in the pocket.
+
+Cash movements have no choice about it and still read "cash" rather than going
+blank; a column of dashes looks like missing data. Searching for `cash` or
+`card` filters on it, same as any other term.
+
 ### Search
 
 One box, matching across description, instructor, category, leg, entry type,
