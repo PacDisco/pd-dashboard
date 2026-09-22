@@ -1,19 +1,38 @@
 // netlify/functions/config.js
 //
-// GET  /api/config        → returns merged dashboard manifest (discovery + permissions)
-//                           requires any authenticated Identity user
-// PUT  /api/config        → replaces the permissions overrides in Netlify Blobs
-//                           requires the caller to have the "admin" role
+// GET  /api/config        → the dashboards the caller may open.
+//                           Admins get the full manifest plus the grants map
+//                           (`grants`) so the admin screen can render.
+//                           Requires any authenticated Identity user.
+// PUT  /api/config        → replaces the per-person grants in Netlify Blobs.
+//                           Body: { grants: { "someone@example.com": ["slug", …] } }
+//                           Legacy body { dashboards: [{ slug, allowedRoles }] }
+//                           is still accepted and still writes the old
+//                           `permissions` blob — see below.
+//                           Requires the "admin" role.
 // GET  /api/config?debug=1 → diagnostics (no auth) for verifying deploy state
 //
+// Access is PER PERSON, by email. `allowedRoles` on a dashboard is now only a
+// fallback for people who have no explicit grant record yet, and roles
+// themselves only gate in-app powers (approving timesheets, writing marketing
+// spend, …). The rule lives in one place:
+//   netlify/edge-functions/lib/dashboard-access.js
+//
 // Discovery manifest is loaded via HTTP from the site itself (no bundler
-// filesystem issues). Permissions live in a Netlify Blob.
+// filesystem issues). Grants live in a Netlify Blob.
 
 import { getStore } from "@netlify/blobs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  canAccess,
+  emailKey,
+  isAdmin as rolesAreAdmin,
+  normalizeGrants,
+} from "../edge-functions/lib/dashboard-access.js";
 
-const BLOB_KEY = "permissions";
+const GRANTS_KEY = "grants";
+const BLOB_KEY = "permissions"; // legacy per-dashboard role overrides
 const STORE = "dashboards";
 
 /**
@@ -92,8 +111,18 @@ function merge(discovery, overrides) {
   };
 }
 
+async function readGrants(store) {
+  try {
+    const raw = await store.get(GRANTS_KEY, { type: "json" });
+    return raw ? normalizeGrants(raw) : null;
+  } catch (err) {
+    console.warn("grants read failed", err.message);
+    return null;
+  }
+}
+
 function isAdmin(user) {
-  return (user?.app_metadata?.roles || []).includes("admin");
+  return rolesAreAdmin(user?.app_metadata?.roles || []);
 }
 function requireAuth(user) {
   if (!user) return { status: 401, body: { error: "Not authenticated" } };
@@ -108,11 +137,13 @@ export const handler = async (event, context) => {
   if (method === "GET" && event.queryStringParameters?.debug === "1") {
     const discovery = await loadDiscovery(event);
     let blob = null;
+    let grantsBlob = null;
     let blobError = null;
     let blobStrategy = null;
     try {
       const autoStore = getStore({ name: STORE, consistency: "strong" });
       blob = await autoStore.get(BLOB_KEY, { type: "json" });
+      grantsBlob = await autoStore.get(GRANTS_KEY, { type: "json" });
       blobStrategy = "auto-context";
     } catch (autoErr) {
       const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
@@ -121,6 +152,7 @@ export const handler = async (event, context) => {
         try {
           const exStore = getStore({ name: STORE, consistency: "strong", siteID, token });
           blob = await exStore.get(BLOB_KEY, { type: "json" });
+          grantsBlob = await exStore.get(GRANTS_KEY, { type: "json" });
           blobStrategy = "explicit-env-vars";
         } catch (explicitErr) {
           blobError = `auto: ${autoErr.message} | explicit: ${explicitErr.message}`;
@@ -135,6 +167,10 @@ export const handler = async (event, context) => {
       discoveryCount: discovery.dashboards?.length || 0,
       discoverySlugs: (discovery.dashboards || []).map((d) => d.slug),
       blob,
+      // Emails are the keys; report counts only, so the debug endpoint (which
+      // is deliberately unauthenticated) never leaks the team roster.
+      grantsUserCount: grantsBlob?.users ? Object.keys(grantsBlob.users).length : 0,
+      grantsUpdatedAt: grantsBlob?.updatedAt || null,
       blobStrategy,
       blobError,
       envVarsPresent: {
@@ -153,19 +189,38 @@ export const handler = async (event, context) => {
   if (method === "GET") {
     const err = requireAuth(user);
     if (err) return send(err.status, err.body);
+
     const discovery = await loadDiscovery(event);
     let overrides = null;
+    let grants = null;
     let blobWarning = null;
     try {
       const store = openStore();
       overrides = await store.get(BLOB_KEY, { type: "json" });
+      grants = await readGrants(store);
     } catch (err) {
       blobWarning = err.message;
       console.warn("blob read failed", err.message);
     }
+
     const merged = merge(discovery, overrides || { dashboards: [] });
+    const roles = user.app_metadata?.roles || [];
+    const admin = isAdmin(user);
+
+    // Non-admins are served ONLY what they may open. Previously every signed-in
+    // user received the whole manifest and the page hid the rest client-side,
+    // which leaked the title and description of every dashboard.
+    const dashboards = admin
+      ? merged.dashboards
+      : merged.dashboards.filter((d) =>
+          canAccess({ email: user.email, roles, slug: d.slug, dashboard: d, grants })
+        );
+
     return send(200, {
       ...merged,
+      dashboards,
+      isAdmin: admin,
+      ...(admin ? { grants: grants || { version: 1, users: {} } } : {}),
       generatedAt: new Date().toISOString(),
       ...(blobWarning ? { blobWarning } : {}),
     });
@@ -183,31 +238,82 @@ export const handler = async (event, context) => {
       return send(400, { error: "Invalid JSON" });
     }
 
-    const incoming = Array.isArray(body.dashboards) ? body.dashboards : null;
-    if (!incoming) return send(400, { error: "Body must include `dashboards` array" });
-
-    const clean = incoming
-      .filter((d) => typeof d?.slug === "string")
-      .map((d) => ({
-        slug: d.slug,
-        allowedRoles: Array.isArray(d.allowedRoles)
-          ? d.allowedRoles.filter((r) => typeof r === "string")
-          : [],
-      }));
-
-    try {
-      const store = openStore();
-      await store.setJSON(BLOB_KEY, { dashboards: clean });
-      return send(200, { ok: true, count: clean.length });
-    } catch (err) {
-      return send(500, {
-        error: `Can't save permissions: ${err.message}. Enable Netlify Blobs on your site (Site configuration → Blobs) and redeploy, or set NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN env vars.`,
-      });
+    const hasGrants = body.grants && typeof body.grants === "object";
+    const hasLegacy = Array.isArray(body.dashboards);
+    if (!hasGrants && !hasLegacy) {
+      return send(400, { error: "Body must include a `grants` object (or a legacy `dashboards` array)" });
     }
+
+    let store;
+    try {
+      store = openStore();
+    } catch (err) {
+      return send(500, { error: blobHelp(err) });
+    }
+
+    const result = { ok: true };
+
+    if (hasGrants) {
+      // Only slugs that actually exist are stored — a typo or a renamed folder
+      // would otherwise sit in the document forever, silently granting nothing.
+      const discovery = await loadDiscovery(event);
+      const known = new Set((discovery.dashboards || []).map((d) => String(d.slug).toLowerCase()));
+
+      const users = {};
+      let dropped = 0;
+      for (const [rawEmail, slugs] of Object.entries(body.grants)) {
+        const key = emailKey(rawEmail);
+        if (!key) continue;
+        const list = Array.isArray(slugs) ? slugs : [];
+        const clean = [...new Set(
+          list.filter((s) => typeof s === "string").map((s) => s.trim().toLowerCase())
+        )];
+        const kept = known.size ? clean.filter((s) => known.has(s)) : clean;
+        dropped += clean.length - kept.length;
+        users[key] = kept;
+      }
+
+      try {
+        await store.setJSON(GRANTS_KEY, {
+          version: 1,
+          updatedAt: new Date().toISOString(),
+          updatedBy: user.email || null,
+          users,
+        });
+      } catch (err) {
+        return send(500, { error: blobHelp(err) });
+      }
+      result.users = Object.keys(users).length;
+      result.grantCount = Object.values(users).reduce((n, l) => n + l.length, 0);
+      if (dropped) result.droppedUnknownSlugs = dropped;
+    }
+
+    if (hasLegacy) {
+      const clean = body.dashboards
+        .filter((d) => typeof d?.slug === "string")
+        .map((d) => ({
+          slug: d.slug,
+          allowedRoles: Array.isArray(d.allowedRoles)
+            ? d.allowedRoles.filter((r) => typeof r === "string")
+            : [],
+        }));
+      try {
+        await store.setJSON(BLOB_KEY, { dashboards: clean });
+      } catch (err) {
+        return send(500, { error: blobHelp(err) });
+      }
+      result.count = clean.length;
+    }
+
+    return send(200, result);
   }
 
   return send(405, { error: "Method not allowed" });
 };
+
+function blobHelp(err) {
+  return `Can't save access rules: ${err.message}. Enable Netlify Blobs on your site (Site configuration → Blobs) and redeploy, or set NETLIFY_SITE_ID + NETLIFY_BLOBS_TOKEN env vars.`;
+}
 
 function send(status, body) {
   return {

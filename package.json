@@ -9,6 +9,8 @@
   "scripts": {
     "build": "node scripts/build-manifest.js",
     "test": "node test/instructor-checklist.test.mjs",
+    "test:access": "node test/dashboard-access.test.mjs",
+    "test:access-ui": "node test/dashboard-access.smoke.mjs",
     "test:seasonal": "node test/seasonal-reset.test.mjs",
     "test:time": "node test/time-tracking.test.mjs",
     "test:time-ui": "node test/timer-ui.smoke.mjs",

@@ -1,16 +1,22 @@
 // netlify/edge-functions/auth-gate.js
 //
 // Runs on every request to a dashboard subpath (configured in netlify.toml).
-// Reads the current permissions from Netlify Blobs and allows or blocks
-// based on the caller's Identity JWT roles.
+// Reads the current access rules from Netlify Blobs and allows or blocks
+// based on the caller's Identity JWT.
 //
-// Because permissions come from the blob (not a static redirect rule),
-// admins can update them from the UI and changes take effect instantly
-// on the next request — no redeploy.
+// Access is granted PER PERSON (by email), not per role — see
+// lib/dashboard-access.js for the rule and the migration fallback.
+//
+// Because the rules come from the blob (not a static redirect rule), admins
+// can update them from the UI and changes take effect instantly on the next
+// request — no redeploy.
 
 import { getStore } from "@netlify/blobs";
+import { ADMIN_ROLE, canAccess, normalizeGrants } from "./lib/dashboard-access.js";
 
-const ADMIN = "admin";
+const STORE = "dashboards";
+const GRANTS_KEY = "grants";
+const LEGACY_PERMS_KEY = "permissions";
 
 export default async (request, context) => {
   const url = new URL(request.url);
@@ -26,27 +32,31 @@ export default async (request, context) => {
   const roles = user.app_metadata?.roles || [];
 
   // Admin always passes.
-  if (roles.includes(ADMIN)) return context.next();
+  if (roles.includes(ADMIN_ROLE)) return context.next();
 
-  // Read the live permissions for this slug.
-  const perms = await loadPermissionsFor(slug, request);
-  if (!perms) {
+  const store = openEdgeStore();
+
+  // The person's explicit dashboard list, if they have one.
+  const grants = await loadGrants(store);
+
+  // The manifest entry, needed for (a) telling "unknown slug, not ours" apart
+  // from "known slug, denied", and (b) the legacy role fallback for anyone who
+  // hasn't been given an explicit list yet.
+  const dashboard = await loadDashboardEntry(slug, store, request);
+  if (!dashboard) {
     // Slug unknown → not a gated dashboard path; pass through.
     return context.next();
   }
 
-  const allowed = perms.allowedRoles || [];
-  if (!allowed.length) return unauthorized("Admin-only resource.");
-  if (!allowed.some((r) => roles.includes(r))) {
-    return unauthorized("Your role can't access this dashboard.");
+  if (canAccess({ email: user.email, roles, slug, dashboard, grants })) {
+    return context.next();
   }
-
-  return context.next();
+  return unauthorized("You haven't been given access to this dashboard.");
 };
 
 function openEdgeStore() {
   try {
-    return getStore({ name: "dashboards", consistency: "strong" });
+    return getStore({ name: STORE, consistency: "strong" });
   } catch (err) {
     const siteID =
       (typeof Netlify !== "undefined" && Netlify.env?.get?.("NETLIFY_SITE_ID")) ||
@@ -55,20 +65,37 @@ function openEdgeStore() {
       (typeof Netlify !== "undefined" && Netlify.env?.get?.("NETLIFY_BLOBS_TOKEN")) ||
       (typeof Netlify !== "undefined" && Netlify.env?.get?.("NETLIFY_API_TOKEN"));
     if (siteID && token) {
-      return getStore({ name: "dashboards", consistency: "strong", siteID, token });
+      return getStore({ name: STORE, consistency: "strong", siteID, token });
     }
-    throw err;
+    console.warn("auth-gate: blob store unavailable:", err.message);
+    return null;
   }
 }
 
-async function loadPermissionsFor(slug, request) {
+async function loadGrants(store) {
+  if (!store) return null;
   try {
-    const store = openEdgeStore();
-    const overrides = await store.get("permissions", { type: "json" });
-    const entry = (overrides?.dashboards || []).find((d) => d.slug === slug);
-    if (entry) return entry;
+    const raw = await store.get(GRANTS_KEY, { type: "json" });
+    return raw ? normalizeGrants(raw) : null;
   } catch (err) {
-    console.warn("auth-gate blob read failed, falling back to discovery:", err.message);
+    // A blob read failure must NOT silently widen access: returning null drops
+    // the caller onto the legacy role rule, which is at least as strict.
+    console.warn("auth-gate grants read failed, falling back to roles:", err.message);
+    return null;
+  }
+}
+
+async function loadDashboardEntry(slug, store, request) {
+  // Legacy per-dashboard role overrides still live in the blob; they carry the
+  // allowedRoles used by the fallback, so prefer them over the shipped file.
+  if (store) {
+    try {
+      const overrides = await store.get(LEGACY_PERMS_KEY, { type: "json" });
+      const entry = (overrides?.dashboards || []).find((d) => d.slug === slug);
+      if (entry) return entry;
+    } catch (err) {
+      console.warn("auth-gate blob read failed, falling back to discovery:", err.message);
+    }
   }
   // Fallback to the static discovery manifest that ships with the deploy.
   try {

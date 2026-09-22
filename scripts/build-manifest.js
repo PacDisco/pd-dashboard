@@ -36,9 +36,21 @@ const DISCOVERY = path.join(ROOT, "dashboards.discovery.json");
 const MANIFEST = path.join(ROOT, "dashboards.json");
 const REDIRECTS = path.join(ROOT, "_redirects");
 
-// Roles supported by the system (kept in one place for consistency)
+// Roles supported by the system (kept in one place for consistency).
+//
+// Access to a dashboard is decided PER PERSON now (netlify/edge-functions/
+// lib/dashboard-access.js); these roles gate in-app powers — approving
+// timesheets, writing marketing spend, marking a student dropped — and seed
+// the fallback for anyone who has no explicit dashboard list yet.
 const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed", "contractor"];
-const ALL_ROLES = ["admin", ...FUNCTIONAL_ROLES];
+// `member` means "a known, signed-in person with no particular job function".
+// Someone whose access is entirely per-dashboard may hold no functional role at
+// all, and the coarse `Role=` backstop below can only match on roles — without
+// `member` such a person would be bounced before auth-gate ever ran. The admin
+// screen assigns it automatically to anyone granted dashboards who has no other
+// role, so it never needs to be managed by hand.
+const BASELINE_ROLE = "member";
+const ALL_ROLES = ["admin", BASELINE_ROLE, ...FUNCTIONAL_ROLES];
 // The coarse per-dashboard baseline in _redirects deliberately EXCLUDES
 // `contractor`. Contractors are outside the organisation, and _redirects is the
 // last static backstop under auth-gate.js (which falls through to next() when a
