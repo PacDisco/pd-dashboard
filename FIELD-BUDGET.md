@@ -234,8 +234,82 @@ same budget, so a malformed client can't void a row in someone else's programme.
 Cash movements can be removed but not edited — an exchange is two linked rows,
 and editing one half in isolation would leave the float wrong.
 
+## Cash on hand
+
+How much physical money each instructor is carrying. Nothing stores it — it is
+derived from the ledger, which is the only version that can't drift from the
+entries it came from.
+
+```
+held = cash in − cash out − cash spent
+```
+
+- **cash in** — withdrawals, currency received in an exchange, cash handed over
+  by someone else
+- **cash out** — currency given up in an exchange, cash handed to someone else
+- **cash spent** — expenses with `payment_method = 'cash'`. A card charge is
+  real spend against the budget and no change at all to the pocket.
+
+Movement rows carry their own sign, so they are taken as they are rather than
+negated by type — the one rule that holds whichever way round the field app
+records a withdrawal, and an exchange is only representable as a signed pair
+anyway.
+
+**In and out are split rather than netted.** The balance is the same either way;
+the components are not. An instructor who withdrew USD 2,000 and changed USD
+1,000 into another currency would otherwise read as "drawn 1,000", which matches
+no receipt and nothing they remember. `budget-admin.mjs` therefore groups by
+`sign(amount)` as well as by type.
+
+**Corrections resolve to what they undo.** A correction's own `entry_type` says
+nothing about the row it voids, so the query joins `corrects_id` back to the
+original and uses the ORIGINAL's type and payment method with the correction's
+already-negated amount. The float then nets back on its own. A correction whose
+original is missing is counted and reported rather than guessed at.
+
+**Currencies never add together.** Instructors hold USD and FJD at once and the
+value of this figure is that it's countable, not converted. One row per person
+per currency, and the budget's total is per currency too.
+
+**A negative balance is shown, not clamped.** It means the ledger has more cash
+leaving than ever arrived — a withdrawal nobody logged — and that is the thing
+worth seeing.
+
+### Where it appears
+
+- On the collapsed budget card, as a green chip: what that programme's
+  instructors are holding between them, per currency. Visible before you open
+  anything.
+- Inside the card, a table per instructor per currency: in, out, spent, held.
+  The components sit beside the balance because a balance alone can't be checked
+  against anything — a pocket count that disagrees is then traceable to one of
+  three figures.
+- On each instructor's pill, their own held figure.
+
+A pocket is one pocket, but entries belong to a budget. Where someone is holding
+cash from more than one programme, the row says so underneath and gives their
+total across all of them.
+
+The API returns `cash` (per budget) and `cashByPerson` from `?action=list`. The
+arithmetic is `netlify/functions/_shared/field-cash.mjs`, covered by
+`npm run test:cash` and `npm run test:cash-ui`.
+
+## Leg totals
+
+Each leg header reads like the card summary above it: what's left, of what, a
+progress bar, and the base-currency conversion. A leg balance on its own is a
+number with nothing to judge it against — USD 2,904 left is healthy on a 3k leg
+and alarming on a 30k one.
+
 ## Known gaps
 
+- **Cash on hand assumes the field app signs movements as documented.** An
+  exchange is a signed pair and a withdrawal is positive. The in / out / spent
+  columns exist so a wrong sign reads as an obviously wrong subtotal rather than
+  a quietly wrong balance — check one real budget against a known float before
+  trusting it.
+- **Nothing reconciles a counted pocket against the figure.** Held is what the
+  ledger says should be there; there is no place to record what actually was.
 - **Unbudgeted spend is flagged but not alerted.** A category with zero
   allocation and non-zero spend shows a red "unbudgeted" label here. Nothing
   emails anyone.

@@ -18,7 +18,9 @@
 // (PEN 40.50 -> 4050) with an explicit currency on every row.
 //
 // Routes (?action=..., or JSON body { action } on POST):
-//   GET   list        -> { budgets, categories, assignments, spend }
+//   GET   list        -> { budgets, categories, assignments, spend,
+//                          cash, cashByPerson }   cash = drawn/spent/held per
+//                          instructor per currency; see _shared/field-cash.mjs
 //   GET   entries     ?budget=<id>  -> { entries }
 //   GET   export      ?budget=<id>  -> text/csv, for reconciliation
 //   POST  create      { name, currency, default_rate, categories[], emails[] }
@@ -47,6 +49,7 @@
 import { neon } from "@neondatabase/serverless";
 import { verifiedUser } from "./_shared/identity.mjs";
 import { hashCode, codeProblem } from "./_shared/access-code.mjs";
+import { foldCash } from "./_shared/field-cash.mjs";
 
 const WRITE_ROLES = ["admin", "programs", "operations"];
 
@@ -118,7 +121,7 @@ function cleanRates(raw) {
 
 async function handleList() {
   const db = sql();
-  const [budgets, categories, assignments, spend, receipts, codes] = await Promise.all([
+  const [budgets, categories, assignments, spend, receipts, codes, cashRows] = await Promise.all([
     db`select * from budgets order by created_at desc`,
     // A recursive materialised path, so ordering holds at any depth. A join to
     // the parent only sorts two levels, and grouping on coalesce(parent_id, id)
@@ -141,7 +144,33 @@ async function handleList() {
          from entries where receipt_file_id is not null group by budget_id`,
     // Never the hash — only whether a code exists and when it was set.
     db`select email, code_set_at, last_login_at, locked_until from instructor_codes`,
+    // Cash on hand. Grouped in the database rather than pulled row by row: the
+    // result is bounded by budgets × instructors × currencies × types, which
+    // stays small however long the ledger gets.
+    //
+    // The left join resolves a correction back to the row it voids. A
+    // correction's own entry_type says nothing about what it is undoing, so
+    // without this an undone withdrawal and an undone cash expense would be
+    // indistinguishable. `kind` and `method` are therefore the ORIGINAL's —
+    // paired with the correction's already-negated amount, which is what makes
+    // the float net back. See _shared/field-cash.mjs.
+    db`select e.budget_id,
+              e.email,
+              e.currency,
+              coalesce(o.entry_type, e.entry_type)         as kind,
+              coalesce(o.payment_method, e.payment_method) as method,
+              sign(e.amount)                               as direction,
+              sum(e.amount)::bigint                        as total,
+              count(*)::int                                as n
+         from entries e
+         left join entries o on o.id = e.corrects_id
+        group by e.budget_id, e.email, e.currency,
+                 coalesce(o.entry_type, e.entry_type),
+                 coalesce(o.payment_method, e.payment_method),
+                 sign(e.amount)`,
   ]);
+
+  const cash = foldCash(cashRows.map((r) => ({ ...r, total: money(r.total) })));
 
   return json(200, {
     budgets: budgets.map((b) => ({
@@ -160,6 +189,13 @@ async function handleList() {
     spend: spend.map((s) => ({ ...s, spent: money(s.spent) })),
     receipts,
     codes,
+    // drawn / spent / held per instructor per currency, both within a budget
+    // and across all of them — one pocket can carry cash from one programme
+    // into the next, so the two figures are reported separately rather than
+    // one being presented as the other.
+    cash: cash.byBudget,
+    cashByPerson: cash.byPerson,
+    cashUnresolved: cash.unresolved,
     generatedAt: new Date().toISOString(),
   });
 }

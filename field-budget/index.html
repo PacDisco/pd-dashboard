@@ -87,6 +87,9 @@
     display:flex; justify-content:space-between; align-items:baseline; gap:12px;
     padding-bottom:8px; border-bottom:2px solid var(--topaz-soft); margin-bottom:10px;
   }
+  .leg-head > span:first-child { flex:1; min-width:0; }
+  .leg-head .minibar { flex:none; align-self:center; width:90px; }
+  .leg-head .leg-over { color:var(--over); }
   .leg-name { font-weight:600; }
   .leg-cur {
     font-size:11px; font-weight:600; color:var(--topaz-dark); background:var(--topaz-soft);
@@ -108,7 +111,39 @@
   .row.over .fill { background:var(--over); }
   .row.over .row-top span:last-child { color:var(--over); }
 
+  /* Cash on hand. Physical notes in a pocket, so it gets its own visual
+     language — green, countable — rather than looking like another gauge. */
+  .cash-chip {
+    display:inline-flex; align-items:center; gap:7px; flex-wrap:wrap;
+    font-size:11.5px; font-weight:600; color:#2f5d16;
+    background:#eef7e6; border:1px solid #cfe6bb; border-radius:9999px;
+    padding:2px 10px; margin-top:4px;
+  }
+  .cash-chip .lbl { font-weight:500; color:#4f7a24; text-transform:uppercase; letter-spacing:.05em; font-size:10px; }
+  .cash-chip.none { color:#797979; background:#f7f7f7; border-color:#e5e7eb; }
+  .cash-chip.none .lbl { color:#9ca3af; }
+  .cash-chip.short { color:var(--over); background:#fdeceb; border-color:#f5c6c3; }
+  .cash-chip.short .lbl { color:var(--over); }
+
+  .cash { margin-top:18px; padding-top:14px; border-top:1px solid #e5e7eb; }
+  .cash h3 { font-size:12px; font-weight:600; color:#797979; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+  .cash table { width:100%; font-size:13px; border-collapse:collapse; }
+  .cash th {
+    text-align:right; font-size:10.5px; font-weight:500; color:#9ca3af;
+    text-transform:uppercase; letter-spacing:.06em; padding:0 0 6px 12px; white-space:nowrap;
+  }
+  .cash th:first-child { text-align:left; padding-left:0; }
+  .cash td { padding:7px 0 7px 12px; text-align:right; border-top:1px solid #f3f4f6; white-space:nowrap; }
+  .cash td:first-child { text-align:left; padding-left:0; white-space:normal; }
+  .cash .held { font-weight:600; }
+  .cash .held.short { color:var(--over); }
+  .cash .zero { color:#d1d5db; }
+  .cash .elsewhere { font-size:11px; color:#797979; }
+  .cash tfoot td { border-top:2px solid var(--topaz-soft); font-weight:600; }
+
   .people { margin-top:16px; padding-top:14px; border-top:1px solid #e5e7eb; }
+  .pill .cash-held { color:#2f5d16; font-weight:600; }
+  .pill .cash-held.short { color:var(--over); }
   .pill {
     display:inline-flex; align-items:center; gap:6px; background:#f7f7f7;
     border:1px solid #e5e7eb; border-radius:9999px; padding:4px 11px;
@@ -401,6 +436,39 @@ function toBase(amount, leg, base) {
   return Number.isFinite(r) && r > 0 ? Math.round(amount / r) : null;
 }
 
+/* ---------------------------------------------------------------- cash ---
+   How much physical cash each instructor is holding. The API does the folding
+   (netlify/functions/_shared/field-cash.mjs); this end only arranges it.
+
+   The components are shown beside the balance rather than just the balance,
+   because a balance alone can't be checked against anything. A count in a
+   pocket that doesn't match "held" is then traceable to one of three figures,
+   and a sign recorded the wrong way round shows up as an obviously wrong
+   subtotal instead of a quietly wrong total. */
+
+function cashFor(budgetId) {
+  return (DATA.cash || []).filter((r) => r.budget_id === budgetId);
+}
+
+// Currencies are kept apart: adding PEN to USD needs a rate, and the value of
+// this number is that it is countable rather than estimated.
+function cashByCurrency(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    const c = out.get(r.currency) || { currency: r.currency, in: 0, out: 0, spent: 0 };
+    c.in += r.in; c.out += r.out; c.spent += r.spent;
+    out.set(r.currency, c);
+  }
+  return [...out.values()]
+    .map((c) => ({ ...c, held: c.in - c.out - c.spent }))
+    .sort((a, b) => b.held - a.held || a.currency.localeCompare(b.currency));
+}
+
+function personHeld(email, currency) {
+  const row = (DATA.cashByPerson || []).find((p) => p.email === email && p.currency === currency);
+  return row ? row.held : null;
+}
+
 /* ---------------------------------------------------------------- list --- */
 
 async function load() {
@@ -430,6 +498,8 @@ function render() {
     const legs = treeFor(b.id);
     const people = DATA.assignments.filter((a) => a.budget_id === b.id);
     const nReceipts = (DATA.receipts.find((r) => r.budget_id === b.id) || {}).n || 0;
+    const cashRows = cashFor(b.id);
+    const cashCur = cashByCurrency(cashRows);
 
     // Roll up to base. A leg with no base rate can't be converted, and that is
     // said out loud rather than silently dropped from the total.
@@ -460,16 +530,32 @@ function render() {
     const stamp = (n, cur) => { n.legCurrency = cur; n.kids.forEach((k) => stamp(k, cur)); };
     legs.forEach((leg) => stamp(leg, leg.currency));
 
+    // Each leg reads like the card summary above it: what's left, of what, and
+    // a bar. Without the allocation beside it, a leg balance is a number with
+    // nothing to judge it against — USD 2,904 left is healthy on a 3k leg and
+    // alarming on a 30k one.
     const legBlocks = legs.map((leg) => {
-      const nzd = toBase(leg.allocated - leg.spent, leg, base);
+      const left = leg.allocated - leg.spent;
+      const nzd = toBase(left, leg, base);
+      const pct = leg.allocated > 0
+        ? Math.min(100, (leg.spent / leg.allocated) * 100)
+        : (leg.spent > 0 ? 100 : 0);
+      const overspent = leg.spent > leg.allocated;
       return `<section class="leg">
         <div class="leg-head">
           <span><span class="leg-name">${esc(leg.name)}</span><span class="leg-cur">${esc(leg.currency || '—')}</span></span>
+          <span class="minibar ${overspent ? 'over' : ''}" title="${Math.round(pct)}% spent">
+            <span style="width:${pct}%"></span>
+          </span>
           <span class="text-right">
-            <span class="num font-semibold">${fmt(leg.allocated - leg.spent, leg.currency)}</span>
-            ${nzd !== null && leg.currency !== base
-              ? `<span class="block text-xs" style="color:#797979">≈ ${fmt(nzd, base)}</span>`
-              : (nzd === null ? `<span class="block text-xs warn">no ${base} rate</span>` : '')}
+            <span class="num font-semibold${overspent ? ' leg-over' : ''}">${fmt(left, leg.currency)}</span>
+            <span class="block text-xs" style="color:#797979">
+              <span class="num">of ${fmt(leg.allocated, leg.currency)}</span>${
+                nzd !== null && leg.currency !== base
+                  ? ` · <span class="num">≈ ${fmt(nzd, base)}</span>`
+                  : ''}
+            </span>
+            ${nzd === null ? `<span class="block text-xs warn">no ${base} rate</span>` : ''}
           </span>
         </div>
         ${leg.kids.map(gauge).join('') || '<p class="hint">No categories in this leg yet.</p>'}
@@ -491,6 +577,10 @@ function render() {
               legs.map((l) => l.currency).filter(Boolean).join(', ') || 'no currency'} → ${esc(base)} · ${
               people.length} instructor${people.length === 1 ? '' : 's'} · ${nReceipts} receipt${nReceipts === 1 ? '' : 's'}
           </span>
+          ${cashCur.length ? `<span class="cash-chip${cashCur.some((c) => c.held < 0) ? ' short' : ''}"
+            title="Cash the instructors on this budget are holding, by currency">
+            <span class="lbl">cash on hand</span>${cashCur.map((c) => fmt(c.held, c.currency)).join(' · ')}
+          </span>` : ''}
         </span>
         <span class="minibar ${spentBase > allocBase ? 'over' : ''}" title="${Math.round(pct)}% spent">
           <span style="width:${pct}%"></span>
@@ -509,13 +599,60 @@ function render() {
         </p>
         ${legBlocks || '<p class="hint">No legs yet — edit this budget to add one.</p>'}
 
+        ${cashRows.length ? `<div class="cash">
+          <h3>Cash on hand</h3>
+          <table>
+            <thead><tr>
+              <th>Instructor</th><th>Cash in</th><th>Cash out</th><th>Spent</th><th>Held</th>
+            </tr></thead>
+            <tbody>${cashRows.map((r) => {
+              const across = personHeld(r.email, r.currency);
+              const elsewhere = across !== null && across !== r.held;
+              const assigned = people.some((p) => p.email === r.email);
+              return `<tr>
+                <td>
+                  <span class="font-medium">${esc((r.email || '').split('@')[0])}</span>
+                  <span class="elsewhere">${esc(r.currency)}</span>
+                  ${assigned ? '' : ' <span class="warn">unassigned</span>'}
+                  ${elsewhere ? `<span class="block elsewhere">${fmt(across, r.currency)} in hand across all budgets</span>` : ''}
+                </td>
+                <td>${r.in ? fmt(r.in, r.currency) : '<span class="zero">—</span>'}</td>
+                <td>${r.out ? fmt(r.out, r.currency) : '<span class="zero">—</span>'}</td>
+                <td>${r.spent ? fmt(r.spent, r.currency) : '<span class="zero">—</span>'}</td>
+                <td class="held${r.held < 0 ? ' short' : ''}">${fmt(r.held, r.currency)}</td>
+              </tr>`;
+            }).join('')}</tbody>
+            ${cashCur.length > 1 || cashRows.length > 1 ? `<tfoot>${cashCur.map((c) => `<tr>
+              <td>All instructors · ${esc(c.currency)}</td>
+              <td>${c.in ? fmt(c.in, c.currency) : '<span class="zero">—</span>'}</td>
+              <td>${c.out ? fmt(c.out, c.currency) : '<span class="zero">—</span>'}</td>
+              <td>${c.spent ? fmt(c.spent, c.currency) : '<span class="zero">—</span>'}</td>
+              <td class="held${c.held < 0 ? ' short' : ''}">${fmt(c.held, c.currency)}</td>
+            </tr>`).join('')}</tfoot>` : ''}
+          </table>
+          <p class="hint">
+            Cash in is withdrawals and cash received; cash out is money exchanged
+            or handed to someone else; spent is cash expenses only, never card.
+            Held is what's left — what should be in the pocket right now.
+            ${cashRows.some((r) => r.held < 0)
+              ? '<span class="warn">A negative balance means the ledger has more cash spent than drawn — usually a withdrawal nobody logged.</span>'
+              : ''}
+            ${DATA.cashUnresolved
+              ? `<span class="warn">${DATA.cashUnresolved} correction${DATA.cashUnresolved === 1 ? '' : 's'} could not be matched to an entry and ${DATA.cashUnresolved === 1 ? 'is' : 'are'} left out.</span>`
+              : ''}
+          </p>
+        </div>` : ''}
+
         <div class="people">
           <div class="mb-2">
             ${people.length
               ? people.map((p) => {
                   const c = (DATA.codes || []).find((x) => x.email === p.email);
                   const locked = c && c.locked_until && new Date(c.locked_until) > new Date();
+                  const held = cashRows.filter((r) => r.email === p.email && r.held !== 0);
                   return `<span class="pill">${esc(p.email)}
+                    ${held.map((r) => `<span class="cash-held${r.held < 0 ? ' short' : ''}"
+                      title="Cash on hand for this budget">${fmt(r.held, r.currency)}</span>`).join('')}
                     <button data-code="${esc(p.email)}" title="${c ? 'Change access code' : 'Set an access code'}"
                       style="color:${c ? 'var(--topaz-dark)' : '#b02a37'};font-weight:600">
                       ${locked ? 'locked' : (c ? 'code' : 'no code')}</button>
