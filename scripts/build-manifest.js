@@ -42,7 +42,7 @@ const REDIRECTS = path.join(ROOT, "_redirects");
 // lib/dashboard-access.js); these roles gate in-app powers — approving
 // timesheets, writing marketing spend, marking a student dropped — and seed
 // the fallback for anyone who has no explicit dashboard list yet.
-const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed", "contractor"];
+const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed", "contractor", "timesheet-reviewer"];
 // `member` means "a known, signed-in person with no particular job function".
 // Someone whose access is entirely per-dashboard may hold no functional role at
 // all, and the coarse `Role=` backstop below can only match on roles — without

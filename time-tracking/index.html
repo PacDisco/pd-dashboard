@@ -553,8 +553,12 @@ async function boot() {
   RUNNING = ME.running || null;
 
   var c = ME.contractor || {};
-  $('who').textContent = (c.full_name || c.email || '') + (ME.isManager ? ' · manager' : '');
-  if (ME.isManager) { $('tab-team').classList.remove('hidden'); $('tab-admin').classList.remove('hidden'); }
+  // Team is for anyone who may see the roster; Projects changes what the team
+  // logs against, so it stays with full admin.
+  $('who').textContent = (c.full_name || c.email || '')
+    + (ME.isManager ? ' · manager' : (ME.canReview ? ' · timesheet reviewer' : ''));
+  if (canReview()) $('tab-team').classList.remove('hidden');
+  if (ME.isManager) $('tab-admin').classList.remove('hidden');
 
   fillProjectSelect($('t-project'), PROJECTS, RUNNING ? RUNNING.project_id : null);
   fillBrandSelect($('t-brand'), $('t-project').value, RUNNING ? RUNNING.entry_brand : undefined);
@@ -906,7 +910,20 @@ async function removeEntry(id) {
  * a local date plus a clock time becomes an ISO instant here, exactly as the
  * by-hand modal does, because the browser is the only thing that knows them.
  */
+/**
+ * Two tiers, and the gap between them is money.
+ *
+ *   isMgr()     full control — rates, projects, other people's entries, and
+ *               pushing an approved timesheet into Invoices & Payments
+ *   canReview() see the team's time and the roster, and sign a period off
+ *
+ * The server enforces both (netlify/functions/time-tracking.js, ACTION_ACCESS);
+ * these only decide what is worth putting on screen. Hiding a button is not a
+ * permission, so nothing here is the only thing standing between a reviewer and
+ * a rate change.
+ */
 function isMgr() { return !!(ME && ME.isManager); }
+function canReview() { return !!(ME && (ME.canReview || ME.isManager)); }
 
 var IMPORT = { parsed: [], report: [], include: {}, slashDates: false, unmapped: [], lastBatch: null };
 
@@ -1664,16 +1681,27 @@ function renderTeam() {
       // The running pill goes on the second line beside the email, not next to
       // the input: on the same line it pushed this column ~60px wider and tipped
       // the whole table into horizontal scrolling.
-      + '<td><input class="fld font-semibold" style="width:132px" value="' + esc(c.full_name || '') + '"'
-          + ' placeholder="' + esc(c.email) + '" title="Display name — shown on approved timesheets and payments"'
-          + ' onchange="saveContractor(' + c.id + ', {full_name: this.value})">'
-        + '<div class="text-xs text-gray-400 mt-1 flex items-center gap-1">' + esc(c.email)
-        + (c.timer_running ? '<span class="pill pill-live">running</span>' : '') + '</div></td>'
-      + '<td><div class="flex items-center gap-1"><input class="fld" style="width:86px" type="number" step="0.01" min="0" value="' + (c.hourly_rate == null ? '' : c.hourly_rate) + '" onchange="saveContractor(' + c.id + ', {hourly_rate: this.value})" placeholder="rate">'
-        + '<select class="fld" style="width:72px" onchange="saveContractor(' + c.id + ', {currency: this.value})">'
-        + (ME.currencies || ['USD']).map(function (cu) { return '<option' + (cu === c.currency ? ' selected' : '') + '>' + cu + '</option>'; }).join('')
-        + '</select></div></td>'
-      + '<td><input class="fld" style="width:140px" value="' + esc(c.vendor_name || '') + '" placeholder="' + esc(name) + '" onchange="saveContractor(' + c.id + ', {vendor_name: this.value})"></td>'
+      // A reviewer reads this table; only an admin edits it. The fields are
+      // rendered as text rather than disabled inputs — a greyed-out box invites
+      // a click and then explains nothing, and the server would 403 anyway.
+      + (isMgr()
+        ? '<td><input class="fld font-semibold" style="width:132px" value="' + esc(c.full_name || '') + '"'
+            + ' placeholder="' + esc(c.email) + '" title="Display name — shown on approved timesheets and payments"'
+            + ' onchange="saveContractor(' + c.id + ', {full_name: this.value})">'
+          + '<div class="text-xs text-gray-400 mt-1 flex items-center gap-1">' + esc(c.email)
+          + (c.timer_running ? '<span class="pill pill-live">running</span>' : '') + '</div></td>'
+        : '<td><div class="font-semibold text-gray-800">' + esc(c.full_name || c.email) + '</div>'
+          + '<div class="text-xs text-gray-400 mt-1 flex items-center gap-1">' + esc(c.email)
+          + (c.timer_running ? '<span class="pill pill-live">running</span>' : '') + '</div></td>')
+      + (isMgr()
+        ? '<td><div class="flex items-center gap-1"><input class="fld" style="width:86px" type="number" step="0.01" min="0" value="' + (c.hourly_rate == null ? '' : c.hourly_rate) + '" onchange="saveContractor(' + c.id + ', {hourly_rate: this.value})" placeholder="rate">'
+          + '<select class="fld" style="width:72px" onchange="saveContractor(' + c.id + ', {currency: this.value})">'
+          + (ME.currencies || ['USD']).map(function (cu) { return '<option' + (cu === c.currency ? ' selected' : '') + '>' + cu + '</option>'; }).join('')
+          + '</select></div></td>'
+        : '<td class="mono">' + (c.hourly_rate == null ? '<span class="text-xs text-red-600">no rate</span>' : esc(c.hourly_rate) + ' ' + esc(c.currency || '')) + '</td>')
+      + (isMgr()
+        ? '<td><input class="fld" style="width:140px" value="' + esc(c.vendor_name || '') + '" placeholder="' + esc(name) + '" onchange="saveContractor(' + c.id + ', {vendor_name: this.value})"></td>'
+        : '<td class="text-gray-600">' + esc(c.vendor_name || name) + '</td>')
       + '<td class="text-right font-semibold mono">' + hours(c.period_minutes) + ' h</td>'
       + '<td class="text-right mono">' + (c.unapproved_minutes ? hours(c.unapproved_minutes) + ' h' : '—') + '</td>'
       + '<td class="text-xs text-gray-500">' + (c.last_logged ? ymd(c.last_logged) : '—') + '</td>'
@@ -1778,7 +1806,9 @@ function renderApprovals(list) {
       + '<td class="text-right whitespace-nowrap">'
         + (pushed
           ? '<a class="text-xs lnk" href="/invoices/">open in payments →</a>'
-          : '<button class="btn btn-primary" onclick="pushPayment(' + a.id + ')">push to payments</button> '
+          : (isMgr()
+              ? '<button class="btn btn-primary" onclick="pushPayment(' + a.id + ')">push to payments</button> '
+              : '<span class="text-xs text-gray-500 mr-2">an admin releases the payment</span>')
             + '<button class="btn btn-ghost" onclick="unapprove(' + a.id + ')">undo</button>')
       + '</td></tr>'
       + (parts.length

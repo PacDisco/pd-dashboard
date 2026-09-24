@@ -72,10 +72,34 @@ function sql() {
   return _sql;
 }
 
-// Who can see and act on OTHER people's time. Everyone else — including
-// operations — only ever sees their own entries. Rates and payout totals live
-// behind this too, so widening it exposes what every contractor is paid.
+/**
+ * Two tiers above "yourself", and the difference between them is money moving.
+ *
+ *   review   see anyone's time, the roster with its rates and period payouts,
+ *            the approval history — and sign a period off. Approving locks the
+ *            entries; it does not pay anyone.
+ *   manage   everything that changes what a person is owed or how time is
+ *            recorded: hourly rates, projects, other people's entries, pushing
+ *            an approval into Invoices & Payments, and the one-off migrations.
+ *
+ * `admin` is both. `timesheet-reviewer` is the first without the second, which
+ * is how someone checks the team's hours without also being able to alter a
+ * rate or release a payment.
+ *
+ * ACTION_ACCESS at the bottom of this file is the enforced version of that
+ * sentence — one table rather than twenty scattered guards, so widening a
+ * permission is a visible edit rather than a one-character slip in a handler.
+ */
 const MANAGER_ROLES = ['admin'];
+const REVIEWER_ROLES = ['admin', 'timesheet-reviewer'];
+
+function capabilitiesFor(roles) {
+  const list = Array.isArray(roles) ? roles : [];
+  const manage = MANAGER_ROLES.some((r) => list.includes(r));
+  // A manager is always a reviewer; the reverse is the whole point.
+  const review = manage || REVIEWER_ROLES.some((r) => list.includes(r));
+  return { review, manage };
+}
 const MAX_MINUTES = 1440;          // matches the DB constraint (24h)
 
 // Billing granularity. Time is billed in quarter hours.
@@ -195,11 +219,16 @@ function readCaller(context) {
   const email = String(user.email || '').trim().toLowerCase();
   if (!email) return null;
   const roles = (user.app_metadata && user.app_metadata.roles) || [];
+  const caps = capabilitiesFor(roles);
   return {
     email,
     name: (user.user_metadata && user.user_metadata.full_name) || null,
     roles,
-    isManager: roles.some((r) => MANAGER_ROLES.includes(r)),
+    // `isManager` keeps its old meaning — full control — so every guard that
+    // already used it stays exactly as strict as it was. Only the handlers
+    // deliberately widened below look at canReview.
+    isManager: caps.manage,
+    canReview: caps.review,
   };
 }
 
@@ -274,10 +303,18 @@ async function recomputeApproval(approvalId) {
   );
 }
 
-async function targetContractorId(caller, self, requested) {
+/**
+ * Resolve which contractor a request is about.
+ *
+ * `need` matters: reading someone else's time is a reviewer's job, WRITING an
+ * entry against their name is not. Both used to run through one check, so
+ * widening the read would silently have widened the write.
+ */
+async function targetContractorId(caller, self, requested, need = 'manage') {
   const id = optId('contractor_id', requested);
   if (id === null || id === self.id) return self.id;
-  if (!caller.isManager) throw new Error('You can only access your own time entries');
+  const allowed = need === 'review' ? caller.canReview : caller.isManager;
+  if (!allowed) throw new Error('You can only access your own time entries');
   const rows = await sql()`SELECT id FROM time_contractors WHERE id = ${id}`;
   if (!rows.length) throw new Error('contractor not found');
   return rows[0].id;
@@ -364,6 +401,7 @@ async function handleMe(caller) {
   return ok({
     contractor: self,
     isManager: caller.isManager,
+    canReview: caller.canReview,
     roles: caller.roles,
     projects,
     running,
@@ -379,7 +417,7 @@ async function handleEntries(caller, qs) {
 
   // Managers can ask for everyone at once with ?contractor_id=all
   if (String(qs.contractor_id || '') === 'all') {
-    if (!caller.isManager) return bad('You can only access your own time entries', 403);
+    if (!caller.canReview) return bad('You can only access your own time entries', 403);
     const rows = await sql().query(
       `${ENTRY_SELECT} WHERE e.work_date BETWEEN $1 AND $2
        ORDER BY e.work_date DESC, e.started_at DESC`,
@@ -389,7 +427,7 @@ async function handleEntries(caller, qs) {
   }
 
   let cid;
-  try { cid = await targetContractorId(caller, self, qs.contractor_id); }
+  try { cid = await targetContractorId(caller, self, qs.contractor_id, 'review'); }
   catch (e) { return bad(e.message, /own time entries/.test(e.message) ? 403 : 400); }
 
   const rows = await sql().query(
@@ -1052,7 +1090,7 @@ async function handleRestoreExact(caller, body) {
 
 // ------------------------------------------------------- manager: roster
 async function handleContractors(caller, qs) {
-  if (!caller.isManager) return bad('admin role required', 403);
+  if (!caller.canReview) return bad('you need the admin or timesheet-reviewer role for this', 403);
   let from, to;
   try { ({ from, to } = range({ from: qs.from, to: qs.to })); } catch (e) { return bad(e.message); }
   const rows = await sql().query(
@@ -1209,7 +1247,7 @@ const APPROVAL_BRANDS_SQL = `
   ), '[]'::json) AS brand_minutes`;
 
 async function handleApprovals(caller, qs) {
-  if (!caller.isManager) return bad('admin role required', 403);
+  if (!caller.canReview) return bad('you need the admin or timesheet-reviewer role for this', 403);
   let cid;
   try { cid = optId('contractor_id', qs.contractor_id); } catch (e) { return bad(e.message); }
   const limit = Math.min(Number(qs.limit) || 50, 200);
@@ -1242,7 +1280,7 @@ async function handleApprovals(caller, qs) {
  * timesheet without being counted — hours that were then unpayable forever.
  */
 async function handleApprove(caller, body) {
-  if (!caller.isManager) return bad('admin role required', 403);
+  if (!caller.canReview) return bad('you need the admin or timesheet-reviewer role for this', 403);
   let cid, start, end, notes;
   try {
     cid   = reqId('contractor_id', body.contractor_id);
@@ -1321,7 +1359,7 @@ async function handleApprove(caller, body) {
 }
 
 async function handleUnapprove(caller, body) {
-  if (!caller.isManager) return bad('admin role required', 403);
+  if (!caller.canReview) return bad('you need the admin or timesheet-reviewer role for this', 403);
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
   if (!id) return bad('id required');
@@ -1427,6 +1465,59 @@ exports.__test = {
   ROUND_TO_MINUTES, MIN_BILLABLE_MINUTES, MAX_MINUTES,
 };
 
+/**
+ * What each action needs, enforced before any handler runs.
+ *
+ *   self     the handler decides for itself — these are the routes that act on
+ *            the caller's own time, or that take a contractor_id and check it
+ *   review   see the team's time and sign a period off
+ *   manage   change rates, projects, other people's entries, or release money
+ *
+ * The per-handler guards below are kept as well. Two checks for one rule is
+ * deliberate here: this is the boundary between "can see what the team worked"
+ * and "can change what they are paid", and a single missed `!` in either place
+ * would open it silently.
+ *
+ * An action missing from this table is refused rather than defaulting to self —
+ * a new route should not quietly inherit the loosest setting.
+ */
+const ACTION_ACCESS = {
+  me: 'self',
+  entries: 'self',            // widens to review inside, per contractor_id
+  projects: 'self',
+  start: 'self',
+  stop: 'self',
+  discard: 'self',
+  'create-entry': 'self',     // writing for someone else needs manage, inside
+  'update-entry': 'self',
+  'delete-entry': 'self',
+  'import-entries': 'self',
+  'undo-import': 'self',
+
+  contractors: 'review',
+  approvals: 'review',
+  approve: 'review',
+  unapprove: 'review',
+
+  'save-contractor': 'manage',
+  'save-project': 'manage',
+  'delete-project': 'manage',
+  'push-payment': 'manage',
+  'restore-exact': 'manage',
+};
+
+function accessProblem(caller, action) {
+  const need = ACTION_ACCESS[action];
+  if (!need) return null;      // unknown actions fall through to the 400 below
+  if (need === 'review' && !caller.canReview) {
+    return 'you need the admin or timesheet-reviewer role for this';
+  }
+  if (need === 'manage' && !caller.isManager) {
+    return 'admin role required';
+  }
+  return null;
+}
+
 // -------------------------------------------------------------------------
 exports.handler = async (event, context) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: JSON_HEADERS, body: '' };
@@ -1443,6 +1534,9 @@ exports.handler = async (event, context) => {
       ? (event.isBase64Encoded ? JSON.parse(Buffer.from(event.body, 'base64').toString('utf8')) : JSON.parse(event.body))
       : {};
     const action = qs.action || body.action || (method === 'GET' ? 'me' : null);
+
+    const denied = accessProblem(caller, action);
+    if (denied) return bad(denied, 403);
 
     if (method === 'GET') {
       if (action === 'me')          return await handleMe(caller);
@@ -1483,4 +1577,7 @@ exports.handler = async (event, context) => {
 };
 
 // Exported for unit tests (test/time-tracking.test.mjs).
-exports._internals = { defaultDueDate, coerceDate, coerceInstant, optMoney, currency, dstr, MAX_MINUTES };
+exports._internals = {
+  defaultDueDate, coerceDate, coerceInstant, optMoney, currency, dstr, MAX_MINUTES,
+  capabilitiesFor, accessProblem, ACTION_ACCESS, MANAGER_ROLES, REVIEWER_ROLES,
+};

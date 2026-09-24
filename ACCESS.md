@@ -72,7 +72,7 @@ They gate what someone may **do** inside a dashboard, not what they can open:
 | Where | Check |
 |---|---|
 | `marketing-spend.mjs` | `admin`, `outreach` or `operations` may write spend |
-| `time-tracking.js` | manager roles approve a period |
+| `time-tracking.js` | `admin` or `timesheet-reviewer` sees the team and approves; `admin` alone pays — see below |
 | `enrollment-status.mjs` | `ENROLLMENT_DROP_ROLES` may mark a student dropped |
 | `shirt-orders.mjs` | `SHIRT_ORDER_ROLES` may place an order |
 | `_shared/cash-access.mjs` | who may open the cash forecast data |
@@ -80,6 +80,47 @@ They gate what someone may **do** inside a dashboard, not what they can open:
 | `users.js`, `config.js` | `admin` may manage people and access |
 
 They're edited on the **People & powers** tab. None of them were changed.
+
+### `timesheet-reviewer`
+
+Time Tracker used to have one boolean, `isManager`, gating everything above
+"your own time": seeing other people's entries, the roster with its hourly rates
+and period payouts, approving a period, pushing an approved timesheet into
+Invoices & Payments, and editing anyone's hours. The only way to let someone
+check the team's timesheets was to make them an admin.
+
+It is now two tiers, and the line between them is money moving:
+
+| | `timesheet-reviewer` | `admin` |
+|---|---|---|
+| See anyone's entries | ✓ | ✓ |
+| Roster, with rates and period payouts | ✓ | ✓ |
+| Approve a period (locks the entries) | ✓ | ✓ |
+| Undo an approval, before it's pushed | ✓ | ✓ |
+| Push an approval to Invoices & Payments | | ✓ |
+| Set hourly rates, vendors, display names | | ✓ |
+| Add, edit or archive projects | | ✓ |
+| Edit or delete someone else's entries | | ✓ |
+| Import time against someone else's name | | ✓ |
+
+A reviewer sees the roster as text rather than as editable fields — a greyed-out
+input invites a click and then explains nothing, and the server would refuse it
+anyway.
+
+**Where that boundary lives.** `ACTION_ACCESS` in
+`netlify/functions/time-tracking.js` records the level every route needs, and it
+is enforced before any handler runs. The per-handler guards are kept as well:
+two checks for one rule is deliberate where a missed `!` would open the gap
+between "can see what the team worked" and "can change what they are paid". A
+route missing from the table is refused rather than defaulting to the loosest
+setting.
+
+Reading someone else's entries and writing an entry against their name used to
+run through the same check, so widening the read would have widened the write.
+They are now separate — `targetContractorId(caller, self, id, 'review' | 'manage')`.
+
+`npm run test:time-access` covers the matrix, and fails if a route is added
+without a decision recorded for it.
 
 ### `member`
 

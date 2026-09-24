@@ -16,6 +16,7 @@
     "test:export": "node test/field-export.test.mjs",
     "test:fx": "node test/field-fx.test.mjs",
     "test:duplicate": "node test/field-duplicate.test.mjs",
+    "test:time-access": "node test/time-access.test.mjs",
     "test:seasonal": "node test/seasonal-reset.test.mjs",
     "test:time": "node test/time-tracking.test.mjs",
     "test:time-ui": "node test/timer-ui.smoke.mjs",

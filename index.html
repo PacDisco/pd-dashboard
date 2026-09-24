@@ -448,7 +448,7 @@
     // Roles no longer decide which dashboards a person sees — that's per-person
     // now (see netlify/edge-functions/lib/dashboard-access.js). They survive as
     // capability flags for what someone may DO inside a dashboard.
-    const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed", "contractor"];
+    const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed", "contractor", "timesheet-reviewer"];
     const BASELINE_ROLE = "member";   // "a known person, no particular job function"
     const ALL_ROLES = ["admin", BASELINE_ROLE, ...FUNCTIONAL_ROLES];
 
