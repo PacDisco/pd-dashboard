@@ -641,6 +641,7 @@ function imageBox(path, altPath) {
   return `<div class="imgbox">${src ? `<img src="${esc(src)}" alt="">` : '<div class="none">No photo yet</div>'}</div>
     <div class="imgacts">
       <label class="btn btn--sm btn--primary">Upload photo<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-upload="${esc(path)}" class="hidden"></label>
+      <button class="btn btn--sm" type="button" data-drive="${esc(path)}"${altPath ? ` data-drive-alt="${esc(altPath)}"` : ''}>From Google Drive</button>
       <button class="btn btn--sm" type="button" data-library="${esc(path)}">Choose uploaded</button>
       ${src ? `<button class="btn btn--sm btn--danger" type="button" data-clear="${esc(path)}">Remove</button>` : ''}
     </div>
@@ -770,6 +771,7 @@ function wirePanel(box) {
   box.querySelectorAll('[data-select-sec]').forEach((b) => b.onclick = () => select({ kind: 'section', key: b.dataset.selectSec }));
   box.querySelectorAll('[data-upload]').forEach((inp) => inp.onchange = () => uploadImage(inp));
   box.querySelectorAll('[data-library]').forEach((b) => b.onclick = () => showLibrary(b.dataset.library));
+  box.querySelectorAll('[data-drive]').forEach((b) => b.onclick = () => openDrive(b.dataset.drive, b.dataset.driveAlt || null));
   box.querySelectorAll('[data-clear]').forEach((b) => b.onclick = () => { setPath(S.data, b.dataset.clear, ''); changed(); renderPanel(); });
   const parent = box.querySelector('#img-parent');
   if (parent) parent.onclick = () => select(S.sel.parent);
@@ -842,6 +844,87 @@ async function showLibrary(path) {
     grid.querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => { setPath(S.data, path, b.dataset.pick); changed(); renderPanel(); });
   } catch (e) {
     grid.innerHTML = `<span class="help">Couldn't load photos: ${esc(e.message)}</span>`;
+  }
+}
+
+// ─── Google Drive picker ────────────────────────────────────────────────────
+// Browses the shared "Program photos" folder through /api/program-drive. A pick
+// is copied into program-media, so the page never depends on the Drive file.
+
+const DRIVE = '/api/program-drive';
+const D = { path: null, alt: null, folder: null, q: '', next: null };
+
+async function driveApi(params, body) {
+  const res = await fetch(body ? DRIVE : `${DRIVE}?${new URLSearchParams(params)}`, {
+    method: body ? 'POST' : 'GET', credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) sessionExpired();
+  if (!res.ok) throw new ApiError(res.status, data);
+  return data;
+}
+
+function openDrive(path, altPath) {
+  Object.assign(D, { path, alt: altPath, folder: null, q: '', next: null });
+  $('#drive-q').value = '';
+  $('#dlg-drive').showModal();
+  driveLoad();
+}
+$('#drive-close').onclick = () => $('#dlg-drive').close();
+$('#drive-search-form').onsubmit = (e) => { e.preventDefault(); D.q = $('#drive-q').value.trim(); D.next = null; driveLoad(); };
+$('#drive-more').onclick = () => driveLoad(true);
+
+async function driveLoad(append = false) {
+  const body = $('#drive-body');
+  const more = $('#drive-more');
+  if (!append) body.innerHTML = '<p class="help">Loading…</p>';
+  more.classList.add('hidden');
+  let r;
+  try {
+    const params = { action: 'list' };
+    if (D.folder) params.folder = D.folder;
+    if (D.q) params.q = D.q;
+    if (append && D.next) params.pageToken = D.next;
+    r = await driveApi(params);
+  } catch (e) {
+    body.innerHTML = `<p class="notice notice--${e.status === 503 ? 'warn' : 'bad'}" style="border-radius:8px">${esc(e.message)}</p>`;
+    return;
+  }
+  D.next = r.nextPageToken;
+  $('#drive-crumbs').innerHTML = (D.q
+    ? [`<button type="button" data-crumb="">Program photos</button>`, `<span>›</span><span>Search: “${esc(D.q)}”</span>`]
+    : r.path.map((p, i) => `${i ? '<span>›</span>' : ''}<button type="button" data-crumb="${esc(p.id === r.root ? '' : p.id)}">${esc(p.name)}</button>`)).join('');
+  $$('#drive-crumbs [data-crumb]').forEach((b) => b.onclick = () => { D.folder = b.dataset.crumb || null; D.q = ''; $('#drive-q').value = ''; driveLoad(); });
+
+  const folders = r.folders.map((f) => `<button type="button" class="drive-folder" data-folder="${esc(f.id)}"><span aria-hidden="true">📁</span>${esc(f.name)}</button>`).join('');
+  const imgs = r.images.map((i) => `<button type="button" class="drive-img" data-pick-drive="${esc(i.id)}" title="${esc(i.name)}"><img src="${esc(i.thumb)}" alt="" loading="lazy"><span>${esc(i.name)}</span></button>`).join('');
+  const html = (folders ? `<div class="drive-section">Folders</div><div class="drive-grid" style="margin-bottom:14px">${folders}</div>` : '') +
+    (imgs ? `<div class="drive-section">Photos</div><div class="drive-grid" id="drive-imgs">${imgs}</div>` : '');
+  if (append && $('#drive-imgs')) $('#drive-imgs').insertAdjacentHTML('beforeend', imgs);
+  else body.innerHTML = html || `<p class="help">${D.q ? 'No photos match that search.' : 'This folder has no photos.'}</p>`;
+  more.classList.toggle('hidden', !D.next);
+  $$('#drive-body [data-folder]').forEach((b) => b.onclick = () => { D.folder = b.dataset.folder; D.q = ''; $('#drive-q').value = ''; driveLoad(); });
+  $$('#drive-body [data-pick-drive]').forEach((b) => b.onclick = () => drivePick(b));
+}
+
+async function drivePick(btn) {
+  btn.setAttribute('aria-busy', 'true');
+  btn.querySelector('span').textContent = 'Importing…';
+  try {
+    const r = await driveApi(null, { action: 'import', id: btn.dataset.pickDrive });
+    setPath(S.data, D.path, r.url);
+    if (D.alt && !String(getPath(S.data, D.alt) || '').trim() && r.description) setPath(S.data, D.alt, r.description);
+    S.library = null;
+    changed();
+    $('#dlg-drive').close();
+    renderPanel();
+    toast(D.alt && !r.description ? 'Photo added from Drive. Add a short description of it underneath.' : 'Photo added from Drive.');
+  } catch (e) {
+    btn.removeAttribute('aria-busy');
+    btn.querySelector('span').textContent = 'Couldn’t import';
+    toast(`Import failed: ${esc(e.message)}`);
   }
 }
 

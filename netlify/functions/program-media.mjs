@@ -57,12 +57,24 @@ async function upload(req) {
   const actual = sniff(buf);
   if (actual !== declared) return json({ error: "That file isn't the image type it claims to be." }, 415);
 
-  const key = newKey(actual);
-  const name = String(req.headers.get("x-filename") || "").replace(/[^\w .()-]/g, "").slice(0, 120);
-  await media().set(key, buf, { metadata: { type: actual, name, uploadedBy: user.actor, uploadedAt: new Date().toISOString(), bytes: buf.byteLength } });
+  const stored = await storeImage(buf, { name: req.headers.get("x-filename"), actor: user.actor, origin: new URL(req.url).origin });
+  return json(stored, 201);
+}
 
-  const origin = (process.env.URL || new URL(req.url).origin).replace(/\/+$/, "");
-  return json({ key, url: `${origin}/api/program-media?key=${encodeURIComponent(key)}` }, 201);
+/**
+ * Store an already-validated image and return its editor URL. Shared with
+ * program-drive.mjs so Drive imports land in the same place as uploads.
+ * Re-checks the bytes itself, so callers can't store a non-image by mistake.
+ */
+export async function storeImage(buf, { name = "", actor = "unknown", source = "upload", origin = "" } = {}, store = media()) {
+  const type = sniff(buf);
+  if (!type) throw new Error("Not a JPG, PNG, WebP or GIF image");
+  if (buf.byteLength > MAX_BYTES) throw new Error("Image is over 5 MB");
+  const key = newKey(type);
+  const clean = String(name || "").replace(/[^\w .()-]/g, "").slice(0, 120);
+  await store.set(key, buf, { metadata: { type, name: clean, source, uploadedBy: actor, uploadedAt: new Date().toISOString(), bytes: buf.byteLength } });
+  const base = (process.env.URL || origin).replace(/\/+$/, "");
+  return { key, url: `${base}/api/program-media?key=${encodeURIComponent(key)}` };
 }
 
 async function listRecent(req) {

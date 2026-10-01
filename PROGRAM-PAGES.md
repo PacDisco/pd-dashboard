@@ -29,6 +29,7 @@ sees drafts and has no database or login.
 | `netlify/functions/program-pages.mjs` | Drafts, autosave (with conflict detection), publish, unpublish, history, restore, archive. |
 | `netlify/functions/program-media.mjs` | Image upload and serving (Netlify Blobs store `program-media`). JPG/PNG/WebP/GIF only, checked by file signature. No SVG. |
 | `netlify/functions/program-pages-nightly.mjs` | Scheduled daily (2am NZ). Rebuilds the public site so **Next departure** moves on once a session starts and started sessions drop off the Dates list, without anyone publishing. Skips the rebuild when nothing is published. |
+| `netlify/functions/program-drive.mjs` | Google Drive photo picker. Browses **one** shared folder with the dashboard's service account, read-only, and copies a picked photo into program media. |
 | `netlify/functions/program-pages-export.mjs` | Read-only export of **published** pages for the public build. Only accepts the build token. |
 | `netlify/functions/_shared/program-pages-access.mjs` | Who can edit and who can publish, plus the build-token check. |
 | `MIGRATION-program-pages.sql` | Tables `program_pages` and `program_page_versions`. Idempotent. |
@@ -51,13 +52,26 @@ Nothing else in the repo changed.
 | `NETLIFY_DATABASE_URL` | Already set (Neon). |
 | `PROGRAM_PAGES_BUILD_TOKEN` | 32+ random characters (`openssl rand -hex 32`). Set the **same value** on pd-program-pages. Under 24 characters disables the export. |
 | `PROGRAM_SITE_BUILD_HOOK` | The build hook URL from pd-program-pages → Site configuration → Build hooks. Without it, publishing still saves but the editor warns that the site wasn't rebuilt. |
+| `PROGRAM_PAGES_DRIVE_FOLDER_ID` | The Drive folder (or shared drive) editors can pick photos from. See below. Without it, the Drive button shows a "not set up yet" message. |
 | `PROGRAM_PAGES_PUBLISH_ROLES` | Optional. Default `admin,outreach,programs`. |
+
+## Google Drive photos (one-time setup)
+
+1. Pick or create the folder that holds program photos, e.g. **Program Photos** with a subfolder per program. A shared drive works too.
+2. **Share** it with the dashboard's service account (the `client_email` in the Google service-account JSON the dashboard already uses) as a **Viewer**.
+3. Copy the folder ID from its URL (`drive.google.com/drive/folders/<THIS PART>`) into pd-dashboard as `PROGRAM_PAGES_DRIVE_FOLDER_ID`, then redeploy.
+
+How it behaves:
+- **Access:** read-only Drive scope. Editors only see that folder and its subfolders, even if the service account can see other folders for other dashboards.
+- **Copies, not links:** a picked photo is copied into program media. Moving, renaming or unsharing the Drive file later never breaks a live page.
+- **iPhone photos and big files:** HEIC photos and anything over 5 MB come in as Drive's 2400px JPEG.
+- **Descriptions:** if the Drive file has a description, it pre-fills the photo description (alt text).
 
 ## How editing works
 
 - **Text:** click it and type. Enter finishes a one-line field. Pasting strips formatting.
 - **Prices, dates, status, links:** click them on the page and the right-hand panel jumps to that field.
-- **Photos:** click one to upload (resized to 2400px in the browser first), reuse an earlier upload, or paste a URL from the existing `/library/images/` folder. A description box sits under every photo.
+- **Photos:** click one to pick it from **Google Drive**, upload (resized to 2400px in the browser first), reuse an earlier upload, or paste a URL from the existing `/library/images/` folder. A description box sits under every photo.
 - **Review widgets:** in the hero, **+ Add a live review widget** takes the GoAbroad or GoOverseas embed code, or a Google Place ID, and stays up to date on its own (details in the pd-program-pages README). Manual review badges are still there for anything else.
 - **Lists** (weeks, FAQs, dates, cards and so on): **+ Add** buttons sit on the page. A selected item gets a toolbar to move it up or down, duplicate it or delete it.
 - **Sections** tab: show, hide and reorder sections per page.

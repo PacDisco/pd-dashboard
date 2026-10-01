@@ -116,3 +116,17 @@ test("publishing without a build hook says so instead of failing", async () => {
   assert.equal(r.triggered, false);
   assert.match(r.message, /PROGRAM_SITE_BUILD_HOOK/);
 });
+
+test("storeImage re-checks bytes and records where the image came from", async () => {
+  const { storeImage } = await import("../netlify/functions/program-media.mjs");
+  const saved = [];
+  const store = { set: async (key, buf, opts) => saved.push({ key, opts }) };
+  process.env.URL = "https://dash.test";
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]).buffer;
+  const r = await storeImage(jpg, { name: "IMG 1.jpg<script>", actor: "Megan", source: "drive:abc" }, store);
+  assert.match(r.url, /^https:\/\/dash\.test\/api\/program-media\?key=\d{6}-[0-9a-f]{18}\.jpg$/);
+  assert.equal(saved[0].opts.metadata.source, "drive:abc");
+  assert.equal(saved[0].opts.metadata.name, "IMG 1.jpgscript");
+  await assert.rejects(storeImage(new TextEncoder().encode("<svg/>").buffer, {}, store), /Not a JPG/);
+  delete process.env.URL;
+});

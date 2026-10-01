@@ -34,7 +34,8 @@
     "test:jotform-attribution": "node test/jotform-attribution.test.mjs",
     "sync:template": "node scripts/sync-program-template.mjs",
     "test:program-pages": "node test/program-pages.test.mjs",
-    "test:program-pages-ui": "node test/program-pages.smoke.mjs"
+    "test:program-pages-ui": "node test/program-pages.smoke.mjs",
+    "test:program-drive": "node test/program-drive.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
