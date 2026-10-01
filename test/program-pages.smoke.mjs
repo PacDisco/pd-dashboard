@@ -72,6 +72,15 @@ await frame().locator(".pdp--edit").waitFor();
 ok(page.url().endsWith("#/edit/south-america-gap-semester"), "opens the editor");
 await shot("01-editor");
 
+// Review badges in the hero: click one → its fields in the panel
+await frame().locator('[data-item="hero.reviews.1"] .pdp-review__site').click();
+ok((await page.locator(".insp-head h2").textContent()) === "Review badge 2 of 2", "review badge selected");
+ok((await page.locator('#f-hero_reviews_1_source').inputValue()) === "GoOverseas", "site shown in panel");
+await page.locator('#f-hero_reviews_1_count').fill("31");
+await page.waitForTimeout(400);
+ok(/31 reviews/.test(await frame().locator('[data-item="hero.reviews.1"]').textContent()), "count updates on the page");
+await shot("01b-review-badge");
+
 // Inline text edit → autosave
 const h1 = frame().locator('[data-f="hero.headline"]');
 await h1.click();

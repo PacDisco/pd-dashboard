@@ -28,6 +28,7 @@ sees drafts and has no database or login.
 | `program-pages/starters/south-america.json` | Starter content taken from the current South America page. Bracketed text like `[Instructor name]` marks what still needs filling in. |
 | `netlify/functions/program-pages.mjs` | Drafts, autosave (with conflict detection), publish, unpublish, history, restore, archive. |
 | `netlify/functions/program-media.mjs` | Image upload and serving (Netlify Blobs store `program-media`). JPG/PNG/WebP/GIF only, checked by file signature. No SVG. |
+| `netlify/functions/program-pages-nightly.mjs` | Scheduled daily (2am NZ). Rebuilds the public site so **Next departure** moves on once a session starts and started sessions drop off the Dates list, without anyone publishing. Skips the rebuild when nothing is published. |
 | `netlify/functions/program-pages-export.mjs` | Read-only export of **published** pages for the public build. Only accepts the build token. |
 | `netlify/functions/_shared/program-pages-access.mjs` | Who can edit and who can publish, plus the build-token check. |
 | `MIGRATION-program-pages.sql` | Tables `program_pages` and `program_page_versions`. Idempotent. |

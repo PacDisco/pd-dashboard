@@ -342,6 +342,9 @@ function markSelection() {
 // ─── clicking & typing in the page ──────────────────────────────────────────
 
 function ctxFor(el) {
+  // The hero's "Next departure" card stands in for a row in the Dates list.
+  const ref = el.closest('[data-ref-item]');
+  if (ref) return { kind: 'item', path: ref.dataset.refItem };
   const item = el.closest('[data-item]');
   if (item) return { kind: 'item', path: item.dataset.item };
   if (el.closest('[data-group="facts"]')) return { kind: 'group', key: 'facts' };

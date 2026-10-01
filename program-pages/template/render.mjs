@@ -124,6 +124,10 @@ const SECTION_BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
  * adding a field here is all it takes for editors to see it.
  *   type: text | multiline | number | money | date | url | image | select | toggle
  */
+// Third-party review sites shown as badges in the hero. Named in text only —
+// no logos or embed scripts, so nothing external runs on the page.
+export const REVIEW_SOURCES = ['GoAbroad', 'GoOverseas', 'Google', 'Trustpilot', 'Other'];
+
 export const SCHEMA = {
   page: {
     label: 'Page settings',
@@ -147,8 +151,6 @@ export const SCHEMA = {
       { k: 'hero.intro', label: 'Intro', type: 'multiline' },
       { k: 'hero.image', label: 'Hero photo', type: 'image' },
       { k: 'hero.imageAlt', label: 'Hero photo description (alt text)', type: 'text' },
-      { k: 'hero.reviewText', label: 'Review line', type: 'text' },
-      { k: 'hero.reviewUrl', label: 'Review link', type: 'url' },
     ],
   },
   facts: {
@@ -184,6 +186,7 @@ export const SCHEMA = {
   },
   // Repeatable items. `blank` is what "+ Add" inserts.
   lists: {
+    'hero.reviews':      { label: 'Review badge', add: 'Add a review badge', fields: [{ k: 'source', label: 'Review site', type: 'select', options: REVIEW_SOURCES }, { k: 'score', label: 'Score (e.g. 4.5 or 98%)', type: 'text' }, { k: 'count', label: 'Number of reviews', type: 'number' }, { k: 'url', label: 'Link to the reviews', type: 'url' }], blank: { source: 'GoAbroad', score: '', count: '', url: '' } },
     'why.items':         { label: 'Reason', add: 'Add a reason', fields: [{ k: 'title', label: 'Title', type: 'text' }, { k: 'body', label: 'Text', type: 'multiline' }, { k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }], blank: { title: 'New reason', body: 'Describe it in a sentence or two.', image: '', imageAlt: '' } },
     'route.phases':      { label: 'Phase', add: 'Add a phase', fields: [{ k: 'label', label: 'Weeks', type: 'text' }, { k: 'text', label: 'What happens', type: 'text' }], blank: { label: 'Wk', text: 'Location · headline activity' } },
     'itinerary.weeks':   { label: 'Week', add: 'Add a week', fields: [{ k: 'title', label: 'Title', type: 'text' }, { k: 'location', label: 'Location', type: 'text' }, { k: 'body', label: 'Description', type: 'multiline' }, { k: 'tags', label: 'Tags (comma separated)', type: 'text' }, { k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }], blank: { title: 'New week', location: '', body: 'What happens this week.', tags: '', image: '', imageAlt: '' } },
@@ -221,7 +224,7 @@ export function blankProgram(name = 'New program') {
       currency: 'USD',
     },
     layout: defaultLayout(),
-    hero: { eyebrow: 'Gap semester', headline: name, intro: '[One or two sentences on what makes this program special]', image: '', imageAlt: '', reviewText: '', reviewUrl: '' },
+    hero: { eyebrow: 'Gap semester', headline: name, intro: '[One or two sentences on what makes this program special]', image: '', imageAlt: '', reviews: [] },
     facts: { countries: '[Countries]', start: '', finish: '', weeks: 10, groupMax: 14, ages: '17–22', tuition: 0, flightsEstimate: 0, activityLevel: 'Medium', credit: 'Optional · University of Montana' },
     why: { heading: 'What makes this program different', items: [] },
     route: { heading: 'Your journey at a glance', mapImage: '', mapAlt: '', phases: [] },
@@ -249,6 +252,13 @@ export function normalizeProgram(p) {
       out[k] = { ...base[k], ...((p && p[k]) || {}) };
     }
   }
+  if (!Array.isArray(out.hero.reviews)) out.hero.reviews = [];
+  // Pages saved before review badges existed had one free-text line.
+  if (!out.hero.reviews.length && out.hero.reviewText) {
+    out.hero.reviews = [{ source: 'Other', score: String(out.hero.reviewText), count: '', url: out.hero.reviewUrl || '' }];
+  }
+  delete out.hero.reviewText;
+  delete out.hero.reviewUrl;
   const known = new Set(SECTIONS.map((s) => s.key));
   const seen = new Set();
   const layout = [];
@@ -302,7 +312,8 @@ function ctx(p, opts) {
     if (!items.length && !ed) return '';
     const inner = items.map((it, i) => {
       const ip = `${path}.${i}`;
-      return `<${itemTag} class="${itemCls}"${ed ? ` data-item="${attr(ip)}"` : ''}>${each(it, ip, i)}</${itemTag}>`;
+      const html = each(it, ip, i);
+      return html == null ? '' : `<${itemTag} class="${itemCls}"${ed ? ` data-item="${attr(ip)}"` : ''}>${html}</${itemTag}>`;
     }).join('');
     const add = ed ? `<button type="button" class="pde-add" data-add="${attr(path)}">+ ${esc(SCHEMA.lists[path]?.add || 'Add')}</button>` : '';
     return `<${tag} class="${cls}"${ed ? ` data-list="${attr(path)}"` : ''}>${inner}</${tag}>${add}`;
@@ -400,8 +411,11 @@ const R = {
         `<blockquote class="pdp-quote">${c.t(`${ip}.quote`, 'p', '', { multiline: true })}<footer>${c.t(`${ip}.name`, 'span', '')}</footer></blockquote>`, 'figure', 'pdp-card pdp-card--pad');
   },
   dates(p, c) {
+    const today = new Date().toISOString().slice(0, 10);
     return `<h2 class="pdp-h2">${c.t('dates.heading', 'span')}</h2>` +
       c.list('dates.sessions', 'div', 'pdp-dates', (s, ip) => {
+        // Sessions that have already started drop off the live page (nightly rebuild).
+        if (!c.ed && s.start && s.start < today) return null;
         const closed = /^(full|closed)$/i.test(s.status || '');
         const label = s.spotsLeft !== '' && s.spotsLeft != null && Number(s.spotsLeft) > 0 && !closed
           ? `${s.status || 'Open'} · ${Number(s.spotsLeft)} spot${Number(s.spotsLeft) === 1 ? '' : 's'} left` : (s.status || 'Open');
@@ -451,6 +465,71 @@ export function videoEmbed(u) {
   return '';
 }
 
+/** "4.5" → 4.5 out of 5; "98%" → 98 out of 100. Returns null if it isn't a number. */
+export function parseScore(score) {
+  const s = String(score ?? '').trim();
+  const pct = /^(\d{1,3}(?:\.\d+)?)\s*%$/.exec(s);
+  if (pct) { const v = Math.min(100, Number(pct[1])); return { value: v, max: 100, pct: v }; }
+  const m = /^(\d(?:\.\d+)?)(?:\s*\/\s*5)?$/.exec(s);
+  if (m) { const v = Math.min(5, Number(m[1])); return { value: v, max: 5, pct: (v / 5) * 100 }; }
+  return null;
+}
+
+function renderReviews(p, c) {
+  const items = p.hero.reviews || [];
+  if (!items.length && !c.ed) return '';
+  return `<div class="pdp-reviews-wrap">` + c.list('hero.reviews', 'ul', 'pdp-reviews', (r, ip) => {
+    const sc = parseScore(r.score);
+    const count = Number(r.count) > 0 ? Number(r.count).toLocaleString('en-US') : '';
+    const site = r.source && r.source !== 'Other' ? r.source : '';
+    const stars = sc && sc.max === 5
+      ? `<span class="pdp-stars" aria-hidden="true"><span class="pdp-stars__fill" style="width:${sc.pct.toFixed(0)}%"></span></span>` : '';
+    const scoreText = sc && sc.max === 100 ? `${sc.value}%` : (sc ? `${sc.value}` : String(r.score || ''));
+    const label = sc ? (sc.max === 100 ? `${scoreText} rating` : `${scoreText} out of 5`) : scoreText;
+    const inner =
+      `<span class="pdp-review__score"${c.ed ? ` data-f="${esc(ip)}.score" data-empty="Score"` : ''}>${esc(c.ed ? (r.score ?? '') : scoreText)}</span>` +
+      stars +
+      `<span class="pdp-review__meta">` +
+        `<span${c.ed ? ` data-v="${esc(ip)}.count"` : ''}>${count ? `${esc(count)} reviews` : (c.ed ? 'Set review count' : '')}</span>` +
+        `<span class="pdp-review__site"${c.ed ? ` data-v="${esc(ip)}.source"` : ''}>${site ? `on ${esc(site)}` : (c.ed ? 'Choose site' : '')}</span>` +
+      `</span>` +
+      `<span class="pdp-sr">${esc(`${label}${count ? ` from ${count} reviews` : ''}${site ? ` on ${site}` : ''}`)}</span>`;
+    return !c.ed && r.url
+      ? `<a class="pdp-review" href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">${inner}</a>`
+      : `<span class="pdp-review">${inner}</span>`;
+  }, 'li', 'pdp-reviews__item') + `</div>`;
+}
+
+/**
+ * The soonest session that hasn't started yet and isn't full/closed.
+ * `today` is YYYY-MM-DD; pages are rebuilt nightly so a past date drops off.
+ */
+export function nextSession(p, today = new Date().toISOString().slice(0, 10)) {
+  const list = (p?.dates?.sessions || [])
+    .map((s, i) => ({ ...s, _i: i }))
+    .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.start || '') && s.start >= today && !/^(full|closed)$/i.test(s.status || ''));
+  list.sort((a, b) => a.start.localeCompare(b.start));
+  return list[0] || null;
+}
+
+function renderNext(p, c) {
+  const n = nextSession(p);
+  if (!n) {
+    return c.ed ? `<span class="pdp-next pdp-next--empty"><span class="pdp-next__label">Next departure</span><span class="pdp-next__when">Add a start date</span></span>` : '';
+  }
+  const spots = Number(n.spotsLeft) > 0 ? Number(n.spotsLeft) : 0;
+  const status = spots ? `${spots} spot${spots === 1 ? '' : 's'} left` : (/limited|waitlist/i.test(n.status || '') ? n.status : '');
+  const ref = c.ed ? ` data-ref-item="dates.sessions.${n._i}"` : '';
+  const inner =
+    `<span class="pdp-next__label">Next departure</span>` +
+    `<span class="pdp-next__when">${esc(shortDate(n.start).replace(/^(\w+) (\d+), (\d+)$/, '$2 $1 $3'))}</span>` +
+    (status ? `<span class="pdp-pill pdp-next__pill">${esc(status)}</span>` : '');
+  // Goes straight to the application, using this session's apply link if it has one.
+  const href = safeUrl(n.applyUrl || p.settings.applyUrl);
+  return c.ed ? `<span class="pdp-next"${ref}>${inner}</span>`
+    : `<a class="pdp-next" href="${esc(href)}" aria-label="${esc(`Apply for the ${dateRange(n.start, n.end)} departure`)}">${inner}</a>`;
+}
+
 function renderHero(p, c) {
   const f = p.facts;
   const fact = (label, html) => `<div class="pdp-fact"><span class="pdp-fact__label">${label}</span>${html}</div>`;
@@ -464,7 +543,7 @@ function renderHero(p, c) {
     `${c.t('hero.intro', 'p', 'pdp-hero__intro', { multiline: true })}` +
     `<div class="pdp-hero__ctas"><a class="pdp-btn pdp-btn--lg" href="#dates">Check dates &amp; apply</a>` +
     (p.settings.bookletUrl ? `<a class="pdp-btn pdp-btn--lg pdp-btn--inv-ghost" href="${attr(safeUrl(p.settings.bookletUrl))}">Get the itinerary</a>` : '') + `</div>` +
-    (p.hero.reviewText || c.ed ? `<p class="pdp-hero__review">${c.link('hero.reviewText', p.hero.reviewUrl, 'pdp-hero__reviewlink', 'hero.reviewUrl')}</p>` : '') +
+    renderReviews(p, c) +
     `</div></header>` +
     `<div class="pdp-wrap"><div class="pdp-facts"${c.ed ? ' data-group="facts"' : ''}>` +
     fact('Where', c.t('facts.countries', 'strong', '')) +
@@ -477,13 +556,11 @@ function renderHero(p, c) {
 }
 
 function renderBar(p, c, shown) {
-  const next = (p.dates.sessions || []).filter((s) => s.start && !/^(full|closed)$/i.test(s.status || '')).sort((a, b) => a.start.localeCompare(b.start))[0];
   const navs = shown.filter((k) => SECTION_BY_KEY[k].nav)
     .map((k) => `<a href="#${SECTION_BY_KEY[k].anchor}">${esc(SECTION_BY_KEY[k].nav)}</a>`).join('');
   return `<nav class="pdp-bar" aria-label="Program sections"><div class="pdp-wrap pdp-bar__inner">` +
     `<div class="pdp-bar__nav"><strong>${esc(p.name)}</strong>${navs}</div>` +
-    `<div class="pdp-bar__cta"><span class="pdp-bar__meta">${money(p.facts.tuition, c.cur) ? `From ${esc(money(p.facts.tuition, c.cur))}` : ''}${next ? ` · Next start ${esc(shortDate(next.start))}` : ''}</span>` +
-    `<a class="pdp-btn" href="${attr(safeUrl(p.settings.applyUrl))}">Apply now</a></div>` +
+    `<div class="pdp-bar__cta">${renderNext(p, c)}<a class="pdp-btn" href="${attr(safeUrl(p.settings.applyUrl))}">Apply now</a></div>` +
     `</div></nav>`;
 }
 
@@ -568,7 +645,7 @@ export function renderStandalone(program, { slug = '', editable = false, extraHe
 // already loaded on pacificdiscovery.org.
 
 export const PROGRAM_CSS = `
-.pdp{--pdp-topaz:#55bbd2;--pdp-topaz-dk:#1f6b7c;--pdp-teal:#288195;--pdp-green:#81c243;--pdp-ink:#2f2f2f;--pdp-body:#4a4a4a;--pdp-muted:#5b6166;--pdp-line:#dfe5e8;--pdp-soft:#f3f8f9;--pdp-sand:#faf7f2;--pdp-sticky-top:0px;
+.pdp{--pdp-topaz:#55bbd2;--pdp-topaz-dk:#1f6b7c;--pdp-teal:#288195;--pdp-green:#81c243;--pdp-ink:#2f2f2f;--pdp-body:#4a4a4a;--pdp-muted:#5b6166;--pdp-line:#dfe5e8;--pdp-soft:#f3f8f9;--pdp-sand:#faf7f2;--pdp-orange:#F15B39;--pdp-orange-dk:#d9472a;--pdp-sticky-top:0px;
   font-family:Poppins,system-ui,sans-serif;color:var(--pdp-body);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;text-align:left}
 .pdp *,.pdp *::before,.pdp *::after{box-sizing:border-box}
 .pdp :where(h1,h2,h3,p,ul,ol,li,figure,blockquote){margin:0;padding:0}
@@ -609,11 +686,33 @@ export const PROGRAM_CSS = `
 .pdp-hero__img{width:100%;height:100%;object-fit:cover}
 .pdp-hero--img::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,22,28,.78) 0%,rgba(8,22,28,.45) 45%,rgba(8,22,28,.05) 75%),linear-gradient(180deg,rgba(8,22,28,0) 50%,rgba(8,22,28,.55) 100%);pointer-events:none}
 .pdp-hero--img .pdp-hero__inner{text-shadow:0 1px 12px rgba(0,0,0,.35)}
-.pdp-hero__inner{position:relative;z-index:1;width:100%;padding-top:120px;padding-bottom:56px;display:flex;flex-direction:column;gap:18px}
+.pdp-hero__inner{position:relative;z-index:1;width:100%;padding-top:120px;padding-bottom:76px;display:flex;flex-direction:column;gap:18px}
 .pdp-hero__intro{font-size:19px;max-width:58ch;color:#fff}
 .pdp-hero__ctas{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
-.pdp-hero__review{font-size:14px}
-.pdp-hero__reviewlink{color:#fff!important;text-decoration:underline;text-underline-offset:3px}
+.pdp-next{display:inline-flex;align-items:center;gap:10px;background:var(--pdp-orange);color:#fff!important;text-decoration:none!important;border-radius:999px;padding:6px 8px 6px 18px;min-height:46px;box-shadow:0 2px 10px rgba(241,91,57,.35);transition:background .15s}
+a.pdp-next:hover{background:var(--pdp-orange-dk)}
+a.pdp-next:focus-visible{outline:3px solid var(--pdp-ink);outline-offset:2px}
+/* White on #F15B39 is 3.3:1: fine for the 19px bold date (large text), too faint
+   for small text, so the label is near-black and the spots tag is white. */
+.pdp-next__label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#1a1a1a;line-height:1.1;max-width:72px}
+.pdp-next__when{font-size:19px;font-weight:700;line-height:1;color:#fff;white-space:nowrap}
+.pdp-next__pill{background:#fff;color:#a8361a}
+.pdp-next:not(:has(.pdp-next__pill)){padding-right:18px}
+.pdp-next--empty{background:#eef0f1;box-shadow:none;padding-right:18px}
+.pdp-next--empty .pdp-next__label{color:var(--pdp-muted)}
+.pdp-next--empty .pdp-next__when{font-size:14px;font-weight:500;color:var(--pdp-muted)}
+.pdp-reviews{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
+.pdp-reviews-wrap .pde-add{max-width:320px;background:rgba(255,255,255,.9)}
+.pdp-review{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,.95);color:var(--pdp-ink)!important;text-decoration:none!important;border-radius:12px;padding:8px 14px;text-shadow:none;min-height:44px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+a.pdp-review:hover{background:#fff}
+.pdp-review__score{font-size:20px;font-weight:700;line-height:1;color:var(--pdp-ink)}
+.pdp-review__meta{display:flex;flex-direction:column;font-size:12px;line-height:1.3;color:var(--pdp-muted)}
+.pdp-review__site{font-weight:600;color:var(--pdp-teal)}
+.pdp-stars{position:relative;display:inline-block;font-size:16px;line-height:1;letter-spacing:1px;color:#d5d9dc}
+.pdp-stars::before{content:"★★★★★"}
+.pdp-stars__fill{position:absolute;inset:0 auto 0 0;overflow:hidden;white-space:nowrap;color:#e8a200}
+.pdp-stars__fill::before{content:"★★★★★"}
+.pdp-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .pdp-facts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:#fff;border:1px solid var(--pdp-line);border-radius:16px;margin-top:-36px;position:relative;z-index:2;box-shadow:0 8px 30px rgba(20,40,50,.08);overflow:hidden}
 .pdp-fact{padding:18px 18px;border-right:1px solid var(--pdp-line);display:flex;flex-direction:column;gap:2px}
 .pdp-fact:last-child{border-right:0}
@@ -628,7 +727,6 @@ export const PROGRAM_CSS = `
 .pdp-bar__nav a{color:var(--pdp-body);text-decoration:none;font-weight:500}
 .pdp-bar__nav a:hover{color:var(--pdp-teal)}
 .pdp-bar__cta{display:flex;gap:14px;align-items:center}
-.pdp-bar__meta{font-size:14px;color:var(--pdp-muted)}
 /* grids + cards */
 .pdp-grid{display:grid;gap:20px}
 .pdp-grid--2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
@@ -728,7 +826,14 @@ details[open]>summary .pdp-chev{transform:rotate(-135deg)}
   .pdp-date .pdp-btn{grid-column:1/-1}
   .pdp-cta{padding:32px 24px}
   .pdp-split{grid-template-columns:1fr}
-  .pdp-bar__meta{display:none}
   .pdp-bar__inner{min-height:56px}
+  .pdp-bar__nav{display:none}
+  .pdp-bar__inner{justify-content:flex-end}
+  .pdp-bar__cta{width:100%;justify-content:space-between;gap:8px}
+  .pdp-next{min-height:44px;padding:5px 6px 5px 14px;gap:8px;display:inline-grid;grid-template-columns:auto auto;grid-template-rows:auto auto;column-gap:10px;row-gap:1px}
+  .pdp-next__label{font-size:10px;max-width:none;grid-column:1;grid-row:1}
+  .pdp-next__when{font-size:18px;grid-column:1;grid-row:2}
+  .pdp-next__pill{grid-column:2;grid-row:1/3;align-self:center;font-size:12px;padding:3px 10px}
+  .pdp-bar .pdp-btn{min-height:44px;padding:0 16px;font-size:14px}
 }
 `;

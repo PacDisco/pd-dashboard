@@ -77,8 +77,20 @@
   "intro": "Bike and trek the Inca Jungle Trail, volunteer with Andean communities, learn Spanish at your level and snorkel the Galápagos — with a group of 14 and experienced instructors by your side.",
   "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/9_SAS_SNORKEL_WITH_SHARKS%2C_DIVE_INTO_REFORESTATION_AND_EXPLORE_THE_WILDEST_ISLANDS.jpg",
   "imageAlt": "Students snorkeling in the Galápagos Islands",
-  "reviewText": "[★ 4.9 · 120+ reviews on GoAbroad]",
-  "reviewUrl": ""
+  "reviews": [
+   {
+    "source": "GoAbroad",
+    "score": "4.5",
+    "count": 295,
+    "url": ""
+   },
+   {
+    "source": "GoOverseas",
+    "score": "98%",
+    "count": 30,
+    "url": ""
+   }
+  ]
  },
  "facts": {
   "countries": "Peru · Ecuador · Galápagos",
