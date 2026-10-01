@@ -72,14 +72,20 @@ await frame().locator(".pdp--edit").waitFor();
 ok(page.url().endsWith("#/edit/south-america-gap-semester"), "opens the editor");
 await shot("01-editor");
 
-// Review badges in the hero: click one → its fields in the panel
-await frame().locator('[data-item="hero.reviews.1"] .pdp-review__site').click();
-ok((await page.locator(".insp-head h2").textContent()) === "Review badge 2 of 2", "review badge selected");
-ok((await page.locator('#f-hero_reviews_1_source').inputValue()) === "GoOverseas", "site shown in panel");
-await page.locator('#f-hero_reviews_1_count').fill("31");
+// Live review widgets in the hero: GoAbroad shows its real iframe, GoOverseas a
+// placeholder (no third-party script runs in the editor). Click → panel fields.
+ok(await frame().locator('[data-item="hero.widgets.0"] iframe[src^="https://www.goabroad.com/reviews/generator/"]').count() === 1, "GoAbroad widget iframe");
+ok(await frame().locator("script[src*='gooverseas']").count() === 0, "no GoOverseas script in the editor");
+await frame().locator('[data-item="hero.widgets.1"]').click();
+ok((await page.locator(".insp-head h2").textContent()) === "Live review widget 2 of 2", "widget selected");
+ok((await page.locator('#f-hero_widgets_1_type').inputValue()) === "GoOverseas", "type shown in panel");
+await page.locator('#f-hero_widgets_1_code').fill("not a widget");
 await page.waitForTimeout(400);
-ok(/31 reviews/.test(await frame().locator('[data-item="hero.reviews.1"]').textContent()), "count updates on the page");
-await shot("01b-review-badge");
+ok(/isn't recognised/.test(await frame().locator('[data-item="hero.widgets.1"]').textContent()), "bad code flagged on the page");
+await page.locator('#f-hero_widgets_1_code').fill("43632");
+await page.waitForTimeout(400);
+ok(/#43632/.test(await frame().locator('[data-item="hero.widgets.1"]').textContent()), "bare ID accepted");
+await shot("01b-review-widgets");
 
 // Inline text edit → autosave
 const h1 = frame().locator('[data-f="hero.headline"]');

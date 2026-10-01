@@ -17,7 +17,7 @@
 
 import {
   renderProgram, PROGRAM_CSS, SCHEMA, SECTIONS, blankProgram, normalizeProgram,
-  getPath, setPath, slugify, esc, findPlaceholders, dateRange,
+  getPath, setPath, slugify, esc, findPlaceholders, dateRange, parseWidget,
 } from '/program-pages/template/render.mjs';
 
 // The public program site (pd-program-pages). Used for "View live" previews of
@@ -931,6 +931,9 @@ export function publishChecks(p) {
   const sessions = p.dates?.sessions || [];
   if (visible('dates') && !sessions.length) out.push({ level: 'warn', text: 'No start dates listed.' });
   sessions.forEach((s, i) => { if (!s.start || !s.end) out.push({ level: 'bad', text: `Start date ${i + 1} is missing a start or end date.`, items: [{ path: `dates.sessions.${i}.start`, text: 'Dates' }] }); });
+  (p.hero?.widgets || []).forEach((w, i) => {
+    if (!parseWidget(w)) out.push({ level: 'bad', text: `Review widget ${i + 1} (${w.type || 'unknown'}) has no valid embed code. Paste it again or delete the widget.`, items: [{ path: `hero.widgets.${i}.code`, text: `${w.type || 'Widget'} embed code` }] });
+  });
   const missingAlt = [];
   (function walk(v, path) {
     if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${path}.${i}`));

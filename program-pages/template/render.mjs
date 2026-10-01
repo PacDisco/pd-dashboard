@@ -128,6 +128,51 @@ const SECTION_BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
 // no logos or embed scripts, so nothing external runs on the page.
 export const REVIEW_SOURCES = ['GoAbroad', 'GoOverseas', 'Google', 'Trustpilot', 'Other'];
 
+export const WIDGET_TYPES = ['GoAbroad', 'GoOverseas', 'Google'];
+
+/**
+ * Turn whatever an editor pasted into a small, validated description of the
+ * widget. The pasted code itself is NEVER output — the page rebuilds the embed
+ * from these fields, so a bad paste can't inject anything.
+ * @returns {null | {kind:'goabroad',src:string,width:number,height:number}
+ *                 | {kind:'gooverseas',id:string,wtype:string,name:string,theme:string,link:string}
+ *                 | {kind:'google',placeId:string}}
+ */
+export function parseWidget(w) {
+  const type = String(w?.type || '');
+  const code = String(w?.code || '').trim();
+  if (!code) return null;
+  if (type === 'GoAbroad') {
+    const m = /https:\/\/www\.goabroad\.com\/reviews\/generator\/[A-Za-z0-9/_-]+(?:\?[A-Za-z0-9=&_.%-]*)?/.exec(code.replace(/&amp;/g, '&'));
+    if (!m) return null;
+    const num = (re, d) => { const x = re.exec(code); const v = x ? Number(x[1]) : d; return v >= 40 && v <= 1200 ? v : d; };
+    return { kind: 'goabroad', src: m[0], width: num(/width:\s*(\d+)px/i, 352), height: num(/height:\s*(\d+)px/i, 84) };
+  }
+  if (type === 'GoOverseas') {
+    const attr = (n) => { const x = new RegExp(`data-gooverseas-widget-${n}="([^"]*)"`, 'i').exec(code); return x ? x[1] : ''; };
+    const id = attr('id') || (/^\d{1,10}$/.test(code) ? code : '');
+    if (!/^\d{1,10}$/.test(id)) return null;
+    const pick = (v, ok, d) => (ok.test(v) ? v : d);
+    return {
+      kind: 'gooverseas', id,
+      wtype: pick(attr('type'), /^(program|provider)$/, 'program'),
+      name: pick(attr('name'), /^[a-z]{1,30}$/, 'programshort'),
+      theme: pick(attr('theme'), /^[a-z]{1,20}$/, 'primary'),
+      link: pick(attr('link'), /^(yes|no)$/, 'yes'),
+    };
+  }
+  if (type === 'Google') {
+    const x = /(ChIJ[A-Za-z0-9_-]{10,200})/.exec(code);
+    return x ? { kind: 'google', placeId: x[1] } : null;
+  }
+  return null;
+}
+
+// GoOverseas' own loader, verbatim from their embed code. Added once per page,
+// only when a GoOverseas widget is present, and never inside the editor (the
+// editor runs on the dashboard's origin, so no third-party script runs there).
+const GOOVERSEAS_LOADER = '!function(e,s,r){e.GoOverseas=e.GoOverseas||function(){(e.GoOverseas.q=e.GoOverseas.q||[]).push(arguments)},e.GoOverseas.l=1*new Date;var a=s.createElement(r),n=s.getElementsByTagName(r)[0];a.async=1,a.src="https://www.gooverseas.com/static/0.2.0/main.min.js",n.parentNode.insertBefore(a,n)}(window,document,"script"),GoOverseas("review_widget_embed");';
+
 export const SCHEMA = {
   page: {
     label: 'Page settings',
@@ -186,6 +231,7 @@ export const SCHEMA = {
   },
   // Repeatable items. `blank` is what "+ Add" inserts.
   lists: {
+    'hero.widgets':      { label: 'Live review widget', add: 'Add a live review widget', fields: [{ k: 'type', label: 'Widget', type: 'select', options: WIDGET_TYPES }, { k: 'code', label: 'Embed code or ID', type: 'multiline', help: 'GoAbroad or GoOverseas: paste the embed code they give you. Google: paste the Place ID (starts with ChIJ…). The rating updates on its own.' }], blank: { type: 'GoAbroad', code: '' } },
     'hero.reviews':      { label: 'Review badge', add: 'Add a review badge', fields: [{ k: 'source', label: 'Review site', type: 'select', options: REVIEW_SOURCES }, { k: 'score', label: 'Score (e.g. 4.5 or 98%)', type: 'text' }, { k: 'count', label: 'Number of reviews', type: 'number' }, { k: 'url', label: 'Link to the reviews', type: 'url' }], blank: { source: 'GoAbroad', score: '', count: '', url: '' } },
     'why.items':         { label: 'Reason', add: 'Add a reason', fields: [{ k: 'title', label: 'Title', type: 'text' }, { k: 'body', label: 'Text', type: 'multiline' }, { k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }], blank: { title: 'New reason', body: 'Describe it in a sentence or two.', image: '', imageAlt: '' } },
     'route.phases':      { label: 'Phase', add: 'Add a phase', fields: [{ k: 'label', label: 'Weeks', type: 'text' }, { k: 'text', label: 'What happens', type: 'text' }], blank: { label: 'Wk', text: 'Location · headline activity' } },
@@ -224,7 +270,7 @@ export function blankProgram(name = 'New program') {
       currency: 'USD',
     },
     layout: defaultLayout(),
-    hero: { eyebrow: 'Gap semester', headline: name, intro: '[One or two sentences on what makes this program special]', image: '', imageAlt: '', reviews: [] },
+    hero: { eyebrow: 'Gap semester', headline: name, intro: '[One or two sentences on what makes this program special]', image: '', imageAlt: '', widgets: [], reviews: [] },
     facts: { countries: '[Countries]', start: '', finish: '', weeks: 10, groupMax: 14, ages: '17–22', tuition: 0, flightsEstimate: 0, activityLevel: 'Medium', credit: 'Optional · University of Montana' },
     why: { heading: 'What makes this program different', items: [] },
     route: { heading: 'Your journey at a glance', mapImage: '', mapAlt: '', phases: [] },
@@ -253,6 +299,7 @@ export function normalizeProgram(p) {
     }
   }
   if (!Array.isArray(out.hero.reviews)) out.hero.reviews = [];
+  if (!Array.isArray(out.hero.widgets)) out.hero.widgets = [];
   // Pages saved before review badges existed had one free-text line.
   if (!out.hero.reviews.length && out.hero.reviewText) {
     out.hero.reviews = [{ source: 'Other', score: String(out.hero.reviewText), count: '', url: out.hero.reviewUrl || '' }];
@@ -475,6 +522,38 @@ export function parseScore(score) {
   return null;
 }
 
+function renderWidgets(p, c) {
+  const items = p.hero.widgets || [];
+  if (!items.length && !c.ed) return '';
+  const html = c.list('hero.widgets', 'ul', 'pdp-widgets', (w) => {
+    const pw = parseWidget(w);
+    const note = (txt, bad) => `<span class="pdp-widget pdp-widget--note${bad ? ' pdp-widget--bad' : ''}">${esc(txt)}</span>`;
+    if (!pw) return c.ed ? note(w.code ? `This ${w.type || ''} code isn't recognised. Paste the embed code again.` : `Paste the ${w.type || ''} embed code in the panel →`, !!w.code) : null;
+    if (pw.kind === 'goabroad') {
+      const frame = `<iframe class="pdp-widget__frame" src="${esc(pw.src)}" width="${pw.width}" height="${pw.height}" title="GoAbroad reviews" loading="lazy" scrolling="no" style="width:${pw.width}px;height:${pw.height}px"></iframe>`;
+      // In the editor a cover sits over the frame so a click selects the widget.
+      return `<span class="pdp-widget pdp-widget--frame">${frame}${c.ed ? '<span class="pde-cover"></span>' : ''}</span>`;
+    }
+    if (pw.kind === 'gooverseas') {
+      if (c.ed) return note(`GoOverseas reviews widget #${pw.id} — shows on the live page`);
+      return `<span class="pdp-widget pdp-widget--gooverseas"><span class="go-overseas-review-widget-component widget-${esc(pw.name)}" data-gooverseas-widget-type="${esc(pw.wtype)}" data-gooverseas-widget-id="${esc(pw.id)}" data-gooverseas-widget-name="${esc(pw.name)}" data-gooverseas-widget-theme="${esc(pw.theme)}" data-gooverseas-widget-link="${esc(pw.link)}"></span></span>`;
+    }
+    // Google: the build fetches rating + count from the Places API (w._google).
+    const g = w._google;
+    if (!g || !(Number(g.rating) > 0)) return c.ed ? note('Google rating — filled in automatically when published') : null;
+    const rating = Math.round(Number(g.rating) * 10) / 10;
+    const count = Number(g.count) > 0 ? Number(g.count).toLocaleString('en-US') : '';
+    const inner = `<span class="pdp-review__score">${esc(rating)}</span>` +
+      `<span class="pdp-stars" aria-hidden="true"><span class="pdp-stars__fill" style="width:${Math.round((rating / 5) * 100)}%"></span></span>` +
+      `<span class="pdp-review__meta">${count ? `<span>${esc(count)} reviews</span>` : ''}<span class="pdp-review__site">on Google</span></span>` +
+      `<span class="pdp-sr">${esc(`${rating} out of 5${count ? ` from ${count} reviews` : ''} on Google`)}</span>`;
+    return g.url && !c.ed ? `<a class="pdp-review" href="${esc(safeUrl(g.url))}" target="_blank" rel="noopener">${inner}</a>` : `<span class="pdp-review">${inner}</span>`;
+  }, 'li', 'pdp-widgets__item');
+  // Live page: nothing at all when no widget produced output (e.g. Google not fetched).
+  if (!c.ed && !html.includes('<li')) return '';
+  return `<div class="pdp-widgets-wrap">${html}</div>`;
+}
+
 function renderReviews(p, c) {
   const items = p.hero.reviews || [];
   if (!items.length && !c.ed) return '';
@@ -543,6 +622,7 @@ function renderHero(p, c) {
     `${c.t('hero.intro', 'p', 'pdp-hero__intro', { multiline: true })}` +
     `<div class="pdp-hero__ctas"><a class="pdp-btn pdp-btn--lg" href="#dates">Check dates &amp; apply</a>` +
     (p.settings.bookletUrl ? `<a class="pdp-btn pdp-btn--lg pdp-btn--inv-ghost" href="${attr(safeUrl(p.settings.bookletUrl))}">Get the itinerary</a>` : '') + `</div>` +
+    renderWidgets(p, c) +
     renderReviews(p, c) +
     `</div></header>` +
     `<div class="pdp-wrap"><div class="pdp-facts"${c.ed ? ' data-group="facts"' : ''}>` +
@@ -581,7 +661,9 @@ export function renderProgram(program, opts = {}) {
     const tone = key === 'cta' ? ' pdp-sec--flush' : '';
     return `<section id="${meta.anchor}" class="pdp-sec${tone}${hidden ? ' pde-hidden' : ''}"${c.ed ? ` data-sec="${key}" data-label="${attr(meta.label)}"` : ''}><div class="pdp-wrap">${inner}</div></section>`;
   }).join('');
-  return `<div class="pdp${c.ed ? ' pdp--edit' : ''}">${renderHero(p, c)}${renderBar(p, c, shown)}${secs}</div>`;
+  const goScript = !c.ed && (p.hero.widgets || []).some((w) => parseWidget(w)?.kind === 'gooverseas')
+    ? `<script>${GOOVERSEAS_LOADER}</script>` : '';
+  return `<div class="pdp${c.ed ? ' pdp--edit' : ''}">${renderHero(p, c)}${renderBar(p, c, shown)}${secs}${goScript}</div>`;
 }
 
 export function seoFor(program, { canonicalBase = 'https://www.pacificdiscovery.org/programs/', slug = '' } = {}) {
@@ -701,6 +783,14 @@ a.pdp-next:focus-visible{outline:3px solid var(--pdp-ink);outline-offset:2px}
 .pdp-next--empty{background:#eef0f1;box-shadow:none;padding-right:18px}
 .pdp-next--empty .pdp-next__label{color:var(--pdp-muted)}
 .pdp-next--empty .pdp-next__when{font-size:14px;font-weight:500;color:var(--pdp-muted)}
+.pdp-widgets{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:4px}
+.pdp-widgets-wrap .pde-add{max-width:320px;background:rgba(255,255,255,.9)}
+.pdp-widget{position:relative;display:inline-flex;align-items:center;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.15);text-shadow:none;max-width:100%}
+.pdp-widget__frame{border:0;display:block;max-width:100%}
+.pdp-widget--gooverseas{min-height:84px;min-width:260px}
+.pdp-widget--note{padding:12px 16px;font-size:13px;font-weight:500;color:var(--pdp-muted);border:2px dashed #c9d6da;background:rgba(255,255,255,.95);min-height:60px}
+.pdp-widget--bad{border-color:#e3a08f;color:#a8361a}
+.pde-cover{position:absolute;inset:0;cursor:pointer}
 .pdp-reviews{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
 .pdp-reviews-wrap .pde-add{max-width:320px;background:rgba(255,255,255,.9)}
 .pdp-review{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,.95);color:var(--pdp-ink)!important;text-decoration:none!important;border-radius:12px;padding:8px 14px;text-shadow:none;min-height:44px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
