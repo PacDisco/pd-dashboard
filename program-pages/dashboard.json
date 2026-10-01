@@ -1,0 +1,9 @@
+{
+  "title": "Program Pages",
+  "description": "Edit the public program pages on pacificdiscovery.org — click on the page to change text, photos, dates and prices, then publish.",
+  "category": "Outreach",
+  "icon": "🧭",
+  "colors": ["#288195", "#55bbd2"],
+  "allowedRoles": ["admin", "outreach", "programs", "admissions"],
+  "order": 30
+}

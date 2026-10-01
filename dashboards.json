@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T09:03:15.545Z",
+  "generatedAt": "2026-10-01T05:08:22.135Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -21,22 +21,22 @@
       "url": "/Contacts/"
     },
     {
-      "slug": "cashflow",
-      "title": "Cashflow Forecast",
-      "description": "Compare cashflow forecast versions — live from Google Drive.",
+      "slug": "cash-forecast",
+      "title": "Cash Forecast",
+      "description": "Driver-based cash flow for Pacific Discovery — set programs, pax and payment rules; actuals sync from Xero.",
       "category": "Finance",
-      "icon": "💰",
+      "icon": "📈",
       "owner": "",
       "pinned": false,
       "colors": [
-        "#2563eb",
-        "#0ea5e9"
+        "#288195",
+        "#55bbd2"
       ],
       "allowedRoles": [
         "admin",
         "operations"
       ],
-      "url": "/cashflow/"
+      "url": "/cash-forecast/"
     },
     {
       "slug": "enrollment",
@@ -73,27 +73,6 @@
         "operations"
       ],
       "url": "/field-budget/"
-    },
-    {
-      "slug": "field-media",
-      "title": "Field Media",
-      "description": "Photos and videos uploaded by field staff via the media.pacificdiscovery.org app. Grouped by season + program.",
-      "category": "Programs",
-      "icon": "🎬",
-      "owner": "",
-      "pinned": false,
-      "order": 35,
-      "colors": [
-        "#0891b2",
-        "#22d3ee"
-      ],
-      "allowedRoles": [
-        "admin",
-        "admissions",
-        "outreach",
-        "operations"
-      ],
-      "url": "/field-media/"
     },
     {
       "slug": "flight-programs",
@@ -133,25 +112,6 @@
         "flights"
       ],
       "url": "/flights/"
-    },
-    {
-      "slug": "forward-business-report",
-      "title": "Forward Business Report",
-      "description": "Forward-looking revenue and enrollment outlook by season and program.",
-      "category": "Operations",
-      "icon": "🧭",
-      "owner": "",
-      "pinned": true,
-      "colors": [
-        "#0f766e",
-        "#14b8a6"
-      ],
-      "allowedRoles": [
-        "admin",
-        "operations",
-        "programs"
-      ],
-      "url": "/forward-business-report/"
     },
     {
       "slug": "instructor-field-reports",
@@ -210,19 +170,6 @@
         "operations"
       ],
       "url": "/invoices/"
-    },
-    {
-      "slug": "lead-data-sheet",
-      "title": "Pacific Discovery - Marketing Lead Source Dashboard",
-      "description": "Live lead data synced from HubSpot with source, stage, and owner views.",
-      "category": "Outreach",
-      "icon": "📈",
-      "owner": "",
-      "pinned": false,
-      "allowedRoles": [
-        "outreach"
-      ],
-      "url": "/lead-data-sheet/"
     },
     {
       "slug": "marketing-performance",
@@ -284,6 +231,27 @@
         "operations"
       ],
       "url": "/pipeline/"
+    },
+    {
+      "slug": "program-pages",
+      "title": "Program Pages",
+      "description": "Edit the public program pages on pacificdiscovery.org — click on the page to change text, photos, dates and prices, then publish.",
+      "category": "Outreach",
+      "icon": "🧭",
+      "owner": "",
+      "pinned": false,
+      "order": 30,
+      "colors": [
+        "#288195",
+        "#55bbd2"
+      ],
+      "allowedRoles": [
+        "admin",
+        "outreach",
+        "programs",
+        "admissions"
+      ],
+      "url": "/program-pages/"
     },
     {
       "slug": "program-schedule",

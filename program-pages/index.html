@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Program Pages — Pacific Discovery</title>
+<meta name="description" content="Edit the public program pages on pacificdiscovery.org — click on the page to change text, photos, dates and prices, then publish.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --topaz:#55bbd2;--teal:#288195;--teal-dk:#1f6b7c;--green:#81c243;--ink:#2f2f2f;--body:#4a4a4a;--muted:#5f666b;
+  --line:#e1e6e8;--bg:#f4f6f7;--panel:#fff;--soft:#eef6f8;--warn:#8a4b00;--warn-bg:#fff4e0;--bad:#a8321d;--bad-bg:#fdecea;--ok:#3c6b14;--ok-bg:#e9f5dd;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:Poppins,system-ui,sans-serif;color:var(--body);background:var(--bg);font-size:14px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--teal)}
+h1,h2,h3{margin:0;color:var(--ink)}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.hidden{display:none!important}
+.btn{display:inline-flex;align-items:center;gap:6px;justify-content:center;min-height:38px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:500;white-space:nowrap;text-decoration:none;color:var(--ink)}
+.btn:hover{background:var(--soft)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn--primary{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn--primary:hover{background:var(--teal-dk);border-color:var(--teal-dk)}
+.btn--danger{color:var(--bad);border-color:#f0c9c2}
+.btn--danger:hover{background:var(--bad-bg)}
+.btn--sm{min-height:32px;padding:0 10px;font-size:13px}
+.btn--icon{width:34px;min-height:34px;padding:0}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.chip--draft{background:#eef0f1;color:#4f565b}
+.chip--live{background:var(--ok-bg);color:var(--ok)}
+.chip--changes{background:var(--warn-bg);color:var(--warn)}
+.chip--archived{background:#eef0f1;color:#6b7176}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field>label,.field>.lbl{font-size:12px;font-weight:600;color:var(--ink)}
+.field .help{font-size:12px;color:var(--muted)}
+.field input[type=text],.field input[type=url],.field input[type=number],.field input[type=date],.field select,.field textarea{width:100%;border:1px solid #cfd7da;border-radius:8px;padding:8px 10px;background:#fff;min-height:38px}
+.field textarea{min-height:84px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--topaz);outline-offset:0;border-color:var(--topaz)}
+.field.flash{animation:flash 1.2s ease}
+@keyframes flash{0%,100%{background:transparent}20%{background:#e3f4f8}}
+.money{display:flex;align-items:center;border:1px solid #cfd7da;border-radius:8px;background:#fff;overflow:hidden}
+.money span{padding:0 10px;color:var(--muted);font-weight:600}
+.money input{border:0!important;border-radius:0!important}
+
+/* list view */
+#view-list{max-width:1100px;margin:0 auto;padding:28px 20px 60px}
+.topline{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.topline h1{font-size:30px}
+.crumb{font-size:13px;color:var(--muted);text-decoration:none}
+table.pages{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pages th{font-size:12px;text-align:left;color:var(--muted);font-weight:600;padding:10px 16px;background:#fafbfb;border-bottom:1px solid var(--line)}
+.pages td{padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pages tr:last-child td{border-bottom:0}
+.pages .nm{font-weight:600;color:var(--ink)}
+.pages .sl{font-size:12px;color:var(--muted)}
+.pages .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.empty{background:#fff;border:1px dashed #c8d2d6;border-radius:12px;padding:40px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+
+/* editor view */
+#view-editor{display:grid;grid-template-rows:auto auto 1fr;height:100vh}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.bar .name{font-weight:600;color:var(--ink);font-size:15px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .spacer{flex:1}
+.save-state{font-size:12px;color:var(--muted);min-width:110px}
+.save-state.err{color:var(--bad);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:0 12px;min-height:34px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--soft);color:var(--teal);font-weight:600}
+.notice{padding:10px 14px;font-size:13px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.notice--warn{background:var(--warn-bg);color:var(--warn)}
+.notice--bad{background:var(--bad-bg);color:var(--bad)}
+.notice--info{background:var(--soft);color:var(--teal-dk)}
+.work{display:grid;grid-template-columns:minmax(0,1fr) 360px;min-height:0}
+.canvas{overflow:auto;padding:18px;display:flex;justify-content:center;background:#e9eef0}
+.canvas iframe{border:0;background:#fff;width:100%;max-width:1440px;height:100%;min-height:600px;box-shadow:0 2px 14px rgba(0,0,0,.08);border-radius:6px;transition:max-width .25s}
+.canvas.mobile iframe{max-width:390px}
+.inspector{background:#fff;border-left:1px solid var(--line);overflow:auto;display:flex;flex-direction:column}
+.insp-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:0;background:#fff;z-index:2}
+.insp-head h2{font-size:15px}
+.insp-body{padding:16px}
+.insp-tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.insp-tabs button{border:0;background:transparent;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;color:var(--muted);font-weight:500}
+.insp-tabs button[aria-pressed=true]{background:var(--soft);color:var(--teal)}
+.item-acts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.hint{font-size:13px;color:var(--muted);background:#fafbfb;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px}
+.secrow{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid var(--line)}
+.secrow .lbl{flex:1;cursor:pointer}
+.secrow .lbl:hover{color:var(--teal)}
+.secrow.off .lbl{color:#9aa1a5;text-decoration:line-through}
+.imgbox{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#f6f8f9}
+.imgbox img{display:block;width:100%;max-height:200px;object-fit:cover}
+.imgbox .none{padding:28px;text-align:center;color:var(--muted);font-size:13px}
+.imgacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.lib{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.lib button{border:1px solid var(--line);border-radius:6px;padding:0;overflow:hidden;cursor:pointer;background:#fff;aspect-ratio:1}
+.lib img{width:100%;height:100%;object-fit:cover;display:block}
+.ver{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;flex-direction:column;gap:4px}
+.ver .meta{font-size:12px;color:var(--muted)}
+.ver .acts{display:flex;gap:6px;margin-top:4px}
+.check{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.check .dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.check .dot.ok{background:#5d9e2a}.check .dot.warn{background:#d68a00}.check .dot.bad{background:#c0392b}
+dialog{border:0;border-radius:14px;padding:0;max-width:520px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(20,30,35,.45)}
+.dlg-head{padding:18px 20px 0}
+.dlg-head h2{font-size:22px}
+.dlg-body{padding:16px 20px}
+.dlg-foot{padding:0 20px 18px;display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:90vw}
+.toast a{color:#bfe9f3}
+@media (max-width:980px){
+  .work{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) 46vh}
+  .inspector{border-left:0;border-top:1px solid var(--line)}
+}
+</style>
+</head>
+<body>
+
+<!-- ───────── list of pages ───────── -->
+<main id="view-list" class="hidden" aria-labelledby="list-title">
+  <a class="crumb" href="/">← All dashboards</a>
+  <div class="topline">
+    <div>
+      <h1 id="list-title" class="serif">Program Pages</h1>
+      <p style="margin:4px 0 0;color:var(--muted)">Click a page to edit it. Changes save as you go and only go live when you publish.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="show-archived"> Show archived</label>
+      <button class="btn btn--primary" id="btn-new" type="button">+ New page</button>
+    </div>
+  </div>
+  <div id="list-error" class="notice notice--bad hidden" role="alert"></div>
+  <div id="list-body" aria-live="polite"><p>Loading…</p></div>
+</main>
+
+<!-- ───────── editor ───────── -->
+<div id="view-editor" class="hidden">
+  <div class="bar">
+    <button class="btn btn--sm" id="btn-back" type="button">← Pages</button>
+    <span class="name" id="ed-name"></span>
+    <span id="ed-status"></span>
+    <span class="save-state" id="ed-save" aria-live="polite"></span>
+    <span class="spacer"></span>
+    <button class="btn btn--sm btn--icon" id="btn-undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="btn btn--sm btn--icon" id="btn-redo" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)">↷</button>
+    <div class="seg" role="group" aria-label="Preview size">
+      <button type="button" id="dev-desktop" aria-pressed="true">Desktop</button>
+      <button type="button" id="dev-mobile" aria-pressed="false">Phone</button>
+    </div>
+    <a class="btn btn--sm" id="btn-live" target="_blank" rel="noopener">View live ↗</a>
+    <button class="btn btn--primary" id="btn-publish" type="button">Publish…</button>
+  </div>
+  <div id="ed-notice" class="notice hidden" role="status"></div>
+  <div class="work">
+    <div class="canvas" id="canvas">
+      <iframe id="frame" title="Page preview — click anything to edit it"></iframe>
+    </div>
+    <aside class="inspector" aria-label="Edit panel">
+      <div class="insp-tabs" role="toolbar" aria-label="Panel">
+        <button type="button" data-tab="edit" aria-pressed="true">Edit</button>
+        <button type="button" data-tab="sections" aria-pressed="false">Sections</button>
+        <button type="button" data-tab="page" aria-pressed="false">Page settings</button>
+        <button type="button" data-tab="history" aria-pressed="false">History</button>
+      </div>
+      <div id="insp"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- new page -->
+<dialog id="dlg-new" aria-labelledby="dlg-new-title">
+  <form method="dialog" id="form-new">
+    <div class="dlg-head"><h2 id="dlg-new-title" class="serif">New program page</h2></div>
+    <div class="dlg-body">
+      <div class="field"><label for="new-name">Program name</label><input type="text" id="new-name" required placeholder="e.g. Southeast Asia"></div>
+      <div class="field"><label for="new-slug">Web address</label>
+        <div class="money"><span>/programs/</span><input type="text" id="new-slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="southeast-asia-gap-semester"></div>
+        <span class="help">Use the same address as the current page on the site, so it replaces it when you publish.</span></div>
+      <div class="field"><label for="new-from">Start from</label><select id="new-from"></select></div>
+      <p id="new-err" class="notice notice--bad hidden" role="alert"></p>
+    </div>
+    <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate type="submit">Cancel</button><button class="btn btn--primary" id="new-go" value="go" type="submit">Create page</button></div>
+  </form>
+</dialog>
+
+<!-- publish -->
+<dialog id="dlg-pub" aria-labelledby="dlg-pub-title">
+  <form method="dialog" id="form-pub">
+    <div class="dlg-head"><h2 id="dlg-pub-title" class="serif">Publish changes</h2></div>
+    <div class="dlg-body">
+      <div id="pub-checks"></div>
+      <div class="field" style="margin-top:14px"><label for="pub-note">What changed? <span style="font-weight:400;color:var(--muted)">(optional, shows in History)</span></label><input type="text" id="pub-note" maxlength="300" placeholder="e.g. Updated spring dates and tuition"></div>
+      <p id="pub-err" class="notice notice--bad hidden" role="alert"></p>
+    </div>
+    <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate type="submit">Cancel</button><button class="btn btn--primary" id="pub-go" value="go" type="submit">Publish now</button></div>
+  </form>
+</dialog>
+
+<script type="module" src="/program-pages/editor.js"></script>
+</body>
+</html>

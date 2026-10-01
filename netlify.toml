@@ -70,6 +70,14 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
+# Program Pages editor: the pinned page template is an ES module (.mjs), which
+# needs a JavaScript MIME type for the browser to import it.
+[[headers]]
+  for = "/program-pages/template/*"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"
+    Cache-Control = "no-cache"
+
 [[headers]]
   for = "/*"
   [headers.values]
