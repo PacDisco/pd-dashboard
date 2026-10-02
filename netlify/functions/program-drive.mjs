@@ -22,7 +22,8 @@
 // iPhone HEIC photos and anything over 5 MB are imported through Drive's own
 // JPEG rendition at 2400px, so they arrive web-ready without a resize step.
 
-import googleCreds from "./lib/google-creds.cjs";
+import { google } from "googleapis";
+import { neon } from "@neondatabase/serverless";
 import { requireEditor, json } from "./_shared/program-pages-access.mjs";
 import { storeImage } from "./program-media.mjs";
 
@@ -32,15 +33,22 @@ const MAX_DIRECT = 5 * 1024 * 1024;
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const FILE_FIELDS = "id,name,mimeType,size,parents,description,thumbnailLink,imageMediaMetadata(width,height),modifiedTime";
 
+// Same lookup as lib/google-creds.cjs (env var first, then the app_config table),
+// written as ESM: Netlify's bundler doesn't pull the dependencies of a .cjs file
+// into an .mjs function, which crashed this function on start-up.
+async function getServiceAccount() {
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!process.env.NETLIFY_DATABASE_URL) return null;
+  const rows = await neon(process.env.NETLIFY_DATABASE_URL)`SELECT value FROM app_config WHERE key = 'google_service_account_json' LIMIT 1`;
+  return rows && rows[0] ? rows[0].value : null;
+}
+
 let _drive;
 let _auth; // the service-account client, for fetching thumbnailLink renditions
 async function defaultDrive() {
   if (!_drive) {
-    // googleapis is large; load it lazily so a load failure is reported as a
-    // readable error instead of crashing the function (a bare HTTP 502).
     const t0 = Date.now();
-    const { google } = await import("googleapis");
-    const raw = await googleCreds.getServiceAccount();
+    const raw = await getServiceAccount();
     if (!raw) throw new Error("Google service account not configured");
     let creds;
     try { creds = JSON.parse(raw); } catch { throw new Error("Google service account JSON is not valid (not configured)"); }
