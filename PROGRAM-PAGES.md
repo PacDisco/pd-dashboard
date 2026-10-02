@@ -64,7 +64,7 @@ shared drives, and files shared with them.
 In Google Cloud Console, in any project (the one the service account lives in is fine):
 
 1. **APIs & Services → Library:** enable **Google Picker API** and **Google Drive API**.
-2. **OAuth consent screen:** User type **Internal** (Workspace accounts only, no Google review needed). App name e.g. "PD Dashboard". Add the scope `.../auth/drive.file`.
+2. **OAuth consent screen:** User type **Internal** (Workspace accounts only, no Google review needed). App name e.g. "PD Dashboard". Add the scope `.../auth/drive.readonly`.
 3. **Credentials → Create credentials → OAuth client ID → Web application.**
    Authorized JavaScript origins: `https://dashboard.pacificdiscovery.org`. No redirect URI is needed.
 4. **Credentials → Create credentials → API key.** Restrict it: API restrictions → **Google Picker API** only. Application restrictions → **Websites** → `https://dashboard.pacificdiscovery.org/*`.
@@ -73,8 +73,8 @@ In Google Cloud Console, in any project (the one the service account lives in is
    `PROGRAM_PAGES_DRIVE_FOLDER_ID` is no longer used; delete it.
 
 How it behaves:
-- **First use:** Google shows a sign-in pop-up asking to let the dashboard "see files you open with this app". Allow pop-ups for the dashboard.
-- **Scope `drive.file`:** the dashboard can read only the photo a person picks. It can't browse or change anything else in their Drive. The sign-in token stays in that browser tab and is never sent to the dashboard's server.
+- **First use:** Google shows a sign-in pop-up asking to let the dashboard see your Drive files (read-only). Allow pop-ups for the dashboard.
+- **Scope `drive.readonly`:** needed for the picker to show thumbnails; with `drive.file`, most previews were blank. The dashboard can't change, delete or share anything, and it only downloads the photo a person picks. The app is Internal, so only pacificdiscovery.org accounts can use it, and the sign-in token stays in that browser tab and is never sent to the dashboard's server.
 - **Copies, not links:** the picked photo is downloaded in the browser, resized to at most 2400px, and stored in program media like an upload. Unsharing or deleting the Drive file later never breaks a live page.
 - **File types:** JPG, PNG, WebP and GIF. iPhone **HEIC** photos aren't offered, because browsers can't read them. Set the iPhone camera to "Most Compatible", or export as JPG first.
 - **Descriptions:** a Drive file's description pre-fills the photo description (alt text).

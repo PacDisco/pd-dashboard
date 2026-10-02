@@ -76,6 +76,16 @@ function toast(html, ms = 4200) {
   setTimeout(() => el.remove(), ms);
 }
 
+/** A toast that stays up and can be updated, for long-running steps. */
+function progressToast(html) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.setAttribute('role', 'status');
+  el.innerHTML = html;
+  document.body.appendChild(el);
+  return { set: (h) => { el.innerHTML = h; }, done: () => el.remove() };
+}
+
 function notice(kind, html) {
   const n = $('#ed-notice');
   if (!kind) { n.className = 'notice hidden'; n.innerHTML = ''; return; }
@@ -858,8 +868,12 @@ async function showLibrary(path) {
 // ─── Google Drive (Google Picker, signed in as the editor) ───────────────────
 // Each editor signs in with their own Google account and sees everything they
 // can open in Drive: My Drive, shared drives, shared with me. The scope is
-// drive.file, so the dashboard can read ONLY the files a person picks, nothing
-// else in their Drive. The access token lives in this tab's memory only.
+// drive.readonly: Google's picker only draws thumbnails for files the app can
+// read, so with the narrower drive.file most previews were blank. Read-only
+// means the dashboard can't change, delete or share anything, and it only ever
+// downloads the one photo a person picks. The OAuth app is Internal
+// (pacificdiscovery.org accounts only). The access token lives in this tab's
+// memory only and is never sent to the dashboard's server.
 // A picked photo is downloaded in the browser, resized, and stored in program
 // media like any upload, so the live page never depends on the Drive file.
 
@@ -897,7 +911,7 @@ function googleToken() {
     if (!GOOGLE.tokenClient) {
       GOOGLE.tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE.cfg.clientId,
-        scope: 'https://www.googleapis.com/auth/drive.file',
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
         callback: () => {},
       });
     }
@@ -947,20 +961,37 @@ function showPicker(token, path, altPath) {
 }
 
 async function importFromDrive(doc, token, path, altPath) {
-  const id = doc[window.google.picker.Document.ID] || doc.id;
-  const name = doc[window.google.picker.Document.NAME] || doc.name || 'photo';
-  const description = doc[window.google.picker.Document.DESCRIPTION] || doc.description || '';
-  toast(`Importing ${esc(name)}…`);
+  const D = window.google.picker.Document;
+  const id = doc[D.ID] || doc.id;
+  const name = doc[D.NAME] || doc.name || 'photo';
+  const description = doc[D.DESCRIPTION] || doc.description || '';
+  const mb = (n) => (n / 1048576).toFixed(1);
+  const t = progressToast(`Downloading ${esc(name)} from Drive…`);
   try {
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? 'Google wouldn’t share that file. Do you still have access to it?' : `Drive download failed (HTTP ${res.status})`);
-    const blob = await res.blob();
+    // Stream it so people can see a big original coming down rather than a frozen screen.
+    const total = Number(res.headers.get('content-length')) || Number(doc.sizeBytes) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      got += value.length;
+      t.set(`Downloading ${esc(name)}… ${mb(got)}${total ? ` of ${mb(total)}` : ''} MB`);
+    }
+    const blob = new Blob(chunks, { type: res.headers.get('content-type') || doc.mimeType || 'image/jpeg' });
+    t.set(`Resizing and saving ${esc(name)}…`);
     const type = blob.type && blob.type !== 'application/octet-stream' ? blob.type : (doc.mimeType || 'image/jpeg');
     await uploadFile(new File([blob], name, { type }), path, { name, alt: altPath, altText: description.slice(0, 300) });
+    t.done();
     toast(altPath && !description ? 'Photo added from Drive. Add a short description of it underneath.' : 'Photo added from Drive.');
   } catch (e) {
+    t.done();
     toast(`Import failed: ${esc(e.message)}`);
   }
 }

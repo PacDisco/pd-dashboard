@@ -7,9 +7,9 @@
 // service account), so people can choose photos from everything they can open
 // in Drive: My Drive, shared drives, and files shared with them.
 //
-//   - OAuth scope: drive.file. The dashboard can read only the files a person
-//     picks, never browse the rest of their Drive. Google doesn't require app
-//     verification for it.
+//   - OAuth scope: drive.readonly (the picker needs it to draw thumbnails). The
+//     dashboard can't change anything in Drive and only downloads the photo a
+//     person picks. The OAuth app is Internal, so no Google verification.
 //   - The token stays in the editor's browser tab memory. Nothing Google-side
 //     is stored on the server. The picked photo is downloaded in the browser and
 //     uploaded through /api/program-media like any other photo.
