@@ -107,23 +107,6 @@ table.pages{width:100%;border-collapse:collapse;background:#fff;border:1px solid
 .check .dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}
 .check .dot.ok{background:#5d9e2a}.check .dot.warn{background:#d68a00}.check .dot.bad{background:#c0392b}
 dialog{border:0;border-radius:14px;padding:0;max-width:520px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.25)}
-dialog.dlg-wide{max-width:960px}
-.drive-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
-.drive-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.drive-crumbs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:13px}
-.drive-crumbs button{border:0;background:none;color:var(--teal);font-weight:600;cursor:pointer;padding:4px 2px}
-.drive-crumbs span{color:var(--muted)}
-.drive-search input{border:1px solid #cfd7da;border-radius:8px;padding:8px 10px;min-width:240px;min-height:38px}
-.drive-body{min-height:300px;max-height:60vh;overflow:auto}
-.drive-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
-.drive-folder,.drive-img{border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;text-align:left;padding:0;overflow:hidden;display:flex;flex-direction:column}
-.drive-folder{padding:12px;flex-direction:row;gap:8px;align-items:center;font-weight:600;color:var(--ink);min-height:48px}
-.drive-folder:hover,.drive-img:hover{border-color:var(--topaz);box-shadow:0 0 0 2px rgba(85,187,210,.25)}
-.drive-img img{width:100%;aspect-ratio:4/3;object-fit:cover;background:#eef2f3;display:block}
-.drive-img span{font-size:12px;padding:6px 8px;color:var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.drive-img[aria-busy=true]{opacity:.5;pointer-events:none}
-.drive-section{font-size:12px;font-weight:600;color:var(--muted);margin:4px 0 8px;text-transform:uppercase;letter-spacing:.05em}
-.drive-more{display:flex;justify-content:center;margin-top:10px}
 dialog::backdrop{background:rgba(20,30,35,.45)}
 .dlg-head{padding:18px 20px 0}
 .dlg-head h2{font-size:22px}
@@ -217,25 +200,6 @@ dialog::backdrop{background:rgba(20,30,35,.45)}
     </div>
     <div class="dlg-foot"><button class="btn" value="cancel" formnovalidate type="submit">Cancel</button><button class="btn btn--primary" id="pub-go" value="go" type="submit">Publish now</button></div>
   </form>
-</dialog>
-
-<!-- Google Drive photo picker -->
-<dialog id="dlg-drive" aria-labelledby="dlg-drive-title" class="dlg-wide">
-  <div class="dlg-head drive-head">
-    <h2 id="dlg-drive-title" class="serif">Choose from Google Drive</h2>
-    <button class="btn btn--sm" type="button" id="drive-close" aria-label="Close">✕</button>
-  </div>
-  <div class="dlg-body">
-    <div class="drive-bar">
-      <nav id="drive-crumbs" class="drive-crumbs" aria-label="Folder"></nav>
-      <form id="drive-search-form" class="drive-search" role="search">
-        <label for="drive-q" class="hidden">Search photos</label>
-        <input type="search" id="drive-q" placeholder="Search all program photos…">
-      </form>
-    </div>
-    <div id="drive-body" class="drive-body" aria-live="polite"></div>
-    <div class="drive-more"><button class="btn btn--sm hidden" type="button" id="drive-more">Load more</button></div>
-  </div>
 </dialog>
 
 <script type="module" src="/program-pages/editor.js"></script>

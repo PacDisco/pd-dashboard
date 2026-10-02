@@ -249,6 +249,7 @@ async function openEditor(slug) {
   setTab('edit');
   mountFrame();
   checkTemplateDrift();
+  prepareGoogle()?.catch(() => { /* reported when someone clicks the button */ });
 }
 
 function mountFrame() {
@@ -803,25 +804,32 @@ async function shrink(file) {
   return blob && blob.size < file.size ? new File([blob], file.name, { type }) : file;
 }
 
+/** Resize in the browser, store via /api/program-media, set it on `path`. */
+async function uploadFile(file, path, { name = file.name, alt = null, altText = '' } = {}) {
+  const small = await shrink(file);
+  const res = await fetch(MEDIA, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': small.type, 'X-Filename': String(name || '').slice(0, 120) },
+    body: small,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) sessionExpired();
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  setPath(S.data, path, body.url);
+  if (alt && altText && !String(getPath(S.data, alt) || '').trim()) setPath(S.data, alt, altText);
+  S.library = null;
+  changed();
+  renderPanel();
+  return body;
+}
+
 async function uploadImage(input) {
   const file = input.files?.[0];
   if (!file) return;
-  const path = input.dataset.upload;
   const label = input.closest('label');
   label.firstChild.textContent = 'Uploading…';
   try {
-    const small = await shrink(file);
-    const res = await fetch(MEDIA, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': small.type, 'X-Filename': file.name.slice(0, 120) },
-      body: small,
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-    setPath(S.data, path, body.url);
-    S.library = null;
-    changed();
-    renderPanel();
+    await uploadFile(file, input.dataset.upload);
     toast('Photo uploaded. Add a short description of it underneath.');
   } catch (e) {
     toast(`Upload failed: ${esc(e.message)}`);
@@ -847,91 +855,112 @@ async function showLibrary(path) {
   }
 }
 
-// ─── Google Drive picker ────────────────────────────────────────────────────
-// Browses the shared "Program photos" folder through /api/program-drive. A pick
-// is copied into program-media, so the page never depends on the Drive file.
+// ─── Google Drive (Google Picker, signed in as the editor) ───────────────────
+// Each editor signs in with their own Google account and sees everything they
+// can open in Drive: My Drive, shared drives, shared with me. The scope is
+// drive.file, so the dashboard can read ONLY the files a person picks, nothing
+// else in their Drive. The access token lives in this tab's memory only.
+// A picked photo is downloaded in the browser, resized, and stored in program
+// media like any upload, so the live page never depends on the Drive file.
 
-const DRIVE = '/api/program-drive';
-const D = { path: null, alt: null, folder: null, q: '', next: null };
+const GOOGLE = { cfg: null, ready: false, loading: null, token: null, tokenExp: 0, tokenClient: null, error: null };
+const PICK_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
 
-async function driveApi(params, body) {
-  const res = await fetch(body ? DRIVE : `${DRIVE}?${new URLSearchParams(params)}`, {
-    method: body ? 'POST' : 'GET', credentials: 'include',
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const el = document.createElement('script');
+    el.src = src; el.async = true; el.onload = resolve;
+    el.onerror = () => reject(new Error(`Couldn't load ${new URL(src).host}`));
+    document.head.appendChild(el);
   });
-  const data = await res.json().catch(() => null);
-  if (res.status === 401) sessionExpired();
-  if (!res.ok) {
-    // No JSON means Netlify answered, not our function: it crashed or timed out.
-    const fallback = res.status === 404
-      ? 'The Google Drive picker isn’t deployed yet (no program-drive function).'
-      : `The Google Drive picker didn’t respond (HTTP ${res.status}). Check pd-dashboard → Logs → Functions → program-drive.`;
-    const err = new ApiError(res.status, data || { error: fallback });
-    if (data?.detail) err.message = `${data.error} (${data.detail})`;
-    throw err;
-  }
-  return data;
+}
+
+/** Load config + Google's scripts ahead of time, so the click can open the sign-in popup straight away. */
+function prepareGoogle() {
+  if (GOOGLE.ready || GOOGLE.loading) return GOOGLE.loading;
+  GOOGLE.loading = (async () => {
+    const res = await fetch('/api/program-drive?action=config', { credentials: 'include' });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.error || `Google Drive setup check failed (HTTP ${res.status})`);
+    GOOGLE.cfg = body;
+    await Promise.all([loadScript('https://apis.google.com/js/api.js'), loadScript('https://accounts.google.com/gsi/client')]);
+    await new Promise((resolve) => window.gapi.load('picker', resolve));
+    GOOGLE.ready = true;
+  })().catch((e) => { GOOGLE.error = e.message; GOOGLE.loading = null; throw e; });
+  return GOOGLE.loading;
+}
+
+function googleToken() {
+  return new Promise((resolve, reject) => {
+    if (GOOGLE.token && Date.now() < GOOGLE.tokenExp) return resolve(GOOGLE.token);
+    if (!GOOGLE.tokenClient) {
+      GOOGLE.tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE.cfg.clientId,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: () => {},
+      });
+    }
+    GOOGLE.tokenClient.callback = (r) => {
+      if (r.error) return reject(new Error(r.error === 'access_denied' ? 'Google sign-in was cancelled.' : r.error));
+      GOOGLE.token = r.access_token;
+      GOOGLE.tokenExp = Date.now() + (Number(r.expires_in || 3600) - 60) * 1000;
+      resolve(GOOGLE.token);
+    };
+    GOOGLE.tokenClient.error_callback = (e) => reject(new Error(e?.type === 'popup_closed' ? 'Google sign-in was closed.' : 'Google sign-in failed. Allow pop-ups for the dashboard and try again.'));
+    GOOGLE.tokenClient.requestAccessToken({ prompt: GOOGLE.token ? '' : 'select_account' });
+  });
 }
 
 function openDrive(path, altPath) {
-  Object.assign(D, { path, alt: altPath, folder: null, q: '', next: null });
-  $('#drive-q').value = '';
-  $('#dlg-drive').showModal();
-  driveLoad();
-}
-$('#drive-close').onclick = () => $('#dlg-drive').close();
-$('#drive-search-form').onsubmit = (e) => { e.preventDefault(); D.q = $('#drive-q').value.trim(); D.next = null; driveLoad(); };
-$('#drive-more').onclick = () => driveLoad(true);
-
-async function driveLoad(append = false) {
-  const body = $('#drive-body');
-  const more = $('#drive-more');
-  if (!append) body.innerHTML = '<p class="help">Loading…</p>';
-  more.classList.add('hidden');
-  let r;
-  try {
-    const params = { action: 'list' };
-    if (D.folder) params.folder = D.folder;
-    if (D.q) params.q = D.q;
-    if (append && D.next) params.pageToken = D.next;
-    r = await driveApi(params);
-  } catch (e) {
-    body.innerHTML = `<p class="notice notice--${e.status === 503 ? 'warn' : 'bad'}" style="border-radius:8px">${esc(e.message)}</p>`;
+  if (!GOOGLE.ready) {
+    // Must stay inside the click for the sign-in popup, so don't await here.
+    prepareGoogle()?.then(() => toast('Google Drive is ready. Click “From Google Drive” again.'))
+      .catch((e) => toast(esc(e.message)));
+    if (GOOGLE.error) toast(esc(GOOGLE.error)); else toast('Connecting to Google Drive…');
     return;
   }
-  D.next = r.nextPageToken;
-  $('#drive-crumbs').innerHTML = (D.q
-    ? [`<button type="button" data-crumb="">Program photos</button>`, `<span>›</span><span>Search: “${esc(D.q)}”</span>`]
-    : r.path.map((p, i) => `${i ? '<span>›</span>' : ''}<button type="button" data-crumb="${esc(p.id === r.root ? '' : p.id)}">${esc(p.name)}</button>`)).join('');
-  $$('#drive-crumbs [data-crumb]').forEach((b) => b.onclick = () => { D.folder = b.dataset.crumb || null; D.q = ''; $('#drive-q').value = ''; driveLoad(); });
-
-  const folders = r.folders.map((f) => `<button type="button" class="drive-folder" data-folder="${esc(f.id)}"><span aria-hidden="true">📁</span>${esc(f.name)}</button>`).join('');
-  const imgs = r.images.map((i) => `<button type="button" class="drive-img" data-pick-drive="${esc(i.id)}" title="${esc(i.name)}"><img src="${esc(i.thumb)}" alt="" loading="lazy"><span>${esc(i.name)}</span></button>`).join('');
-  const html = (folders ? `<div class="drive-section">Folders</div><div class="drive-grid" style="margin-bottom:14px">${folders}</div>` : '') +
-    (imgs ? `<div class="drive-section">Photos</div><div class="drive-grid" id="drive-imgs">${imgs}</div>` : '');
-  if (append && $('#drive-imgs')) $('#drive-imgs').insertAdjacentHTML('beforeend', imgs);
-  else body.innerHTML = html || `<p class="help">${D.q ? 'No photos match that search.' : 'This folder has no photos.'}</p>`;
-  more.classList.toggle('hidden', !D.next);
-  $$('#drive-body [data-folder]').forEach((b) => b.onclick = () => { D.folder = b.dataset.folder; D.q = ''; $('#drive-q').value = ''; driveLoad(); });
-  $$('#drive-body [data-pick-drive]').forEach((b) => b.onclick = () => drivePick(b));
+  googleToken().then((token) => showPicker(token, path, altPath)).catch((e) => toast(esc(e.message)));
 }
 
-async function drivePick(btn) {
-  btn.setAttribute('aria-busy', 'true');
-  btn.querySelector('span').textContent = 'Importing…';
+function showPicker(token, path, altPath) {
+  const P = window.google.picker;
+  const images = () => new P.DocsView(P.ViewId.DOCS_IMAGES).setMimeTypes(PICK_TYPES).setIncludeFolders(true).setSelectFolderEnabled(false);
+  const picker = new P.PickerBuilder()
+    .setTitle('Choose a photo')
+    .addView(new P.DocsView(P.ViewId.DOCS_IMAGES).setMimeTypes(PICK_TYPES)) // all photos you can open
+    .addView(images().setOwnedByMe(true))   // My Drive
+    .addView(images().setEnableDrives(true)) // Shared drives
+    .addView(images().setOwnedByMe(false))  // Shared with me
+    .enableFeature(P.Feature.SUPPORT_DRIVES)
+    .setOAuthToken(token)
+    .setDeveloperKey(GOOGLE.cfg.apiKey)
+    .setAppId(GOOGLE.cfg.appId)
+    .setOrigin(`${location.protocol}//${location.host}`)
+    .setCallback((data) => {
+      if (data[P.Response.ACTION] !== P.Action.PICKED) return;
+      const doc = data[P.Response.DOCUMENTS][0];
+      importFromDrive(doc, token, path, altPath);
+    })
+    .build();
+  picker.setVisible(true);
+}
+
+async function importFromDrive(doc, token, path, altPath) {
+  const id = doc[window.google.picker.Document.ID] || doc.id;
+  const name = doc[window.google.picker.Document.NAME] || doc.name || 'photo';
+  const description = doc[window.google.picker.Document.DESCRIPTION] || doc.description || '';
+  toast(`Importing ${esc(name)}…`);
   try {
-    const r = await driveApi(null, { action: 'import', id: btn.dataset.pickDrive });
-    setPath(S.data, D.path, r.url);
-    if (D.alt && !String(getPath(S.data, D.alt) || '').trim() && r.description) setPath(S.data, D.alt, r.description);
-    S.library = null;
-    changed();
-    $('#dlg-drive').close();
-    renderPanel();
-    toast(D.alt && !r.description ? 'Photo added from Drive. Add a short description of it underneath.' : 'Photo added from Drive.');
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? 'Google wouldn’t share that file. Do you still have access to it?' : `Drive download failed (HTTP ${res.status})`);
+    const blob = await res.blob();
+    const type = blob.type && blob.type !== 'application/octet-stream' ? blob.type : (doc.mimeType || 'image/jpeg');
+    await uploadFile(new File([blob], name, { type }), path, { name, alt: altPath, altText: description.slice(0, 300) });
+    toast(altPath && !description ? 'Photo added from Drive. Add a short description of it underneath.' : 'Photo added from Drive.');
   } catch (e) {
-    btn.removeAttribute('aria-busy');
-    btn.querySelector('span').textContent = 'Couldn’t import';
     toast(`Import failed: ${esc(e.message)}`);
   }
 }

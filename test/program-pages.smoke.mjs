@@ -49,14 +49,11 @@ await page.route(`${ORIGIN}/**`, async (route) => {
   const req = route.request();
   const url = new URL(req.url());
   if (url.pathname === "/api/program-drive") {
-    const action = url.searchParams.get("action") || JSON.parse(req.postData() || "{}").action;
-    if (action === "thumb") return route.fulfill({ status: 200, contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="#5a9"/></svg>' });
-    if (action === "import") { db.driveImports = (db.driveImports || 0) + 1; return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ key: "k.jpg", url: `${ORIGIN}/api/program-media?key=drive1.jpg`, name: "machu.jpg", description: "Sunrise over Machu Picchu" }) }); }
-    const folder = url.searchParams.get("folder");
-    const body = folder === "SA_folder_00001"
-      ? { root: "ROOT", path: [{ id: "ROOT", name: "Program photos" }, { id: "SA_folder_00001", name: "South America" }], folders: [], images: [{ id: "machu_jpg_00001", name: "machu.jpg", thumb: "/api/program-drive?action=thumb&id=machu_jpg_00001" }], nextPageToken: null }
-      : { root: "ROOT", path: [{ id: "ROOT", name: "Program photos" }], folders: [{ id: "SA_folder_00001", name: "South America" }], images: [], nextPageToken: null };
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ clientId: "1-x.apps.googleusercontent.com", apiKey: "AIzaFAKEFAKEFAKEFAKEFAKE", appId: "123456789" }) });
+  }
+  if (url.pathname === "/api/program-media" && req.method() === "POST") {
+    db.mediaUploads = (db.mediaUploads || 0) + 1;
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ key: "drive1.jpg", url: `${ORIGIN}/api/program-media?key=drive1.jpg` }) });
   }
   if (url.pathname.startsWith("/api/program-pages")) {
     const [status, body] = apiResponse(req.method(), url, req.postData() ? JSON.parse(req.postData()) : null);
@@ -66,6 +63,22 @@ await page.route(`${ORIGIN}/**`, async (route) => {
   if (file.endsWith("/")) file += "index.html";
   if (!file.startsWith(ROOT) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "nf" });
   return route.fulfill({ status: 200, contentType: TYPES[path.extname(file)] || "application/octet-stream", body: fs.readFileSync(file) });
+});
+
+// Fake Google Identity + Picker + Drive, so the editor's Drive flow runs offline.
+const FAKE_GAPI = `window.gapi={load:(n,cb)=>cb()};window.google=window.google||{};(function(){
+  const chain=function(){return new Proxy({}, {get:(t,k)=>k==='build'?()=>({setVisible(){setTimeout(()=>window.__pickCb({action:'picked',docs:[{id:'drive_file_123',name:'machu.jpg',description:'Sunrise over Machu Picchu',mimeType:'image/jpeg'}]}),10)}}):(k==='setCallback'?(cb)=>{window.__pickCb=cb;return p}:()=>p)});};
+  let p; function PickerBuilder(){p=chain();return p;}
+  function DocsView(){const v=new Proxy({}, {get:()=>()=>v});return v;}
+  google.picker={PickerBuilder,DocsView,ViewId:{DOCS_IMAGES:'images'},Feature:{SUPPORT_DRIVES:'sd'},Response:{ACTION:'action',DOCUMENTS:'docs'},Action:{PICKED:'picked'},Document:{ID:'id',NAME:'name',DESCRIPTION:'description'}};
+})();`;
+const FAKE_GSI = `window.google=window.google||{};google.accounts={oauth2:{initTokenClient:(o)=>{const c={callback:o.callback,requestAccessToken(){window.__tokenRequests=(window.__tokenRequests||0)+1;setTimeout(()=>c.callback({access_token:'user-token',expires_in:3600}),5)}};return c;}}};`;
+const driveDownloads = [];
+await page.route("https://apis.google.com/js/api.js", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: FAKE_GAPI }));
+await page.route("https://accounts.google.com/gsi/client", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: FAKE_GSI }));
+await page.route("https://www.googleapis.com/drive/v3/files/**", (r) => {
+  driveDownloads.push({ url: r.request().url(), auth: r.request().headers().authorization });
+  return r.fulfill({ status: 200, contentType: "image/jpeg", headers: { "access-control-allow-origin": "*" }, body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]) });
 });
 
 let passed = 0;
@@ -111,20 +124,16 @@ ok(await page.locator("#ed-save").textContent() === "All changes saved", "save s
 await frame().locator('[data-item="itinerary.weeks.1"] .pdp-week__num').click();
 ok((await page.locator(".insp-head h2").textContent()) === "Week 2 of 10", "panel shows the selected week");
 await shot("02-week-selected");
-// Pick this week's photo from Google Drive; its Drive description fills the alt text
-await page.evaluate(() => { const S = window.__pdp.S; S.data.itinerary.weeks[1].imageAlt = ''; });
+// Pick this week's photo from Google Drive (Google Picker, signed in as the editor)
+await page.evaluate(() => { window.__pdp.S.data.itinerary.weeks[1].imageAlt = ''; });
 await page.getByRole("button", { name: "From Google Drive" }).first().click();
-await page.locator('#dlg-drive[open]').waitFor();
-await page.locator('#drive-body [data-folder="SA_folder_00001"]').click();
-await page.locator('#drive-body [data-pick-drive="machu_jpg_00001"]').waitFor();
-ok((await page.locator('#drive-crumbs').textContent()).includes("South America"), "breadcrumbs follow the folder");
-await shot("02b-drive-picker");
-await page.locator('#drive-body [data-pick-drive="machu_jpg_00001"]').click();
-await page.waitForTimeout(500);
-ok(db.driveImports === 1, "imported through /api/program-drive");
+await page.waitForTimeout(800);
+ok(await page.evaluate(() => window.__tokenRequests) === 1, "asked Google for the editor's own token");
+ok(driveDownloads.length === 1 && driveDownloads[0].url.includes("/files/drive_file_123?alt=media&supportsAllDrives=true"), "downloaded the picked file (shared drives too)");
+ok(driveDownloads[0].auth === "Bearer user-token", "with the editor's token");
+ok(db.mediaUploads === 1, "stored through /api/program-media");
 ok((await S()).itinerary.weeks[1].image.endsWith("key=drive1.jpg"), "week photo set from Drive");
 ok((await S()).itinerary.weeks[1].imageAlt === "Sunrise over Machu Picchu", "alt text from the Drive description");
-ok(!(await page.locator("#dlg-drive").evaluate((d) => d.open)), "picker closes");
 await frame().locator('[data-item="itinerary.weeks.1"] .pdp-week__num').click();
 await frame().locator('.pde-tools button[data-op="del"]').click();
 ok((await S()).itinerary.weeks.length === 9, "deleted a week");

@@ -29,7 +29,7 @@ sees drafts and has no database or login.
 | `netlify/functions/program-pages.mjs` | Drafts, autosave (with conflict detection), publish, unpublish, history, restore, archive. |
 | `netlify/functions/program-media.mjs` | Image upload and serving (Netlify Blobs store `program-media`). JPG/PNG/WebP/GIF only, checked by file signature. No SVG. |
 | `netlify/functions/program-pages-nightly.mjs` | Scheduled daily (2am NZ). Rebuilds the public site so **Next departure** moves on once a session starts and started sessions drop off the Dates list, without anyone publishing. Skips the rebuild when nothing is published. |
-| `netlify/functions/program-drive.mjs` | Google Drive photo picker. Browses **one** shared folder with the dashboard's service account, read-only, and copies a picked photo into program media. |
+| `netlify/functions/program-drive.mjs` | Hands the Google Picker settings (client ID, API key, project number) to signed-in editors. The picking itself happens in the browser as the editor. |
 | `netlify/functions/program-pages-export.mjs` | Read-only export of **published** pages for the public build. Only accepts the build token. |
 | `netlify/functions/_shared/program-pages-access.mjs` | Who can edit and who can publish, plus the build-token check. |
 | `MIGRATION-program-pages.sql` | Tables `program_pages` and `program_page_versions`. Idempotent. |
@@ -52,20 +52,32 @@ Nothing else in the repo changed.
 | `NETLIFY_DATABASE_URL` | Already set (Neon). |
 | `PROGRAM_PAGES_BUILD_TOKEN` | 32+ random characters (`openssl rand -hex 32`). Set the **same value** on pd-program-pages. Under 24 characters disables the export. |
 | `PROGRAM_SITE_BUILD_HOOK` | The build hook URL from pd-program-pages → Site configuration → Build hooks. Without it, publishing still saves but the editor warns that the site wasn't rebuilt. |
-| `PROGRAM_PAGES_DRIVE_FOLDER_ID` | The Drive folder (or shared drive) editors can pick photos from. See below. Without it, the Drive button shows a "not set up yet" message. |
+| `GOOGLE_PICKER_CLIENT_ID`, `GOOGLE_PICKER_API_KEY`, `GOOGLE_PICKER_APP_ID` | Google Picker for **From Google Drive** (see below). Without them, the button says which ones are missing. |
 | `PROGRAM_PAGES_PUBLISH_ROLES` | Optional. Default `admin,outreach,programs`. |
 
 ## Google Drive photos (one-time setup)
 
-1. Pick or create the folder that holds program photos, e.g. **Program Photos** with a subfolder per program. A shared drive works too.
-2. **Share** it with the dashboard's service account (the `client_email` in the Google service-account JSON the dashboard already uses) as a **Viewer**.
-3. Copy the folder ID from its URL (`drive.google.com/drive/folders/<THIS PART>`) into pd-dashboard as `PROGRAM_PAGES_DRIVE_FOLDER_ID`, then redeploy.
+The **From Google Drive** button opens Google's own file picker, signed in as the
+person editing. They can choose from everything they can open in Drive: My Drive,
+shared drives, and files shared with them.
+
+In Google Cloud Console, in any project (the one the service account lives in is fine):
+
+1. **APIs & Services → Library:** enable **Google Picker API** and **Google Drive API**.
+2. **OAuth consent screen:** User type **Internal** (Workspace accounts only, no Google review needed). App name e.g. "PD Dashboard". Add the scope `.../auth/drive.file`.
+3. **Credentials → Create credentials → OAuth client ID → Web application.**
+   Authorized JavaScript origins: `https://dashboard.pacificdiscovery.org`. No redirect URI is needed.
+4. **Credentials → Create credentials → API key.** Restrict it: API restrictions → **Google Picker API** only. Application restrictions → **Websites** → `https://dashboard.pacificdiscovery.org/*`.
+5. Note the **project number** (Cloud overview → Project info).
+6. On pd-dashboard (scope **Functions**), set `GOOGLE_PICKER_CLIENT_ID`, `GOOGLE_PICKER_API_KEY` and `GOOGLE_PICKER_APP_ID` (the project number), then redeploy.
+   `PROGRAM_PAGES_DRIVE_FOLDER_ID` is no longer used; delete it.
 
 How it behaves:
-- **Access:** read-only Drive scope. Editors only see that folder and its subfolders, even if the service account can see other folders for other dashboards.
-- **Copies, not links:** a picked photo is copied into program media. Moving, renaming or unsharing the Drive file later never breaks a live page.
-- **iPhone photos and big files:** HEIC photos and anything over 5 MB come in as Drive's 2400px JPEG.
-- **Descriptions:** if the Drive file has a description, it pre-fills the photo description (alt text).
+- **First use:** Google shows a sign-in pop-up asking to let the dashboard "see files you open with this app". Allow pop-ups for the dashboard.
+- **Scope `drive.file`:** the dashboard can read only the photo a person picks. It can't browse or change anything else in their Drive. The sign-in token stays in that browser tab and is never sent to the dashboard's server.
+- **Copies, not links:** the picked photo is downloaded in the browser, resized to at most 2400px, and stored in program media like an upload. Unsharing or deleting the Drive file later never breaks a live page.
+- **File types:** JPG, PNG, WebP and GIF. iPhone **HEIC** photos aren't offered, because browsers can't read them. Set the iPhone camera to "Most Compatible", or export as JPG first.
+- **Descriptions:** a Drive file's description pre-fills the photo description (alt text).
 
 ## How editing works
 

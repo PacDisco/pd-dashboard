@@ -38,11 +38,6 @@
 [functions."shirt-orders"]
   timeout = 26
 
-# Drive photo picker: cold-starting googleapis plus a few Drive calls can pass
-# 10s on the first request after a deploy.
-[functions."program-drive"]
-  timeout = 26
-
 # Route /api/config → config function, /api/users[/*] → users function.
 [[redirects]]
   from = "/api/config"
