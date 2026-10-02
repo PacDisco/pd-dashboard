@@ -49,7 +49,7 @@ await page.route(`${ORIGIN}/**`, async (route) => {
   const req = route.request();
   const url = new URL(req.url());
   if (url.pathname === "/api/program-drive") {
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ clientId: "1-x.apps.googleusercontent.com", apiKey: "AIzaFAKEFAKEFAKEFAKEFAKE", appId: "123456789" }) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ clientId: "1-x.apps.googleusercontent.com", apiKey: "test-picker-key-0123456789abcdef", appId: "123456789" }) });
   }
   if (url.pathname === "/api/program-media" && req.method() === "POST") {
     db.mediaUploads = (db.mediaUploads || 0) + 1;

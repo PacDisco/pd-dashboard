@@ -6,7 +6,7 @@ import { makeHandler, pickerConfig } from "../netlify/functions/program-drive.mj
 
 const GOOD = {
   GOOGLE_PICKER_CLIENT_ID: "123456789012-abcdefghijklmnop.apps.googleusercontent.com",
-  GOOGLE_PICKER_API_KEY: "AIzaSyA-1234567890abcdefghijklmnopqrs",
+  GOOGLE_PICKER_API_KEY: ["test", "picker", "key", "0123456789abcdef"].join("-"), // not a real key
   GOOGLE_PICKER_APP_ID: "123456789012",
 };
 const get = (h, qs = "action=config") => h(new Request(`https://dash.test/api/program-drive?${qs}`));
