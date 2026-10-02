@@ -860,9 +860,17 @@ async function driveApi(params, body) {
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => null);
   if (res.status === 401) sessionExpired();
-  if (!res.ok) throw new ApiError(res.status, data);
+  if (!res.ok) {
+    // No JSON means Netlify answered, not our function: it crashed or timed out.
+    const fallback = res.status === 404
+      ? 'The Google Drive picker isn’t deployed yet (no program-drive function).'
+      : `The Google Drive picker didn’t respond (HTTP ${res.status}). Check pd-dashboard → Logs → Functions → program-drive.`;
+    const err = new ApiError(res.status, data || { error: fallback });
+    if (data?.detail) err.message = `${data.error} (${data.detail})`;
+    throw err;
+  }
   return data;
 }
 

@@ -22,7 +22,6 @@ function fakeDrive() {
   const calls = { media: [] };
   return {
     calls,
-    _pdAuth: { getAccessToken: async () => ({ token: "tok" }) },
     files: {
       async get({ fileId, alt }) {
         const f = FILES[fileId];
@@ -47,6 +46,7 @@ function setup({ user = { email: "a@pd.org", actor: "Megan" } } = {}) {
   const fetched = [];
   const h = makeHandler({
     drive: async () => drive,
+    auth: () => ({ getAccessToken: async () => ({ token: "tok" }) }),
     requireEditor: async () => user,
     storeImage: async (buf, meta) => { stored.push({ bytes: buf.byteLength, ...meta }); return { key: "k1.jpg", url: "https://dash.test/api/program-media?key=k1.jpg" }; },
     fetch: async (url, opts) => { fetched.push({ url, auth: opts?.headers?.Authorization }); return new Response(JPEG); },

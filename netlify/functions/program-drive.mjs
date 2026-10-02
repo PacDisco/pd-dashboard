@@ -22,7 +22,6 @@
 // iPhone HEIC photos and anything over 5 MB are imported through Drive's own
 // JPEG rendition at 2400px, so they arrive web-ready without a resize step.
 
-import { google } from "googleapis";
 import googleCreds from "./lib/google-creds.cjs";
 import { requireEditor, json } from "./_shared/program-pages-access.mjs";
 import { storeImage } from "./program-media.mjs";
@@ -34,16 +33,23 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 const FILE_FIELDS = "id,name,mimeType,size,parents,description,thumbnailLink,imageMediaMetadata(width,height),modifiedTime";
 
 let _drive;
+let _auth; // the service-account client, for fetching thumbnailLink renditions
 async function defaultDrive() {
   if (!_drive) {
+    // googleapis is large; load it lazily so a load failure is reported as a
+    // readable error instead of crashing the function (a bare HTTP 502).
+    const t0 = Date.now();
+    const { google } = await import("googleapis");
     const raw = await googleCreds.getServiceAccount();
     if (!raw) throw new Error("Google service account not configured");
-    const creds = JSON.parse(raw);
+    let creds;
+    try { creds = JSON.parse(raw); } catch { throw new Error("Google service account JSON is not valid (not configured)"); }
     if (creds.private_key && creds.private_key.includes("\\n")) creds.private_key = creds.private_key.replace(/\\n/g, "\n");
     const auth = new google.auth.GoogleAuth({ credentials: creds, scopes: ["https://www.googleapis.com/auth/drive.readonly"] });
     const client = await auth.getClient();
     _drive = google.drive({ version: "v3", auth: client });
-    _drive._pdAuth = client; // for fetching thumbnailLink renditions
+    _auth = client;
+    console.log(`[program-drive] Drive client ready in ${Date.now() - t0}ms as ${creds.client_email}`);
   }
   return _drive;
 }
@@ -155,7 +161,7 @@ export function makeHandler(deps = {}) {
 
   async function authedFetch(drive, link) {
     let token = null;
-    try { const t = await drive._pdAuth?.getAccessToken(); token = typeof t === "string" ? t : t?.token; } catch { /* unauthenticated fetch */ }
+    try { const t = await (deps.auth || (() => _auth))()?.getAccessToken(); token = typeof t === "string" ? t : t?.token; } catch { /* unauthenticated fetch */ }
     return fetchFn(link, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
   }
 
@@ -226,9 +232,13 @@ export function makeHandler(deps = {}) {
       return json({ error: "Method not allowed" }, 405);
     } catch (err) {
       console.error("program-drive:", err);
-      const msg = /not configured|invalid_grant|unauthorized_client/i.test(err.message || "")
-        ? "The dashboard can't sign in to Google Drive. Tell Jake." : "Google Drive request failed. Try again.";
-      return json({ error: msg }, 502);
+      const m = String(err?.message || err);
+      const code = err?.code || err?.response?.status;
+      let msg = "Google Drive request failed. Try again.";
+      if (/not configured|invalid_grant|unauthorized_client|invalid JWT|DECODER|private key/i.test(m)) msg = "The dashboard can't sign in to Google Drive (service account).";
+      else if (code === 404 || /File not found/i.test(m)) msg = "The photo folder wasn't found. Check PROGRAM_PAGES_DRIVE_FOLDER_ID and that the folder is shared with the service account.";
+      else if (code === 403 || /insufficient|forbidden|has not been used|disabled/i.test(m)) msg = "Google refused access. Check the folder is shared with the service account and the Drive API is enabled for its project.";
+      return json({ error: msg, detail: m.slice(0, 200) }, 502);
     }
   };
 }
