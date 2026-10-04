@@ -85,6 +85,7 @@ How it behaves:
 - **Prices, dates, status, links:** click them on the page and the right-hand panel jumps to that field.
 - **Photos:** click one to pick it from **Google Drive**, upload (resized to 2400px in the browser first), reuse an earlier upload, or paste a URL from the existing `/library/images/` folder. A description box sits under every photo.
 - **Review widgets:** in the hero, **+ Add a live review widget** takes the GoAbroad or GoOverseas embed code, or a Google Place ID, and stays up to date on its own (details in the pd-program-pages README). Manual review badges are still there for anything else.
+- **Reviews section:** **+ Add a GoAbroad or GoOverseas widget** puts a full review widget above the quotes. Paste the embed code the same way; a larger review-list widget from their generator suits this spot better than the small badge used in the hero.
 - **Lists** (weeks, FAQs, dates, cards and so on): **+ Add** buttons sit on the page. A selected item gets a toolbar to move it up or down, duplicate it or delete it.
 - **Sections** tab: show, hide and reorder sections per page.
 - **Undo/redo** buttons, or Ctrl/Cmd+Z, cover every change, including deletes.

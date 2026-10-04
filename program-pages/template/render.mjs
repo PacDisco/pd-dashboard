@@ -232,6 +232,7 @@ export const SCHEMA = {
   // Repeatable items. `blank` is what "+ Add" inserts.
   lists: {
     'hero.widgets':      { label: 'Live review widget', add: 'Add a live review widget', fields: [{ k: 'type', label: 'Widget', type: 'select', options: WIDGET_TYPES }, { k: 'code', label: 'Embed code or ID', type: 'multiline', help: 'GoAbroad or GoOverseas: paste the embed code they give you. Google: paste the Place ID (starts with ChIJ…). The rating updates on its own.' }], blank: { type: 'GoAbroad', code: '' } },
+    'reviews.widgets':   { label: 'Live review widget', add: 'Add a GoAbroad or GoOverseas widget', fields: [{ k: 'type', label: 'Widget', type: 'select', options: WIDGET_TYPES }, { k: 'code', label: 'Embed code or ID', type: 'multiline', help: 'GoAbroad or GoOverseas: paste the embed code they give you (a review-list widget works well here). Google: paste the Place ID (starts with ChIJ…). Updates on its own.' }], blank: { type: 'GoOverseas', code: '' } },
     'hero.reviews':      { label: 'Review badge', add: 'Add a review badge', fields: [{ k: 'source', label: 'Review site', type: 'select', options: REVIEW_SOURCES }, { k: 'score', label: 'Score (e.g. 4.5 or 98%)', type: 'text' }, { k: 'count', label: 'Number of reviews', type: 'number' }, { k: 'url', label: 'Link to the reviews', type: 'url' }], blank: { source: 'GoAbroad', score: '', count: '', url: '' } },
     'why.items':         { label: 'Reason', add: 'Add a reason', fields: [{ k: 'title', label: 'Title', type: 'text' }, { k: 'body', label: 'Text', type: 'multiline' }, { k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }], blank: { title: 'New reason', body: 'Describe it in a sentence or two.', image: '', imageAlt: '' } },
     'route.phases':      { label: 'Phase', add: 'Add a phase', fields: [{ k: 'label', label: 'Weeks', type: 'text' }, { k: 'text', label: 'What happens', type: 'text' }], blank: { label: 'Wk', text: 'Location · headline activity' } },
@@ -281,7 +282,7 @@ export function blankProgram(name = 'New program') {
     instructors: { heading: 'Who you’ll travel with', intro: '', people: [] },
     safety: { heading: 'How we keep students safe', items: [], linkText: 'Read our full safety approach', linkUrl: 'https://www.pacificdiscovery.org/safety' },
     cost: { heading: 'What it costs, all in', lines: [], note: '', included: [], excluded: [] },
-    reviews: { heading: 'From past students and parents', videoUrl: '', quotes: [] },
+    reviews: { heading: 'From past students and parents', videoUrl: '', widgets: [], quotes: [] },
     dates: { heading: 'Pick your start date', help: 'Not sure yet? Talk to an advisor.', sessions: [] },
     faq: { heading: 'Questions we get about this program', items: [] },
     cta: { heading: 'Ready to go?', body: '', primaryText: 'Apply now', secondaryText: 'Talk to an advisor' },
@@ -300,6 +301,7 @@ export function normalizeProgram(p) {
   }
   if (!Array.isArray(out.hero.reviews)) out.hero.reviews = [];
   if (!Array.isArray(out.hero.widgets)) out.hero.widgets = [];
+  if (!Array.isArray(out.reviews.widgets)) out.reviews.widgets = [];
   // Pages saved before review badges existed had one free-text line.
   if (!out.hero.reviews.length && out.hero.reviewText) {
     out.hero.reviews = [{ source: 'Other', score: String(out.hero.reviewText), count: '', url: out.hero.reviewUrl || '' }];
@@ -453,6 +455,7 @@ const R = {
   reviews(p, c) {
     const vid = videoEmbed(p.reviews.videoUrl);
     return `<h2 class="pdp-h2">${c.t('reviews.heading', 'span')}</h2>` +
+      renderWidgets(p, c, 'reviews.widgets', 'pdp-widgets-wrap pdp-widgets-wrap--reviews') +
       (vid ? `<div class="pdp-video"${c.ed ? ' data-v="reviews.videoUrl"' : ''}><iframe src="${attr(vid)}" title="Student video" loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>` : '') +
       c.list('reviews.quotes', 'div', 'pdp-grid pdp-grid--3', (it, ip) =>
         `<blockquote class="pdp-quote">${c.t(`${ip}.quote`, 'p', '', { multiline: true })}<footer>${c.t(`${ip}.name`, 'span', '')}</footer></blockquote>`, 'figure', 'pdp-card pdp-card--pad');
@@ -522,10 +525,10 @@ export function parseScore(score) {
   return null;
 }
 
-function renderWidgets(p, c) {
-  const items = p.hero.widgets || [];
+function renderWidgets(p, c, path = 'hero.widgets', wrap = 'pdp-widgets-wrap') {
+  const items = getPath(p, path) || [];
   if (!items.length && !c.ed) return '';
-  const html = c.list('hero.widgets', 'ul', 'pdp-widgets', (w) => {
+  const html = c.list(path, 'ul', 'pdp-widgets', (w) => {
     const pw = parseWidget(w);
     const note = (txt, bad) => `<span class="pdp-widget pdp-widget--note${bad ? ' pdp-widget--bad' : ''}">${esc(txt)}</span>`;
     if (!pw) return c.ed ? note(w.code ? `This ${w.type || ''} code isn't recognised. Paste the embed code again.` : `Paste the ${w.type || ''} embed code in the panel →`, !!w.code) : null;
@@ -551,7 +554,7 @@ function renderWidgets(p, c) {
   }, 'li', 'pdp-widgets__item');
   // Live page: nothing at all when no widget produced output (e.g. Google not fetched).
   if (!c.ed && !html.includes('<li')) return '';
-  return `<div class="pdp-widgets-wrap">${html}</div>`;
+  return `<div class="${wrap}">${html}</div>`;
 }
 
 function renderReviews(p, c) {
@@ -661,7 +664,7 @@ export function renderProgram(program, opts = {}) {
     const tone = key === 'cta' ? ' pdp-sec--flush' : '';
     return `<section id="${meta.anchor}" class="pdp-sec${tone}${hidden ? ' pde-hidden' : ''}"${c.ed ? ` data-sec="${key}" data-label="${attr(meta.label)}"` : ''}><div class="pdp-wrap">${inner}</div></section>`;
   }).join('');
-  const goScript = !c.ed && (p.hero.widgets || []).some((w) => parseWidget(w)?.kind === 'gooverseas')
+  const goScript = !c.ed && [...(p.hero.widgets || []), ...(p.reviews.widgets || [])].some((w) => parseWidget(w)?.kind === 'gooverseas')
     ? `<script>${GOOVERSEAS_LOADER}</script>` : '';
   return `<div class="pdp${c.ed ? ' pdp--edit' : ''}">${renderHero(p, c)}${renderBar(p, c, shown)}${secs}${goScript}</div>`;
 }
@@ -784,6 +787,10 @@ a.pdp-next:focus-visible{outline:3px solid var(--pdp-ink);outline-offset:2px}
 .pdp-next--empty .pdp-next__label{color:var(--pdp-muted)}
 .pdp-next--empty .pdp-next__when{font-size:14px;font-weight:500;color:var(--pdp-muted)}
 .pdp-widgets{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:4px}
+.pdp-widgets-wrap--reviews{margin-bottom:24px}
+.pdp-widgets-wrap--reviews .pdp-widgets{align-items:flex-start;gap:16px}
+.pdp-widgets-wrap--reviews .pdp-widget{box-shadow:none;border:1px solid var(--pdp-line)}
+.pdp-widgets-wrap--reviews .pdp-widget--gooverseas{min-width:min(100%,320px)}
 .pdp-widgets-wrap .pde-add{max-width:320px;background:rgba(255,255,255,.9)}
 .pdp-widget{position:relative;display:inline-flex;align-items:center;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.15);text-shadow:none;max-width:100%}
 .pdp-widget__frame{border:0;display:block;max-width:100%}
