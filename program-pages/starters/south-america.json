@@ -1,515 +1,515 @@
 {
- "v": 1,
- "name": "South America",
- "seo": {
-  "title": "South America Gap Year Semester Program | Pacific Discovery",
-  "description": "Peru, Ecuador & the Galápagos in 10 weeks: Machu Picchu via the Inca Jungle Trail, Spanish immersion, Andean community volunteering and Galápagos snorkeling. Ages 17–22.",
-  "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/south-america-semester.png"
- },
- "settings": {
-  "applyUrl": "https://www.pacificdiscovery.org/apply",
-  "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
-  "callUrl": "",
-  "whatsappUrl": "",
-  "currency": "USD"
- },
- "layout": [
-  {
-   "key": "why",
-   "show": true
+  "v": 1,
+  "name": "South America",
+  "seo": {
+    "title": "South America Gap Year Semester Program | Pacific Discovery",
+    "description": "Peru, Ecuador & the Galápagos in 10 weeks: Machu Picchu via the Inca Jungle Trail, Spanish immersion, Andean community volunteering and Galápagos snorkeling. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/south-america-semester.png"
   },
-  {
-   "key": "route",
-   "show": true
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
   },
-  {
-   "key": "itinerary",
-   "show": true
-  },
-  {
-   "key": "day",
-   "show": true
-  },
-  {
-   "key": "stay",
-   "show": true
-  },
-  {
-   "key": "learning",
-   "show": true
-  },
-  {
-   "key": "instructors",
-   "show": true
-  },
-  {
-   "key": "safety",
-   "show": true
-  },
-  {
-   "key": "cost",
-   "show": true
-  },
-  {
-   "key": "reviews",
-   "show": true
-  },
-  {
-   "key": "dates",
-   "show": true
-  },
-  {
-   "key": "faq",
-   "show": true
-  },
-  {
-   "key": "cta",
-   "show": true
-  },
-  {
-   "key": "related",
-   "show": true
-  }
- ],
- "hero": {
-  "eyebrow": "Gap semester · Peru, Ecuador & the Galápagos",
-  "headline": "Machu Picchu, the Andes and the Galápagos in one semester",
-  "intro": "Bike and trek the Inca Jungle Trail, volunteer with Andean communities, learn Spanish at your level and snorkel the Galápagos — with a group of 14 and experienced instructors by your side.",
-  "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/9_SAS_SNORKEL_WITH_SHARKS%2C_DIVE_INTO_REFORESTATION_AND_EXPLORE_THE_WILDEST_ISLANDS.jpg",
-  "imageAlt": "Students snorkeling in the Galápagos Islands",
-  "reviews": [],
-  "widgets": [
-   {
-    "type": "GoAbroad",
-    "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
-   },
-   {
-    "type": "GoOverseas",
-    "code": "<div class=\"go-overseas-review-widget-component widget-programshort\" data-gooverseas-widget-type=\"program\" data-gooverseas-widget-id=\"43632\" data-gooverseas-widget-name=\"programshort\" data-gooverseas-widget-theme=\"primary\" data-gooverseas-widget-link=\"yes\"></div>"
-   }
-  ]
- },
- "facts": {
-  "countries": "Peru · Ecuador · Galápagos",
-  "start": "Cusco, Peru",
-  "finish": "Baltra, Ecuador",
-  "weeks": 10,
-  "groupMax": 14,
-  "ages": "17–22",
-  "tuition": 15500,
-  "flightsEstimate": 2500,
-  "activityLevel": "High",
-  "credit": "Optional · University of Montana"
- },
- "why": {
-  "heading": "What makes this semester different",
-  "items": [
-   {
-    "title": "Machu Picchu and the Galápagos, both",
-    "body": "Classic Andes adventure and a Galápagos island section in the same 10 weeks.",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/2BIKING%2C_ZIP-LINING%2C_AND_EXPLORING_MACHU_PICCHU.jpg",
-    "imageAlt": "Machu Picchu at sunrise"
-   },
-   {
-    "title": "Adventure with real service",
-    "body": "Work alongside an Indigenous Andean community and a carrier-llama conservation project — not just visit.",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/3_SAS_CULTURE%2C_CUISINE%2C_AND_LLAMAS_IN_THE_SACRED_VALLEY.jpg",
-    "imageAlt": "Students trekking with llamas in the Sacred Valley"
-   },
-   {
-    "title": "Spanish at your level",
-    "body": "Lessons at two levels throughout, practised in markets, kitchens and villages.",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/1SAS_COMMUNITY_VOLUNTEERING_AND_SPANISH_IMMERSION.jpg",
-    "imageAlt": "Spanish lesson in the Sacred Valley"
-   },
-   {
-    "title": "All-inclusive on the ground",
-    "body": "Meals, lodging, in-country travel, activities, entry fees and guides are included.",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/5_SAS_A_TRULY_AUTHENTIC_ECUADORIAN_EXPERIENCE.jpg",
-    "imageAlt": "Group exploring Ecuador"
-   }
-  ]
- },
- "route": {
-  "heading": "Your journey at a glance",
-  "mapImage": "",
-  "mapAlt": "Route map from Cusco, Peru to Baltra, Ecuador",
-  "phases": [
-   {
-    "label": "Wk 1–3",
-    "text": "Sacred Valley & Cusco · volunteering, Spanish, Inca Jungle Trail to Machu Picchu"
-   },
-   {
-    "label": "Wk 4",
-    "text": "[Location] · adventure, culture & the highest lake on Earth"
-   },
-   {
-    "label": "Wk 5–8",
-    "text": "Ecuador · highlands, the Amazon and chocolate-making"
-   },
-   {
-    "label": "Wk 9–10",
-    "text": "Galápagos · snorkeling, reforestation, volcanoes and beaches"
-   }
-  ]
- },
- "itinerary": {
-  "heading": "Week by week",
-  "intro": "",
-  "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary.",
-  "weeks": [
-   {
-    "title": "Community volunteering & Spanish immersion",
-    "location": "Sacred Valley, Peru",
-    "body": "Meet your instructors in Lima and fly together to Cusco, then travel to Urubamba in the Sacred Valley for orientation. Explore the ruins of Pisaq, Ollantaytambo and Moray, start a community service project, and begin Spanish lessons at two levels.",
-    "tags": "Service, Spanish, Ruins",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/1SAS_COMMUNITY_VOLUNTEERING_AND_SPANISH_IMMERSION.jpg",
-    "imageAlt": "Community volunteering in the Sacred Valley"
-   },
-   {
-    "title": "Inca Jungle Trail & Machu Picchu",
-    "location": "Peru",
-    "body": "A 4-day journey to Machu Picchu: biking, optional zip-lining, natural hot springs and river traverses on the way to Aguas Calientes. Hike up for sunrise at Machu Picchu, with the option to climb Huayna Picchu.",
-    "tags": "Biking, Trekking, Machu Picchu",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/2BIKING%2C_ZIP-LINING%2C_AND_EXPLORING_MACHU_PICCHU.jpg",
-    "imageAlt": "Machu Picchu"
-   },
-   {
-    "title": "Culture, cuisine & llamas in the Sacred Valley",
-    "location": "Cusco & Urubamba, Peru",
-    "body": "A Cusco legend and culture tour, a farmers market visit and cooking class, then our second volunteer project with founders Alejandra and Jorge — recovering the traditional use and breeding of carrier llamas, with a day-trek alongside them.",
-    "tags": "Cooking, Conservation, Llamas",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/3_SAS_CULTURE%2C_CUISINE%2C_AND_LLAMAS_IN_THE_SACRED_VALLEY.jpg",
-    "imageAlt": "Llamas in the Sacred Valley"
-   },
-   {
-    "title": "Adventure, culture & the highest lake on Earth",
-    "location": "[Location]",
-    "body": "[Describe week 4]",
-    "tags": "",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/4SAS_ADVENTURE%2C_CULTURE%2C_AND_THE_HIGHEST_LAKE_ON_EARTH!.jpg",
-    "imageAlt": "[Describe the photo]"
-   },
-   {
-    "title": "A truly authentic Ecuadorian experience",
-    "location": "Ecuador",
-    "body": "[Describe week 5]",
-    "tags": "",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/5_SAS_A_TRULY_AUTHENTIC_ECUADORIAN_EXPERIENCE.jpg",
-    "imageAlt": "Ecuador"
-   },
-   {
-    "title": "[Week 6 title]",
-    "location": "[Location]",
-    "body": "[Describe week 6]",
-    "tags": "",
-    "image": "",
-    "imageAlt": ""
-   },
-   {
-    "title": "Making chocolate in the Amazon",
-    "location": "Ecuador",
-    "body": "[Describe week 7]",
-    "tags": "",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/7_SAS_MAKING_CHOCOLATE_IN_THE_AMAZON.jpg",
-    "imageAlt": "Making chocolate in the Amazon"
-   },
-   {
-    "title": "Highlands, adventure & Amazon exploration",
-    "location": "Ecuador",
-    "body": "[Describe week 8]",
-    "tags": "",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/8_SAS_HIGHLANDS%2C_ADVENTURE%2C_AND_AMAZON_EXPLORATION.jpg",
-    "imageAlt": "Ecuador highlands"
-   },
-   {
-    "title": "Snorkel with sharks, reforestation & the wildest islands",
-    "location": "Galápagos",
-    "body": "[Describe week 9]",
-    "tags": "Snorkeling, Kayaking, Reforestation",
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "instructors",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    }
+  ],
+  "hero": {
+    "eyebrow": "Gap semester · Peru, Ecuador & the Galápagos",
+    "headline": "Machu Picchu, the Andes and the Galápagos in one semester",
+    "intro": "Bike and trek the Inca Jungle Trail, volunteer with Andean communities, learn Spanish at your level and snorkel the Galápagos — with a group of 14 and experienced instructors by your side.",
     "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/9_SAS_SNORKEL_WITH_SHARKS%2C_DIVE_INTO_REFORESTATION_AND_EXPLORE_THE_WILDEST_ISLANDS.jpg",
-    "imageAlt": "Snorkeling in the Galápagos"
-   },
-   {
-    "title": "Volcanoes, beaches & dreamlike adventures",
-    "location": "Galápagos",
-    "body": "[Describe week 10]",
-    "tags": "",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/SAS_10_VOLCANOES%2C_BEACHES%2C_AND_DREAMLIKE_ADVENTURES.jpg",
-    "imageAlt": "Galápagos volcano and beach"
-   }
-  ]
- },
- "day": {
-  "heading": "What a typical day looks like",
-  "slots": [
-   {
-    "time": "7:00",
-    "text": "[Breakfast at the guesthouse]"
-   },
-   {
-    "time": "9:00",
-    "text": "Spanish lesson (two levels)"
-   },
-   {
-    "time": "12:30",
-    "text": "[Lunch at the local market]"
-   },
-   {
-    "time": "14:00",
-    "text": "Community project"
-   },
-   {
-    "time": "18:00",
-    "text": "[Group dinner]"
-   },
-   {
-    "time": "20:00",
-    "text": "[Debrief & journaling]"
-   }
-  ],
-  "notes": [
-   {
-    "title": "Free time",
-    "body": "[How much, and what students do with it]"
-   },
-   {
-    "title": "Phones & wifi",
-    "body": "[Your device policy, stated plainly]"
-   },
-   {
-    "title": "Fitness needed",
-    "body": "High activity level. Be ready for a multi-day hike towards Machu Picchu and physical work on volunteer projects, like trail building or removing invasive plants."
-   }
-  ]
- },
- "stay": {
-  "heading": "Where you’ll stay",
-  "intro": "",
-  "items": [
-   {
-    "title": "Guesthouses & lodges",
-    "body": "[Share of nights · room setup]",
-    "image": "",
-    "imageAlt": ""
-   },
-   {
-    "title": "Camping nights",
-    "body": "Low camping level — you’ll camp a few nights on this program.",
-    "image": "",
-    "imageAlt": ""
-   },
-   {
-    "title": "Food",
-    "body": "All meals included (not snacks). [Dietary needs line]",
-    "image": "",
-    "imageAlt": ""
-   }
-  ]
- },
- "learning": {
-  "heading": "Learn while you travel",
-  "items": [
-   {
-    "title": "Spanish immersion",
-    "body": "Lessons at two levels, practised every day on the ground.",
-    "linkText": "",
-    "linkUrl": ""
-   },
-   {
-    "title": "Optional college credit",
-    "body": "Earn credit through the University of Montana. [Credits available · fee] · 529 funds can be used.",
-    "linkText": "How college credit works",
-    "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
-   }
-  ]
- },
- "instructors": {
-  "heading": "Who you’ll travel with",
-  "intro": "",
-  "people": [
-   {
-    "name": "[Instructor name]",
-    "role": "Program Instructor",
-    "bio": "[Seasons led · certifications · fun fact]",
-    "photo": ""
-   },
-   {
-    "name": "[Instructor name]",
-    "role": "Program Instructor",
-    "bio": "[Seasons led · certifications · fun fact]",
-    "photo": ""
-   }
-  ]
- },
- "safety": {
-  "heading": "For parents: how we keep students safe",
-  "items": [
-   {
-    "title": "24/7 emergency line",
-    "body": "[One line on how it works]"
-   },
-   {
-    "title": "Wilderness first aid",
-    "body": "[Instructor certifications]"
-   },
-   {
-    "title": "Altitude plan",
-    "body": "[Acclimatisation days in Cusco]"
-   },
-   {
-    "title": "Insurance & health",
-    "body": "[Requirements]"
-   }
-  ],
-  "linkText": "Read our full safety approach",
-  "linkUrl": "https://www.pacificdiscovery.org/safety"
- },
- "cost": {
-  "heading": "What it costs, all in",
-  "lines": [
-   {
-    "label": "College credit (optional)",
-    "amount": "[$X]"
-   }
-  ],
-  "note": "[Deposit amount · payment plan] · 529 funds can cover tuition.",
-  "included": [
-   {
-    "text": "All in-program travel and transport"
-   },
-   {
-    "text": "All accommodation"
-   },
-   {
-    "text": "All meals (not including snacks)"
-   },
-   {
-    "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
-   },
-   {
-    "text": "Experienced Program Instructors and local guides"
-   },
-   {
-    "text": "Informal lectures from resident experts on conservation and eco-tourism"
-   },
-   {
-    "text": "Experiential core curriculum"
-   },
-   {
-    "text": "Certificate of Program Completion"
-   }
-  ],
-  "excluded": [
-   {
-    "text": "International flights"
-   },
-   {
-    "text": "Visas"
-   },
-   {
-    "text": "Travel insurance"
-   },
-   {
-    "text": "Personal spending and snacks"
-   },
-   {
-    "text": "College credit fee"
-   }
-  ]
- },
- "reviews": {
-  "heading": "From past students and parents",
-  "videoUrl": "",
-  "quotes": [
-   {
-    "quote": "[Real student quote about this program]",
-    "name": "[Name, semester]"
-   },
-   {
-    "quote": "[Real parent quote on safety or communication]",
-    "name": "[Parent name]"
-   }
-  ]
- },
- "dates": {
-  "heading": "Pick your start date",
-  "help": "Not sure yet? Talk to an advisor.",
-  "sessions": [
-   {
-    "start": "2027-02-11",
-    "end": "2027-04-21",
-    "season": "Spring",
-    "status": "Open",
-    "spotsLeft": "",
-    "applyUrl": ""
-   },
-   {
-    "start": "2027-09-09",
-    "end": "2027-11-17",
-    "season": "Fall",
-    "status": "Open",
-    "spotsLeft": "",
-    "applyUrl": ""
-   }
-  ]
- },
- "faq": {
-  "heading": "Questions we get about this program",
-  "items": [
-   {
-    "q": "Do I need to speak Spanish?",
-    "a": "No. Lessons run at two levels, so complete beginners and confident speakers both improve."
-   },
-   {
-    "q": "How hard is the Inca Jungle Trail?",
-    "a": "[Distance, altitude and how we prepare]"
-   },
-   {
-    "q": "Can I come on my own?",
-    "a": "[Most students join solo — say so with a number]"
-   },
-   {
-    "q": "How do flights work?",
-    "a": "Flights aren’t included. [Arrival airport, group flight details]"
-   },
-   {
-    "q": "How often can I contact home?",
-    "a": "[Phone and wifi policy]"
-   },
-   {
-    "q": "What’s the cancellation policy?",
-    "a": "[Summary + link to terms]"
-   }
-  ]
- },
- "cta": {
-  "heading": "Spring 2027 is filling. Hold your place.",
-  "body": "[Deposit amount] holds your spot.",
-  "primaryText": "Apply now",
-  "secondaryText": "Request the itinerary"
- },
- "related": {
-  "heading": "You may also like",
-  "items": [
-   {
-    "title": "Ecuador & Galápagos Summer",
-    "meta": "4 weeks · $7,950",
-    "url": "https://www.pacificdiscovery.org/programs",
-    "image": ""
-   },
-   {
-    "title": "Mexico, Costa Rica & Guatemala",
-    "meta": "10 weeks · $15,500",
-    "url": "https://www.pacificdiscovery.org/programs/central-america-gap-semester",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/central-america-semester.png"
-   },
-   {
-    "title": "Southeast Asia",
-    "meta": "10 weeks · $15,000",
-    "url": "https://www.pacificdiscovery.org/programs/southeast-asia-gap-semester",
-    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/southeast-asia-semester.png"
-   }
-  ]
- }
+    "imageAlt": "Students snorkeling in the Galápagos Islands",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      },
+      {
+        "type": "GoOverseas",
+        "code": "<div class=\"go-overseas-review-widget-component widget-programshort\" data-gooverseas-widget-type=\"program\" data-gooverseas-widget-id=\"43632\" data-gooverseas-widget-name=\"programshort\" data-gooverseas-widget-theme=\"primary\" data-gooverseas-widget-link=\"yes\"></div>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Peru · Ecuador · Galápagos",
+    "start": "Lima, Peru",
+    "finish": "Quito, Ecuador",
+    "weeks": 10,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 15500,
+    "flightsEstimate": 2500,
+    "activityLevel": "High",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this semester different",
+    "items": [
+      {
+        "title": "Machu Picchu and the Galápagos, both",
+        "body": "Classic Andes adventure and a Galápagos island section in the same 10 weeks.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/2BIKING%2C_ZIP-LINING%2C_AND_EXPLORING_MACHU_PICCHU.jpg",
+        "imageAlt": "Machu Picchu at sunrise"
+      },
+      {
+        "title": "Adventure with real service",
+        "body": "Work alongside an Indigenous Andean community and a carrier-llama conservation project — not just visit.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/3_SAS_CULTURE%2C_CUISINE%2C_AND_LLAMAS_IN_THE_SACRED_VALLEY.jpg",
+        "imageAlt": "Students trekking with llamas in the Sacred Valley"
+      },
+      {
+        "title": "Spanish at your level",
+        "body": "Lessons at two levels throughout, practised in markets, kitchens and villages.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/1SAS_COMMUNITY_VOLUNTEERING_AND_SPANISH_IMMERSION.jpg",
+        "imageAlt": "Spanish lesson in the Sacred Valley"
+      },
+      {
+        "title": "All-inclusive on the ground",
+        "body": "Meals, lodging, in-country travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/5_SAS_A_TRULY_AUTHENTIC_ECUADORIAN_EXPERIENCE.jpg",
+        "imageAlt": "Group exploring Ecuador"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Lima, Peru through Ecuador to the Galápagos and back to Quito",
+    "phases": [
+      {
+        "label": "Wk 1–3",
+        "text": "Peru · Sacred Valley service & Spanish, Inca Jungle Trail to Machu Picchu, Cusco and the llama project"
+      },
+      {
+        "label": "Wk 4",
+        "text": "Lake Titicaca · community stay on the Capachica Peninsula and Taquile Island, then on to Ecuador"
+      },
+      {
+        "label": "Wk 5–8",
+        "text": "Ecuador · Agato homestay, Otavalo, Quilotoa, Baños, rafting, chocolate-making and the Cuyabeno Reserve"
+      },
+      {
+        "label": "Wk 9–10",
+        "text": "Galápagos · reforestation, Kicker Rock, Isabela’s volcanoes, then back to Quito"
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary.",
+    "weeks": [
+      {
+        "title": "Community volunteering & Spanish immersion",
+        "location": "Lima → Cusco → Urubamba, Peru",
+        "body": "You’ll land in Lima, meet your Program Instructors and head straight to Cusco, the heart of the ancient Incan Empire. After soaking up the city’s energy we move to Urubamba, in the Sacred Valley, for orientation: getting to know each other, setting the tone for the program and diving into the Peruvian way of life.\n\nThis week we explore the Incan ruins of Pisaq, Ollantaytambo and Moray, and start a local service project, working side by side with the community and learning about their traditions. Spanish lessons at two levels mean that whether you’re just starting or looking to level up, you’ll be able to immerse yourself even more in the culture.",
+        "tags": "Service, Spanish, Ruins",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/1SAS_COMMUNITY_VOLUNTEERING_AND_SPANISH_IMMERSION.jpg",
+        "imageAlt": "Community volunteering in the Sacred Valley"
+      },
+      {
+        "title": "Biking, zip-lining & exploring Machu Picchu",
+        "location": "Inca Jungle Trail to Machu Picchu, Peru",
+        "body": "We set off on a 4-day journey to Machu Picchu along the legendary Inca Jungle Trail: biking Andean roads, optional zip-lining, relaxing in natural hot springs and crossing rivers. Every day is packed with action and huge views, all leading to Aguas Calientes, the gateway town to Machu Picchu.\n\nFrom Aguas Calientes we make our way up to Machu Picchu, hiking it for the extra thrill or taking the bus. After a guided tour of the ruins there’s plenty of free time to wander, take photos and soak in this incredible place.",
+        "tags": "Biking, Zip-lining, Machu Picchu",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/2BIKING%2C_ZIP-LINING%2C_AND_EXPLORING_MACHU_PICCHU.jpg",
+        "imageAlt": "Machu Picchu"
+      },
+      {
+        "title": "Culture, cuisine & llamas in the Sacred Valley",
+        "location": "Cusco & Urubamba, Peru",
+        "body": "Cusco blends old-world charm with Andean culture: cobbled streets, orange-tiled adobe homes and a towering cathedral. A Cusco Legend and Culture Tour uncovers the city’s history and myths, then we visit the farmers market for the freshest local ingredients and roll up our sleeves for a hands-on cooking class in traditional Peruvian dishes.\n\nBack in Urubamba, our second volunteer project is with Alejandra, Jorge and their resident llamas. The project revives the ancient traditions of llama breeding and use, and supports local communities through environmental education and sustainable rural development, helping preserve the Sacred Valley’s highland ecosystems. We also work with a social enterprise that brings a traditional Andean village to life, and finish with an immersive day-trek with the llamas.",
+        "tags": "Cooking, Conservation, Llamas",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/3_SAS_CULTURE%2C_CUISINE%2C_AND_LLAMAS_IN_THE_SACRED_VALLEY.jpg",
+        "imageAlt": "Llamas in the Sacred Valley"
+      },
+      {
+        "title": "Adventure, culture & the highest lake on Earth",
+        "location": "Lake Titicaca, Peru → Ecuador",
+        "body": "Our journey to Lake Titicaca crosses mountains, crystal-clear lakes, clusters of earthen homes and herds of llamas. We stay on the Capachica Peninsula, where life is tranquil and the culture is rich.\n\nLiving alongside locals, we get hands-on with the community, hike the terraced slopes, explore ancient hilltop ruins and swim in the world’s highest navigable lake. A boat ride takes us to Taquile Island and its timeless traditions. It’s a chance to unplug from the tourist trail before we head on to Ecuador.",
+        "tags": "Community stay, Hiking, Culture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/4SAS_ADVENTURE%2C_CULTURE%2C_AND_THE_HIGHEST_LAKE_ON_EARTH!.jpg",
+        "imageAlt": "Lake Titicaca"
+      },
+      {
+        "title": "A truly authentic Ecuadorian experience",
+        "location": "Agato, Ecuador",
+        "body": "Forget the typical tourist trail. We head to the small, remote village of Agato, high in the Andes, where the Kichwa people keep a lifestyle that’s as authentic as it gets. During our homestay we live alongside local families and contribute to community-driven, sustainable development projects: helping with food prep, harvesting quinoa and corn, and learning farming techniques passed down through generations.\n\nWe also spend time with the kids, planning arts, crafts and sports, and settle into the rhythms of a culture deeply connected to the earth. This is about building real relationships with a community that opens your eyes to a different world.",
+        "tags": "Homestay, Service, Kichwa culture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/5_SAS_A_TRULY_AUTHENTIC_ECUADORIAN_EXPERIENCE.jpg",
+        "imageAlt": "Homestay in Agato, Ecuador"
+      },
+      {
+        "title": "Highlands, adventure & Amazon exploration",
+        "location": "Otavalo, Quilotoa, Baños & Tena, Ecuador",
+        "body": "Just past halfway, we head into Ecuador’s Central Highlands, starting at Otavalo’s famous craft market, full of textiles, jewelry, art and leather goods. In Quilotoa, a small artisan village beside a breathtaking crater lake, we stay with a local artist couple and hike around the crater.\n\nNext is Baños, at the foot of the active Tungurahua Volcano. After daily Spanish lessons we explore waterfalls and go canyoning, zip-lining and hiking. Finally we drop into the Amazon Basin, starting with a rafting expedition down the Jatunyacu River in Tena and learning about the indigenous communities who call the rainforest home.",
+        "tags": "Markets, Hiking, Adventure, Rafting",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/8_SAS_HIGHLANDS%2C_ADVENTURE%2C_AND_AMAZON_EXPLORATION.jpg",
+        "imageAlt": "Quilotoa Crater Lake"
+      },
+      {
+        "title": "Making chocolate in the Amazon",
+        "location": "Tena & Misahualli, Ecuador",
+        "body": "After camping on the edge of the Amazon in Tena, one last rafting expedition down the Jatunyacu River takes us to Misahualli, a town on the edge of the jungle. Here we spend time at the Sinchi Warmi Center, an indigenous women’s ecotourism initiative dedicated to sustainability and protecting the natural environment.\n\nThe women of Sinchi Warmi share their knowledge of traditional Amazonian life and how they use the land sustainably. A highlight is learning how artisanal chocolate is made from scratch, from harvesting cacao beans to the finished product, and of course tasting the results. Our visit directly supports their work.",
+        "tags": "Sustainability, Rafting, Chocolate",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/7_SAS_MAKING_CHOCOLATE_IN_THE_AMAZON.jpg",
+        "imageAlt": "Making chocolate at Sinchi Warmi"
+      },
+      {
+        "title": "Wildlife encounters & jungle adventures in Cuyabeno",
+        "location": "Cuyabeno Wildlife Reserve, Ecuador",
+        "body": "From Misahualli we venture into the Cuyabeno Wildlife Reserve, Ecuador’s second-largest national park and one of the most biodiverse places on the planet. From a remote lodge deep in the forest we explore rivers and lakes by motor-canoe and paddle-canoe, watching for wildlife including rare pink and grey river dolphins.\n\nOur native guide shares ancestral knowledge of medicinal plants, wildlife and the practices that have sustained local communities for centuries. Night excursions go in search of caimans and nocturnal birds, and we wrap up our time in the Amazon at a bird-watching tower with panoramic views over the rainforest canopy.",
+        "tags": "Wildlife, Canoeing, Rainforest",
+        "image": "",
+        "imageAlt": "Canoeing in the Cuyabeno Wildlife Reserve"
+      },
+      {
+        "title": "Snorkel with sharks, reforestation & the wildest islands",
+        "location": "San Cristóbal, Galápagos",
+        "body": "A morning flight takes us to San Cristóbal Island, where Darwin first set foot in the Galápagos. Over the next two weeks we explore four islands, each with its own biodiversity and wildlife. In the highlands we start our first project, reforestation: restoring native forest by removing invasive plants and learning why this work matters for the islands’ future.\n\nThen it’s time for the water. We snorkel crystal-clear bays alongside sea turtles, rays and maybe a hammerhead shark, including at Kicker Rock (León Dormido), a towering rock formation teeming with life. Sea lions, marine iguanas and frigatebirds are just the start.",
+        "tags": "Conservation, Snorkeling, Wildlife",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/9_SAS_SNORKEL_WITH_SHARKS%2C_DIVE_INTO_REFORESTATION_AND_EXPLORE_THE_WILDEST_ISLANDS.jpg",
+        "imageAlt": "Snorkeling in the Galápagos"
+      },
+      {
+        "title": "Volcanoes, beaches & dreamlike adventures",
+        "location": "Isabela & Santa Cruz, Galápagos → Quito",
+        "body": "We’ve saved the best for last. A scenic boat ride takes us to Isabela Island, where we bike to the Wetlands, then take on a 16 km trek through the highlands to the Sierra Negra and Chico volcanoes. A boat tour to Cabo Rosa reveals more of the Galápagos’ underwater world.\n\nBack on Santa Cruz Island there’s free time to explore, shop for souvenirs and relax on the beaches before our program wrap, reflecting on 10 weeks of exploration, cultural immersion, meaningful projects and friendships. We then head back to Quito to connect with international departures.",
+        "tags": "Hiking, Snorkeling, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SAS_Images%20by%20Weeks/SAS_10_VOLCANOES%2C_BEACHES%2C_AND_DREAMLIKE_ADVENTURES.jpg",
+        "imageAlt": "Isabela Island, Galápagos"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [
+      {
+        "time": "7:00",
+        "text": "[Breakfast at the guesthouse]"
+      },
+      {
+        "time": "9:00",
+        "text": "Spanish lesson (two levels)"
+      },
+      {
+        "time": "12:30",
+        "text": "[Lunch at the local market]"
+      },
+      {
+        "time": "14:00",
+        "text": "Community project"
+      },
+      {
+        "time": "18:00",
+        "text": "[Group dinner]"
+      },
+      {
+        "time": "20:00",
+        "text": "[Debrief & journaling]"
+      }
+    ],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "[How much, and what students do with it]"
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "[Your device policy, stated plainly]"
+      },
+      {
+        "title": "Fitness needed",
+        "body": "High activity level. Be ready for a multi-day hike towards Machu Picchu and physical work on volunteer projects, like trail building or removing invasive plants."
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Guesthouses & lodges",
+        "body": "[Share of nights · room setup]",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Camping nights",
+        "body": "Low camping level — you’ll camp a few nights on this program.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Food",
+        "body": "All meals included (not snacks). [Dietary needs line]",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Spanish immersion",
+        "body": "Lessons at two levels, practised every day on the ground.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn credit through the University of Montana. [Credits available · fee] · 529 funds can be used.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 emergency line",
+        "body": "[One line on how it works]"
+      },
+      {
+        "title": "Wilderness first aid",
+        "body": "[Instructor certifications]"
+      },
+      {
+        "title": "Altitude plan",
+        "body": "[Acclimatisation days in Cusco]"
+      },
+      {
+        "title": "Insurance & health",
+        "body": "[Requirements]"
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[$X]"
+      }
+    ],
+    "note": "[Deposit amount · payment plan] · 529 funds can cover tuition.",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "All meals (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, semester]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-02-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      },
+      {
+        "start": "2027-09-09",
+        "end": "2027-11-17",
+        "season": "Fall",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "Do I need to speak Spanish?",
+        "a": "No. Lessons run at two levels, so complete beginners and confident speakers both improve."
+      },
+      {
+        "q": "How hard is the Inca Jungle Trail?",
+        "a": "[Distance, altitude and how we prepare]"
+      },
+      {
+        "q": "Can I come on my own?",
+        "a": "[Most students join solo — say so with a number]"
+      },
+      {
+        "q": "How do flights work?",
+        "a": "Flights aren’t included. [Arrival airport, group flight details]"
+      },
+      {
+        "q": "How often can I contact home?",
+        "a": "[Phone and wifi policy]"
+      },
+      {
+        "q": "What’s the cancellation policy?",
+        "a": "[Summary + link to terms]"
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "[Deposit amount] holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Ecuador & Galápagos Summer",
+        "meta": "4 weeks · $7,950",
+        "url": "https://www.pacificdiscovery.org/programs",
+        "image": ""
+      },
+      {
+        "title": "Mexico, Costa Rica & Guatemala",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/central-america-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/central-america-semester.png"
+      },
+      {
+        "title": "Southeast Asia",
+        "meta": "10 weeks · $15,000",
+        "url": "https://www.pacificdiscovery.org/programs/southeast-asia-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/southeast-asia-semester.png"
+      }
+    ]
+  }
 }
