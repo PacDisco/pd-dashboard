@@ -17,7 +17,7 @@
 
 import {
   renderProgram, PROGRAM_CSS, SCHEMA, SECTIONS, blankProgram, normalizeProgram,
-  getPath, setPath, slugify, esc, findPlaceholders, dateRange, parseWidget,
+  getPath, setPath, slugify, esc, findPlaceholders, dateRange, parseWidget, parseFocus,
 } from '/program-pages/template/render.mjs';
 
 // The public program site (pd-program-pages). Used for "View live" previews of
@@ -643,8 +643,24 @@ function fieldHtml(f, path) {
     case 'url': return `<div class="field" data-path="${esc(path)}">${lbl}<input type="url" id="${id}" data-path="${esc(path)}" data-type="text" value="${esc(v)}" placeholder="https://…">${v ? `<a class="help" href="${esc(v)}" target="_blank" rel="noopener">Test link ↗</a>` : ''}${help}</div>`;
     case 'select': return `<div class="field" data-path="${esc(path)}">${lbl}<select id="${id}" data-path="${esc(path)}" data-type="text">${(f.options || []).map((o) => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>${help}</div>`;
     case 'image': return `<div class="field" data-path="${esc(path)}"><span class="lbl">${esc(f.label)}</span>${imageBox(path, null)}${help}</div>`;
+    case 'focus': return focusPicker(f, path, help);
     default: return `<div class="field" data-path="${esc(path)}">${lbl}<input type="text" id="${id}" data-path="${esc(path)}" data-type="text" value="${esc(v)}">${help}</div>`;
   }
+}
+
+// Click-to-set focal point for a cropped photo. Stored as "X% Y%".
+function focusPicker(f, path, help) {
+  const src = getPath(S.data, f.image);
+  const cur = parseFocus(getPath(S.data, path));
+  const [x, y] = (cur || '50% 50%').split(' ').map((n) => parseFloat(n));
+  const lbl = `<span class="lbl">${esc(f.label)}</span>`;
+  if (!src) return `<div class="field" data-path="${esc(path)}">${lbl}<span class="help">Add the photo first.</span></div>`;
+  return `<div class="field" data-path="${esc(path)}">${lbl}
+    <div class="focus" data-focus="${esc(path)}"${f.mobile ? ' data-focus-mobile="1"' : ''} title="Click to set the focus">
+      <img src="${esc(src)}" alt="" draggable="false"><span class="focus__dot" style="left:${x}%;top:${y}%"></span>
+    </div>
+    <div class="imgacts"><span class="help focus__val">${cur ? `Focus: ${esc(cur)}` : (f.mobile ? 'Using the computer focus' : 'Centred')}</span>
+      ${cur ? `<button class="btn btn--sm" type="button" data-focus-reset="${esc(path)}">Reset</button>` : ''}</div>${help}</div>`;
 }
 
 function imageBox(path, altPath) {
@@ -739,7 +755,8 @@ function renderPanel() {
         (s.key === 'cta' || s.key === 'dates' ? `<p class="help" style="font-size:12px;color:var(--muted)">Button links come from Page settings.</p>` : '');
     } else if (s.kind === 'image') {
       head = 'Photo';
-      body = imageBox(s.path, s.alt) + (s.parent && s.parent.kind !== 'page'
+      const focusFields = (SCHEMA.hero.fields || []).filter((f) => f.type === 'focus' && f.image === s.path);
+      body = imageBox(s.path, s.alt) + focusFields.map((f) => fieldHtml(f, f.k)).join('') + (s.parent && s.parent.kind !== 'page'
         ? `<p style="margin-top:14px"><button class="btn btn--sm" type="button" id="img-parent">← Back to ${s.parent.kind === 'item' ? 'item' : 'section'}</button></p>` : '');
     }
   }
@@ -783,6 +800,19 @@ function wirePanel(box) {
   box.querySelectorAll('[data-upload]').forEach((inp) => inp.onchange = () => uploadImage(inp));
   box.querySelectorAll('[data-library]').forEach((b) => b.onclick = () => showLibrary(b.dataset.library));
   box.querySelectorAll('[data-drive]').forEach((b) => b.onclick = () => openDrive(b.dataset.drive, b.dataset.driveAlt || null));
+  box.querySelectorAll('[data-focus]').forEach((el) => el.onclick = (e) => {
+    const r = el.querySelector('img').getBoundingClientRect();
+    const x = Math.round(Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100)));
+    const y = Math.round(Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100)));
+    setPath(S.data, el.dataset.focus, `${x}% ${y}%`);
+    el.querySelector('.focus__dot').style.cssText = `left:${x}%;top:${y}%`;
+    const val = el.parentElement.querySelector('.focus__val');
+    if (val) val.textContent = `Focus: ${x}% ${y}%`;
+    // Show the result where it matters: phone focus → phone preview.
+    setDevice(!!el.dataset.focusMobile);
+    changed();
+  });
+  box.querySelectorAll('[data-focus-reset]').forEach((b) => b.onclick = () => { setPath(S.data, b.dataset.focusReset, ''); changed(); renderPanel(); });
   box.querySelectorAll('[data-clear]').forEach((b) => b.onclick = () => { setPath(S.data, b.dataset.clear, ''); changed(); renderPanel(); });
   const parent = box.querySelector('#img-parent');
   if (parent) parent.onclick = () => select(S.sel.parent);

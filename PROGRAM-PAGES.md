@@ -83,6 +83,8 @@ How it behaves:
 
 - **Text:** click it and type. Enter finishes a one-line field. Pasting strips formatting.
 - **Prices, dates, status, links:** click them on the page and the right-hand panel jumps to that field.
+- **Hero photo focus:** click the hero photo, then click the part that must stay in view, once for computers and once for phones. Setting the phone focus switches the preview to Phone so you can check it.
+- **Promotions:** in Key facts, set a promotional price (the normal tuition shows crossed out), a short promotion message, or both. Add an end date and the promotion comes off the live page by itself the next morning.
 - **Photos:** click one to pick it from **Google Drive**, upload (resized to 2400px in the browser first), reuse an earlier upload, or paste a URL from the existing `/library/images/` folder. A description box sits under every photo.
 - **Review widgets:** in the hero, **+ Add a live review widget** takes the GoAbroad or GoOverseas embed code, or a Google Place ID, and stays up to date on its own (details in the pd-program-pages README). Manual review badges are still there for anything else.
 - **Reviews section:** **+ Add a GoAbroad or GoOverseas widget** puts a full review widget above the quotes. Paste the embed code the same way; a larger review-list widget from their generator suits this spot better than the small badge used in the hero.

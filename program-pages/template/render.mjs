@@ -128,6 +128,19 @@ const SECTION_BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
 // no logos or embed scripts, so nothing external runs on the page.
 export const REVIEW_SOURCES = ['GoAbroad', 'GoOverseas', 'Google', 'Trustpilot', 'Other'];
 
+/** A photo focal point, stored as "X% Y%". Anything else means "centre". */
+export function parseFocus(v) {
+  const m = /^\s*(\d{1,3}(?:\.\d+)?)%\s+(\d{1,3}(?:\.\d+)?)%\s*$/.exec(String(v || ''));
+  if (!m) return '';
+  const c = (n) => Math.round(Math.min(100, Math.max(0, Number(n))));
+  return `${c(m[1])}% ${c(m[2])}%`;
+}
+
+/** Strip quote marks an editor typed around a testimonial; the page adds its own. */
+export function stripQuotes(v) {
+  return String(v || '').trim().replace(/^["'\u201C\u2018\u00AB\u201E]+\s*/, '').replace(/\s*["'\u201D\u2019\u00BB]+$/, '');
+}
+
 export const WIDGET_TYPES = ['GoAbroad', 'GoOverseas', 'Google'];
 
 /**
@@ -196,6 +209,8 @@ export const SCHEMA = {
       { k: 'hero.intro', label: 'Intro', type: 'multiline' },
       { k: 'hero.image', label: 'Hero photo', type: 'image' },
       { k: 'hero.imageAlt', label: 'Hero photo description (alt text)', type: 'text' },
+      { k: 'hero.imageFocus', label: 'Photo focus on computers', type: 'focus', image: 'hero.image', help: 'Click the part of the photo that should stay in view when the sides get cropped.' },
+      { k: 'hero.imageFocusMobile', label: 'Photo focus on phones', type: 'focus', image: 'hero.image', mobile: true, help: 'Phones show a narrow slice of the photo. Click the part that must stay in view, e.g. a face.' },
     ],
   },
   facts: {
@@ -208,6 +223,9 @@ export const SCHEMA = {
       { k: 'facts.groupMax', label: 'Max group size', type: 'number' },
       { k: 'facts.ages', label: 'Ages', type: 'text' },
       { k: 'facts.tuition', label: 'Tuition', type: 'money' },
+      { k: 'facts.promoPrice', label: 'Promotional price (optional)', type: 'money', help: 'Shows the normal tuition crossed out with this price next to it. Leave empty for no price change.' },
+      { k: 'facts.promoText', label: 'Promotion message (optional)', type: 'text', help: 'A short line under the price, e.g. “Save $1,000 when you apply by Dec 1”. Works with or without a promotional price.' },
+      { k: 'facts.promoEnds', label: 'Promotion ends (optional)', type: 'date', help: 'Last day of the promotion. It comes off the live page on its own the next morning.' },
       { k: 'facts.flightsEstimate', label: 'Estimated flights', type: 'money' },
       { k: 'facts.activityLevel', label: 'Activity level', type: 'select', options: ['Low', 'Medium', 'High'] },
       { k: 'facts.credit', label: 'College credit line', type: 'text' },
@@ -246,7 +264,7 @@ export const SCHEMA = {
     'cost.lines':        { label: 'Cost line', add: 'Add a cost line', fields: [{ k: 'label', label: 'Label', type: 'text' }, { k: 'amount', label: 'Amount (as shown)', type: 'text' }], blank: { label: 'Item', amount: '$0' } },
     'cost.included':     { label: 'Included item', add: 'Add an included item', fields: [{ k: 'text', label: 'Text', type: 'text' }], blank: { text: 'Included item' } },
     'cost.excluded':     { label: 'Not-included item', add: 'Add an item', fields: [{ k: 'text', label: 'Text', type: 'text' }], blank: { text: 'Not included' } },
-    'reviews.quotes':    { label: 'Quote', add: 'Add a quote', fields: [{ k: 'quote', label: 'Quote', type: 'multiline' }, { k: 'name', label: 'Who said it', type: 'text' }], blank: { quote: 'Quote', name: 'Name, semester' } },
+    'reviews.quotes':    { label: 'Quote', add: 'Add a quote', fields: [{ k: 'quote', label: 'Quote', type: 'multiline', help: 'No need to type quote marks. The page adds them.' }, { k: 'name', label: 'Who said it', type: 'text' }], blank: { quote: 'Quote', name: 'Name, semester' } },
     'dates.sessions':    { label: 'Start date', add: 'Add a start date', fields: [{ k: 'start', label: 'Start', type: 'date' }, { k: 'end', label: 'End', type: 'date' }, { k: 'season', label: 'Season', type: 'select', options: ['Spring', 'Summer', 'Fall', 'Winter'] }, { k: 'status', label: 'Status', type: 'select', options: ['Open', 'Limited spots', 'Waitlist', 'Full', 'Closed'] }, { k: 'spotsLeft', label: 'Spots left (optional)', type: 'number' }, { k: 'applyUrl', label: 'Apply link (optional, overrides page default)', type: 'url' }], blank: { start: '', end: '', season: 'Spring', status: 'Open', spotsLeft: '', applyUrl: '' } },
     'faq.items':         { label: 'Question', add: 'Add a question', fields: [{ k: 'q', label: 'Question', type: 'text' }, { k: 'a', label: 'Answer', type: 'multiline' }], blank: { q: 'New question?', a: 'Answer.' } },
     'related.items':     { label: 'Related program', add: 'Add a program', fields: [{ k: 'title', label: 'Title', type: 'text' }, { k: 'meta', label: 'Length · price', type: 'text' }, { k: 'url', label: 'Link', type: 'url' }, { k: 'image', label: 'Photo', type: 'image' }], blank: { title: 'Program', meta: '10 weeks · $0', url: '', image: '' } },
@@ -271,8 +289,8 @@ export function blankProgram(name = 'New program') {
       currency: 'USD',
     },
     layout: defaultLayout(),
-    hero: { eyebrow: 'Gap semester', headline: name, intro: '[One or two sentences on what makes this program special]', image: '', imageAlt: '', widgets: [], reviews: [] },
-    facts: { countries: '[Countries]', start: '', finish: '', weeks: 10, groupMax: 14, ages: '17–22', tuition: 0, flightsEstimate: 0, activityLevel: 'Medium', credit: 'Optional · University of Montana' },
+    hero: { eyebrow: 'Gap semester', headline: name, intro: '[One or two sentences on what makes this program special]', image: '', imageAlt: '', imageFocus: '', imageFocusMobile: '', widgets: [], reviews: [] },
+    facts: { countries: '[Countries]', start: '', finish: '', weeks: 10, groupMax: 14, ages: '17–22', tuition: 0, promoPrice: '', promoText: '', promoEnds: '', flightsEstimate: 0, activityLevel: 'Medium', credit: 'Optional · University of Montana' },
     why: { heading: 'What makes this program different', items: [] },
     route: { heading: 'Your journey at a glance', mapImage: '', mapAlt: '', phases: [] },
     itinerary: { heading: 'Week by week', intro: '', note: 'This is a guide to what you can expect. The order of activities may change.', weeks: [] },
@@ -437,11 +455,13 @@ const R = {
   cost(p, c) {
     const f = p.facts;
     const lines = c.list('cost.lines', 'div', 'pdp-cost__lines', (it, ip) => `${c.t(`${ip}.label`, 'span', '')}${c.t(`${ip}.amount`, 'strong', '')}`, 'div', 'pdp-cost__row');
-    const weekly = Number(f.tuition) > 0 && Number(f.weeks) > 0 ? Math.round(Number(f.tuition) / Number(f.weeks) / 10) * 10 : 0;
+    const pr = activePromo(p);
+    const charged = pr && !pr.expired && pr.price ? pr.price : Number(f.tuition);
+    const weekly = charged > 0 && Number(f.weeks) > 0 ? Math.round(charged / Number(f.weeks) / 10) * 10 : 0;
     return `<h2 class="pdp-h2">${c.t('cost.heading', 'span')}</h2>` +
       `<div class="pdp-split">` +
       `<div class="pdp-card pdp-card--pad pdp-cost">` +
-      `<div class="pdp-cost__row pdp-cost__row--lead"><span>Program tuition</span>${c.v('facts.tuition', money(f.tuition, c.cur) || 'Set tuition', 'strong')}</div>` +
+      `<div class="pdp-cost__row pdp-cost__row--lead"><span>Program tuition</span><span class="pdp-cost__price">${renderPrice(p, c)}</span></div>` +
       (Number(f.flightsEstimate) > 0 || c.ed ? `<div class="pdp-cost__row"><span>Flights (estimate)</span>${c.v('facts.flightsEstimate', money(f.flightsEstimate, c.cur) ? `~${money(f.flightsEstimate, c.cur)}` : 'Set estimate', 'strong')}</div>` : '') +
       lines +
       (weekly ? `<p class="pdp-small">That’s about ${esc(money(weekly, c.cur))} per week of tuition.</p>` : '') +
@@ -457,8 +477,13 @@ const R = {
     return `<h2 class="pdp-h2">${c.t('reviews.heading', 'span')}</h2>` +
       renderWidgets(p, c, 'reviews.widgets', 'pdp-widgets-wrap pdp-widgets-wrap--reviews') +
       (vid ? `<div class="pdp-video"${c.ed ? ' data-v="reviews.videoUrl"' : ''}><iframe src="${attr(vid)}" title="Student video" loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>` : '') +
-      c.list('reviews.quotes', 'div', 'pdp-grid pdp-grid--3', (it, ip) =>
-        `<blockquote class="pdp-quote">${c.t(`${ip}.quote`, 'p', '', { multiline: true })}<footer>${c.t(`${ip}.name`, 'span', '')}</footer></blockquote>`, 'figure', 'pdp-card pdp-card--pad');
+      c.list('reviews.quotes', 'div', 'pdp-grid pdp-grid--3 pdp-quotes', (it, ip) => {
+        if (!c.ed && !stripQuotes(it.quote)) return null;
+        const text = c.ed ? c.t(`${ip}.quote`, 'p', 'pdp-quote__text', { multiline: true })
+          : (stripQuotes(it.quote) ? `<p class="pdp-quote__text pdp-ml">${esc(stripQuotes(it.quote))}</p>` : '');
+        const name = c.t(`${ip}.name`, 'span', 'pdp-quote__name');
+        return `<span class="pdp-quote__mark" aria-hidden="true">\u201C</span><blockquote class="pdp-quote">${text}</blockquote><span class="pdp-quote__mark pdp-quote__mark--close" aria-hidden="true">\u201D</span>${name ? `<figcaption class="pdp-quote__by">${name}</figcaption>` : ''}`;
+      }, 'figure', 'pdp-card pdp-quote-card');
   },
   dates(p, c) {
     const today = new Date().toISOString().slice(0, 10);
@@ -586,6 +611,20 @@ function renderReviews(p, c) {
  * The soonest session that hasn't started yet and isn't full/closed.
  * `today` is YYYY-MM-DD; pages are rebuilt nightly so a past date drops off.
  */
+/**
+ * The promotion to show, or null. A promotional price only counts when it is
+ * below tuition; the message works on its own. Ends after promoEnds (inclusive).
+ */
+export function activePromo(p, today = new Date().toISOString().slice(0, 10)) {
+  const f = p?.facts || {};
+  const tuition = Number(f.tuition) || 0;
+  const price = Number(f.promoPrice) > 0 && Number(f.promoPrice) < tuition ? Number(f.promoPrice) : 0;
+  const text = String(f.promoText || '').trim();
+  if (!price && !text) return null;
+  const ends = /^\d{4}-\d{2}-\d{2}$/.test(f.promoEnds || '') ? f.promoEnds : '';
+  return { price, text, ends, expired: !!ends && ends < today };
+}
+
 export function nextSession(p, today = new Date().toISOString().slice(0, 10)) {
   const list = (p?.dates?.sessions || [])
     .map((s, i) => ({ ...s, _i: i }))
@@ -612,11 +651,30 @@ function renderNext(p, c) {
     : `<a class="pdp-next" href="${esc(href)}" aria-label="${esc(`Apply for the ${dateRange(n.start, n.end)} departure`)}">${inner}</a>`;
 }
 
+// Tuition with an optional promotion: normal price struck through, sale price
+// in orange, and the promo message as a small badge. Expired promos vanish on
+// the live page; the editor keeps them visible with a note.
+function renderPrice(p, c, tag = 'strong') {
+  const f = p.facts;
+  const pr = activePromo(p);
+  const base = money(f.tuition, c.cur);
+  if (!pr || (pr.expired && !c.ed)) return c.v('facts.tuition', base || 'Set tuition', tag);
+  const now = pr.price ? money(pr.price, c.cur) : '';
+  const price = now
+    ? `<span class="pdp-price"><s class="pdp-price__was"${c.ed ? ' data-v="facts.tuition"' : ''}><span class="pdp-sr">Was </span>${esc(base)}</s> ${c.ed ? `<${tag} class="pdp-price__now" data-v="facts.promoPrice">` : `<${tag} class="pdp-price__now">`}<span class="pdp-sr">now </span>${esc(now)}</${tag}></span>`
+    : c.v('facts.tuition', base || 'Set tuition', tag);
+  const note = pr.text ? `<span class="pdp-promo"${c.ed ? ' data-v="facts.promoText"' : ''}>${esc(pr.text)}</span>` : '';
+  const ended = c.ed && pr.expired ? `<span class="pdp-promo pdp-promo--ended" data-v="facts.promoEnds">Promotion ended ${esc(shortDate(pr.ends))} · hidden on the live page</span>` : '';
+  return price + note + ended;
+}
+
 function renderHero(p, c) {
   const f = p.facts;
   const fact = (label, html) => `<div class="pdp-fact"><span class="pdp-fact__label">${label}</span>${html}</div>`;
+  const fd = parseFocus(p.hero.imageFocus), fm = parseFocus(p.hero.imageFocusMobile);
+  const focus = fd || fm ? ` style="${fd ? `--pdp-pos:${fd};` : ''}${fm ? `--pdp-pos-m:${fm};` : ''}"` : '';
   const bg = p.hero.image
-    ? `<div class="pdp-hero__media">${c.img('hero.image', 'hero.imageAlt', 'pdp-hero__img')}</div>`
+    ? `<div class="pdp-hero__media"${focus}>${c.img('hero.image', 'hero.imageAlt', 'pdp-hero__img')}</div>`
     : (c.ed ? `<div class="pdp-hero__media">${c.img('hero.image', 'hero.imageAlt', 'pdp-hero__img', 'Add a hero photo')}</div>` : '');
   return `<header class="pdp-hero${p.hero.image ? ' pdp-hero--img' : ''}">${bg}` +
     `<div class="pdp-wrap pdp-hero__inner">` +
@@ -632,7 +690,7 @@ function renderHero(p, c) {
     fact('Where', c.t('facts.countries', 'strong', '')) +
     fact('Length', c.v('facts.weeks', f.weeks ? `${f.weeks} weeks` : '—', 'strong')) +
     fact('Group', c.v('facts.groupMax', `${f.groupMax ? `Max ${f.groupMax}` : ''}${f.groupMax && f.ages ? ' · ' : ''}${f.ages ? `ages ${String(f.ages).replace(/[-–]/g, '\u2011')}` : ''}` || '—', 'strong')) +
-    fact('Tuition', `${c.v('facts.tuition', money(f.tuition, c.cur) || 'Set tuition', 'strong')}${Number(f.flightsEstimate) > 0 ? `<span class="pdp-fact__sub">+ flights est. ${esc(money(f.flightsEstimate, c.cur))}</span>` : ''}`) +
+    fact('Tuition', `${renderPrice(p, c)}${Number(f.flightsEstimate) > 0 ? `<span class="pdp-fact__sub">+ flights est. ${esc(money(f.flightsEstimate, c.cur))}</span>` : ''}`) +
     fact('Activity', c.v('facts.activityLevel', f.activityLevel || '—', 'strong')) +
     fact('College credit', c.t('facts.credit', 'strong', '')) +
     `</div></div>`;
@@ -683,6 +741,8 @@ export function seoFor(program, { canonicalBase = 'https://www.pacificdiscovery.
 export function jsonLd(program, { slug = '', canonicalBase = 'https://www.pacificdiscovery.org/programs/' } = {}) {
   const p = normalizeProgram(program);
   const s = seoFor(p, { slug, canonicalBase });
+  const promo = activePromo(p);
+  if (promo && promo.expired) promo.price = 0;
   const data = {
     '@context': 'https://schema.org',
     '@type': 'TouristTrip',
@@ -694,7 +754,8 @@ export function jsonLd(program, { slug = '', canonicalBase = 'https://www.pacifi
     provider: { '@type': 'Organization', name: 'Pacific Discovery', url: 'https://www.pacificdiscovery.org' },
     offers: (p.dates.sessions || []).filter((x) => x.start).map((x) => ({
       '@type': 'Offer',
-      price: Number(p.facts.tuition) || undefined,
+      price: (promo && promo.price) || Number(p.facts.tuition) || undefined,
+      priceValidUntil: (promo && promo.price && promo.ends) || undefined,
       priceCurrency: p.settings.currency || 'USD',
       availability: /^(full|closed)$/i.test(x.status || '') ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock',
       url: safeUrl(x.applyUrl || p.settings.applyUrl),
@@ -768,7 +829,7 @@ export const PROGRAM_CSS = `
 /* hero */
 .pdp-hero{position:relative;background:var(--pdp-teal);color:#fff;min-height:520px;display:flex;align-items:flex-end;overflow:hidden}
 .pdp-hero__media{position:absolute;inset:0}
-.pdp-hero__img{width:100%;height:100%;object-fit:cover}
+.pdp-hero__img{width:100%;height:100%;object-fit:cover;object-position:var(--pdp-pos,50% 50%)}
 .pdp-hero--img::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,22,28,.78) 0%,rgba(8,22,28,.45) 45%,rgba(8,22,28,.05) 75%),linear-gradient(180deg,rgba(8,22,28,0) 50%,rgba(8,22,28,.55) 100%);pointer-events:none}
 .pdp-hero--img .pdp-hero__inner{text-shadow:0 1px 12px rgba(0,0,0,.35)}
 .pdp-hero__inner{position:relative;z-index:1;width:100%;padding-top:120px;padding-bottom:76px;display:flex;flex-direction:column;gap:18px}
@@ -816,6 +877,13 @@ a.pdp-review:hover{background:#fff}
 .pdp-fact__label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--pdp-muted)}
 .pdp-fact strong{color:var(--pdp-ink);font-size:16px;line-height:1.35}
 .pdp-fact__sub{font-size:13px;color:var(--pdp-muted)}
+.pdp-price{display:inline-flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
+.pdp-price__was{color:var(--pdp-muted);font-weight:500;font-size:.82em;text-decoration-thickness:2px;text-decoration-color:var(--pdp-orange)}
+.pdp-price__now{color:var(--pdp-orange-dk)}
+.pdp-promo{display:inline-block;align-self:flex-start;margin:4px 0 2px;padding:3px 9px;border-radius:999px;background:#fdeae5;color:#a8361a;font-size:12px;font-weight:600;line-height:1.35}
+.pdp-promo--ended{background:#eef1f2;color:var(--pdp-muted)}
+.pdp-cost__price{display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+.pdp-cost__price .pdp-promo{align-self:flex-end}
 /* sticky bar */
 .pdp-bar{position:sticky;top:var(--pdp-sticky-top);z-index:20;background:rgba(255,255,255,.96);backdrop-filter:saturate(1.4) blur(6px);border-bottom:1px solid var(--pdp-line);margin-top:28px}
 .pdp-bar__inner{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}
@@ -882,8 +950,14 @@ details[open]>summary .pdp-chev{transform:rotate(-135deg)}
 /* reviews */
 .pdp-video{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000;max-width:860px}
 .pdp-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.pdp-quote p{font-family:'DM Serif Display',Georgia,serif;font-size:21px;line-height:1.4;color:var(--pdp-ink)}
-.pdp-quote footer{margin-top:12px;font-size:14px;color:var(--pdp-muted);font-weight:500}
+.pdp-quotes{align-items:stretch}
+.pdp-quote-card{position:relative;padding:30px 26px 24px;gap:0;border:0;border-top:4px solid var(--pdp-topaz);box-shadow:0 10px 30px rgba(31,107,124,.10);background:linear-gradient(180deg,#fff 0%,#fff 70%,var(--pdp-soft) 100%);overflow:visible}
+.pdp-quote__mark{display:block;font-family:'DM Serif Display',Georgia,serif;font-size:76px;line-height:.8;height:44px;color:var(--pdp-topaz);margin-bottom:6px}
+.pdp-quote{flex:1}
+.pdp-quote__text{font-family:'DM Serif Display',Georgia,serif;font-size:21px;line-height:1.45;color:var(--pdp-ink)}
+.pdp-quote__mark--close{text-align:right;height:30px;margin:4px 0 0;line-height:.9}
+.pdp-quote__by{display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:16px;border-top:1px solid var(--pdp-line);font-size:14px;font-weight:600;color:var(--pdp-teal);letter-spacing:.01em}
+.pdp-quote__by::before{content:"";width:22px;height:2px;background:var(--pdp-orange);flex:none}
 /* dates */
 .pdp-dates{display:flex;flex-direction:column;border:1px solid var(--pdp-line);border-radius:14px;background:#fff;overflow:hidden}
 .pdp-date{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:16px;align-items:center;padding:16px 22px;border-top:1px solid var(--pdp-line)}
@@ -919,6 +993,7 @@ details[open]>summary .pdp-chev{transform:rotate(-135deg)}
   .pdp-hero{min-height:460px}
   .pdp-hero__inner{padding-top:96px;padding-bottom:52px}
   .pdp-hero__intro{font-size:17px}
+  .pdp-hero__img{object-position:var(--pdp-pos-m,var(--pdp-pos,50% 50%))}
   .pdp-date{grid-template-columns:1fr auto;padding:16px}
   .pdp-date .pdp-btn{grid-column:1/-1}
   .pdp-cta{padding:32px 24px}

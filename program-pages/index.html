@@ -97,6 +97,10 @@ table.pages{width:100%;border-collapse:collapse;background:#fff;border:1px solid
 .imgbox img{display:block;width:100%;max-height:200px;object-fit:cover}
 .imgbox .none{padding:28px;text-align:center;color:var(--muted);font-size:13px}
 .imgacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.focus{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:crosshair;background:#f6f8f9;line-height:0}
+.focus img{display:block;width:100%;height:auto;user-select:none}
+.focus__dot{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:3px solid #fff;background:rgba(241,91,57,.85);box-shadow:0 0 0 2px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.4);pointer-events:none}
+.focus__val{align-self:center}
 .lib{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
 .lib button{border:1px solid var(--line);border-radius:6px;padding:0;overflow:hidden;cursor:pointer;background:#fff;aspect-ratio:1}
 .lib img{width:100%;height:100%;object-fit:cover;display:block}
