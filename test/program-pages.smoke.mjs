@@ -88,7 +88,8 @@ const S = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__pdp.S.dat
 const frame = () => page.frameLocator("#frame");
 
 await page.goto(`${ORIGIN}/program-pages/`);
-await page.getByRole("button", { name: "Start with South America" }).click();
+ok(await page.locator("[data-starter]").count() === 4, "four ready-made starters offered");
+await page.getByRole("button", { name: "+ South America Semester Abroad" }).click();
 ok(await page.locator("#new-slug").inputValue() === "south-america-gap-semester", "starter prefills the address");
 await page.getByRole("button", { name: "Create page" }).click();
 await frame().locator(".pdp--edit").waitFor();

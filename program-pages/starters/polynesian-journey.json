@@ -1,0 +1,507 @@
+{
+  "v": 1,
+  "name": "Polynesian Journey Semester Abroad",
+  "seo": {
+    "title": "Polynesian Journey Semester Abroad | Pacific Discovery",
+    "description": "Hawaiʻi, Fiji & New Zealand in 10 weeks: an Imu feast, voyaging canoe culture, fishpond restoration, Fijian village life, manta rays, Māori marae stays and a Whanganui River canoe journey. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/polynesian-journey-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Gap semester · Hawaiʻi, Fiji & New Zealand",
+    "headline": "Follow the path of Polynesian voyagers in one semester",
+    "intro": "Cook an Imu feast in Hawaiʻi, live in a Fijian highland village, snorkel with manta rays and paddle the Whanganui River to a Māori marae in New Zealand.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/5_PolyJ_CULTURE_AND_CONSERVATION.jpg",
+    "imageAlt": "Students and children running on a beach lined with palm trees",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Hawaiʻi · Fiji · New Zealand",
+    "start": "Hilo, Hawaiʻi",
+    "finish": "Wellington, New Zealand",
+    "weeks": 10,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 15500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 3100,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this semester different",
+    "items": [
+      {
+        "title": "Three Polynesian cultures, firsthand",
+        "body": "An Imu feast and voyaging canoe practice in Hawaiʻi, a kava ceremony and village life in Fiji, and marae stays in New Zealand.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/5_PolyJ_CULTURE_AND_CONSERVATION.jpg",
+        "imageAlt": "Students and children running on a beach lined with palm trees"
+      },
+      {
+        "title": "Conservation on land and sea",
+        "body": "Restore an ancient Hawaiian fishpond, plant mangroves and work on coral projects in Fiji, and trap invasive species in a New Zealand park.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/2SERVICE%2C_SCENERY_%26_ISLAND_LIFE.jpg",
+        "imageAlt": "Clear blue water around black lava rocks and palm trees"
+      },
+      {
+        "title": "Epic water adventures",
+        "body": "Surf on Oʻahu’s North Shore, snorkel with manta rays in Fiji and raft the world’s highest commercially rafted waterfall in Rotorua.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/3_PolyJ_WAVE_RIDING_%26_ISLAND_LIVING_ON_O%CA%BBAHU.jpg",
+        "imageAlt": "Student riding a wave on a surfboard"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/6_PolyJ_MUD_POOLS_AND_MARINE_MAGIC.jpg",
+        "imageAlt": "Student with arms raised at the top of a waterfall"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Hilo and Oʻahu in Hawaiʻi to Fiji, then Auckland to Wellington",
+    "phases": [
+      {
+        "label": "Week 1–2",
+        "text": "Hawaiʻi Island · an Imu feast in Pahala, Volcanoes National Park, voyaging canoe culture with Na Kalai Waʻa and fishpond restoration in Hilo"
+      },
+      {
+        "label": "Week 3–4",
+        "text": "Oʻahu · surf lessons in Haleʻiwa, Hanauma Bay, marine conservation, the Hawaiʻi Food Bank and a Koko Crater sunset"
+      },
+      {
+        "label": "Week 4–7",
+        "text": "Fiji · sand dunes and forest conservation, a Namosi village stay, river tubing, mangroves, then manta rays and coral projects in the Yasawas"
+      },
+      {
+        "label": "Week 7–8",
+        "text": "New Zealand · Waitangi in the Bay of Islands, conservation at Tawharanui and a marae stay in Rotorua"
+      },
+      {
+        "label": "Week 9–10",
+        "text": "Mountain biking and geothermal Rotorua, a four-day Whanganui River canoe journey, then Wellington"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels & lodges",
+        "body": "Clean, safe hostels and lodges in Hawaiʻi, Fiji and New Zealand.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Camping nights",
+        "body": "Medium camping level: camping at Arnott’s Lodge in Hilo, campgrounds at Tawharanui and riverside huts on the Whanganui River.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Village & marae stays",
+        "body": "Namosi EcoRetreat in Fiji’s highlands, Paruaharanui Marae in Rotorua and a night in the wharenui at Tieke Kāinga Marae.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Imu feast, volcanoes & voyaging canoes",
+        "location": "Hilo → Pahala → Waimea, Hawaiʻi",
+        "body": "You’ll meet your Program Instructors in Hilo and head to Pahala for orientation. With James Aku we spend a day building an imu pit, heating the stones and preparing the food, then uncover it the next morning for our Imu feast.\n\nWe tour Volcanoes National Park, usually hiking the Kīlauea Iki Trail across the crater floor, and snorkel at Kealakekua Bay on the way to Waimea. With Na Kalai Waʻa we begin learning traditional voyaging canoe observation and cultural practice at Puʻukoholā Heiau.",
+        "tags": "Orientation, Culture, Volcanoes",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/1_PolyJ_WAVE_RIDING_%26_ISLAND_LIVING_ON_O%CA%BBAHU.jpg",
+        "imageAlt": "Students hiking through steam vents in the forest"
+      },
+      {
+        "title": "Fishpond restoration & Hawaiian language",
+        "location": "Waimea → Hilo → Honolulu, Hawaiʻi",
+        "body": "A second day with Na Kalai Waʻa takes us to Mahukona to learn about its history and the organisation’s hopes for the future. Then we head to Hilo for a Hawaiian language introduction and cultural history session with Traven Apiki.\n\nWith the Edith Kanakaʻole Foundation we spend two days restoring the Hale o Lono fishpond in Keaukaha: clearing debris and invasive plants, dry stacking stone walls, maintaining the mākāhā (sluice gate) and propagating limu (seaweed). After a day to explore, we fly to Honolulu.",
+        "tags": "Conservation, Language, Culture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/2SERVICE%2C_SCENERY_%26_ISLAND_LIFE.jpg",
+        "imageAlt": "Clear blue water around black lava rocks and palm trees"
+      },
+      {
+        "title": "Surf, snorkel & marine conservation on Oʻahu",
+        "location": "Haleʻiwa → Honolulu, Oʻahu",
+        "body": "On Oʻahu’s North Shore we take surf lessons with HI Surf in Haleʻiwa and snorkel at Shark’s Cove.\n\nIn Honolulu we snorkel Hanauma Bay, inside a volcanic crater on the southeast coast, then spend two days on marine conservation with Ocean Alliance.",
+        "tags": "Surfing, Snorkeling, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/3_PolyJ_WAVE_RIDING_%26_ISLAND_LIVING_ON_O%CA%BBAHU.jpg",
+        "imageAlt": "Student riding a wave on a surfboard"
+      },
+      {
+        "title": "Food bank, Koko Crater & on to Fiji",
+        "location": "Honolulu → Nadi → Suva, Fiji",
+        "body": "We help at the Hawaiʻi Food Bank, climb Koko Crater for sunset, visit the Bishop Museum and wrap up our time in Hawaiʻi.\n\nThen we fly to Fiji. A local guide leads an orientation on Fijian culture, customs, language and safety, and we explore Nadi by public transport. On the way to Suva we work with the National Trust of Fiji at the sand dunes in Fiji’s first national park: removing marine debris, planting trees and learning from the ranger.",
+        "tags": "Service, Hiking, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/4_PolyJ_SERVING_LAND_%26_SEA_BEFORE_FIJI.jpg",
+        "imageAlt": "Two students standing in a rock pool by the sea"
+      },
+      {
+        "title": "Village life in the Namosi highlands",
+        "location": "Suva → Namosi → Deuba, Fiji",
+        "body": "With park rangers we spend a morning on forest park conservation (bird watching, tree planting and mending walkways) with a waterfall swim, then explore Suva and its museum with a local guide.\n\nAt Namosi EcoRetreat we’re welcomed with a kava ceremony, meke and a bonfire. Over the next days we learn crafts, music and Fijian phrases, hike the highlands, build bamboo rafts and swim the river, and spend a day on community service in Navunikabi village. Then we move to the coast at Deuba.",
+        "tags": "Culture, Service, Hiking",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/5_PolyJ_CULTURE_AND_CONSERVATION.jpg",
+        "imageAlt": "Students and children running on a beach lined with palm trees"
+      },
+      {
+        "title": "River tubing, mangroves & manta rays",
+        "location": "Deuba → Nadi → Drawaqa, Fiji",
+        "body": "We take a longboat up the Navua River, visit a local village, swim at a waterfall and tube back down through the rainforest. Two days of mangrove conservation follow: planting and caring for seedlings, nursery maintenance, a beach clean and a climate change workshop.\n\nFrom Nadi we take the boat to Drawaqa in the Yasawa Islands, where we snorkel with manta rays and start coral conservation projects with Barefoot Manta.",
+        "tags": "Adventure, Conservation, Snorkeling",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/PolyJ_Images%20by%20Week/6_PolyJ_MUD_POOLS_AND_MARINE_MAGIC.jpg",
+        "imageAlt": "Student with arms raised at the top of a waterfall"
+      },
+      {
+        "title": "Coral projects & the Bay of Islands",
+        "location": "Drawaqa, Fiji → Auckland → Paihia, New Zealand",
+        "body": "We finish our coral projects, which can include coral nursery work, reef monitoring and marine debris removal, then return to Nadi and fly to Auckland.\n\nIn Paihia we take an educational tour of the Waitangi Treaty Grounds to learn about Te Tiriti o Waitangi and its significance today, kayak or snorkel depending on the weather, and have a day to explore the far north.",
+        "tags": "Conservation, History, Kayaking",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Tawharanui conservation & Rotorua marae",
+        "location": "Tawharanui → Rotorua, New Zealand",
+        "body": "At Tawharanui Regional Park we spend four days on conservation projects with the council, such as invasive species trapping, camping in the park with optional kiwi spotting in the evenings.\n\nThen we travel to Rotorua and stay at Paruaharanui Marae, with an introduction to Māori culture and the marae. We raft a river that includes the world’s highest commercially rafted waterfall, at 7 metres.",
+        "tags": "Conservation, Culture, Rafting",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Geothermal Rotorua & onto the Whanganui",
+        "location": "Rotorua → Lake Taupō → Whanganui River",
+        "body": "We soak in Kerosene Creek, explore Rotorua’s geothermal sights and ride self-guided mountain bike trails with Planet Bike. After time at Lake Taupō, we head to Owhango Adventures base.\n\nOur Whanganui River canoe journey begins with a karakia (prayer) for safe passage. Led by our Kaitiaki, we paddle through steep canyons lined with native bush, stopping to swim, and set up camp each night.",
+        "tags": "Mountain biking, Geothermal, Canoeing",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Bridge to Nowhere, marae & Wellington",
+        "location": "Whanganui River → Wellington, New Zealand",
+        "body": "On the river we walk to the Bridge to Nowhere and are welcomed onto Tieke Kāinga Marae with a pōwhiri, sleeping in the wharenui. We paddle on toward Pipiriki and return to base.\n\nAfter a rest day and our program wrap, we finish in Wellington with a night tour of Zealandia and a walking day from Te Papa along the waterfront to Parliament, before flying home from Wellington.",
+        "tags": "Canoeing, Culture, Program wrap",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Expect hiking, surfing, a four-day canoe journey and some physical work on conservation projects."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Hawaiian, Fijian & Māori culture",
+        "body": "Learn traditional voyaging canoe practice with Na Kalai Waʻa, take a Hawaiian language introduction, learn Fijian phrases in Namosi and stay on two marae in New Zealand.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "$1950"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, semester]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-02-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      },
+      {
+        "start": "2027-09-09",
+        "end": "2027-11-17",
+        "season": "Fall",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness. You don't need experience with any of the activities, but be ready to try hiking, surfing, snorkeling, rafting and a four-day canoe journey. Conservation projects also involve some physical work."
+      },
+      {
+        "q": "Do I need to know how to surf or paddle?",
+        "a": "No. Surf lessons start from the basics, and guides lead the Whanganui River canoe journey."
+      },
+      {
+        "q": "What is a marae stay?",
+        "a": "A marae is a Māori meeting place and community hub. You’ll be welcomed with a pōwhiri and sleep together in the wharenui (meeting house)."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly clean, comfortable hostels and lodges, plus some camping, an eco-retreat in Fiji’s Namosi highlands and two marae stays in New Zealand."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "South America Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/south-america-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/south-america-semester.png"
+      },
+      {
+        "title": "Southeast Asia Semester Abroad",
+        "meta": "10 weeks · $15,000",
+        "url": "https://www.pacificdiscovery.org/programs/southeast-asia-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/southeast-asia-semester.png"
+      },
+      {
+        "title": "Australia & Bali Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-bali-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-bali-semester.png"
+      }
+    ]
+  }
+}

@@ -1,0 +1,507 @@
+{
+  "v": 1,
+  "name": "Southeast Asia Semester Abroad",
+  "seo": {
+    "title": "Southeast Asia Semester Abroad | Pacific Discovery",
+    "description": "Thailand, Laos, Vietnam & Cambodia in 10 weeks: hill tribe and village homestays, elephant care, a Mekong slow boat, Halong Bay, Angkor Wat, community building projects and Krabi’s cliffs. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/southeast-asia-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Gap semester · Thailand, Laos, Vietnam & Cambodia",
+    "headline": "Four countries of Southeast Asia in one semester",
+    "intro": "Live with hill tribe families, care for elephants, slow-boat the Mekong into Laos, cruise Halong Bay, explore Angkor Wat and finish on Krabi’s limestone cliffs.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/SEA_10_FROM_JUNGLE_TO_BEACH_CLIFFS.jpg",
+    "imageAlt": "Student rock climbing above a bay with longtail boats",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Thailand · Laos · Vietnam · Cambodia",
+    "start": "Bangkok, Thailand",
+    "finish": "Krabi, Thailand",
+    "weeks": 10,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 15000,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2800,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this semester different",
+    "items": [
+      {
+        "title": "Four countries, overland",
+        "body": "Trains, vans, a two-day Mekong slow boat, an overnight cruise and a night train connect Thailand, Laos, Vietnam and Cambodia.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/week4_SEA_SOUTHEAST_ASIA%E2%80%99S_ULTIMATE_RIVER_ADVENTURE.jpg",
+        "imageAlt": "Group beside a river boat on a sandy riverbank"
+      },
+      {
+        "title": "Homestays that go deep",
+        "body": "Stay with hill tribe families in northern Thailand, Khmu and Hmong villages on a Laos trek, and a family in a Cambodian floating village.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_ImagesbyWeeks/week3_SEA_HILL_TRIBE_ADVENTURES_%26_CITY_VIBES.jpg",
+        "imageAlt": "Students washing an elephant in a muddy river"
+      },
+      {
+        "title": "Service across the region",
+        "body": "Coffee nurseries in the hills, elephant care, village building in Mae Win, mangrove planting in Kampot and a building project with Volunteer Building Cambodia.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_ImagesbyWeeks/week_2_ELEPHANT_CONSERVATION_%26_COMMUNITY_VOLUNTEERING.jpg",
+        "imageAlt": "Students standing beside an elephant"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/6_SEA_FLAVOR%2C_HISTORY_%26_EPIC_VIEWS.jpg",
+        "imageAlt": "Students in aprons and straw hats at a cooking class"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Bangkok through northern Thailand, Laos, Vietnam and Cambodia back to Krabi",
+    "phases": [
+      {
+        "label": "Week 1–4",
+        "text": "Thailand · Ayutthaya and Sukhothai by bike, a hill tribe homestay, Chiang Mai, elephants, village volunteering in Mae Win and a stay at a meditation centre"
+      },
+      {
+        "label": "Week 4–5",
+        "text": "Laos · cross the border and slow-boat the Mekong to Luang Prabang, then a four-day village trek with homestays"
+      },
+      {
+        "label": "Week 6–7",
+        "text": "Vietnam · Hanoi, an overnight cruise in Halong Bay, a student-led section to Hoi An and Saigon’s Cu Chi tunnels"
+      },
+      {
+        "label": "Week 8–9",
+        "text": "Cambodia · Phnom Penh, sun bears, mangroves in Kampot, Kep, Angkor Wat, a floating village homestay and a building project"
+      },
+      {
+        "label": "Week 9–10",
+        "text": "Thailand · Muay Thai in Bangkok, a night train to Khao Sok, then climbing and kayaking in Krabi"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Guesthouses & hotels",
+        "body": "Comfortable guesthouses and modern hotels in towns and cities.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Homestays",
+        "body": "Hill tribe families in northern Thailand, Khmu and Hmong villages on the Laos trek, and a floating village family in Cambodia, usually on mats with mosquito nets.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Nights on the move",
+        "body": "A night on a Halong Bay cruise, a sleeper bus to Siem Reap and a night train to Surat Thani.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Bangkok to Sukhothai by bike",
+        "location": "Bangkok → Ayutthaya → Sukhothai → Chiang Rai, Thailand",
+        "body": "You’ll meet your Program Instructors in Bangkok, then take the train to Ayutthaya, the ancient capital of Siam, and explore its temple ruins by mountain bike. A van takes us north to Sukhothai for a sunset bike tour of the historical park.\n\nWe visit Wat Phra Si Rattana Mahathat, the Thawee Folk Museum and Wat Chan Tawan Tok, hold our orientation, and spend a day at Si Satchanalai Historical Park, known for its traditional pottery. The week ends on the public bus to Chiang Rai.",
+        "tags": "Orientation, Biking, Temples",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_ImagesbyWeeks/1_SEA_BUSTLING_BANGKOK_%26_ANCIENT_TEMPLES.jpg",
+        "imageAlt": "Students waving from inside a tuk-tuk at night"
+      },
+      {
+        "title": "Hill tribe homestay & Chiang Mai",
+        "location": "Chiang Rai → Chiang Mai, Thailand",
+        "body": "After a morning tour of Chiang Rai, we head into the hills to stay with hill tribe families. We cook dinner with our hosts, help build a coffee nursery and plant fruit trees, walk into the jungle to check local dams, and watch an evening dance performance.\n\nBack in Chiang Rai we debrief, then take the bus to Chiang Mai for a walking tour of its big temple and markets, dinner at the night markets and a free day before heading to the elephants.",
+        "tags": "Homestay, Service, Culture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_ImagesbyWeeks/week_2_ELEPHANT_CONSERVATION_%26_COMMUNITY_VOLUNTEERING.jpg",
+        "imageAlt": "Students standing beside an elephant"
+      },
+      {
+        "title": "Elephants & village volunteering",
+        "location": "Chiang Mai → Mae Win → Sansai, Thailand",
+        "body": "At Happy Elephant House we spend our days on elephant enrichment, clearing land and helping the local team with whatever is needed. The day is shaped by what the elephants need, and touching them is mostly not allowed. Each day also includes culture and temples.\n\nNext we move to the countryside around Mae Win for two days of community volunteering, building alongside locals, before transferring to Sansai.",
+        "tags": "Animal welfare, Service, Culture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_ImagesbyWeeks/week3_SEA_HILL_TRIBE_ADVENTURES_%26_CITY_VIBES.jpg",
+        "imageAlt": "Students washing an elephant in a muddy river"
+      },
+      {
+        "title": "Meditation & the Mekong into Laos",
+        "location": "Sansai → Chiang Mai → Chiang Khong → Luang Prabang, Laos",
+        "body": "At a traditional meditation centre in Sansai, monks lead sessions in meditation and talks on the Buddhist traditions and philosophy that shape Thai culture. Back in Chiang Mai we have a private cooking class and another night market.\n\nFrom Chiang Khong we cross the Friendship Bridge into Laos, then board a private slow boat for two days down the Mekong, overnighting in Pakbeng before arriving in Luang Prabang.",
+        "tags": "Meditation, Cooking, River journey",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/week4_SEA_SOUTHEAST_ASIA%E2%80%99S_ULTIMATE_RIVER_ADVENTURE.jpg",
+        "imageAlt": "Group beside a river boat on a sandy riverbank"
+      },
+      {
+        "title": "Trekking & village homestays in Laos",
+        "location": "Luang Prabang → Nong Khiaw → Luang Prabang, Laos",
+        "body": "After a day exploring Luang Prabang, we set off on a four-day trek with Tiger Trails. A boat ride on the Nam Ou River takes us to Sob Khan for a picnic lunch, then we trek through karst mountains and jungle to Payong to meet our host families.\n\nThe next days take us to Na Luang, a Khmu and Hmong village, stopping at Tad Nang None waterfall, and through bamboo forests and over streams to the Hmong village of Patham, staying with families each night. We trek out to Vieng Kham and return to Luang Prabang, with time for Kuang Si waterfall before flying to Hanoi.",
+        "tags": "Trekking, Homestay, Waterfalls",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/week5_SEA_TREKKING%2C_TEMPLES_AND_WATERFALLS.jpg",
+        "imageAlt": "Two students jumping into the water from a boat"
+      },
+      {
+        "title": "Hanoi, Halong Bay & going student-led",
+        "location": "Hanoi → Halong Bay, Vietnam",
+        "body": "A walking tour of Hanoi’s Old Quarter takes in Quan Thanh Temple and Cua Bac Gate. The next day we hike at the Perfume Pagoda and finish with a Hanoi street food walking tour.\n\nThen we head to Halong Bay for an overnight cruise into Bai Tu Long Bay: kayaking at Cap La Island, a cooking demonstration, sunrise tai chi on deck and a visit to Thien Canh Son Cave. Back in Hanoi, the student-led section begins.",
+        "tags": "Culture, Food, Kayaking",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/6_SEA_FLAVOR%2C_HISTORY_%26_EPIC_VIEWS.jpg",
+        "imageAlt": "Students in aprons and straw hats at a cooking class"
+      },
+      {
+        "title": "Student-led to Hoi An, then Saigon",
+        "location": "Hanoi → Hoi An → Saigon, Vietnam",
+        "body": "During the student-led section, you plan the route, budget and activities that take the group to Hoi An. There we meet our guide for dinner and take a boat to the Red Bridge Cooking School for a morning cooking class.\n\nWe fly to Saigon to tour the Cu Chi tunnels, have a free day, and then travel overland into Cambodia.",
+        "tags": "Student-led, Cooking, History",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_ImagesbyWeeks/7_SEA_STUDENT-LED_SECTION.jpg",
+        "imageAlt": "Students walking in front of an ornate gate"
+      },
+      {
+        "title": "Phnom Penh, sun bears & mangroves",
+        "location": "Phnom Penh → Kampot → Kep → Siem Reap, Cambodia",
+        "body": "In Phnom Penh we visit the Genocide Museum and Choeung Ek Killing Fields, then decompress on a sunset cruise and at the night markets. At a wildlife rescue centre we work alongside the animal care team as sun bear keepers.\n\nIn Kampot we paddleboard, plant mangroves and visit Champa Lodge gardens. From Kep we go island hopping and snorkeling, take a guided national park walk and an architecture tour, then ride the sleeper bus to Siem Reap for a countryside cycle tour through local villages and markets.",
+        "tags": "History, Wildlife, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/8_SEA__MANGROVES%2C_MOVEMENT_%26_ISLAND_MAGIC.jpg",
+        "imageAlt": "Student sitting at the front of a longtail boat between limestone islands"
+      },
+      {
+        "title": "Angkor Wat, homestay & building",
+        "location": "Siem Reap, Cambodia → Bangkok, Thailand",
+        "body": "We start early for a sunrise tour of Angkor Wat, then visit APOPO to see the landmine detection HeroRATs. A night in a floating village homestay follows, with a boat trip and an introduction to daily life on the water.\n\nBack in Siem Reap we take a walking tour of a local pagoda and the royal gardens, eat at a street food market and watch the Phare Circus. Two days with Volunteer Building Cambodia on a community building project close out Cambodia before we fly to Bangkok for Muay Thai and the night train south.",
+        "tags": "Temples, Homestay, Service",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/9_SEA_IMMERSION_IN_THE_LAND_OF_TEMPLES.jpg",
+        "imageAlt": "Group sitting on the steps of an Angkor temple"
+      },
+      {
+        "title": "From jungle to beach cliffs",
+        "location": "Khao Sok → Ao Nang, Krabi, Thailand",
+        "body": "In Khao Sok National Park we visit the lake, go river tubing, start a day with yoga and head out on a night safari.\n\nThen we transfer to Ao Nang in Krabi for a half day of rock climbing and a half day of kayaking. We finish with our program wrap and a final dinner before flying home from Krabi.",
+        "tags": "Wildlife, Climbing, Kayaking",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/SEA_finalImagesByWeek/SEA_10_FROM_JUNGLE_TO_BEACH_CLIFFS.jpg",
+        "imageAlt": "Student rock climbing above a bay with longtail boats"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Expect multi-day trekking in Laos, cycling, climbing and kayaking, and some physical work on volunteer projects."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Buddhism & meditation",
+        "body": "Spend time at a traditional meditation centre where monks lead meditation and talk about the Buddhist traditions and philosophy that shape Thai culture.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "$1950"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, semester]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-02-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      },
+      {
+        "start": "2027-09-09",
+        "end": "2027-11-17",
+        "season": "Fall",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness. You don't need experience with any of the activities, but be ready for a four-day trek in Laos, cycling, climbing and kayaking. Volunteer projects also involve some physical work."
+      },
+      {
+        "q": "What are the homestays like?",
+        "a": "Simple and welcoming. In the hill tribe village, on the Laos trek and in the floating village you’ll sleep on mats, usually with mosquito nets, and share meals with your hosts. A local guide is there to help."
+      },
+      {
+        "q": "What is the meditation centre like?",
+        "a": "It's a traditional centre where monks lead the sessions. It's a chance to learn about the Buddhist traditions that shape Thai culture, so come ready to be respectful, quiet and curious."
+      },
+      {
+        "q": "What is the student-led section?",
+        "a": "In Vietnam the group plans its own route to Hoi An, managing the budget, transport, meals and activities, with your instructors there for guidance."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "South America Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/south-america-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/south-america-semester.png"
+      },
+      {
+        "title": "Australia & Bali Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-bali-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-bali-semester.png"
+      },
+      {
+        "title": "Polynesian Journey Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/polynesian-journey-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/polynesian-journey-semester.png"
+      }
+    ]
+  }
+}

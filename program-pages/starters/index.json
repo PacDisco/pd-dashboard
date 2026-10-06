@@ -1,0 +1,22 @@
+[
+  {
+    "id": "south-america",
+    "name": "South America Semester Abroad",
+    "slug": "south-america-gap-semester"
+  },
+  {
+    "id": "australia-bali",
+    "name": "Australia & Bali Semester Abroad",
+    "slug": "australia-bali-gap-semester"
+  },
+  {
+    "id": "southeast-asia",
+    "name": "Southeast Asia Semester Abroad",
+    "slug": "southeast-asia-gap-semester"
+  },
+  {
+    "id": "polynesian-journey",
+    "name": "Polynesian Journey Semester Abroad",
+    "slug": "polynesian-journey-gap-semester"
+  }
+]

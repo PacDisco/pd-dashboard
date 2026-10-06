@@ -148,14 +148,19 @@ async function showList() {
     body.innerHTML = '';
     return;
   }
+  const starters = await loadStarters();
+  const used = new Set((S.programs || []).map((p) => p.slug));
+  const todo = starters.filter((st) => !used.has(st.slug));
+  const starterBox = todo.length ? `<div class="starters"><h3>Ready-made starters</h3>
+      <p class="sl">Pre-filled from the latest itineraries. Create one, then review it before publishing.</p>
+      <div class="acts">${todo.map((st) => `<button class="btn btn--sm" type="button" data-starter="${esc(st.id)}">+ ${esc(st.name)}</button>`).join('')}</div></div>` : '';
   if (!S.programs.length) {
     body.innerHTML = `<div class="empty"><h2 class="serif" style="font-size:24px">No program pages yet</h2>
-      <p style="margin:0;max-width:46ch">Start with the South America starter, which already has the content from the current page. Or create a blank page.</p>
-      <button class="btn btn--primary" type="button" id="btn-starter">Start with South America</button></div>`;
-    $('#btn-starter').onclick = () => openNew({ name: 'South America', slug: 'south-america-gap-semester', from: 'starter:south-america' });
+      <p style="margin:0;max-width:46ch">Start from one of the ready-made starters below, or create a blank page.</p></div>${starterBox}`;
+    wireStarters(starters);
     return;
   }
-  body.innerHTML = `<table class="pages"><thead><tr><th scope="col">Page</th><th scope="col">Status</th><th scope="col">Last edited</th><th scope="col"><span class="hidden">Actions</span></th></tr></thead><tbody>${
+  body.innerHTML = starterBox + `<table class="pages"><thead><tr><th scope="col">Page</th><th scope="col">Status</th><th scope="col">Last edited</th><th scope="col"><span class="hidden">Actions</span></th></tr></thead><tbody>${
     S.programs.map((p) => `<tr>
       <td><a class="nm" href="#/edit/${esc(p.slug)}">${esc(p.name)}</a><div class="sl">/programs/${esc(p.slug)}</div></td>
       <td>${chip(p.status)}${p.publishedAt ? `<div class="sl">Published ${esc(ago(p.publishedAt))}${p.publishedBy ? ` by ${esc(p.publishedBy)}` : ''}</div>` : ''}</td>
@@ -167,21 +172,42 @@ async function showList() {
         ${p.status === 'live' || p.status === 'changes' ? `<a class="btn btn--sm" href="${esc(LIVE_BASE + p.slug)}" target="_blank" rel="noopener">View live ↗</a>` : ''}
       </div></td></tr>`).join('')
   }</tbody></table>`;
+  wireStarters(starters);
   $$('[data-unarchive]').forEach((b) => b.onclick = async () => {
     try { await api('POST', {}, { action: 'unarchive', slug: b.dataset.unarchive }); showList(); } catch (e) { toast(esc(e.message)); }
   });
 }
 
 $('#show-archived').onchange = (e) => { S.showArchived = e.target.checked; showList(); };
-$('#btn-new').onclick = () => openNew();
+$('#btn-new').onclick = async () => { await loadStarters(); openNew(); };
 
 // ─── new page ───────────────────────────────────────────────────────────────
+
+// Ready-made starter content (program-pages/starters/index.json).
+let STARTERS = null;
+async function loadStarters() {
+  if (STARTERS) return STARTERS;
+  try {
+    const res = await fetch('/program-pages/starters/index.json', { credentials: 'include' });
+    const list = res.ok ? await res.json() : [];
+    STARTERS = Array.isArray(list) ? list.filter((x) => x && /^[a-z0-9-]+$/.test(x.id || '') && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(x.slug || '')) : [];
+  } catch { STARTERS = []; }
+  if (!STARTERS.length) STARTERS = [{ id: 'south-america', name: 'South America', slug: 'south-america-gap-semester' }];
+  return STARTERS;
+}
+function wireStarters(starters) {
+  $$('[data-starter]').forEach((b) => b.onclick = () => {
+    const st = starters.find((x) => x.id === b.dataset.starter);
+    if (st) openNew({ name: st.name, slug: st.slug, from: `starter:${st.id}` });
+  });
+}
 
 let slugTouched = false;
 function openNew(pre = {}) {
   const dlg = $('#dlg-new');
   const sel = $('#new-from');
-  sel.innerHTML = `<option value="blank">Blank template</option><option value="starter:south-america">South America starter (current page content)</option>` +
+  sel.innerHTML = `<option value="blank">Blank template</option>` +
+    (STARTERS || []).map((st) => `<option value="starter:${esc(st.id)}">${esc(st.name)} starter</option>`).join('') +
     S.programs.filter((p) => p.status !== 'archived').map((p) => `<option value="copy:${esc(p.slug)}">Copy of ${esc(p.name)}</option>`).join('');
   $('#new-name').value = pre.name || '';
   $('#new-slug').value = pre.slug || '';
@@ -192,6 +218,13 @@ function openNew(pre = {}) {
   $('#new-name').focus();
 }
 $('#new-name').oninput = (e) => { if (!slugTouched) $('#new-slug').value = slugify(e.target.value); };
+// Picking a starter fills in its name and web address when they're still empty.
+$('#new-from').onchange = (e) => {
+  const st = (STARTERS || []).find((x) => `starter:${x.id}` === e.target.value);
+  if (!st) return;
+  if (!$('#new-name').value.trim()) $('#new-name').value = st.name;
+  if (!slugTouched || !$('#new-slug').value.trim()) { $('#new-slug').value = st.slug; slugTouched = true; }
+};
 $('#new-slug').oninput = () => { slugTouched = true; };
 $('#form-new').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'go') return;
@@ -219,7 +252,9 @@ $('#form-new').addEventListener('submit', async (e) => {
       data = clone(r.program.draft);
     }
     data.name = name;
-    if (from !== 'starter:south-america' || name !== 'South America') data.seo = { ...(data.seo || {}), title: `${name} | Pacific Discovery` };
+    // Keep a starter's own search title unless the page was renamed.
+    const st = from.startsWith('starter:') ? (STARTERS || []).find((x) => `starter:${x.id}` === from) : null;
+    if (!st || name !== st.name || !data.seo?.title) data.seo = { ...(data.seo || {}), title: `${name} | Pacific Discovery` };
     await api('POST', {}, { action: 'create', slug, name, data });
     $('#dlg-new').close();
     location.hash = `#/edit/${slug}`;

@@ -1,0 +1,507 @@
+{
+  "v": 1,
+  "name": "Australia & Bali Semester Abroad",
+  "seo": {
+    "title": "Australia & Bali Semester Abroad | Pacific Discovery",
+    "description": "Australia & Bali in 10 weeks: canyoning in the Blue Mountains, surf camps, reef science on the Great Barrier Reef, K’gari, Bali’s rice terraces, a yoga retreat and a Mount Batur sunrise. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-bali-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Gap semester · Australia & Bali",
+    "headline": "Australia’s east coast and Bali in one semester",
+    "intro": "Canyon in the Blue Mountains, learn to surf, survey the Great Barrier Reef and finish with Bali’s temples, rice fields and a sunrise on Mount Batur.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/4AusBali_FARMSTAY_%26_ISLAND_HOPPING.jpg",
+    "imageAlt": "Student sitting on coastal rocks above the sea",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Australia · Bali (Indonesia)",
+    "start": "Sydney, Australia",
+    "finish": "Denpasar, Bali",
+    "weeks": 10,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 15500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2800,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this semester different",
+    "items": [
+      {
+        "title": "Two countries, two surf breaks",
+        "body": "Learn to surf at Crescent Head on Australia’s east coast, then build on it at a surf camp in Uluwatu, Bali.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/1AusBali_SYDNEY_%26_CANYONING_IN_THE_BLUE_MO.jpg",
+        "imageAlt": "Turquoise bay below a coastal suburb"
+      },
+      {
+        "title": "Reef science, not just snorkeling",
+        "body": "A reef ecology seminar and marine surveying days on Green Island, the outer reef and Hastings Reef with Marine Discoveries.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/AusBali2_SURF_CAMP_%26_CONSERVATION_PROJECT.png",
+        "imageAlt": "Students standing in shallow water on a beach"
+      },
+      {
+        "title": "Hands-on conservation and service",
+        "body": "Permaculture and forest regeneration in Bermagui, rainforest planting at Crescent Head, food rescue in Sanur and Bali Starling conservation on Nusa Penida.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/6AusBali_SELF-LED_SECTION_%26_BALI_EXPLORATION.jpg",
+        "imageAlt": "Group with gardening gloves and tools"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/8AusBali_RICE_FIELDS_%26_YOGA_RETREAT.jpg",
+        "imageAlt": "Group in traditional Balinese dress at a temple"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Sydney along Australia’s east coast to Cairns, then Bali",
+    "phases": [
+      {
+        "label": "Week 1–2",
+        "text": "Sydney and Coogee, then Bermagui for permaculture, Landcare and forest regeneration, Canberra, and hiking and canyoning in the Blue Mountains"
+      },
+      {
+        "label": "Week 3–4",
+        "text": "Rainforest planting and learning to surf at Crescent Head, Byron Bay, Lamington National Park and Stradbroke Island"
+      },
+      {
+        "label": "Week 5–6",
+        "text": "K’gari, Australia Zoo and Noosa, then reef science and marine surveying on the Great Barrier Reef from Cairns"
+      },
+      {
+        "label": "Week 7–8",
+        "text": "Fly to Bali: food rescue in Sanur, mangroves, temples and rice terraces in Tabanan, and Bali Starling conservation on Nusa Penida"
+      },
+      {
+        "label": "Week 9–10",
+        "text": "Surf camp in Uluwatu, Ubud and a yoga retreat, an overnight on Mount Batur for sunrise and a batik class"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels & lodges",
+        "body": "Clean, safe hostels and lodges, from Coogee and the Blue Mountains to Cairns and Ubud.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Campground & nights out",
+        "body": "A campground stay at Crescent Head, an overnight hike in Bermagui and a night camping on Mount Batur.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Eco retreats & yoga village",
+        "body": "A beachfront eco retreat on K’gari, the FNPF centre on Nusa Penida and a retreat village in Ubud.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Sydney, surf life saving & permaculture",
+        "location": "Sydney → Bermagui, Australia",
+        "body": "You’ll meet your Program Instructors in Sydney and settle into Coogee for orientation, getting to know each other and taking a surf life saving session on the beach.\n\nThen we head down the coast to Bermagui and The Crossing. Here we spend a permaculture design experience day, a Landcare day, and a bushfire prevention and wildlife tour at Potoroo Palace.",
+        "tags": "Orientation, Beach safety, Permaculture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/1AusBali_SYDNEY_%26_CANYONING_IN_THE_BLUE_MO.jpg",
+        "imageAlt": "Turquoise bay below a coastal suburb"
+      },
+      {
+        "title": "Forests, the capital & canyoning",
+        "location": "Bermagui → Canberra → Blue Mountains",
+        "body": "A forest regeneration day and an overnight hike wrap up our time in Bermagui. Next is Canberra, with a visit to Parliament, a city walking tour of the Parliamentary Triangle, Anzac Parade, the Australian War Memorial and Lake Burley Griffin, and a hike up Mt Ainslie.\n\nIn Katoomba we hike in the Blue Mountains straight from our accommodation, then spend a full day canyoning: hiking, scrambling, swimming and abseiling through an introductory canyon after learning abseiling skills.",
+        "tags": "Conservation, Hiking, Canyoning",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/AusBali2_SURF_CAMP_%26_CONSERVATION_PROJECT.png",
+        "imageAlt": "Students standing in shallow water on a beach"
+      },
+      {
+        "title": "Rainforest planting & learning to surf",
+        "location": "Sydney → Crescent Head, Australia",
+        "body": "After a day exploring Sydney, we drive north to Crescent Head. Over three days of service with Maratus we plant trees on a property that holds 25% of the region’s remaining original rainforest, building tree guards, mulching and watering, and help a landowner remove invasive weeds.\n\nWe may also meet Aboriginal community members, learning to weave with lomandra grass and making clay sculptures and sand art from natural materials. Then the surf lessons start.",
+        "tags": "Conservation, Culture, Surfing",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/3AusBali_BYRON_BAY%2C_SUNSHINE_COAST_%26_AUSTRALIA_ZOO.jpg",
+        "imageAlt": "Student sandboarding down a dune"
+      },
+      {
+        "title": "Surf, Byron Bay & Lamington",
+        "location": "Crescent Head → Byron Bay → Stradbroke Island",
+        "body": "Three days of surf lessons with Crescent Surf get everyone riding waves. Then it’s on to Byron Bay to snorkel Julian Rocks (Nguthungulli), where tropical and temperate waters meet, with the chance to catch sunrise at Cape Byron Lighthouse and visit Nightcap National Park for waterfalls and glow worms.\n\nFrom Binna Burra we hike in Lamington National Park, then take the ferry to Stradbroke Island.",
+        "tags": "Surfing, Snorkeling, Hiking",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/4AusBali_FARMSTAY_%26_ISLAND_HOPPING.jpg",
+        "imageAlt": "Student sitting on coastal rocks above the sea"
+      },
+      {
+        "title": "Straddie, K’gari & Australia Zoo",
+        "location": "Stradbroke Island → K’gari → Noosa",
+        "body": "On Stradbroke Island a First Nations tour takes us four-wheel driving, painting a boomerang to take home, along bush tracks and to morning tea at a billabong, followed by an afternoon of sandboarding.\n\nFrom Noosa we cross to K’gari, the world’s largest sand island, staying at a beachfront eco retreat. We swim in freshwater lakes, walk inland tracks through towering forest and end the days with campfires and stargazing. Back on the mainland we spend a day at Australia Zoo.",
+        "tags": "Culture, Sandboarding, Wildlife",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/5AusBali_MARINE_RESERVE_CONSERVATION_IN_THE_GREAT_BARRIER_REEF.jpg",
+        "imageAlt": "Students on a zipline in the forest"
+      },
+      {
+        "title": "Reef science on the Great Barrier Reef",
+        "location": "Noosa → Brisbane → Cairns",
+        "body": "A walk in Noosa National Park, then we head to Brisbane and fly to Cairns.\n\nHere we join Marine Discoveries for Reef Teach: an evening reef ecology seminar, then marine surveying days on Green Island and an outer reef pontoon, and a full day at Hastings Reef.",
+        "tags": "Marine science, Snorkeling, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/6AusBali_SELF-LED_SECTION_%26_BALI_EXPLORATION.jpg",
+        "imageAlt": "Group with gardening gloves and tools"
+      },
+      {
+        "title": "Food rescue, mangroves & Balinese culture",
+        "location": "Cairns → Bali (Sanur, Tabanan)",
+        "body": "After a last day in Cairns, with Josephine Falls nearby, we fly to Bali. Following a rest and orientation day in Seminyak, we move to Sanur for two days with a food rescue organisation, helping prepare and distribute meals and visiting community programs including Bali Life Foundation.\n\nA day of paddleboarding, mangrove restoration and rubbish removal comes with a snorkel. Then we head to Tabanan, where local guides introduce us to Balinese Hinduism, temples and traditional approaches to health and wellbeing.",
+        "tags": "Service, Conservation, Culture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/7AusBali_FOOD_BANK%2C_MANGROVE_RESTORATION_%26.jpg",
+        "imageAlt": "Students walking along a path through green countryside"
+      },
+      {
+        "title": "Rice terraces & Bali Starlings",
+        "location": "Tabanan → Nusa Penida, Bali",
+        "body": "In Tabanan we trek through villages, rice terraces and farmland, join a morning of hands-on agriculture with local community members, and share dinner with members of the local royal family at Tabanan Palace.\n\nThen we cross to Nusa Penida for three days with FNPF, protecting the critically endangered Bali Starling and supporting environmental restoration on the island, before a day to explore.",
+        "tags": "Culture, Conservation, Trekking",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/8AusBali_RICE_FIELDS_%26_YOGA_RETREAT.jpg",
+        "imageAlt": "Group in traditional Balinese dress at a temple"
+      },
+      {
+        "title": "Surf camp & spiritual Ubud",
+        "location": "Uluwatu → Ubud, Bali",
+        "body": "Back on the mainland, a surf camp in Uluwatu with Balumba Surf builds skill, ocean awareness and confidence across several lessons, with a rest day to follow.\n\nIn Ubud we take in the evening markets and a show, then spend a full day with Five Pillars harvesting ingredients, preparing food, visiting temples and joining in ceremony. The week ends as our yoga retreat begins.",
+        "tags": "Surfing, Culture, Wellbeing",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/9AusBali_RICE_FIELDS_%26_YOGA_RETREAT.jpg",
+        "imageAlt": "Group walking through a rice field"
+      },
+      {
+        "title": "Yoga retreat, volcano sunrise & farewell",
+        "location": "Ubud → Mount Batur → Kuta, Bali",
+        "body": "Our yoga retreat focuses on yoga, meditation, mindfulness and personal wellbeing. Next we camp overnight on Mount Batur and climb to the summit for sunrise, then learn traditional batik, creating our own artwork with wax and dyes.\n\nWe finish in Kuta with our program wrap before flying home from Denpasar.",
+        "tags": "Yoga, Hiking, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AusBali_Images%20By%20Weeks/10AusBali_VOLCANO_SUNRISE_HIKE_%26_COOKING_LESSON.jpg",
+        "imageAlt": "Group standing in front of a sea arch"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect hiking, canyoning, surfing and some physical work on volunteer projects."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Reef science on the Great Barrier Reef",
+        "body": "An evening reef ecology seminar followed by marine surveying days on Green Island, the outer reef and Hastings Reef with Marine Discoveries.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "$1950"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, semester]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-02-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      },
+      {
+        "start": "2027-09-09",
+        "end": "2027-11-17",
+        "season": "Fall",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "Do I need to know how to surf?",
+        "a": "No. Surf lessons start from the beginning at Crescent Head, and the surf camp in Uluwatu builds on what you learned."
+      },
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness. You don't need experience with any of the activities, but be ready to try hiking, canyoning, surfing and snorkeling. Volunteer projects also involve some physical work, such as tree planting and weeding."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly clean, comfortable hostels and lodges, plus a campground stay at Crescent Head, an eco retreat on K’gari, the FNPF centre on Nusa Penida, a yoga retreat village in Ubud and a night camping on Mount Batur."
+      },
+      {
+        "q": "How do we get around?",
+        "a": "By group van in Australia, with a flight from Brisbane to Cairns and another from Cairns to Bali."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "South America Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/south-america-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/south-america-semester.png"
+      },
+      {
+        "title": "Southeast Asia Semester Abroad",
+        "meta": "10 weeks · $15,000",
+        "url": "https://www.pacificdiscovery.org/programs/southeast-asia-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/southeast-asia-semester.png"
+      },
+      {
+        "title": "Polynesian Journey Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/polynesian-journey-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/polynesian-journey-semester.png"
+      }
+    ]
+  }
+}
