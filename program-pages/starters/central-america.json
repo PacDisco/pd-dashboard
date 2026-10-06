@@ -1,0 +1,515 @@
+{
+  "v": 1,
+  "name": "Central America Semester Abroad",
+  "seo": {
+    "title": "Central America Semester Abroad | Pacific Discovery",
+    "description": "Mexico, Belize, Guatemala & Costa Rica in 10 weeks: Chichén Itzá, PADI certification, the ATM Cave, an Acatenango volcano hike, Spanish homestays and Pacuare rafting. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/central-america-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Gap semester · Mexico, Belize, Guatemala & Costa Rica",
+    "headline": "Four countries of Central America in one semester",
+    "intro": "Swim in a cenote in Tulum, earn your PADI certification in Belize, camp on Acatenango volcano and finish rafting the Pacuare River in Costa Rica.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/PacificDiscovery%20-%20Central%20America.jpg",
+    "imageAlt": "Group of students in warm jackets on a mountainside with a smoking volcano behind",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Mexico · Belize · Guatemala · Costa Rica",
+    "start": "Cancun, Mexico",
+    "finish": "San José, Costa Rica",
+    "weeks": 10,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 15500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2500,
+    "activityLevel": "High",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this semester different",
+    "items": [
+      {
+        "title": "Spanish in two countries",
+        "body": "Spanish lessons at Meztli Spanish School in Tulum and Sisai Language School in Quetzaltenango, living with host families in both.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/PacificDiscovery%20-%20Central%20America%20_1_.jpg",
+        "imageAlt": "Group of students standing together above the clouds at sunrise"
+      },
+      {
+        "title": "Dive and conserve in Belize",
+        "body": "Earn your PADI certification with Blue Ventures, then join their marine conservation service learning.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/Central%20America%204.png",
+        "imageAlt": "Two scuba divers silhouetted against sunlight underwater"
+      },
+      {
+        "title": "Volcanoes, caves and rivers",
+        "body": "A multi-day Acatenango volcano hike, the ATM Cave, a Lake Atitlán hike, a kayaking expedition and a three-day Pacuare rafting trip.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/Central%20America%202.png",
+        "imageAlt": "Volcano releasing a plume of ash at dawn"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/CentralAmerica.jpeg",
+        "imageAlt": "Students on yoga mats in a bamboo hall with a lake and mountains outside"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Cancun through Belize and Guatemala to San José, Costa Rica",
+    "phases": [
+      {
+        "label": "Week 1–2",
+        "text": "Mexico · Tulum, Mayan ruins, Cenote Dos Ojos, Chichén Itzá, Sian Ka’an and Spanish lessons with a host family"
+      },
+      {
+        "label": "Week 2–4",
+        "text": "Belize · PADI certification and marine conservation with Blue Ventures, a sailing trip to Caye Caulker’s islands, Lower Dover Lodge and the ATM Cave"
+      },
+      {
+        "label": "Week 5–7",
+        "text": "Guatemala · Tikal, Antigua, the Acatenango volcano hike, a coffee tour, a Xela homestay, a Lake Atitlán hike and a yoga retreat"
+      },
+      {
+        "label": "Week 8–10",
+        "text": "Costa Rica · Farm service at Rancho Tinamu, sea kayaking, surf camp in Jaco, animal rescue, Tortuguero and Pacuare rafting"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels, lodges & hotels",
+        "body": "Clean, comfortable stays such as Chill Inn Hostel in Tulum, Sandbar Hostel in Belize, Lower Dover Lodge, Tortuguero Lodge and a river lodge on the Pacuare.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Host families",
+        "body": "Homestays with local families while you study Spanish in Tulum and in Quetzaltenango (Xela).",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Camping & retreats",
+        "body": "Island camping on the sailing trip, camping on the Acatenango and Lake Atitlán hikes and the kayaking expedition, and the Doron Yoga & Zen Center.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Tulum, cenotes & Chichén Itzá",
+        "location": "Cancun → Tulum, Mexico",
+        "body": "You’ll meet your Program Instructors at Cancun airport and transfer to Tulum for orientation. We explore the cliff-top Tulum ruins, swim in Cenote Dos Ojos and head inland to Chichén Itzá.\n\nThen you move in with a host family and start Spanish lessons at Meztli Spanish School. Afternoons bring arts and crafts and salsa dance lessons, and we spend a morning in the Sian Ka’an biosphere reserve.",
+        "tags": "Orientation, Ruins, Spanish",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Spanish study & journey to Belize",
+        "location": "Tulum, Mexico → San Pedro, Belize",
+        "body": "Spanish lessons continue alongside yoga, a Mexican cooking class and a meet-up with locals for an English/Spanish language exchange, with a day to rest and time by the sea between lessons.\n\nMidweek we travel south via Chetumal and take the ferry to San Pedro, Belize, where we settle in at the Blue Ventures dive camp and begin PADI dive training.",
+        "tags": "Spanish, Cooking, Diving",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Diving & marine conservation",
+        "location": "San Pedro, Belize",
+        "body": "Life on the Caribbean Sea becomes our classroom. We keep working through PADI certification with Blue Ventures, developing underwater skills while learning about marine ecosystems. Days are filled with pool sessions, open water dives and environmental education.\n\nAfter a rest day and a resupply run in San Pedro, we join Blue Ventures for three days of marine conservation service learning, contributing to hands-on conservation efforts.",
+        "tags": "Diving, Marine science, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/Central%20America%204.png",
+        "imageAlt": "Two scuba divers silhouetted against sunlight underwater"
+      },
+      {
+        "title": "Island hopping, jungle & the ATM Cave",
+        "location": "San Pedro → Caye Caulker → Lower Dover Lodge, Belize",
+        "body": "A public boat takes us to Caye Caulker, then we set off on a two-day sailing trip with Raggamuffin Tours, island hopping, snorkeling and camping on an island.\n\nFrom Dangriga we transfer inland to Lower Dover Lodge to explore its trails and ruins and swim. A highlight of the week is the ATM Cave expedition, combining physical adventure with cultural history.",
+        "tags": "Sailing, Snorkeling, Caving",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Tikal, Antigua & Acatenango",
+        "location": "Belize Zoo → Tikal → Antigua, Guatemala",
+        "body": "We visit the Belize Zoo, then cross into Guatemala and stay at Jungle Lodge Tikal. Next we fly on and transfer to Antigua, a colonial city surrounded by volcanoes, for a day tour of San Juan del Obispo.\n\nThen comes a multi-day hike on Acatenango volcano, camping under the stars and supporting one another as a team, before a rest day back in Antigua.",
+        "tags": "Ruins, Hiking, Camping",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/PacificDiscovery%20-%20Central%20America.jpg",
+        "imageAlt": "Group of students in warm jackets on a mountainside with a smoking volcano behind"
+      },
+      {
+        "title": "Coffee culture & a Xela homestay",
+        "location": "Antigua → Quetzaltenango, Guatemala",
+        "body": "We join the De la Gente Bike Coffee Tour in Antigua to learn about sustainable farming and local livelihoods.\n\nThen we travel to Quetzaltenango (Xela) to meet our host families and study Spanish at Sisai Language School for five days, practicing in real-world contexts. Living alongside local families gives insight into daily life. At the end of the week we set off on a hike to Lake Atitlán.",
+        "tags": "Coffee, Spanish, Homestay",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/PacificDiscovery%20-%20Central%20America%20_1_.jpg",
+        "imageAlt": "Group of students standing together above the clouds at sunrise"
+      },
+      {
+        "title": "Lake Atitlán & a yoga retreat",
+        "location": "Lake Atitlán, Guatemala → San José, Costa Rica",
+        "body": "Our multi-day hike continues to Lake Atitlán, camping along the way. We then slow the pace at the Doron Yoga & Zen Center, with morning yoga and meditation sessions and afternoon Spanish lessons.\n\nA boat to Panajachel starts our journey to Guatemala City, where we spend a night before flying to San José, Costa Rica, and transferring to Rancho Tinamu.",
+        "tags": "Hiking, Yoga, Spanish",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Central%20America/CentralAmerica.jpeg",
+        "imageAlt": "Students on yoga mats in a bamboo hall with a lake and mountains outside"
+      },
+      {
+        "title": "Farm service & a kayaking expedition",
+        "location": "San Isidro de Dota → Puntarenas, Costa Rica",
+        "body": "At Rancho Tinamu in San Isidro de Dota we spend three days on a sustainable farm service project, working alongside the local community. Through hands-on environmental stewardship, we gain a deeper appreciation for conservation and ethical travel practices.\n\nThen we travel to the coast of Puntarenas for a kayaking expedition, exploring marine environments and camping beneath the stars. This phase of the program is all about teamwork, resilience and connection to nature.",
+        "tags": "Service, Kayaking, Camping",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Dolphins, surf & animal rescue",
+        "location": "Puntarenas → Jaco → Turrucares, Costa Rica",
+        "body": "Our kayaking expedition ends with a dolphin tour. Then we head to Jaco, where surf camp introduces us to Costa Rica’s Pacific waves, and a jungle walk and a zipline give new perspectives on the rainforest.\n\nNext is the Costa Rica Animal Rescue Center in Turrucares, where after an orientation we start volunteering, supporting rehabilitation efforts and caring for animals such as sloths and monkeys.",
+        "tags": "Wildlife, Surfing, Volunteering",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Tortuguero, Pacuare rafting & farewell",
+        "location": "Turrucares → Tortuguero → Pacuare River → San José",
+        "body": "A final day volunteering at the rescue center, then we explore Tortuguero National Park on a morning boat tour and spend a day volunteering in Tortuguero.\n\nOur three-day rafting trip on the Pacuare River includes a hike to indigenous land and tree planting. Surrounded by rainforest and rushing water, we celebrate how far we’ve come as individuals and as a group. The program ends in San José, where we say our goodbyes before flying home.",
+        "tags": "Rafting, Wildlife, Program wrap",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "High activity level. Anyone with an average to advanced fitness level and an enthusiasm for the outdoors will be fine. Expect multi-day hikes on Acatenango volcano and to Lake Atitlán, diving, kayaking, surfing, rafting and some physical work on volunteer projects."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Spanish through immersion",
+        "body": "Lessons at Meztli Spanish School in Tulum and Sisai Language School in Quetzaltenango, practiced every day with your host family and on a language exchange with locals.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Marine conservation with Blue Ventures",
+        "body": "Earn your PADI certification in Belize, then put it to use in conservation service learning on the Caribbean Sea.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "This is a high activity program suited to average to advanced fitness. You’ll need to be ready for multi-day hikes in Guatemala, including Acatenango volcano and Lake Atitlán, and some physical work on volunteer projects. You don’t need previous experience with any of the activities."
+      },
+      {
+        "q": "Do I need to know how to scuba dive?",
+        "a": "No. You’ll learn from the beginning and work toward your PADI certification with Blue Ventures in Belize."
+      },
+      {
+        "q": "Do I need to speak Spanish?",
+        "a": "No. Lessons at Meztli Spanish School in Tulum and Sisai Language School in Quetzaltenango are matched to your level, and you’ll practice with your host families."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly clean, comfortable hostels and lodges, plus homestays with host families in Tulum and Quetzaltenango, camping on the sailing trip, volcano and lake hikes and the kayaking expedition, and the Doron Yoga & Zen Center."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "$1950"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-02-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      },
+      {
+        "start": "2027-09-09",
+        "end": "2027-11-17",
+        "season": "Fall",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "South America Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/south-america-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/south-america-semester.png"
+      },
+      {
+        "title": "Southeast Asia Semester Abroad",
+        "meta": "10 weeks · $15,000",
+        "url": "https://www.pacificdiscovery.org/programs/southeast-asia-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/southeast-asia-semester.png"
+      },
+      {
+        "title": "Australia & Bali Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-bali-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-bali-semester.png"
+      },
+      {
+        "title": "Polynesian Journey Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/polynesian-journey-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/polynesian-journey-semester.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

@@ -1,0 +1,475 @@
+{
+  "v": 1,
+  "name": "Costa Rica Mini Semester",
+  "seo": {
+    "title": "Costa Rica Mini Semester | Pacific Discovery",
+    "description": "Costa Rica in 6 weeks: Monteverde ziplines, wildlife rescue volunteering, a homestay with Spanish classes, a Golfo Dulce kayak expedition, surf in Uvita and Pacuare rafting. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/costa-rica-mini-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Mini semester · Costa Rica",
+    "headline": "Six weeks of Costa Rica’s forests, farms and coast",
+    "intro": "Zipline in Monteverde, volunteer at a wildlife rescue center, live with a host family in Herradura, kayak the Golfo Dulce, surf in Uvita and raft the Pacuare River.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/6_CRmini_RETREAT_AND_RAFT.jpg",
+    "imageAlt": "Group in helmets and life jackets with paddles on a riverbank",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Costa Rica",
+    "start": "San José, Costa Rica",
+    "finish": "San José, Costa Rica",
+    "weeks": 6,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 10500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 1200,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Hands-on wildlife rescue",
+        "body": "Three days volunteering at an animal rescue center near Alajuela, helping prepare food and support the care of animals like sloths and monkeys.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/CR2_ANIMAL_RESCUE_CENTRE_AND_FINCA.jpg",
+        "imageAlt": "Group of students in matching T-shirts outside a wooden shelter"
+      },
+      {
+        "title": "Homestay and Spanish classes",
+        "body": "Live with a local family in the Herradura community, with Spanish classes, hot springs, soccer and a community party.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/3_CRmini_RANCHO_TINAMU_AND_SPANISH_IMMERSION.jpg",
+        "imageAlt": "Students holding sugarcane stalks among tall plants"
+      },
+      {
+        "title": "Three expeditions, three ways to travel",
+        "body": "A multi-day kayak expedition across the Golfo Dulce, three days of surf lessons in Uvita and rafting in and out of the Pacuare River.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/4_CRmini_GOLFO_DULCE_KAYAKING_EXPEDITION.jpg",
+        "imageAlt": "Two people on a kayak on calm blue water"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/5_CRmini_SURF_AND_SOAK_UP_UVITA.jpg",
+        "imageAlt": "Three students holding surfboards on a beach"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from San José through Monteverde, the Pacific coast and the south of Costa Rica to the Pacuare River and back to San José",
+    "phases": [
+      {
+        "label": "Week 1–2",
+        "text": "Monteverde’s cloud forest, a wildlife rescue center near Alajuela, a spice farm and tree planting, Manuel Antonio National Park and Los Campesinos Ecolodge"
+      },
+      {
+        "label": "Week 3",
+        "text": "Hike in to Ranchos Tinamú in San Isidro de Dota, then a homestay with Spanish classes in Herradura"
+      },
+      {
+        "label": "Week 4",
+        "text": "A kayak expedition on the Golfo Dulce, then sustainable farm service at Albergue La Laguna de Corcovado"
+      },
+      {
+        "label": "Week 5–6",
+        "text": "Surf lessons in Uvita, a yoga retreat in Sarapiquí and rafting on the Pacuare River before returning to San José"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Lodges & ecolodges",
+        "body": "Lodges and ecolodges including Los Campesinos Ecolodge, Ranchos Tinamú, Albergue La Laguna de Corcovado, Epic Adventure Lodge and Pacuare River Eco Lodge.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Homestay in Herradura",
+        "body": "Four nights with a local host family in the Herradura community while you take Spanish classes.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Rescue center, farm stay & kayak camp",
+        "body": "Nights at the wildlife rescue center, Posada del Río on the spice farm, and Dolphin Quest during the Golfo Dulce kayak expedition.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Monteverde cloud forest & wildlife rescue",
+        "location": "San José → Monteverde → Alajuela, Costa Rica",
+        "body": "You’ll meet your Program Instructors in San José, then we head up to Monteverde for orientation and a coffee tour. A canopy tour takes us across ziplines and hanging bridges, and we explore the Santa Elena Reserve, hike to El Tigre waterfall and head out on a night walk to look for kinkajous.\n\nNext we transfer to a wildlife rescue center near Alajuela, where we spend our first days volunteering, helping prepare food and supporting the team’s animal care.",
+        "tags": "Orientation, Ziplining, Volunteering",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/1_CRMini_MONTEVERDE_CLOUD_FOREST.jpg",
+        "imageAlt": "Three students in helmets on a forest trail"
+      },
+      {
+        "title": "Spice farm, Manuel Antonio & Los Campesinos",
+        "location": "Alajuela → Villa Nueva Naranjo → Naranjito, Costa Rica",
+        "body": "After a final day at the rescue center we move to a finca in Villa Nueva Naranjo for a spice farm tour and a day of tree planting on a carbon neutral project. We also spend a day exploring Manuel Antonio National Park.\n\nThen we hike 8 km from Brisas del Nara to Los Campesinos Ecolodge, with a trapiche tour on arrival. Horseback riding, the Los Campesinos trails and a soccer game with locals follow, before a day on a community service project.",
+        "tags": "Conservation, Hiking, Community",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/CR2_ANIMAL_RESCUE_CENTRE_AND_FINCA.jpg",
+        "imageAlt": "Group of students in matching T-shirts outside a wooden shelter"
+      },
+      {
+        "title": "Ranchos Tinamú & a Herradura homestay",
+        "location": "Naranjito → San Isidro de Dota → Herradura, Costa Rica",
+        "body": "We hike 16 km to Ranchos Tinamú in San Isidro de Dota. Here we hike to the Olla Quemada cave and spend a day on the sustainable farm project, which can include milking cows and collecting eggs.\n\nOn the way to Herradura we stop at Nauyaca waterfall, then settle in with our host families. Mornings are for Spanish classes, with afternoons swimming in hot springs, playing soccer and other games, and a community party to finish.",
+        "tags": "Hiking, Homestay, Spanish",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/3_CRmini_RANCHO_TINAMU_AND_SPANISH_IMMERSION.jpg",
+        "imageAlt": "Students holding sugarcane stalks among tall plants"
+      },
+      {
+        "title": "Golfo Dulce kayak expedition",
+        "location": "Herradura → Golfito → La Palma, Costa Rica",
+        "body": "In Golfito we spend an afternoon practicing for the kayak expedition. Over the next three days we paddle 15 km, 10 km with a snorkel stop, and 12 km across the gulf with professional guides, staying at Dolphin Quest along the way.\n\nA 4x4 transfer takes us to Albergue La Laguna de Corcovado near La Palma, where we spend three days volunteering on a sustainable farm service project.",
+        "tags": "Kayaking, Snorkeling, Volunteering",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/4_CRmini_GOLFO_DULCE_KAYAKING_EXPEDITION.jpg",
+        "imageAlt": "Two people on a kayak on calm blue water"
+      },
+      {
+        "title": "Surf in Uvita & a yoga retreat",
+        "location": "La Palma → Uvita → Sarapiquí, Costa Rica",
+        "body": "We head to Uvita, stopping at Playa Ventanas, and check in at El Tecal for three days of surf classes spread out to give your body time to rest. Between sessions we visit Dominical, hike the Cola de la Ballena and have a free afternoon.\n\nThen we transfer to Epic Adventure Lodge in Sarapiquí for an introduction to yoga and the start of our yoga retreat, with time for meditation and breathwork.",
+        "tags": "Surfing, Hiking, Yoga",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/5_CRmini_SURF_AND_SOAK_UP_UVITA.jpg",
+        "imageAlt": "Three students holding surfboards on a beach"
+      },
+      {
+        "title": "Pacuare River & farewell",
+        "location": "Sarapiquí → Pacuare → San José, Costa Rica",
+        "body": "After a free day in Sarapiquí we transfer to the Pacuare River and raft in to Pacuare River Eco Lodge. From here we visit an Indigenous village and join a tree planting project, alongside our program wrap.\n\nWe raft out on our final full day and transfer to San José, where students depart from Juan Santamaría International Airport the next day.",
+        "tags": "Rafting, Culture, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/CR_Mini_Images%20By%20Weeks/6_CRmini_RETREAT_AND_RAFT.jpg",
+        "imageAlt": "Group in helmets and life jackets with paddles on a riverbank"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect hikes of up to 16 km, multi-day kayaking and rafting, surfing and some physical work on volunteer projects, like tree planting."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Spanish in a homestay",
+        "body": "Spanish classes in the Herradura community while you live with a local family and take part in community life.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Conservation and sustainable farming",
+        "body": "Volunteering at a wildlife rescue center, tree planting on a carbon neutral project and sustainable farm service at Ranchos Tinamú and Albergue La Laguna de Corcovado.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness with enthusiasm for the outdoors. You don’t need experience with any of the activities, but be ready for hikes of 8 km and 16 km, a multi-day kayak expedition, surfing and rafting. Volunteer projects also involve some physical work, like tree planting."
+      },
+      {
+        "q": "Do I need to know how to surf or kayak?",
+        "a": "No. Surf classes in Uvita are spread over three days with professional instructors, and the kayak expedition starts with an afternoon of practice in Golfito, with professional guides throughout."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly lodges and ecolodges, plus nights at the wildlife rescue center, a farm stay at Posada del Río, Dolphin Quest during the kayak expedition and four nights with a host family in Herradura."
+      },
+      {
+        "q": "What will I do at the wildlife rescue center?",
+        "a": "You’ll spend three days volunteering, helping prepare food and supporting the team’s care of animals like sloths and monkeys."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-03-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Japan Mini Semester",
+        "meta": "5 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/japan-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Golden_Temple_Kyoto.jpg"
+      },
+      {
+        "title": "Hawaii Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/hawaii-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/hawaii-mini-semester.png"
+      },
+      {
+        "title": "Thailand Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-mini-semester.png"
+      },
+      {
+        "title": "Australia Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-mini-semester.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

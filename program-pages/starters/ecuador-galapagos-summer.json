@@ -1,0 +1,450 @@
+{
+  "v": 1,
+  "name": "Ecuador & Galápagos Summer Program",
+  "seo": {
+    "title": "Ecuador & Galápagos Summer Program | Pacific Discovery",
+    "description": "Ecuador & Galápagos in 4 weeks: a community stay in Agato, the Quilotoa crater loop, Spanish and canyoning in Baños, Jatunyacu rafting and Galápagos snorkeling. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/galapagos-turtle%282%29.jpg"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · Ecuador & Galápagos",
+    "headline": "From the Andes to the Galápagos in one summer",
+    "intro": "Live and volunteer in the Andean village of Agato, hike the Quilotoa crater loop, raft the Jatunyacu River and snorkel at Kicker Rock in the Galápagos.",
+    "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/Galapagos_Islands_Snorkeling__1_.jpg",
+    "imageAlt": "Snorkeler swimming above a sea turtle",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Ecuador · Galápagos",
+    "start": "Quito, Ecuador",
+    "finish": "Baltra, Galápagos",
+    "weeks": 4,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 7950,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 0,
+    "activityLevel": "",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Live with an Andean community",
+        "body": "Four days of service-learning in the Kichwa village of Agato, working alongside local families on a community development project.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/IMG_1853.jpg",
+        "imageAlt": "Two students with arms outstretched above a crater lake"
+      },
+      {
+        "title": "Highlands, river and islands",
+        "body": "Hike the Quilotoa crater loop, try canyoning in Baños, raft the Jatunyacu River and hike a volcano on Isabela.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/IMG_0746.jpg",
+        "imageAlt": "Group paddling a raft through river rapids"
+      },
+      {
+        "title": "Service on the Galápagos",
+        "body": "A service project at Hacienda Tranquila on San Cristóbal, alongside snorkeling at La Lobería and Kicker Rock.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/IMG_0711.jpg",
+        "imageAlt": "Students crouching beside a giant tortoise"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/Galapagos_Islands.jpg",
+        "imageAlt": "Group running into the sea from a white sand beach"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Quito through Ecuador’s highlands and Amazon, then by air to the Galápagos, finishing at Baltra",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Orientation and the Teleférico in Quito, then service-learning with the Agato community"
+      },
+      {
+        "label": "Week 2",
+        "text": "Otavalo Market, the Quilotoa crater loop, and Spanish lessons, canyoning and hot springs in Baños"
+      },
+      {
+        "label": "Week 3",
+        "text": "Rafting the Jatunyacu River from Tena, Sinchi Warmi in Misahuallí and Papallacta Hot Springs, then a flight to San Cristóbal"
+      },
+      {
+        "label": "Week 4",
+        "text": "Kicker Rock, Floreana and Isabela, then Santa Cruz and departure from Baltra"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels & guesthouses",
+        "body": "Hostels and guesthouses including Viajero Quito Hostel, Casa Sierra Verde in Baños, Casa Jeimy on San Cristóbal and Iguana Hostel on Isabela.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Community stays",
+        "body": "A community stay with families in Agato, cabañas at Quilotoa and the Sinchi Warmi center, an Indigenous women’s ecotourism initiative in Misahuallí.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "A night camping",
+        "body": "One night camping on the Jatunyacu River rafting trip.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Quito & the Agato community",
+        "location": "Quito → Agato, Ecuador",
+        "body": "You’ll meet your Program Instructors in Quito for orientation, then take the Teleférico, a cable car above the city, for a hike and a day exploring Quito.\n\nNext we take the bus north to Agato, a Kichwa village in the highlands, and settle in. Over the following days we join in service-learning and community immersion, working alongside local families on a community development project and taking part in daily life.",
+        "tags": "Orientation, Service, Culture",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Quilotoa crater & Baños",
+        "location": "Agato → Otavalo → Quilotoa → Baños, Ecuador",
+        "body": "After a final day in Agato, we stop at Otavalo Market on the way to Quilotoa and spend the night in cabañas. In the morning we hike the Quilotoa crater loop, then take the bus to Baños.\n\nIn Baños we take Spanish lessons each morning. Afternoons bring salsa lessons, a hike to Casa del Árbol, hot springs and a canyoning session. The week ends with a bus ride to Tena.",
+        "tags": "Hiking, Spanish, Canyoning",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/IMG_1853.jpg",
+        "imageAlt": "Two students with arms outstretched above a crater lake"
+      },
+      {
+        "title": "Jatunyacu rafting to the Galápagos",
+        "location": "Tena → Misahuallí → Quito → San Cristóbal, Ecuador",
+        "body": "Our two-day rafting trip on the Jatunyacu River includes a night camping, before we transfer to the Sinchi Warmi center in Misahuallí. Here we have a group session, cultural activities, a morning of volunteering and a co-op visit, with a waterfall hike or more cultural activities.\n\nOn the way back to Quito we stop at Papallacta Hot Springs. Then we fly to San Cristóbal in the Galápagos to snorkel at La Lobería, and join a service project at Hacienda Tranquila.",
+        "tags": "Rafting, Culture, Snorkeling",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/IMG_0746.jpg",
+        "imageAlt": "Group paddling a raft through river rapids"
+      },
+      {
+        "title": "San Cristóbal, Isabela & Santa Cruz",
+        "location": "San Cristóbal → Floreana → Isabela → Santa Cruz, Galápagos",
+        "body": "We visit Kicker Rock and a turtle spot from San Cristóbal, then take the boat to Floreana and on to Isabela.\n\nOn Isabela we hike a volcano, take a Tintoreras tour and hold our program wrap. Then we take the boat to Santa Cruz for our last night, and transfer to Baltra the next morning, where students depart from Seymour Airport.",
+        "tags": "Snorkeling, Hiking, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Ecuador%20%26%20Galapagos%20Summer/IMG_2043.jpg",
+        "imageAlt": "Students in wetsuits on a boat beside tall sea rocks"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "[Activity level] activity level. Expect the Quilotoa crater loop, canyoning, two days of rafting, a volcano hike and snorkeling, plus some physical work on community and service projects."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Community service and conservation",
+        "body": "Students gain 25 hours of community service and a Certificate of Community Development and Conservation, through projects in Agato, Misahuallí and on San Cristóbal.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Spanish in Baños",
+        "body": "Spanish lessons each morning during our time in Baños, with salsa lessons too.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "Be ready to try the Quilotoa crater loop hike, canyoning, two days of rafting, a volcano hike on Isabela and snorkeling, plus some physical work on community and service projects."
+      },
+      {
+        "q": "What is the stay in Agato like?",
+        "a": "Agato is a Kichwa village in Ecuador’s northern highlands. You’ll stay in the community, work alongside local families on a community development project and take part in daily life."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly hostels and guesthouses, plus a community stay in Agato, cabañas at Quilotoa, the Sinchi Warmi center in Misahuallí and a night camping on the rafting trip."
+      },
+      {
+        "q": "Will I learn Spanish?",
+        "a": "Yes. You’ll have Spanish lessons each morning during our time in Baños."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "[Add Summer 2027 dates]",
+    "sessions": []
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      },
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

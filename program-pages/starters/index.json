@@ -18,5 +18,80 @@
     "id": "polynesian-journey",
     "name": "Polynesian Journey Semester Abroad",
     "slug": "polynesian-journey-gap-semester"
+  },
+  {
+    "id": "central-america",
+    "name": "Central America Semester Abroad",
+    "slug": "central-america-gap-semester"
+  },
+  {
+    "id": "new-zealand-australia",
+    "name": "New Zealand & Australia Semester Abroad",
+    "slug": "new-zealand-australia-gap-semester"
+  },
+  {
+    "id": "japan-mini",
+    "name": "Japan Mini Semester",
+    "slug": "japan-mini-semester"
+  },
+  {
+    "id": "hawaii-mini",
+    "name": "Hawaii Mini Semester",
+    "slug": "hawaii-mini-semester"
+  },
+  {
+    "id": "thailand-mini",
+    "name": "Thailand Mini Semester",
+    "slug": "thailand-mini-semester"
+  },
+  {
+    "id": "costa-rica-mini",
+    "name": "Costa Rica Mini Semester",
+    "slug": "costa-rica-mini-semester"
+  },
+  {
+    "id": "australia-mini",
+    "name": "Australia Mini Semester",
+    "slug": "australia-mini-semester"
+  },
+  {
+    "id": "marine-conservation",
+    "name": "Marine Conservation & Reef Monitoring Field Program",
+    "slug": "marine-conservation-summer-program"
+  },
+  {
+    "id": "thailand-summer",
+    "name": "Thailand Summer Program",
+    "slug": "thailand-summer-program"
+  },
+  {
+    "id": "bali-summer",
+    "name": "Bali Summer Program",
+    "slug": "bali-summer"
+  },
+  {
+    "id": "new-zealand-fiji-summer",
+    "name": "New Zealand & Fiji Summer Program",
+    "slug": "new-zealand-and-fiji-summer"
+  },
+  {
+    "id": "ecuador-galapagos-summer",
+    "name": "Ecuador & Gal\u00e1pagos Summer Program",
+    "slug": "ecuador-and-galapagos-summer-program"
+  },
+  {
+    "id": "costa-rica-summer",
+    "name": "Costa Rica Summer Program",
+    "slug": "costa-rica-summer"
+  },
+  {
+    "id": "hawaii-summer",
+    "name": "Hawaii Summer Program",
+    "slug": "hawaii-summer"
+  },
+  {
+    "id": "australia-summer",
+    "name": "Australia Summer Program",
+    "slug": "australia-summer"
   }
 ]

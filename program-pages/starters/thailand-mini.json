@@ -1,0 +1,479 @@
+{
+  "v": 1,
+  "name": "Thailand Mini Semester",
+  "seo": {
+    "title": "Thailand Mini Semester | Pacific Discovery",
+    "description": "Thailand in 6 weeks: Bangkok’s canals, Our Land in Kanchanaburi, biking Ayutthaya and Sukhothai, elephants, a meditation retreat, Khao Sok, climbing at Railay and scuba on Koh Lanta. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-mini-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Mini semester · Thailand",
+    "headline": "Six weeks from Bangkok to Thailand’s southern islands",
+    "intro": "Cycle through ancient capitals, work with elephants near Chiang Mai, join a Buddhist meditation retreat, climb Railay’s cliffs and learn to scuba dive on Koh Lanta.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/5_Thai_BEACHES%2C_ROCK_CLIMBING_________________________%26_ADVENTURE_IN_SOUTHERN_THAILAND.jpg",
+    "imageAlt": "Student standing at the bow of a longtail boat between limestone rocks",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Thailand",
+    "start": "Bangkok, Thailand",
+    "finish": "Krabi, Thailand",
+    "weeks": 6,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 10500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2500,
+    "activityLevel": "Low",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Five days with elephants",
+        "body": "Stay at Hug Elephants near Chiang Mai and help with feeding and bathing while learning about the sanctuary’s work to care for them.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/3_Thailand_CONTINUING_AT_THE_ELEPHANT_PROJECT_______________________%26_COMMUNITY_VOLUNTEERING.jpg",
+        "imageAlt": "Smiling student standing beside an elephant"
+      },
+      {
+        "title": "Service in the north",
+        "body": "Sustainable living projects with Our Land in Kanchanaburi, then five days of community volunteering with Hub Volunteer in Mae Win.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/1_Thailand_Bustling_Bangkok_%26_sustainable_living.jpg",
+        "imageAlt": "Group walking along a path beside green rice paddies"
+      },
+      {
+        "title": "Dive, climb and paddle in the south",
+        "body": "Rock climbing and kayaking at Railay Beach, the Dragon Crest Trek, and a three-day scuba diving course on Koh Lanta.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/6_Thai__SCUBA_DIVING_%26_MUAY_THAI_%E2%80%93_KOH_LANTA_ADVENTURES.jpg",
+        "imageAlt": "Snorkelers in turquoise water beside a boat flying the Thai flag"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/Thailand_week2__FROM_ANCIENT_RUINS_TO_ELEPHANTS_IN_CHIANG_MAI.jpg",
+        "imageAlt": "Seated Buddha statue and temple ruins at sunset behind red flowers"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Bangkok north to Chiang Mai, then south to Khao Sok, Railay Beach, Koh Lanta and Krabi",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Orientation and a canal tour in Bangkok, then sustainable living projects with Our Land in Kanchanaburi"
+      },
+      {
+        "label": "Week 2–3",
+        "text": "Ayutthaya and Sukhothai by bike, a cooking class in Chiang Mai, five days with elephants and community volunteering in Mae Win"
+      },
+      {
+        "label": "Week 4",
+        "text": "A three-day Buddhist meditation retreat, then a flight south to Khao Sok National Park"
+      },
+      {
+        "label": "Week 5",
+        "text": "An overnight at Cheow Lan Lake, then rock climbing, kayaking and the Dragon Crest Trek at Railay Beach"
+      },
+      {
+        "label": "Week 6",
+        "text": "A scuba diving course and Muay Thai on Koh Lanta, finishing in Ao Nang, Krabi"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels, guesthouses & hotels",
+        "body": "Comfortable stays in towns and cities, including De Pumkiin Hostel in Ayutthaya, Sabaidee House in Sukhothai, Mae Win Guesthouse and the Krabi Seabass Hotel in Ao Nang.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "At the projects",
+        "body": "We stay on site at Our Land in Kanchanaburi, at Hug Elephants near Chiang Mai and at the MCU meditation centre.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Jungle camp & island stays",
+        "body": "Our Jungle Life Camp in Khao Sok, Railay Viewpoint Resort at Railay Beach and The Dive House on Koh Lanta.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Bangkok canals & sustainable living",
+        "location": "Bangkok → Kanchanaburi, Thailand",
+        "body": "You’ll meet your Program Instructors in Bangkok for two days of orientation, getting to know the group and setting goals for the weeks ahead, finished off with a welcome dinner. A city tour takes us along Bangkok’s canals by longtail boat and into the Kudi Chin community.\n\nThen we head to Kanchanaburi to join Our Land, a local organisation working to protect wildlife corridors to the River Kwai and to live in harmony with nature. We get hands-on straight away, with time to explore waterfalls and swim in the River Kwai.",
+        "tags": "Orientation, Culture, Sustainability",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/1_Thailand_Bustling_Bangkok_%26_sustainable_living.jpg",
+        "imageAlt": "Group walking along a path beside green rice paddies"
+      },
+      {
+        "title": "Ancient capitals, cooking & elephants",
+        "location": "Kanchanaburi → Ayutthaya → Sukhothai → Chiang Mai, Thailand",
+        "body": "Our days at Our Land include making mud bricks, sorting waste at a recycling centre and caring for saplings in the nursery. Then we travel to Ayutthaya, once the capital of Siam, and explore the city by mountain bike. In Sukhothai, another former capital, a sunset bike ride takes us through the historic town.\n\nThe bus north brings us to Chiang Mai for a hands-on Thai cooking class. Then we transfer to Hug Elephants to begin five days with the elephants, helping with feeding and bathing and learning about the sanctuary’s work to care for them.",
+        "tags": "Service, Biking, Elephants",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/Thailand_week2__FROM_ANCIENT_RUINS_TO_ELEPHANTS_IN_CHIANG_MAI.jpg",
+        "imageAlt": "Seated Buddha statue and temple ruins at sunset behind red flowers"
+      },
+      {
+        "title": "Elephants & community volunteering",
+        "location": "Chiang Mai → Mae Win, Thailand",
+        "body": "We spend the rest of our time at Hug Elephants settling into the rhythm of daily life with the elephants and the people who care for them.\n\nNext we move to Mae Win for five days of community volunteering with Hub Volunteer. Depending on what the community needs at the time, that might mean debris clean-ups, reforestation work or spending time with young people at the local school, so come with an open mind and helping hands.",
+        "tags": "Animal welfare, Service, Community",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/3_Thailand_CONTINUING_AT_THE_ELEPHANT_PROJECT_______________________%26_COMMUNITY_VOLUNTEERING.jpg",
+        "imageAlt": "Smiling student standing beside an elephant"
+      },
+      {
+        "title": "Meditation retreat & Khao Sok jungle",
+        "location": "Mae Win → Chiang Mai → Khao Sok, Thailand",
+        "body": "After our last days of volunteering, we head to MCU for a three-day Buddhist meditation retreat. Days begin with chanting and meditation, and we learn about Buddhist philosophy, mindfulness and compassion before practising meditation in nature. Traditional meditation can be challenging, so it’s challenge by choice.\n\nThen we fly to Surat Thani and transfer to Our Jungle Life Camp in Khao Sok National Park, one of the oldest rainforests in the world. We start with yoga, then hike jungle trails and tube down the river.",
+        "tags": "Meditation, Yoga, Jungle",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/4_Thailand_MEDITATION_IMMERSION_%26_KHAO_SOK_NATIONAL_PARK.jpg",
+        "imageAlt": "Group dressed in white standing on a garden path"
+      },
+      {
+        "title": "Railay’s cliffs & the Dragon Crest",
+        "location": "Khao Sok → Railay Beach, Krabi, Thailand",
+        "body": "A basic overnight at Cheow Lan Lake wraps up our time in Khao Sok. From Ao Nam Mao we take a longtail boat to Railay Beach, surrounded by limestone cliffs and the Andaman Sea.\n\nA half day of rock climbing comes first, with no experience needed. Next we explore the coast by kayak, then hike the Dragon Crest Trek to a viewpoint over Railay and the Andaman Sea. A free day gives time to rest on the beach before the boat and ferry to Koh Lanta.",
+        "tags": "Climbing, Kayaking, Hiking",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/5_Thai_BEACHES%2C_ROCK_CLIMBING_________________________%26_ADVENTURE_IN_SOUTHERN_THAILAND.jpg",
+        "imageAlt": "Student standing at the bow of a longtail boat between limestone rocks"
+      },
+      {
+        "title": "Scuba diving & Muay Thai",
+        "location": "Koh Lanta → Ao Nang, Krabi, Thailand",
+        "body": "On Koh Lanta we stay at The Dive House for a three-day scuba diving course in the waters of southern Thailand. Whether you’re a beginner or already a diver, the course takes you out to explore coral reefs and marine life.\n\nThen we switch to two days of Muay Thai, Thailand’s national sport, learning the techniques of this traditional martial art. We finish in Ao Nang with a final night together before flying home from Krabi.",
+        "tags": "Scuba diving, Muay Thai, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Thailand_Mini/6_Thai__SCUBA_DIVING_%26_MUAY_THAI_%E2%80%93_KOH_LANTA_ADVENTURES.jpg",
+        "imageAlt": "Snorkelers in turquoise water beside a boat flying the Thai flag"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Low activity level. Anyone with an enthusiasm for the outdoors and new experiences will be fine. Expect some physical work on volunteer projects, plus cycling, jungle hikes, rock climbing, kayaking, scuba diving and Muay Thai."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Buddhism & meditation",
+        "body": "A three-day retreat at MCU introduces Buddhist philosophy, mindfulness and compassion, with chanting, meditation and time to practise in nature.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Sustainable living in Kanchanaburi",
+        "body": "With Our Land, learn how wildlife corridors to the River Kwai are protected and restored, and get hands-on with mud bricks, recycling and tree nursery work.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "This is a low activity level program, so anyone with an enthusiasm for the outdoors and new experiences will be fine. You don’t need experience with any of the activities, but be ready for cycling, hiking, climbing, kayaking and some physical work on volunteer projects."
+      },
+      {
+        "q": "Do I need scuba diving experience?",
+        "a": "No. The three-day scuba diving course on Koh Lanta suits beginners as well as students who have dived before."
+      },
+      {
+        "q": "What is the meditation retreat like?",
+        "a": "It’s three days at MCU learning about Buddhist philosophy, mindfulness and compassion, with chanting, meditation and time in nature. Traditional meditation can be challenging, so it’s challenge by choice."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "There’s no camping on this program. You’ll stay in comfortable hostels, guesthouses and hotels, on site at Our Land, Hug Elephants and the MCU meditation centre, at Our Jungle Life Camp in Khao Sok, Railay Viewpoint Resort and The Dive House on Koh Lanta."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-03-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Japan Mini Semester",
+        "meta": "5 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/japan-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Golden_Temple_Kyoto.jpg"
+      },
+      {
+        "title": "Hawaii Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/hawaii-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/hawaii-mini-semester.png"
+      },
+      {
+        "title": "Costa Rica Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/costa-rica-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/costa-rica-mini-semester.png"
+      },
+      {
+        "title": "Australia Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-mini-semester.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

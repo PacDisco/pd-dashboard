@@ -1,0 +1,513 @@
+{
+  "v": 1,
+  "name": "New Zealand & Australia Semester Abroad",
+  "seo": {
+    "title": "New Zealand & Australia Semester Abroad | Pacific Discovery",
+    "description": "Australia & New Zealand in 10 weeks: K’gari, surf lessons, Blue Mountains canyoning, Waitangi, a Rotorua marae, a Kahurangi expedition, Wanaka climbing and a sheep station. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-australia-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Gap semester · Australia & New Zealand",
+    "headline": "From Australia’s east coast to New Zealand’s South Island",
+    "intro": "Explore K’gari, learn to surf at Crescent Head and canyon in the Blue Mountains, then tramp through Kahurangi, climb in Wanaka and finish on a high-country sheep and beef station.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/week8_NZA_ROCK_CLIMBING_AND_BACKPACKING_EXPEDITION_IN_NATIONAL_PARK.jpg",
+    "imageAlt": "Group of hikers with backpacks walking toward snow-capped mountains",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Australia · New Zealand",
+    "start": "Brisbane, Australia",
+    "finish": "Christchurch, New Zealand",
+    "weeks": 10,
+    "groupMax": 12,
+    "ages": "17–22",
+    "tuition": 16500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2800,
+    "activityLevel": "High",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this semester different",
+    "items": [
+      {
+        "title": "Two backcountry expeditions",
+        "body": "A four-day backpacking expedition through Kahurangi National Park, with scrambling, a cave and a night tramp, then a hiking expedition from Wanaka.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/week8_NZA_ROCK_CLIMBING_AND_BACKPACKING_EXPEDITION_IN_NATIONAL_PARK.jpg",
+        "imageAlt": "Group of hikers with backpacks walking toward snow-capped mountains"
+      },
+      {
+        "title": "Conservation in both countries",
+        "body": "Rainforest planting with Maratus, permaculture and Landcare at The Crossing, trapping at Tawharanui and projects with the Tasman Environmental Trust at Lake Rotoiti.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/ENVIRONMENTAL_VOLUNTEERING_%26_SYDNEY_EXPLORATION.jpg",
+        "imageAlt": "Smiling student in gloves kneeling to plant in a garden bed"
+      },
+      {
+        "title": "Surf, canyon, raft and climb",
+        "body": "Three days of surf lessons at Crescent Head, canyoning in the Blue Mountains, rafting in Rotorua and two days of rock climbing lessons in Wanaka.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/NZA_Canyoneering_blue_mountains.jpg",
+        "imageAlt": "Student in a helmet abseiling down a rock face covered in ferns"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/week10_NZAADVENTURES_IN_QUEENSTOWN.jpg",
+        "imageAlt": "Three people on a bench looking out at snow-capped mountains"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Brisbane down Australia’s east coast to Sydney, then from Auckland through New Zealand to Christchurch",
+    "phases": [
+      {
+        "label": "Week 1–2",
+        "text": "Brisbane, a First Nations tour and sandboarding on Stradbroke Island, K’gari, Australia Zoo, Lamington National Park and kayaking in Byron Bay"
+      },
+      {
+        "label": "Week 2–4",
+        "text": "Rainforest planting and surf lessons at Crescent Head, canyoning in the Blue Mountains, then permaculture and Landcare in Bermagui"
+      },
+      {
+        "label": "Week 5–6",
+        "text": "Fly from Sydney to Auckland: Waitangi, conservation at Tawharanui, a marae stay and rafting in Rotorua, and the student-led section"
+      },
+      {
+        "label": "Week 7–8",
+        "text": "Wellington, the ferry to the South Island, a four-day Kahurangi expedition and conservation at Lake Rotoiti"
+      },
+      {
+        "label": "Week 8–10",
+        "text": "Down the West Coast to Punakaiki and Franz Josef, Queenstown, climbing and a hiking expedition in Wanaka, Snowdon Station and Christchurch"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels & lodges",
+        "body": "Clean, safe hostels and lodges, from Breeze Lodge in Brisbane and the Blue Mountains YHA to Peppertree Lodge in Paihia and Haka lodges in Wellington, Franz Josef and Christchurch.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Camping & huts",
+        "body": "Medium camping level: campgrounds on Stradbroke Island, at Binna Burra, Broken Head, Tawharanui, Punakaiki, Lake Moke and Wanaka, plus nights out on the Kahurangi and Wanaka expeditions.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Eco retreat, marae & station",
+        "body": "A beachfront eco retreat on K’gari, The Crossing in Bermagui, Paruaharanui Marae in Rotorua and the Shearer’s Quarters at Snowdon Station.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Straddie, sandboarding & K’gari",
+        "location": "Brisbane → Stradbroke Island → K’gari, Australia",
+        "body": "You’ll meet your Program Instructors in Brisbane for orientation, then take the ferry to Stradbroke Island and camp at Minjerribah. A culture tour with Nyanda is followed by a First Nations tour: four-wheel driving to paint a boomerang to take home, bush tracks and morning tea at a billabong, then an afternoon of sandboarding.\n\nAfter the Hells Gate walk in Noosa we cross to K’gari, the world’s largest sand island, staying at a beachfront eco retreat. We swim in freshwater lakes, walk inland tracks through towering forest and end the days with campfires and stargazing.",
+        "tags": "Orientation, Culture, Sandboarding",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/PD_NZA_week_1.jpg",
+        "imageAlt": "Two smiling students with painted faces looking through a wooden boomerang"
+      },
+      {
+        "title": "Australia Zoo, Lamington & Byron Bay",
+        "location": "Noosa → Lamington National Park → Crescent Head, Australia",
+        "body": "A day at Australia Zoo includes the Wildlife Warriors croc show, and a surf awareness session with Noosa Heads Surf Lifesaving prepares us for the beaches ahead. From Binna Burra Campground we choose from several hikes in Lamington National Park.\n\nIn Byron Bay we camp at Broken Head and kayak with Cape Byron Kayaks from Clarks Beach out to the Cape, looking for dolphins at Wategos Beach. Then we drive to Crescent Head and start our service with Maratus, planting trees on a property that holds 25% of the region’s remaining original rainforest.",
+        "tags": "Wildlife, Hiking, Kayaking",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Rainforest service, surfing & canyoning",
+        "location": "Crescent Head → Katoomba, Australia",
+        "body": "Our service with Maratus continues. We may meet a landowner in Kempsey and help remove invasive weeds, and meet Aboriginal community members who teach weaving with lomandra grass, clay sculpture and sand art with natural materials.\n\nThen come three days of surf lessons with Crescent Surf, with two two-hour lessons each day. We drive to Katoomba in the Blue Mountains for a full day of canyoning: after learning abseiling skills, we hike, scramble, swim and abseil through an introductory canyon.",
+        "tags": "Conservation, Surfing, Canyoning",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/NZA_Canyoneering_blue_mountains.jpg",
+        "imageAlt": "Student in a helmet abseiling down a rock face covered in ferns"
+      },
+      {
+        "title": "Blue Mountains & permaculture in Bermagui",
+        "location": "Katoomba → Bermagui → Sydney, Australia",
+        "body": "We hike in the Blue Mountains straight from our hostel, where the trails range from short cliff-top walks to full-day outings. Then we head down the coast to The Crossing in Bermagui, our base for the next few days.\n\nHere we spend a permaculture design experience day, a Landcare day, and a bushfire prevention and wildlife tour at Potoroo Palace. A forest regeneration day and an overnight hike wrap up our time in Bermagui before we drive north to Sydney and settle into Pacific House.",
+        "tags": "Hiking, Permaculture, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/ENVIRONMENTAL_VOLUNTEERING_%26_SYDNEY_EXPLORATION.jpg",
+        "imageAlt": "Smiling student in gloves kneeling to plant in a garden bed"
+      },
+      {
+        "title": "Sydney, Waitangi & Tawharanui",
+        "location": "Sydney, Australia → Paihia → Tawharanui, New Zealand",
+        "body": "After a day exploring Sydney we fly to Auckland and spend the night at Ōrewa. In Paihia a two-and-a-half-hour educational tour of the Waitangi Treaty Grounds looks at the signing of Te Tiriti o Waitangi and its significance in New Zealand today. The next day is choose your own adventure: kayaking, biking or snorkeling, with a budget to pick your activities.\n\nThen we head to Tawharanui Regional Park, where we camp and begin conservation work with Auckland City Council, such as invasive species trapping, with optional kiwi spotting in the evenings.",
+        "tags": "History, Adventure, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/LITTER_INTELLIGENCE_TRAINING%2C_PAIHIA_AND_VOLUNTEERING_IN_A_COASTAL_REGIONAL_PARK.jpg",
+        "imageAlt": "Group standing in front of a carved wooden meeting house"
+      },
+      {
+        "title": "Rotorua marae, rafting & going student-led",
+        "location": "Tawharanui → Rotorua, New Zealand",
+        "body": "Two more days of conservation at Tawharanui, then we travel to Rotorua to stay at Paruaharanui Marae, with an introduction to Māori culture and the marae.\n\nWe raft with Rotorua Rafting on the Kaituna River, over Tutea Falls, at 7 metres the highest commercially rafted waterfall in the world, and ride self-guided mountain bike trails with Planet Bike. Then the student-led section begins: as a group you look at the budget and time available and decide how to spend your days.",
+        "tags": "Culture, Rafting, Student-led",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Wellington & into Kahurangi",
+        "location": "Wellington → Nelson → Kahurangi National Park, New Zealand",
+        "body": "The student-led section ends in Wellington with a night tour of Zealandia, an urban conservation project restoring native ecosystems and wildlife in a predator-free valley. The next day we walk from Te Papa along the waterfront to Parliament.\n\nAn early ferry takes us to the South Island and Nelson, and our four-day backpacking expedition in Kahurangi begins at Cobb Reservoir. Over the next days we scramble under a waterfall, work as a team to climb up into a cave, cross a limestone plateau to a rock overhang campsite, and tramp to Balloon Hut in the dark for some stargazing.",
+        "tags": "City, Tramping, Teamwork",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Kahurangi tops & Lake Rotoiti conservation",
+        "location": "Kahurangi → Lake Rotoiti → Punakaiki, New Zealand",
+        "body": "Our final expedition day crosses the tops from Balloon Hut past Lake Peel to Trilobite Hut and out to the road end, then we drive back to Nelson for a recovery day.\n\nAt Lake Rotoiti we spend three days on conservation projects with the Tasman Environmental Trust, helping protect native wildlife in the Nelson Tasman region. After a day exploring Nelson we start down the West Coast to Punakaiki, with hikes and beaches along the way.",
+        "tags": "Tramping, Conservation, Exploration",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/week8_NZA_ROCK_CLIMBING_AND_BACKPACKING_EXPEDITION_IN_NATIONAL_PARK.jpg",
+        "imageAlt": "Group of hikers with backpacks walking toward snow-capped mountains"
+      },
+      {
+        "title": "Franz Josef, Queenstown & Wanaka climbing",
+        "location": "Punakaiki → Franz Josef → Queenstown → Wanaka, New Zealand",
+        "body": "We continue down the coast to Franz Josef for a day to explore, then travel to Queenstown, camping at Lake Moke, for another day of exploration.\n\nIn Wanaka we spend two days on outdoor rock climbing lessons, learning climbing technique, belaying and rappelling. Then we set off on our second tramping trip, a two-night hiking expedition, often to Mount Aspiring Hut. The weather can be unsettled, so it sometimes becomes a one-night trip.",
+        "tags": "Exploration, Climbing, Tramping",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "High-country station & farewell",
+        "location": "Wanaka → Snowdon Station → Christchurch, New Zealand",
+        "body": "We hike out from the expedition and travel to Snowdon Station, a high-country sheep and beef station near Lake Coleridge, staying in the Shearer’s Quarters. Here we meet the dogs, watch a herding demonstration and see other parts of the working farm.\n\nWe hold our program wrap at the station. On the way to Christchurch we stop for short walks at Arthur’s Pass, then share a last dinner before the program ends at Christchurch Airport.",
+        "tags": "Farm life, Hiking, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/NZA_Images%20By%20Weeks/week10_NZAADVENTURES_IN_QUEENSTOWN.jpg",
+        "imageAlt": "Three people on a bench looking out at snow-capped mountains"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "High activity level. Anyone with a moderate to advanced fitness level and an enthusiasm for the outdoors will have a great time. Expect two multi-day tramps, canyoning, surfing, rock climbing and some physical work on volunteer projects, like the removal of invasive plants."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Indigenous cultures in two countries",
+        "body": "Join a culture tour with Nyanda and a First Nations tour on Stradbroke Island, learn about Te Tiriti o Waitangi at the Waitangi Treaty Grounds and stay at Paruaharanui Marae in Rotorua.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "This is a high activity level program, best suited to moderate to advanced fitness. The Kahurangi expedition includes full days of tramping with scrambling and a climb into a cave, and the Wanaka hiking expedition covers two nights. Volunteer projects also involve physical work, such as weeding and tree planting."
+      },
+      {
+        "q": "Do I need surfing or climbing experience?",
+        "a": "No. Surf lessons at Crescent Head run over three days with two two-hour lessons a day, and the Wanaka climbing days are lessons with an instructor. You don't need previous experience with any of the activities."
+      },
+      {
+        "q": "What is the student-led section?",
+        "a": "For a few days in New Zealand the group takes the reins, looking at the budget and time available and deciding together how to spend them, with your instructors there for guidance."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly clean, comfortable hostels and lodges, plus campgrounds and nights out on the two expeditions, a beachfront eco retreat on K’gari, a marae stay in Rotorua and the Shearer’s Quarters at Snowdon Station."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "$1950"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-02-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      },
+      {
+        "start": "2027-09-09",
+        "end": "2027-11-17",
+        "season": "Fall",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "South America Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/south-america-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/south-america-semester.png"
+      },
+      {
+        "title": "Southeast Asia Semester Abroad",
+        "meta": "10 weeks · $15,000",
+        "url": "https://www.pacificdiscovery.org/programs/southeast-asia-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/southeast-asia-semester.png"
+      },
+      {
+        "title": "Australia & Bali Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-bali-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-bali-semester.png"
+      },
+      {
+        "title": "Polynesian Journey Semester Abroad",
+        "meta": "10 weeks · $15,500",
+        "url": "https://www.pacificdiscovery.org/programs/polynesian-journey-gap-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/polynesian-journey-semester.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

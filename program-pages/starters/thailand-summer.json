@@ -1,0 +1,441 @@
+{
+  "v": 1,
+  "name": "Thailand Summer Program",
+  "seo": {
+    "title": "Thailand Summer Program | Pacific Discovery",
+    "description": "Thailand in 21 days: Bangkok’s canals, biking Ayutthaya, Our Land in Kanchanaburi, Erawan waterfalls, Khao Sok National Park, and climbing and kayaking at Railay Beach. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · Thailand",
+    "headline": "Three weeks from Bangkok to Railay Beach",
+    "intro": "Explore Bangkok’s canals, bike Ayutthaya, get hands-on with Our Land in Kanchanaburi, tube in Khao Sok and climb and kayak at Railay Beach.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/thailand/Thailand%205.png",
+    "imageAlt": "Two students in a kayak below limestone cliffs",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Thailand",
+    "start": "Bangkok, Thailand",
+    "finish": "Krabi, Thailand",
+    "weeks": 3,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 6550,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2300,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Hands-on with Our Land",
+        "body": "Spend four days with Our Land in Kanchanaburi, a local organisation focused on conservation and sustainable living.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Waterfalls and jungle",
+        "body": "A day trek to the Erawan waterfalls, then hiking, yoga and river tubing in Khao Sok National Park.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/thailand/Thailand%202.png",
+        "imageAlt": "Students running on a sandy beach below limestone cliffs"
+      },
+      {
+        "title": "Climb and paddle at Railay",
+        "body": "A half day of rock climbing, a mangrove kayak trip and the Dragon Crest trail at Railay Beach.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/thailand/Thailand%205.png",
+        "imageAlt": "Two students in a kayak below limestone cliffs"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Bangkok to Ayutthaya and Kanchanaburi, then south to Khao Sok and Railay Beach",
+    "phases": [
+      {
+        "label": "Days 1–5",
+        "text": "Orientation, street food, a canal tour and a cultural activity in Bangkok, then a bike tour of Ayutthaya"
+      },
+      {
+        "label": "Days 6–12",
+        "text": "Four days with Our Land in Kanchanaburi, a guided tour of the area and a day trek to the Erawan waterfalls"
+      },
+      {
+        "label": "Days 13–15",
+        "text": "Hiking, yoga and river tubing at Our Jungle Camp in Khao Sok National Park"
+      },
+      {
+        "label": "Days 16–21",
+        "text": "Rock climbing, a mangrove kayak trip and the Dragon Crest trail at Railay Beach"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "City hotel & resort",
+        "body": "A hotel base in Bangkok for the first five nights, then Treetara resort in Kanchanaburi.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Jungle camp",
+        "body": "Our Jungle Camp in Khao Sok National Park.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Beach stay",
+        "body": "Rapala Rock Wood at Railay Beach for the final week.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Bangkok, Ayutthaya & Kanchanaburi",
+        "location": "Bangkok → Ayutthaya → Kanchanaburi, Thailand",
+        "body": "You’ll meet your Program Instructors in Bangkok, where orientation runs over the first two days alongside a taste of the city’s street food. A city tour takes us along Bangkok’s canals, followed by a cultural activity the next day.\n\nWe take the train to Ayutthaya for a bike tour of the old city, then travel by private coach to Kanchanaburi to begin our project with Our Land, a local organisation focused on conservation and sustainable living.",
+        "tags": "Orientation, Culture, Biking",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Our Land, Erawan & Khao Sok",
+        "location": "Kanchanaburi → Khao Sok, Thailand",
+        "body": "Three more days with Our Land give us time to get properly stuck into the project. Then we move to Treetara resort for a guided tour of Kanchanaburi and time playing in the river, followed by a day trek to the Erawan waterfalls.\n\nNext we transfer to Our Jungle Camp in Khao Sok National Park, where our days include hiking, yoga and tubing down the river.",
+        "tags": "Service, Waterfalls, Jungle",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Climbing & kayaking at Railay Beach",
+        "location": "Khao Sok → Railay Beach, Krabi, Thailand",
+        "body": "After a final day of activities in Khao Sok, we take a boat to Railay Beach. Here we spend a half day rock climbing, head out on a kayak trip through the mangroves and hike the Dragon Crest trail.\n\nWe wrap up the program with a final group dinner at Railay before you fly home from Krabi.",
+        "tags": "Climbing, Kayaking, Hiking",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/thailand/Thailand%202.png",
+        "imageAlt": "Students running on a sandy beach below limestone cliffs"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect cycling, a day trek, hiking in Khao Sok, rock climbing, kayaking and some physical work on the volunteer project."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Conservation and sustainable living",
+        "body": "Four days with Our Land in Kanchanaburi, a local organisation focused on conservation and sustainable living.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "Anyone with average fitness and enthusiasm for the outdoors will be fine. You don’t need experience with any of the activities, but be ready for cycling, a day trek to the Erawan waterfalls, rock climbing, kayaking and some physical work on the volunteer project."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "A hotel in Bangkok, Treetara resort in Kanchanaburi, Our Jungle Camp in Khao Sok National Park and Rapala Rock Wood at Railay Beach."
+      },
+      {
+        "q": "How do we get around?",
+        "a": "By train to Ayutthaya, private coach to Kanchanaburi, and boat to Railay Beach."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-07-08",
+        "end": "2027-07-28",
+        "season": "Summer",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      },
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      },
+      {
+        "title": "Ecuador & Galápagos Summer Program",
+        "meta": "4 weeks · $7,950",
+        "url": "https://www.pacificdiscovery.org/programs/ecuador-and-galapagos-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/galapagos-turtle%282%29.jpg"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

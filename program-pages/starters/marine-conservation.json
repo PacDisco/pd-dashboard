@@ -1,0 +1,415 @@
+{
+  "v": 1,
+  "name": "Marine Conservation & Reef Monitoring Field Program",
+  "seo": {
+    "title": "Marine Conservation & Reef Monitoring Field Program | Pacific Discovery",
+    "description": "Two weeks on Oʻahu: earn your PADI Open Water and Ecological Monitoring Program certifications, survey coral reefs, join conservation projects, surf the North Shore. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · Hawaiʻi",
+    "headline": "Dive, survey and protect Oʻahu’s reefs",
+    "intro": "Earn your PADI Open Water certification, learn how scientists monitor coral reef health, join local conservation projects and surf the North Shore.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Expedition/Hawaii_Expedition_3.png",
+    "imageAlt": "Sea turtle swimming with small fish above a coral reef",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Oʻahu, Hawaiʻi (USA)",
+    "start": "Oʻahu, Hawaiʻi",
+    "finish": "Oʻahu, Hawaiʻi",
+    "weeks": 2,
+    "groupMax": 13,
+    "ages": "17–22",
+    "tuition": 6500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 1000,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Two dive certifications",
+        "body": "Three days earning your PADI Open Water Diver certification, then the Conservation Diver Ecological Monitoring Program certification.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Expedition/Hawaii_Expedition_2.png",
+        "imageAlt": "Two scuba divers sitting on the back of a dive boat"
+      },
+      {
+        "title": "Real reef monitoring fieldwork",
+        "body": "Classroom sessions and survey dives on coral reef ecology, invertebrate populations, fish identification and substrate composition, including photogrammetry.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Expedition/Hawaii_Expedition_7.png",
+        "imageAlt": "Scuba diver placing a measuring frame on the seafloor"
+      },
+      {
+        "title": "Hands-on conservation",
+        "body": "Service days with local organisations such as Papahana, the Aloha Tree Alliance and Mālama Maunalua.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Expedition/Hawaii_Expedition_6.png",
+        "imageAlt": "Scuba diver writing on a slate while swimming over a reef"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Expedition/Hawaii_Expedition_4.png",
+        "imageAlt": "Smiling scuba diver climbing out of the water onto a boat"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Honolulu to Haleʻiwa on Oʻahu’s North Shore and back",
+    "phases": [
+      {
+        "label": "Days 1–4",
+        "text": "Honolulu · Orientation and three days of PADI Open Water Diver certification"
+      },
+      {
+        "label": "Days 5–8",
+        "text": "Honolulu · The Ecological Monitoring Program: reef ecology, invertebrates, fish identification and substrate composition"
+      },
+      {
+        "label": "Days 9–10",
+        "text": "Honolulu · Two days of conservation service learning with local organisations"
+      },
+      {
+        "label": "Days 11–14",
+        "text": "Haleʻiwa · Surf lessons on the North Shore, snorkeling at Shark’s Cove and program wrap"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels",
+        "body": "Polynesian Hostel Beach Club in Waikiki at the start and end of the program, and Backpackers Inn in Haleʻiwa on the North Shore.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Yurts at Sun Farm",
+        "body": "Group living in yurts at Sun Farm during the reef monitoring and service days.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Scuba & reef monitoring certifications",
+        "location": "Honolulu, Oʻahu, Hawaiʻi",
+        "body": "You’ll meet your Program Instructors in Honolulu for orientation, then spend three days earning your PADI Open Water Diver certification, learning essential dive skills and completing open-water dives.\n\nNext you begin the Ecological Monitoring Program with Ocean Alliance. Each day starts with a classroom session on topics such as coral reef ecology, invertebrate population management and Hawaiʻi fish identification, followed by dives where you practice buoyancy and conduct underwater surveys.",
+        "tags": "Scuba, Marine science, Orientation",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Expedition/Hawaii_Expedition_6.png",
+        "imageAlt": "Scuba diver writing on a slate while swimming over a reef"
+      },
+      {
+        "title": "Service, surf & Shark’s Cove",
+        "location": "Honolulu → Haleʻiwa, Oʻahu, Hawaiʻi",
+        "body": "The monitoring program wraps up with substrate composition, using photogrammetry to build 3D models of reef structures. Two days of service learning follow with local organisations such as Papahana, the Aloha Tree Alliance and Mālama Maunalua, from native tree planting to removing invasive algae in Maunalua Bay.\n\nThen we head to Haleʻiwa on the North Shore for two days of surf lessons and exploring, snorkel at Shark’s Cove and wrap up the program before flying home from Honolulu.",
+        "tags": "Conservation, Surfing, Snorkeling",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Expedition/Hawaii_Expedition.png",
+        "imageAlt": "Scuba diver holding a camera rig above a sandy seafloor"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with an average fitness level and an enthusiasm for the outdoors will be fine. Expect daily diving during the certification and monitoring program, surf lessons, snorkeling and some physical work on volunteer projects, like removing invasive plants."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Conservation Diver Ecological Monitoring Program",
+        "body": "Classroom sessions and research dives covering coral reef ecology, invertebrate population management, fish identification and substrate composition, with photogrammetry of reef structures. You earn the Conservation Diver Ecological Monitoring Program Certification on successful completion.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "Do I need to know how to scuba dive?",
+        "a": "No. You’ll spend three days earning your PADI Open Water Diver certification before the Ecological Monitoring Program begins."
+      },
+      {
+        "q": "Do I need to know how to surf?",
+        "a": "No. Surf lessons on the North Shore are for first-timers and for those looking to sharpen their skills."
+      },
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness with an enthusiasm for the outdoors. Expect daily diving in the first week, surf lessons and snorkeling, and some physical work on volunteer projects."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "In clean group accommodation: hostels in Waikiki and Haleʻiwa, and yurts at Sun Farm. There’s no camping on this program."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover flights to and from Hawaiʻi, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "Flights to and from Hawaiʻi"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "[Add Summer 2027 dates]",
+    "sessions": []
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      },
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      },
+      {
+        "title": "Ecuador & Galápagos Summer Program",
+        "meta": "4 weeks · $7,950",
+        "url": "https://www.pacificdiscovery.org/programs/ecuador-and-galapagos-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/galapagos-turtle%282%29.jpg"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

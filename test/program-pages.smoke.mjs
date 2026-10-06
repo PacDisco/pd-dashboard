@@ -88,7 +88,7 @@ const S = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__pdp.S.dat
 const frame = () => page.frameLocator("#frame");
 
 await page.goto(`${ORIGIN}/program-pages/`);
-ok(await page.locator("[data-starter]").count() === 4, "four ready-made starters offered");
+ok(await page.locator("[data-starter]").count() === 19, "a ready-made starter for every program");
 await page.getByRole("button", { name: "+ South America Semester Abroad" }).click();
 ok(await page.locator("#new-slug").inputValue() === "south-america-gap-semester", "starter prefills the address");
 await page.getByRole("button", { name: "Create page" }).click();
@@ -142,9 +142,10 @@ await page.locator("#btn-undo").click();
 ok((await S()).itinerary.weeks.length === 10, "undo brings it back");
 
 // Add an FAQ from the on-page + button
+const faqBefore = (await S()).faq.items.length;
 await frame().locator('[data-add="faq.items"]').click();
-ok((await S()).faq.items.length === 7, "added a question");
-ok((await page.locator(".insp-head h2").textContent()) === "Question 7 of 7", "new question is selected");
+ok((await S()).faq.items.length === faqBefore + 1, "added a question");
+ok((await page.locator(".insp-head h2").textContent()) === `Question ${faqBefore + 1} of ${faqBefore + 1}`, "new question is selected");
 
 // Structured value: click tuition on the page → panel field → page updates
 await frame().locator('[data-group="facts"] [data-v="facts.tuition"]').click();
@@ -155,6 +156,7 @@ ok((await frame().locator('[data-group="facts"] [data-v="facts.tuition"]').textC
 
 // Hide a section
 await page.getByRole("button", { name: "Sections" }).click();
+await page.locator('[data-sec-toggle="instructors"]').check();
 await page.locator('[data-sec-toggle="instructors"]').uncheck();
 await page.waitForTimeout(400);
 ok(await frame().locator('[data-sec="instructors"].pde-hidden').count() === 1, "section hidden (faded in editor)");
@@ -166,7 +168,8 @@ ok((await page.locator("#frame").boundingBox()).width <= 392, "phone preview wid
 await shot("03-phone");
 await page.getByRole("button", { name: "Desktop" }).click();
 
-// Publish is blocked while placeholders show
+// Publish is blocked while placeholders show (make sure one is visible)
+await page.evaluate(() => { const S = window.__pdp.S; S.data.faq.items[0].a = "[Answer still to come]"; S.dirty = true; });
 await page.locator("#btn-publish").click();
 await page.locator("#dlg-pub[open]").waitFor();
 ok(await page.locator("#pub-go").isDisabled(), "publish blocked by placeholders");
@@ -189,6 +192,17 @@ await page.locator("#pub-go").click();
 await page.waitForTimeout(400);
 ok(db.publishes.length === 1 && db.publishes[0].note === "Smoke test", "published with note");
 ok((await page.locator("#ed-status").textContent()) === "Live", "status is Live");
+
+// Reload the starter into an existing page's draft; Undo restores it
+await page.evaluate(() => { window.__pdp.S.data.hero.headline = "Changed headline"; });
+await page.locator('[data-tab="page"]').click();
+await page.locator("#pg-starter").waitFor();
+page.once("dialog", (d) => d.accept());
+await page.locator("#pg-starter").click();
+await page.waitForTimeout(500);
+ok((await S()).hero.headline !== "Changed headline" && (await S()).itinerary.weeks.length === 10, "starter content loaded into the draft");
+await page.locator("#btn-undo").click();
+ok((await S()).hero.headline === "Changed headline", "undo brings the old draft back");
 
 ok(errors.length === 0, `no page errors: ${errors.join(" | ")}`);
 await browser.close();

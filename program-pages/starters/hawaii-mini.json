@@ -1,0 +1,466 @@
+{
+  "v": 1,
+  "name": "Hawaii Mini Semester",
+  "seo": {
+    "title": "Hawaii Mini Semester | Pacific Discovery",
+    "description": "Hawaiʻi in 6 weeks: an Imu feast, Volcanoes National Park, manta rays, a permaculture farm, fishpond restoration, Mauna Kea and surf lessons on Oʻahu. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/hawaii-mini-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Mini semester · Hawaiʻi",
+    "headline": "Six weeks across Hawaiʻi Island and Oʻahu",
+    "intro": "Cook an Imu feast in Pahala, snorkel with manta rays off Kona, stargaze from Mauna Kea, restore a fishpond in Hilo and learn to surf in Haleʻiwa.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/5_hawaii_SURFING_LESSONS_%26_RESTORING_WILDERNESS_DIVERSITY_IN_OAHU.png",
+    "imageAlt": "Students lined up on a beach beside surfboards for a lesson",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Hawaiʻi (USA)",
+    "start": "Hilo, Big Island",
+    "finish": "Honolulu, Oʻahu",
+    "weeks": 6,
+    "groupMax": 13,
+    "ages": "17–22",
+    "tuition": 11500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 1000,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Hawaiian culture from local hosts",
+        "body": "Build an imu for a feast in Pahala, learn voyaging canoe practice with Na Kalai Waʻa and take a Hawaiian language introduction in Hilo.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/1_hawaii_ORIENTATION%2C_%26_HAWAII_CULTURAL_FEAST.jpg",
+        "imageAlt": "Group preparing banana stalks and leaves beside a smoking fire pit"
+      },
+      {
+        "title": "Hands-on service, land and sea",
+        "body": "Farm with Ulu Mau Puanui, restore the Hale o Lono fishpond in Keaukaha, join Papahana service learning on Oʻahu and help at the Hawaiʻi Food Bank.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/3_hawaii_VOLUNTEERING_AT_A_LOCAL_NON-PROFIT.jpg",
+        "imageAlt": "Group of students holding buckets and litter grabbers on a sandy beach"
+      },
+      {
+        "title": "From the reef to the summit",
+        "body": "Snorkel with manta rays off Kona, stargaze on Mauna Kea, surf in Haleʻiwa, snorkel Hanauma Bay and kayak to the Twin Islands.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/4_hawaii_STARGAZING_ON_TOP_OF_A_VOLCANO_%26_SUSTAINABLE_FARMING.jpg",
+        "imageAlt": "Group in warm jackets standing under a starry night sky"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/6_hawaii_SNORKELING%2C_KAYAKING_%26_PROGRAM_WRAP.jpg",
+        "imageAlt": "Students climbing among the hanging roots of a large tree"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Hilo around Hawaiʻi Island, then to Haleʻiwa and Honolulu on Oʻahu",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Hilo and orientation in Pahala, Volcanoes National Park and an Imu feast"
+      },
+      {
+        "label": "Week 2–3",
+        "text": "Manta rays off Kona, Big Island Farms near Honokaʻa, voyaging canoe culture with Na Kalai Waʻa and farming with Ulu Mau Puanui"
+      },
+      {
+        "label": "Week 3–4",
+        "text": "Hilo: Hawaiian language, fishpond restoration in Keaukaha, Mauna Kea and morning yoga"
+      },
+      {
+        "label": "Week 4–5",
+        "text": "Fly to Oʻahu: surf lessons in Haleʻiwa, Shark Cove, Museum After Dark and Papahana service learning"
+      },
+      {
+        "label": "Week 6",
+        "text": "Lyon Arboretum, the Hawaiʻi Food Bank, Koko Crater, Hanauma Bay and kayaking to the Twin Islands"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Cottages, lodges & hostels",
+        "body": "Plantation Cottage in Pahala, Waipiʻo Lodge and Backpackers Hawaii in Haleʻiwa.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Camping",
+        "body": "Medium camping level: camping at Hoʻokena on the Kona side and at Arnott’s in Hilo.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Farm cabanas & Sun Farm",
+        "body": "Cabanas at Big Island Farms near Honokaʻa, and Sun Farm as our base in Honolulu.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Volcanoes & an Imu feast",
+        "location": "Hilo → Pahala → Kona, Hawaiʻi",
+        "body": "You’ll meet your Program Instructors in Hilo and drive to Pahala for orientation. From there we tour Volcanoes National Park, usually hiking the Kīlauea Iki Trail from the crater rim to the crater floor and back.\n\nWith our local host James we spend a full day building the imu pit, heating the stones and preparing the food, then return early the next morning to uncover it for our feast, followed by a musical performance. The week ends with the drive to the Kona side and our campsite at Hoʻokena.",
+        "tags": "Orientation, Volcanoes, Culture",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/1_hawaii_ORIENTATION%2C_%26_HAWAII_CULTURAL_FEAST.jpg",
+        "imageAlt": "Group preparing banana stalks and leaves beside a smoking fire pit"
+      },
+      {
+        "title": "Manta rays & a permaculture farm",
+        "location": "Kona → Honokaʻa, Hawaiʻi",
+        "body": "From our camp at Hoʻokena we explore the Kona side of the island and head out on a manta ray boat tour to snorkel with the mantas.\n\nNext we move to Big Island Farms near Honokaʻa and stay in the farm’s cabanas. A permaculture workshop introduces local farming techniques, a coconut workshop teaches us how to open coconuts and use every part, and a marine biology class looks at the coral reefs around the island, where we also make our own reef-safe sunscreen.",
+        "tags": "Snorkeling, Farming, Marine science",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Voyaging canoes & ancient farming",
+        "location": "Honokaʻa → Waipiʻo → Waimea → Hilo, Hawaiʻi",
+        "body": "We harvest ingredients for a farm-to-table vegetarian meal, then move to Waipiʻo Lodge. Two days with Na Kalai Waʻa introduce traditional voyaging canoe observation and cultural practice, from a history walk at Puʻukoholā Heiau and a knot lesson to the history of Mahukona.\n\nWith Ulu Mau Puanui we learn how Hawaiians sustained rain-fed intensive farming for centuries. In Hilo we take a Hawaiian language introduction and cultural history session with Traven, then start restoring the Hale o Lono fishpond in Keaukaha, clearing debris and invasive plants and dry stacking stone walls.",
+        "tags": "Culture, Farming, Conservation",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/3_hawaii_VOLUNTEERING_AT_A_LOCAL_NON-PROFIT.jpg",
+        "imageAlt": "Group of students holding buckets and litter grabbers on a sandy beach"
+      },
+      {
+        "title": "Fishpond, Mauna Kea & first waves",
+        "location": "Hilo, Hawaiʻi → Haleʻiwa, Oʻahu",
+        "body": "A second day at the fishpond covers wall repair, mākāhā (sluice gate) maintenance and limu (seaweed) propagation, ending with a closing ceremony. Then we head up Mauna Kea, a dormant volcano nearly 14,000 feet above sea level, to stargaze from the summit.\n\nMorning yoga sessions and time to explore Hilo round out our time on Hawaiʻi Island. We fly to Honolulu, settle into Haleʻiwa and start our surf lessons with HI Surf.",
+        "tags": "Conservation, Stargazing, Surfing",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/4_hawaii_STARGAZING_ON_TOP_OF_A_VOLCANO_%26_SUSTAINABLE_FARMING.jpg",
+        "imageAlt": "Group in warm jackets standing under a starry night sky"
+      },
+      {
+        "title": "Surf, snorkel & service on Oʻahu",
+        "location": "Haleʻiwa → Honolulu, Oʻahu",
+        "body": "Two more days of surf lessons in Haleʻiwa build on the basics, and we snorkel at Shark Cove before a free day to explore.\n\nIn Honolulu we settle in at Sun Farm and spend an evening at the Bishop Museum’s Museum After Dark. Then come two days of service learning with Papahana, learning about habitat restoration and the island’s native and invasive species, and helping with invasive species removal.",
+        "tags": "Surfing, Snorkeling, Service",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/5_hawaii_SURFING_LESSONS_%26_RESTORING_WILDERNESS_DIVERSITY_IN_OAHU.png",
+        "imageAlt": "Students lined up on a beach beside surfboards for a lesson"
+      },
+      {
+        "title": "Food bank, Hanauma Bay & farewell",
+        "location": "Honolulu, Oʻahu",
+        "body": "We visit Lyon Arboretum and Mānoa Falls, then spend two mornings at the Hawaiʻi Food Bank sorting and boxing food for distribution. One evening we climb an old railway track up the rim of Koko Crater for sunset views over Oʻahu’s eastern coast.\n\nWe snorkel in Hanauma Bay, inside a volcanic crater on the southeast coast, and take a guided sea kayak tour to the Twin Islands with snorkeling and a marine conservation discussion. We finish with our program wrap and reflections before flying home from Honolulu.",
+        "tags": "Service, Snorkeling, Kayaking",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Images%20by%20Week/6_hawaii_SNORKELING%2C_KAYAKING_%26_PROGRAM_WRAP.jpg",
+        "imageAlt": "Students climbing among the hanging roots of a large tree"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect hiking, surfing, snorkeling and kayaking, and some physical work on volunteer projects such as fishpond restoration and invasive species removal."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Hawaiian culture & the land",
+        "body": "Learn traditional voyaging canoe practice with Na Kalai Waʻa, take a Hawaiian language and cultural history session in Hilo, and learn how Hawaiians sustained rain-fed farming with Ulu Mau Puanui.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness. Be ready for hikes like the Kīlauea Iki Trail (3–4 miles) and the steep climb up Koko Crater, plus surfing, snorkeling and kayaking. Volunteer projects also involve physical work, such as fishpond restoration and invasive species removal."
+      },
+      {
+        "q": "Do I need to know how to surf?",
+        "a": "No. You’ll have three days of surf lessons with HI Surf in Haleʻiwa, and you don't need previous experience with any of the activities."
+      },
+      {
+        "q": "Who cooks the meals?",
+        "a": "On our Hawaii programs there is a lot of student-led cooking. In small groups you plan, budget and cook for the others, with your instructors there to help with planning and recipes."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "A mix of cottages, lodges and hostels, camping at Hoʻokena and in Hilo, cabanas at Big Island Farms and Sun Farm in Honolulu."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover flights to and from Hawaiʻi, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "Flights to and from Hawaiʻi"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-03-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Japan Mini Semester",
+        "meta": "5 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/japan-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Golden_Temple_Kyoto.jpg"
+      },
+      {
+        "title": "Thailand Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-mini-semester.png"
+      },
+      {
+        "title": "Costa Rica Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/costa-rica-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/costa-rica-mini-semester.png"
+      },
+      {
+        "title": "Australia Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-mini-semester.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

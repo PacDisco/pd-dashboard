@@ -740,7 +740,7 @@ function renderPanel() {
           ? '<button class="btn btn--sm btn--danger" type="button" id="pg-unpublish">Take page offline</button>'
           : '<button class="btn btn--sm btn--danger" type="button" id="pg-archive">Archive page</button>'}</div>
           <p class="help" style="font-size:12px;color:var(--muted)">Taking a page offline puts the old pacificdiscovery.org page back at this address.</p>` : '') +
-      `<div id="drift"></div>`;
+      `<div id="starter-load"></div><div id="drift"></div>`;
   } else if (S.tab === 'history') {
     head = 'History';
     body = '<p class="hint">Every publish is kept. Preview an older version, or restore it into the draft and publish it again.</p><div id="ver-list">Loading…</div>';
@@ -798,7 +798,7 @@ function renderPanel() {
   box.innerHTML = `<div class="insp-head"><h2>${esc(head)}</h2></div><div class="insp-body">${body}</div>`;
   wirePanel(box);
   if (S.tab === 'history' && !S.previewing) loadVersions();
-  if (S.tab === 'page') showDrift();
+  if (S.tab === 'page') { showDrift(); showStarterLoad(); }
   if (S.focusField) {
     const fieldEl = box.querySelector(`.field[data-path="${CSS.escape(S.focusField)}"]`);
     if (fieldEl) {
@@ -1256,6 +1256,34 @@ async function checkTemplateDrift() {
   } catch { driftMsg = ''; }
   if (S.tab === 'page') showDrift();
 }
+// A page whose address matches a ready-made starter can reload that content
+// into its draft (e.g. after the itinerary changes). The live page is untouched
+// until someone publishes, and Undo brings the old draft back.
+async function showStarterLoad() {
+  const st = (await loadStarters()).find((x) => x.slug === S.slug);
+  const el = $('#starter-load');
+  if (!el || !st) return;
+  el.innerHTML = `<div class="field" style="margin-top:20px"><span class="lbl">Starter content</span>
+    <button class="btn btn--sm" type="button" id="pg-starter">Replace draft with the ${esc(st.name)} starter</button>
+    <span class="help">Loads the latest starter content into this draft. The live page doesn't change until you publish, and Undo brings your current draft back.</span></div>`;
+  $('#pg-starter').onclick = async () => {
+    if (!confirm(`Replace this draft with the ${st.name} starter? You can undo this with the Undo button.`)) return;
+    try {
+      const res = await fetch(`/program-pages/starters/${st.id}.json`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Could not load the starter content.');
+      const data = await res.json();
+      clearTimeout(S.snapTimer);
+      takeSnapshot();
+      data.name = S.data.name || data.name;
+      S.data = normalizeProgram(data);
+      changed();
+      renderPanel();
+      updateBar();
+      toast('Starter content loaded into the draft.');
+    } catch (e) { toast(esc(e.message)); }
+  };
+}
+
 function showDrift() {
   const el = $('#drift');
   if (el) el.innerHTML = driftMsg ? `<p class="notice notice--info" style="margin-top:16px;border-radius:8px">${driftMsg}</p>` : '';

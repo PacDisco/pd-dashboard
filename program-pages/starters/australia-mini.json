@@ -1,0 +1,473 @@
+{
+  "v": 1,
+  "name": "Australia Mini Semester",
+  "seo": {
+    "title": "Australia Mini Semester | Pacific Discovery",
+    "description": "Australia’s east coast in 6 weeks: canyoning in the Blue Mountains, surf lessons, K’gari, Magnetic Island and reef learning on the Great Barrier Reef from Cairns. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-mini-semester.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Mini semester · Australia",
+    "headline": "Sydney to Cairns in six weeks",
+    "intro": "Canyon in the Blue Mountains, learn to surf at Crescent Head, explore K’gari and Magnetic Island, and finish on the Great Barrier Reef.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/1_AUSMini_SYDNEY%2C_ABORIGINAL_CULTURE_%26_CANYONING_IN_THE_BLUE_MOUNTAINS.jpg",
+    "imageAlt": "Student abseiling down a rock face above a forested valley",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Australia",
+    "start": "Sydney, Australia",
+    "finish": "Cairns, Australia",
+    "weeks": 6,
+    "groupMax": 12,
+    "ages": "17–22",
+    "tuition": 11500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2800,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "The whole east coast, by road",
+        "body": "Travel overland from Sydney to Cairns in our own group van, through the Blue Mountains, Byron Bay, Stradbroke Island, K’gari, Airlie Beach and Magnetic Island.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/AusMini2_SURF_CAMP_%26_CONSERVATION_PROJECT.jpg",
+        "imageAlt": "Group standing on coastal rocks looking out to sea"
+      },
+      {
+        "title": "Service, then surf",
+        "body": "Three days of conservation work with Maratus Ecological at Crescent Head, followed by three days learning to surf.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/3_AUSmini_BYRON_BAY%2C_ISLAND_EXPLORATION_%26_AUSTRALIA_ZOO.jpg",
+        "imageAlt": "Two people walking along a beach below a sandy cliff"
+      },
+      {
+        "title": "Reef learning in Cairns",
+        "body": "Three days with Reef Teach learning about coral, marine life and ocean sustainability, with snorkeling out on the Great Barrier Reef.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/6_AUSmini_MARINE_CONSERVATION_%26_GREAT_BARRIER_REEF.jpg",
+        "imageAlt": "Group in stinger suits and snorkel masks on a boat"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/4_AUSmini_K%E2%80%99GARI_FRASER_ISLAND_4WD_EXPEDITION.jpg",
+        "imageAlt": "Three students in snorkel masks standing in clear shallow water"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Sydney north along Australia’s east coast to Cairns",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Orientation in Sydney and the Australian Museum, then canyoning in the Blue Mountains from Katoomba"
+      },
+      {
+        "label": "Week 2",
+        "text": "Conservation work with Maratus Ecological and surf lessons at Crescent Head"
+      },
+      {
+        "label": "Week 3",
+        "text": "Kayaking and the headland walk in Byron Bay, a cultural tour in Brisbane, and sandboarding on Stradbroke Island"
+      },
+      {
+        "label": "Week 4",
+        "text": "Australia Zoo, a K’gari island tour and a day trip to Keppel Island from Yeppoon"
+      },
+      {
+        "label": "Week 5–6",
+        "text": "Ocean rafting at Airlie Beach, wildlife on Magnetic Island, then Reef Teach, Mossman Gorge and Josephine Falls from Cairns"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels",
+        "body": "Clean, comfortable hostels including Pacific House in Sydney, the Blue Mountains YHA, Rainbow Beach Freedom Backpackers and Ryans Rest in Cairns.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Campgrounds & holiday parks",
+        "body": "Waves Campground at Crescent Head, Byron Discovery Park and Tasman Holiday Park at Airlie Beach.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Lodges & island stays",
+        "body": "Manta Lodge on Stradbroke Island, a beach house in Yeppoon and a stay on Magnetic Island.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Sydney & canyoning in the Blue Mountains",
+        "location": "Sydney → Katoomba, Australia",
+        "body": "You’ll meet your Program Instructors in Sydney, where we spend three days on orientation, getting to know each other and the program, with a visit to the Australian Museum.\n\nThen we head to Katoomba in the Blue Mountains, our base for a full day of canyoning: abseiling, swimming and jumping through the canyons of the national park. At the end of the week we drive north to the coast at Crescent Head.",
+        "tags": "Orientation, Culture, Canyoning",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/1_AUSMini_SYDNEY%2C_ABORIGINAL_CULTURE_%26_CANYONING_IN_THE_BLUE_MOUNTAINS.jpg",
+        "imageAlt": "Student abseiling down a rock face above a forested valley"
+      },
+      {
+        "title": "Conservation & learning to surf",
+        "location": "Crescent Head → Byron Bay, Australia",
+        "body": "We start the week with three days of service with Maratus Ecological, doing hands-on bush regeneration and dune conservation work on the coast. Evenings are spent at Waves Campground.\n\nNext come three days learning to surf. Whether it’s your first time on a board or you’ve surfed before, the instructors cater to everyone. Then we pack up and drive north to Byron Bay.",
+        "tags": "Conservation, Surfing, Camping",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/AusMini2_SURF_CAMP_%26_CONSERVATION_PROJECT.jpg",
+        "imageAlt": "Group standing on coastal rocks looking out to sea"
+      },
+      {
+        "title": "Byron Bay, Brisbane & Stradbroke Island",
+        "location": "Byron Bay → Brisbane → Stradbroke Island, Australia",
+        "body": "In Byron Bay we head out kayaking with dolphins and hike the Byron headland walkway. Then we drive into Queensland for a cultural tour with Nyanda on the way to Brisbane, and a day exploring the South Bank Parklands.\n\nFrom Brisbane we cross to Stradbroke Island, known to locals as Straddie. Here we join a cultural tour, spend an afternoon sandboarding and have a day to explore the island.",
+        "tags": "Kayaking, Culture, Sandboarding",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/3_AUSmini_BYRON_BAY%2C_ISLAND_EXPLORATION_%26_AUSTRALIA_ZOO.jpg",
+        "imageAlt": "Two people walking along a beach below a sandy cliff"
+      },
+      {
+        "title": "Australia Zoo, K’gari & Keppel Island",
+        "location": "Rainbow Beach → K’gari → Yeppoon, Australia",
+        "body": "We take the ferry back to the mainland and visit Australia Zoo, learning about its wildlife and the conservation work of its late founder Steve Irwin, before a night at Rainbow Beach.\n\nNext is a K’gari island tour. K’gari is home to over 350 bird species as well as dingoes and echidnas, and we swim in its freshwater lakes. Then we continue north to Yeppoon for a day trip to Keppel Island, before driving on to Airlie Beach.",
+        "tags": "Wildlife, Island, Swimming",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/4_AUSmini_K%E2%80%99GARI_FRASER_ISLAND_4WD_EXPEDITION.jpg",
+        "imageAlt": "Three students in snorkel masks standing in clear shallow water"
+      },
+      {
+        "title": "Airlie Beach & Magnetic Island",
+        "location": "Airlie Beach → Magnetic Island, Australia",
+        "body": "At Airlie Beach we spend a day out on the water with Ocean Rafting and a day at the Airlie Beach Lagoon.\n\nThen we take the ferry to Magnetic Island for four nights. Over half the island is national park and bird sanctuary, with a large koala population. We join a wildlife tour, have a day to explore, and hire paddleboards and kayaks at Horseshoe Bay. At the end of the week we drive north to Cairns.",
+        "tags": "Ocean, Wildlife, Paddleboarding",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/5_Ausmini_BEACH_CLEAN_UP_%26_MAGNETIC_ISLAND.jpg",
+        "imageAlt": "Sunset over the sea framed by palm trees"
+      },
+      {
+        "title": "Reef Teach & the tropical north",
+        "location": "Cairns, Australia",
+        "body": "Our final week is in tropical Cairns. Over three days with Reef Teach we learn about coral, marine life and sustainability for our oceans, with snorkeling out on the Great Barrier Reef.\n\nWe also visit Mossman Gorge and take a day trip to Josephine Falls. We finish with our program wrap, reflecting on everything we’ve experienced and learned together, before flying home from Cairns.",
+        "tags": "Marine science, Snorkeling, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/AUS_mini/6_AUSmini_MARINE_CONSERVATION_%26_GREAT_BARRIER_REEF.jpg",
+        "imageAlt": "Group in stinger suits and snorkel masks on a boat"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect canyoning, surfing, kayaking, hiking and some physical work on the conservation project."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Reef Teach in Cairns",
+        "body": "Three days learning about coral, marine life and sustainability for our oceans, with snorkeling out on the Great Barrier Reef.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "Do I need to know how to surf?",
+        "a": "No. You’ll spend three days learning to surf at Crescent Head, and the instructors cater to everyone, whether it’s your first time on a board or you’ve surfed before."
+      },
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness with an enthusiasm for the outdoors. You don’t need experience with any of the activities, but be ready to try canyoning, surfing, kayaking and hiking. The conservation project also involves some physical work."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly clean, comfortable hostels and lodges, plus campground and holiday park stays at Crescent Head, Byron Bay and Airlie Beach."
+      },
+      {
+        "q": "How do we get around?",
+        "a": "We travel in our own group van for the whole program, with ferries to Stradbroke Island and Magnetic Island."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-03-11",
+        "end": "2027-04-21",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Japan Mini Semester",
+        "meta": "5 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/japan-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Golden_Temple_Kyoto.jpg"
+      },
+      {
+        "title": "Hawaii Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/hawaii-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/hawaii-mini-semester.png"
+      },
+      {
+        "title": "Thailand Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-mini-semester.png"
+      },
+      {
+        "title": "Costa Rica Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/costa-rica-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/costa-rica-mini-semester.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

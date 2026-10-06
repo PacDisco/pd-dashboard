@@ -1,0 +1,444 @@
+{
+  "v": 1,
+  "name": "Bali Summer Program",
+  "seo": {
+    "title": "Bali Summer Program | Pacific Discovery",
+    "description": "Bali in 4 weeks: food rescue and a mangrove clean-up in Sanur, Tabanan’s villages, surf camp in Uluwatu, service on Nusa Penida, a yoga retreat in Ubud and a Mount Batur sunrise. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · Bali",
+    "headline": "Four weeks of service, surf and culture in Bali",
+    "intro": "Rescue food in Sanur, visit Tabanan’s villages and temples, learn to surf in Uluwatu, volunteer on Nusa Penida and finish with a yoga retreat and a sunrise on Mount Batur.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/PacificDiscovery%20-%20Aus_Bali%202.jpg",
+    "imageAlt": "Group silhouetted on a leaning palm tree over the water at dusk",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Bali (Indonesia)",
+    "start": "Denpasar, Bali",
+    "finish": "Denpasar, Bali",
+    "weeks": 4,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 6550,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2500,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "A full surf camp",
+        "body": "Several days of lessons with Balumba Surf School in Uluwatu, whether you’re a beginner or have surfed before.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/PacificDiscovery%20-%20Aus_Bali%202.jpg",
+        "imageAlt": "Group silhouetted on a leaning palm tree over the water at dusk"
+      },
+      {
+        "title": "Service on land and sea",
+        "body": "A mangrove clean-up and food packaging with SOS in Sanur, village meal distribution in Tabanan and a conservation service project with FNPF on Nusa Penida.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Balinese culture and wellbeing",
+        "body": "Temples and trekking in Tabanan, dinner at Tabanan Palace, a cultural day with Five Pillars, batik making and a yoga retreat in Ubud.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia%20%26%20Bali/PacificDiscovery%20-%20Bali.jpg",
+        "imageAlt": "Students learning dance moves in an open-air pavilion"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/Oz_Bali%201.png",
+        "imageAlt": "Two people standing in a stone temple gateway reflected in water"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Denpasar to Sanur, Tabanan, Uluwatu, Nusa Penida, Ubud and Mount Batur",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Orientation in Seminyak, a mangrove clean-up and food rescue in Sanur, then village and temple visits in Tabanan"
+      },
+      {
+        "label": "Week 2",
+        "text": "Agriculture and a palace dinner in Tabanan, then surf camp in Uluwatu"
+      },
+      {
+        "label": "Week 3",
+        "text": "A conservation service project with FNPF on Nusa Penida, then culture and batik making in Ubud"
+      },
+      {
+        "label": "Week 4",
+        "text": "A yoga retreat in Ubud, a sunrise climb on Mount Batur and our program wrap"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hotels & hostels",
+        "body": "Harris Hotel Seminyak, Abian Harmony Hotel in Sanur, My Art Hostel on Nusa Penida and Puji Hostel in Ubud.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Coliving, surf camp & project stays",
+        "body": "Coliving Bali in Tabanan, My Dream Bali at surf camp in Uluwatu and the FNPF centre on Nusa Penida.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Yoga village & a night on the volcano",
+        "body": "Dragonfly Village for the yoga retreat in Ubud, and one night in tents on Mount Batur.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Sanur service & Tabanan villages",
+        "location": "Denpasar → Sanur → Tabanan, Bali",
+        "body": "You’ll meet your Program Instructors in Seminyak, where we spend a day on orientation before moving to the seaside town of Sanur. Here we join a mangrove clean-up, then help package meals with SOS, a food rescue organisation that turns good excess food from hotels and cafes into meals for people in need.\n\nIn Tabanan we stay at Coliving Bali and take meals out to local villages, visiting temples along the way. The next day brings trekking and cultural activities.",
+        "tags": "Orientation, Service, Culture",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia%20%26%20Bali/PacificDiscovery%20-%20Bali.jpg",
+        "imageAlt": "Students learning dance moves in an open-air pavilion"
+      },
+      {
+        "title": "Tabanan Palace & surf camp",
+        "location": "Tabanan → Uluwatu → Nusa Penida, Bali",
+        "body": "A morning agriculture activity is followed by dinner at Tabanan Palace, the local royal palace built in 1343. Then we head to Uluwatu for surf camp with Balumba Surf School. Whether you’re a beginner or have surfed before, the instructors guide you through several days of lessons, with a restoration and exploration day in the middle.\n\nAt the end of the week we cross to Nusa Penida and settle in at FNPF, with activities on our first evening.",
+        "tags": "Culture, Surfing, Restoration",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/PacificDiscovery%20-%20Aus_Bali%202.jpg",
+        "imageAlt": "Group silhouetted on a leaning palm tree over the water at dusk"
+      },
+      {
+        "title": "Nusa Penida service & Ubud culture",
+        "location": "Nusa Penida → Ubud, Bali",
+        "body": "We spend three days on a conservation service project with FNPF on Nusa Penida, then move to My Art Hostel for a free day to explore the island.\n\nBack on the mainland, we settle into Ubud. A day with Five Pillars combines a cultural experience with a visit to an eco farm, and a batik making class follows.",
+        "tags": "Conservation, Culture, Batik",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/Oz_Bali%201.png",
+        "imageAlt": "Two people standing in a stone temple gateway reflected in water"
+      },
+      {
+        "title": "Yoga retreat & Mount Batur sunrise",
+        "location": "Ubud → Mount Batur → Denpasar, Bali",
+        "body": "After a morning at the markets, we head to Dragonfly Village for our yoga retreat with Sheila Ubud Yoga, starting with an orientation evening and continuing over the next three days.\n\nAfter a final morning of yoga, we head to Mount Batur for a night in tents and a pre-dawn climb to the summit for sunrise. Back in Ubud we wrap up the program together before you fly home from Denpasar.",
+        "tags": "Yoga, Hiking, Program wrap",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect several days of surf lessons, trekking in Tabanan, hands-on service projects and a pre-dawn climb up Mount Batur."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Food rescue in Sanur",
+        "body": "Help SOS package meals made from good excess food rescued from hotels and cafes, then take meals out to villages in Tabanan.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "Do I need to know how to surf?",
+        "a": "No. The surf camp with Balumba Surf School in Uluwatu suits beginners as well as students who have surfed before."
+      },
+      {
+        "q": "How fit do I need to be?",
+        "a": "Anyone with average fitness and enthusiasm for the outdoors will be fine. You don’t need experience with any of the activities, but be ready for surf lessons, trekking, service projects and a pre-dawn climb up Mount Batur."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly hotels and hostels, plus Coliving Bali in Tabanan, a surf camp stay in Uluwatu, the FNPF centre on Nusa Penida, Dragonfly Village for the yoga retreat and one night in tents on Mount Batur."
+      },
+      {
+        "q": "What is the yoga retreat like?",
+        "a": "A few days at Dragonfly Village in Ubud with Sheila Ubud Yoga, starting with an orientation evening, with yoga sessions each morning."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "[Add Summer 2027 dates]",
+    "sessions": []
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      },
+      {
+        "title": "Ecuador & Galápagos Summer Program",
+        "meta": "4 weeks · $7,950",
+        "url": "https://www.pacificdiscovery.org/programs/ecuador-and-galapagos-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/galapagos-turtle%282%29.jpg"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

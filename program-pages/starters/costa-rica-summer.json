@@ -1,0 +1,450 @@
+{
+  "v": 1,
+  "name": "Costa Rica Summer Program",
+  "seo": {
+    "title": "Costa Rica Summer Program | Pacific Discovery",
+    "description": "Costa Rica in 4 weeks: an organic farm stay, rainforest hikes, surf lessons in Uvita, a Golfo Dulce kayak expedition, wildlife rescue volunteering and Pacuare rafting. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/costa-rica-college-summer.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · Costa Rica",
+    "headline": "A summer of hiking, paddling and wildlife care in Costa Rica",
+    "intro": "Hike between rural ecolodges, learn to surf in Uvita, kayak the Golfo Dulce, volunteer at a wildlife rescue center and raft the Pacuare River.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/Costa%20Rica%20Mini%20Semester%206.png",
+    "imageAlt": "Group in helmets and life jackets with paddles on a riverbank",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Costa Rica",
+    "start": "San José, Costa Rica",
+    "finish": "San José, Costa Rica",
+    "weeks": 4,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 7950,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 1000,
+    "activityLevel": "High",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Three expedition-style adventures",
+        "body": "Hike between Los Campesinos Ecolodge and Ranchos Tinamú, kayak the Golfo Dulce over several days, and raft in and out of the Pacuare River.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/PacificDiscovery_20.jpg",
+        "imageAlt": "Surfer carrying a board through the whitewater"
+      },
+      {
+        "title": "Hands-on wildlife rescue",
+        "body": "Several days volunteering at an animal rescue center near Alajuela, helping care for animals like sloths and howler monkeys.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/PacificDiscovery%20-%20animals.jpg",
+        "imageAlt": "Young sloths wrapped in a towel in a blue tub"
+      },
+      {
+        "title": "Life on rural farms",
+        "body": "Glamping on a working organic farm with a spice tour, a community volunteer project in Naranjito and tree planting at Ranchos Tinamú.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/PacificDiscovery_21.jpg",
+        "imageAlt": "Students in gloves pulling weeds from long grass"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/PacificDiscovery%20-%20Costa%20Rica.jpg",
+        "imageAlt": "Student carrying a basket of fruit on a forest path"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from San José to the Pacific coast and Golfo Dulce, then Alajuela, Sarapiquí and the Pacuare River and back to San José",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "An organic farm in Villa Nueva Naranjo, Manuel Antonio National Park and a hike to Los Campesinos Ecolodge"
+      },
+      {
+        "label": "Week 2",
+        "text": "A 16 km hike to Ranchos Tinamú, then surf lessons in Uvita"
+      },
+      {
+        "label": "Week 3",
+        "text": "A kayak expedition on the Golfo Dulce, then volunteering at a wildlife rescue center near Alajuela"
+      },
+      {
+        "label": "Week 4",
+        "text": "A yoga retreat in Sarapiquí, rafting on the Pacuare River and a return to San José"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Ecolodges & lodges",
+        "body": "Los Campesinos Ecolodge, Ranchos Tinamú, Epic Adventure Lodge in Sarapiquí and Pacuare River Eco Lodge.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Glamping & kayak camp",
+        "body": "Glamping on a working organic farm in Villa Nueva Naranjo, and Dolphin Quest Camp during the Golfo Dulce kayak expedition.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Cabins, hotels & the rescue center",
+        "body": "Cabinas El Tecal in Uvita, hotels in San José and Golfito, and nights at the wildlife rescue center.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Organic farm & Los Campesinos",
+        "location": "San José → Villa Nueva Naranjo → Naranjito, Costa Rica",
+        "body": "You’ll meet your Program Instructors in San José, then we transfer to a working organic farm in Villa Nueva Naranjo for glamping and orientation. A spice tour introduces local spices, flowers and medicinal plants, and we spend a day in Manuel Antonio National Park.\n\nNext we hike 8 km from Brisas del Nara to Los Campesinos Ecolodge, finishing with a trapiche tour and a welcome barbecue. Horseback riding, the Los Campesinos trails and a soccer game follow, then a volunteer project in the community.",
+        "tags": "Orientation, Hiking, Community",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/PacificDiscovery%20-%20Costa%20Rica.jpg",
+        "imageAlt": "Student carrying a basket of fruit on a forest path"
+      },
+      {
+        "title": "Ranchos Tinamú & surf in Uvita",
+        "location": "Naranjito → San Isidro de Dota → Uvita, Costa Rica",
+        "body": "We hike 16 km from Los Campesinos to Ranchos Tinamú in San Isidro de Dota. Here we spend a day tree planting, take a waterfall hike and head out on a night tour.\n\nThen it’s down to the coast and Cabinas El Tecal in Uvita for surf lessons. Between sessions we hike the Cola de Ballena, visit Nauyaca waterfall and explore Dominical, before transferring to Golfito for an afternoon of kayak expedition practice.",
+        "tags": "Hiking, Conservation, Surfing",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/PacificDiscovery_20.jpg",
+        "imageAlt": "Surfer carrying a board through the whitewater"
+      },
+      {
+        "title": "Golfo Dulce kayaking & wildlife rescue",
+        "location": "Golfito → Golfo Dulce → Alajuela, Costa Rica",
+        "body": "Our kayak expedition covers 15 km on the Golfo Dulce to Dolphin Quest Camp, then 10 km with a snorkel stop. Back in Golfito we kayak and snorkel some more and explore the town.\n\nAfter a final paddle we transfer to Guácima near Alajuela for an introduction to the animal rescue center. We spend the rest of the week volunteering here, helping with daily care, food preparation and enrichment for animals like sloths and howler monkeys.",
+        "tags": "Kayaking, Snorkeling, Volunteering",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/PacificDiscovery%20-%20animals.jpg",
+        "imageAlt": "Young sloths wrapped in a towel in a blue tub"
+      },
+      {
+        "title": "Yoga retreat, Pacuare River & farewell",
+        "location": "Alajuela → Sarapiquí → Pacuare → San José, Costa Rica",
+        "body": "We transfer to Epic Adventure Lodge in Sarapiquí for our yoga retreat, followed by a free day.\n\nThen we head to the Pacuare River and raft in to Pacuare River Eco Lodge. From the lodge we hike to an Indigenous village and hold our program wrap, before rafting out and returning to San José, where students depart from Juan Santamaría International Airport.",
+        "tags": "Yoga, Rafting, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/costa-rica/Costa%20Rica%20Mini%20Semester%206.png",
+        "imageAlt": "Group in helmets and life jackets with paddles on a riverbank"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "High activity level, but no experience is required. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect hikes of 8 km and 16 km, a multi-day kayak expedition, rafting, surfing and some physical work on conservation projects, like cleaning animal enclosures and planting trees."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Sustainability on working farms",
+        "body": "A spice tour on a working organic farm, a volunteer project in the Naranjito community and tree planting at Ranchos Tinamú.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Wildlife rescue and rehabilitation",
+        "body": "Days at an animal rescue center helping with daily care, food preparation and enrichment for rescued animals.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "This is a high activity program, but no experience is required. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect hikes of 8 km and 16 km, kayaking, rafting and surfing, plus some physical work on conservation projects. There is downtime scheduled between the expeditions."
+      },
+      {
+        "q": "Do I need to know how to surf, kayak or raft?",
+        "a": "No. You’ll have surf lessons in Uvita, an afternoon of practice in Golfito before the kayak expedition, and the Pacuare rafting needs no previous experience."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly ecolodges, lodges and cabins, plus glamping on an organic farm, Dolphin Quest Camp during the kayak expedition and nights at the wildlife rescue center."
+      },
+      {
+        "q": "What will I do at the wildlife rescue center?",
+        "a": "You’ll help with daily care, food preparation and enrichment activities for animals like sloths and howler monkeys, and physical work like cleaning out enclosures."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "[Add Summer 2027 dates]",
+    "sessions": []
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      },
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

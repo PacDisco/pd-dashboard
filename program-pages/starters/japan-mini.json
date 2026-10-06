@@ -1,0 +1,467 @@
+{
+  "v": 1,
+  "name": "Japan Mini Semester",
+  "seo": {
+    "title": "Japan Mini Semester | Pacific Discovery",
+    "description": "Japan in 5 weeks: Tokyo’s temples and markets, a Kyoto ryokan and tea ceremony, Nara’s deer, hiking in the Japanese Alps, a conservation project and Hiroshima. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Golden_Temple_Kyoto.jpg"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Mini semester · Japan",
+    "headline": "Japan’s cities, temples and mountains in five weeks",
+    "intro": "Explore Tokyo, take part in a tea ceremony in Kyoto, hike in the Japanese Alps and reflect on peace and resilience in Hiroshima.",
+    "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Golden_Temple_Kyoto.jpg",
+    "imageAlt": "Golden pavilion beside a pond with pine trees and a blue sky",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Japan",
+    "start": "Tokyo, Japan",
+    "finish": "Hiroshima, Japan",
+    "weeks": 5,
+    "groupMax": 14,
+    "ages": "17–22",
+    "tuition": 10500,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 1500,
+    "activityLevel": "",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Live with a Japanese family",
+        "body": "A homestay with a Japanese family gives you firsthand insight into customs, etiquette and daily life.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/1_Japan_TOKYO__URBAN_EXPLORATION_%26_CULTURAL_IMMERSION.jpg",
+        "imageAlt": "Busy city street crossing lined with colourful billboards"
+      },
+      {
+        "title": "Traditional Kyoto",
+        "body": "Stay in a ryokan, take part in a tea ceremony, try on a kimono and join a cooking workshop before exploring Nishiki Market.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Japan_KYOTO_%26_NARA__TRADITIONAL_HEART_OF_JAPAN.jpg",
+        "imageAlt": "Golden pavilion reflected in a pond surrounded by pine trees"
+      },
+      {
+        "title": "Mountains and conservation",
+        "body": "A full day hiking in the Japanese Alps from Takayama, then a local community and conservation project.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/4_Japan_COMMUNITY_ENGAGEMENT_%26_CONSERVATION.jpg",
+        "imageAlt": "Clear river winding through forested hills under a blue sky"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/5_Japan_HIROSHIMA_%26_MIYAJIMA__PEACE%2C_REFLECTION_%26_FAREWELL.jpg",
+        "imageAlt": "Orange torii gate standing in the sea with a small boat nearby"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Tokyo through Kyoto, Nara and Takayama to Hiroshima",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Tokyo · Senso-ji, the Imperial Palace gardens, Tsukiji Fish Market, Odaiba and a homestay"
+      },
+      {
+        "label": "Week 2",
+        "text": "Kyoto & Nara · A ryokan stay, Kiyomizu-dera, a tea ceremony, Todai-ji and Arashiyama Bamboo Grove"
+      },
+      {
+        "label": "Week 3–4",
+        "text": "Takayama & the Japanese Alps · The old town, a full day of hiking, then a community and conservation project"
+      },
+      {
+        "label": "Week 5",
+        "text": "Hiroshima & Miyajima · The Peace Memorial Park and Museum, Itsukushima Shrine, Mount Misen and farewell"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Homestay",
+        "body": "Time living with a Japanese family, sharing their daily routines.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Traditional ryokan",
+        "body": "A traditional Japanese inn while we explore Kyoto and Nara.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Hostels & mountain lodges",
+        "body": "Clean, comfortable hostels in the cities and local lodges or mountain huts in the Japanese Alps.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Tokyo temples, markets & homestay",
+        "location": "Tokyo, Japan",
+        "body": "Welcome to Japan! You’ll meet your Program Instructors in Tokyo for orientation, then move into a homestay with a Japanese family, gaining firsthand insight into customs, etiquette and daily life.\n\nWe visit Senso-ji Temple and Nakamise Street, walk the Imperial Palace gardens, and explore Tsukiji Fish Market and the Ginza and Asakusa neighborhoods. A hands-on workshop and a team-building scavenger hunt with a visit to Odaiba round out the week.",
+        "tags": "Orientation, Culture, Homestay",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/1_Japan_TOKYO__URBAN_EXPLORATION_%26_CULTURAL_IMMERSION.jpg",
+        "imageAlt": "Busy city street crossing lined with colourful billboards"
+      },
+      {
+        "title": "Kyoto & Nara",
+        "location": "Tokyo → Kyoto → Nara, Japan",
+        "body": "We take the Shinkansen to Kyoto and settle into a traditional ryokan. We visit Kiyomizu-dera Temple and the Higashiyama district, take part in a tea ceremony, and try on kimono for photos.\n\nA day trip to Nara brings us to Todai-ji Temple and its friendly deer. Back in Kyoto we join a cooking workshop, explore Nishiki Market, take a calligraphy or origami workshop and walk through Arashiyama Bamboo Grove.",
+        "tags": "Temples, Tea ceremony, Food",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/Japan_KYOTO_%26_NARA__TRADITIONAL_HEART_OF_JAPAN.jpg",
+        "imageAlt": "Golden pavilion reflected in a pond surrounded by pine trees"
+      },
+      {
+        "title": "Takayama & the Japanese Alps",
+        "location": "Kyoto → Takayama, Japan",
+        "body": "We travel to the mountain town of Takayama, known for its samurai heritage and Edo-period streets, and get an introduction to the Japanese Alps. We explore the old town and its morning markets and join a craft workshop.\n\nThen we head into the Alps for a full day of hiking, staying in local lodges or mountain huts and learning about Japan’s relationship with nature and traditional mountain life.",
+        "tags": "Hiking, Crafts, Mountains",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/3_japan_TAKAYAMA_%26_JAPANESE_ALPS_ADVENTURE.jpg",
+        "imageAlt": "Quiet street of traditional dark wooden houses"
+      },
+      {
+        "title": "Community engagement & conservation",
+        "location": "Takayama & rural villages, Japan",
+        "body": "We cycle through rural villages and join a local community and conservation project, including forest conservation work.\n\nThis part of the program offers a deeper look at Japan’s environmental philosophies, which emphasize harmony between people and nature.",
+        "tags": "Conservation, Service, Cycling",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/4_Japan_COMMUNITY_ENGAGEMENT_%26_CONSERVATION.jpg",
+        "imageAlt": "Clear river winding through forested hills under a blue sky"
+      },
+      {
+        "title": "Hiroshima, Miyajima & farewell",
+        "location": "Hiroshima → Miyajima, Japan",
+        "body": "We travel to Hiroshima to visit the Peace Memorial Park and Museum, a powerful reminder of resilience and hope. A ferry takes us to Miyajima Island to see Itsukushima Shrine and hike Mount Misen.\n\nWe wrap up with a group cooking class, learning to make Hiroshima-style okonomiyaki, a final reflection circle and presentations, and a farewell dinner to celebrate the friendships and memories made in Japan.",
+        "tags": "History, Hiking, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/banners/5_Japan_HIROSHIMA_%26_MIYAJIMA__PEACE%2C_REFLECTION_%26_FAREWELL.jpg",
+        "imageAlt": "Orange torii gate standing in the sea with a small boat nearby"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "[Activity level] activity level. No prior travel experience is needed, just curiosity, teamwork and a willingness to step outside your comfort zone. Expect lots of walking in cities, a full day of hiking in the Japanese Alps, cycling and a hike up Mount Misen."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Japanese culture, hands on",
+        "body": "A tea ceremony and kimono fitting in Kyoto, cooking and calligraphy or origami workshops, a craft workshop in Takayama and an okonomiyaki cooking class in Hiroshima.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Peace and reflection in Hiroshima",
+        "body": "A visit to the Peace Memorial Park and Museum, followed by a group reflection circle and presentations at the end of the program.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "No prior experience is needed, but be ready to give everything a go. Expect plenty of walking, a full day of hiking in the Japanese Alps, cycling through rural villages and a hike up Mount Misen."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "A mix of hostels, a traditional ryokan in Kyoto, a homestay with a Japanese family and local lodges or mountain huts in the Japanese Alps."
+      },
+      {
+        "q": "How do we get around?",
+        "a": "By private van, trains (including the Shinkansen bullet train) and ferries."
+      },
+      {
+        "q": "Will I stay with a host family?",
+        "a": "Yes. Part of the program is a homestay with a Japanese family, giving you firsthand insight into customs, etiquette and daily life."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "Not sure yet? Talk to an advisor.",
+    "sessions": [
+      {
+        "start": "2027-03-11",
+        "end": "2027-04-14",
+        "season": "Spring",
+        "status": "Open",
+        "spotsLeft": "",
+        "applyUrl": ""
+      }
+    ]
+  },
+  "cta": {
+    "heading": "Spring 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Hawaii Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/hawaii-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/hawaii-mini-semester.png"
+      },
+      {
+        "title": "Thailand Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-mini-semester.png"
+      },
+      {
+        "title": "Costa Rica Mini Semester",
+        "meta": "6 weeks · $10,500",
+        "url": "https://www.pacificdiscovery.org/programs/costa-rica-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/costa-rica-mini-semester.png"
+      },
+      {
+        "title": "Australia Mini Semester",
+        "meta": "6 weeks · $11,500",
+        "url": "https://www.pacificdiscovery.org/programs/australia-mini-semester",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-mini-semester.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

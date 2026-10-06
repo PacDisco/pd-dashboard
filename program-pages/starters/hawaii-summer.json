@@ -1,0 +1,437 @@
+{
+  "v": 1,
+  "name": "Hawaii Summer Program",
+  "seo": {
+    "title": "Hawaii Summer Program | Pacific Discovery",
+    "description": "Hawaiʻi in 4 weeks: an Imu feast, Volcanoes National Park, manta rays, Mauna Kea stargazing, fishpond restoration, surf lessons and Hanauma Bay. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/hawaii-college-summer.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · Hawaiʻi",
+    "headline": "Surf, summit and service across two Hawaiian islands",
+    "intro": "Share an Imu feast in Pahala, snorkel with manta rays off Kona, stargaze from Mauna Kea, restore a fishpond in Hilo and learn to surf on Oʻahu.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Mini%206.png",
+    "imageAlt": "Two people carrying surfboards along a sandy path under palm trees",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Hawaiʻi (USA)",
+    "start": "Hilo, Big Island",
+    "finish": "Honolulu, Oʻahu",
+    "weeks": 4,
+    "groupMax": 13,
+    "ages": "17–22",
+    "tuition": 8950,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 1000,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Culture and volcanoes on Hawaiʻi Island",
+        "body": "Prepare an imu and share the feast at Cultural Fest in Pahala, then explore the lava landscapes of Volcanoes National Park.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/hawaii-tramping-960x550.jpg",
+        "imageAlt": "Students hiking across rugged black lava rock near the coast"
+      },
+      {
+        "title": "Service with a certificate",
+        "body": "Farm with Ulu Mau Puanui, restore a fishpond in Hilo, work with Papahana and help at the Hawaiʻi Food Bank, earning a Certificate of Environmental Conservation.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/hawaii-gardening-960x550.jpg",
+        "imageAlt": "Person in gloves cutting back palm fronds among trees"
+      },
+      {
+        "title": "From the reef to the summit",
+        "body": "Snorkel with manta rays off Kona, stargaze on Mauna Kea, surf in Haleʻiwa, snorkel Hanauma Bay and kayak to the Twin Islands.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/hawaii-surfing-960x550.jpg",
+        "imageAlt": "Surfers riding and paddling for waves below green hills"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/Hawaii%20Mini%206.png",
+        "imageAlt": "Two people carrying surfboards along a sandy path under palm trees"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Hilo around Hawaiʻi Island, then to Haleʻiwa and Honolulu on Oʻahu",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Hilo and orientation in Pahala, an Imu feast, Volcanoes National Park and a manta ray tour off Kona"
+      },
+      {
+        "label": "Week 2",
+        "text": "Service with Ulu Mau Puanui in Waimea, then Hilo and the summit of Mauna Kea"
+      },
+      {
+        "label": "Week 3",
+        "text": "Fishpond restoration in Hilo, then fly to Oʻahu for Shark Cove and surf lessons in Haleʻiwa"
+      },
+      {
+        "label": "Week 4",
+        "text": "Honolulu: Hanauma Bay, Mānoa Falls, the Hawaiʻi Food Bank, Koko Crater, Papahana and kayaking to the Twin Islands"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Cottages, lodges & hostels",
+        "body": "Plantation Cottage in Pahala, Waipiʻo Lodge and the Backpacker Inn in Haleʻiwa.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Camping",
+        "body": "Medium camping level: camping at Hoʻokena on the Kona side and at Arnott’s in Hilo.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Yurts",
+        "body": "The yurts at Sun Farm are our base for the final week in Honolulu.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Imu feast & Volcanoes National Park",
+        "location": "Hilo → Pahala → Kona, Hawaiʻi",
+        "body": "You’ll meet your Program Instructors in Hilo and head to Pahala in the district of Kaʻu for orientation. Over two days of Cultural Fest we prepare an imu, a traditional underground oven, then share the feast along with a musical group performance.\n\nWe explore Volcanoes National Park and its lava rock landscapes, then travel to the Kona side and set up camp at Hoʻokena. The week ends with a manta ray tour, heading out at night to snorkel or float as the mantas glide below.",
+        "tags": "Orientation, Culture, Volcanoes",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/hawaii-tramping-960x550.jpg",
+        "imageAlt": "Students hiking across rugged black lava rock near the coast"
+      },
+      {
+        "title": "Farming service & Mauna Kea",
+        "location": "Kona → Waimea → Hilo, Hawaiʻi",
+        "body": "After a day exploring Kona we travel to Waimea and settle in at Waipiʻo Lodge. Two days on the Ulu Mau Puanui service project give us hands-on insight into traditional Hawaiian agriculture.\n\nIn Hilo we set up at Arnott’s and have an orientation session with Traven. Then we tour the summit of Mauna Kea to stargaze, learning about the night sky through high-powered telescopes, before a day to explore Hilo.",
+        "tags": "Service, Farming, Stargazing",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Fishpond restoration & surf on Oʻahu",
+        "location": "Hilo, Hawaiʻi → Haleʻiwa → Honolulu, Oʻahu",
+        "body": "We spend two days on fishpond restoration in Hilo with the Edith Kanakaʻole Foundation, then fly to Oʻahu and settle into Haleʻiwa.\n\nWe snorkel at Shark Cove and spend two days on surf lessons with experienced instructors, learning paddling, pop-ups and how to read the waves, with time to explore Haleʻiwa in between. The week ends with the move to the Sun Farm yurts in Honolulu.",
+        "tags": "Conservation, Snorkeling, Surfing",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/hawaii-surfing-960x550.jpg",
+        "imageAlt": "Surfers riding and paddling for waves below green hills"
+      },
+      {
+        "title": "Hanauma Bay, service & farewell",
+        "location": "Honolulu, Oʻahu",
+        "body": "We snorkel Hanauma Bay, inside a volcanic crater on Oʻahu’s southeast coast, and visit Lyon Arboretum and Mānoa Falls. After a morning helping at the Hawaiʻi Food Bank, we hike an old railway track up the rim of Koko Crater for sunset.\n\nA day of conservation work with Papahana is followed by an evening at Museum After Dark, and we kayak to the Twin Islands. We finish with our program wrap before flying home from Honolulu.",
+        "tags": "Snorkeling, Service, Kayaking",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/hawaii/hawaii-gardening-960x550.jpg",
+        "imageAlt": "Person in gloves cutting back palm fronds among trees"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect hiking, surfing, snorkeling and kayaking, and some physical work on volunteer projects, like preparing beds for planting or removing invasive plants."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Certificate of Environmental Conservation",
+        "body": "Earn a Certificate of Environmental Conservation for your 40 hours of service learning, from traditional farming with Ulu Mau Puanui to fishpond restoration in Hilo and conservation work with Papahana.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness. Be ready for hiking, including a sunset hike up Koko Crater, plus surfing, snorkeling and kayaking. Volunteer projects also involve physical work, like preparing beds for planting or removing invasive plants."
+      },
+      {
+        "q": "Do I need to know how to surf?",
+        "a": "No. Experienced instructors teach the fundamentals in Haleʻiwa: paddling, pop-ups and how to read the waves."
+      },
+      {
+        "q": "Do I get anything for the service hours?",
+        "a": "Yes. You’ll earn a Certificate of Environmental Conservation for your 40 hours of service learning."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "A mix of a cottage, a lodge and a hostel, camping at Hoʻokena and in Hilo, and yurts at Sun Farm in Honolulu."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover flights to and from Hawaiʻi, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "Flights to and from Hawaiʻi"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "[Add Summer 2027 dates]",
+    "sessions": []
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      },
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

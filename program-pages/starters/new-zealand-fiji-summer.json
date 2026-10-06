@@ -1,0 +1,444 @@
+{
+  "v": 1,
+  "name": "New Zealand & Fiji Summer Program",
+  "seo": {
+    "title": "New Zealand & Fiji Summer Program | Pacific Discovery",
+    "description": "New Zealand & Fiji in 4 weeks: Waitangi Treaty Grounds, conservation at Tawharanui, mountain biking and rafting in Rotorua, a Fijian village stay and snorkeling off Mana Island. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · New Zealand & Fiji",
+    "headline": "New Zealand’s North Island, then island life in Fiji",
+    "intro": "Volunteer at Tawharanui, mountain bike and raft in Rotorua, stay in a Fijian village and snorkel off Mana Island.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/New%20Zealand%20%26%20Australia/IMG_20190310_110237.jpg",
+    "imageAlt": "Students mountain biking on a trail through tall forest",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "New Zealand · Fiji",
+    "start": "Auckland, New Zealand",
+    "finish": "Nadi, Fiji",
+    "weeks": 4,
+    "groupMax": 12,
+    "ages": "17–22",
+    "tuition": 7000,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2500,
+    "activityLevel": "Low",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Two countries in four weeks",
+        "body": "Two weeks on New Zealand’s North Island, from the Bay of Islands to Wellington, then two weeks in Fiji, from the Sigatoka Valley to Mana Island.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Conservation in both countries",
+        "body": "Three days on a conservation project with DOC at Tawharanui Regional Park, and sand dune conservation at Sigatoka Sand Dunes National Park in Fiji.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "A Fijian village stay",
+        "body": "Three nights in Culanuku Village, starting with a welcome kava ceremony, then craft making and a fishing trip with our hosts.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Fiji/IMG_6378.jpg",
+        "imageAlt": "Student on a boat holding up a string of fish"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/New%20Zealand%20%26%20Australia/IMG_20190310_110237.jpg",
+        "imageAlt": "Students mountain biking on a trail through tall forest"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Auckland north to Paihia, south to Rotorua and Wellington, then Nadi, the Sigatoka Valley, Pacific Harbour and Mana Island in Fiji",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Arrival in Auckland, the Waitangi Treaty Grounds and kayaking in Paihia, then conservation work at Tawharanui"
+      },
+      {
+        "label": "Week 2",
+        "text": "Waimangu Volcanic Valley, mountain biking and rafting in Rotorua, then Te Papa, Zealandia and Parliament in Wellington"
+      },
+      {
+        "label": "Week 3",
+        "text": "Fly to Fiji for sand dune conservation in the Sigatoka Valley, a stay in Culanuku Village and river tubing at Pacific Harbour"
+      },
+      {
+        "label": "Week 4",
+        "text": "Kila World, snorkeling trips on Mana Island and program wrap in Nadi"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Lodges & hostels",
+        "body": "Peppertree Lodge in Paihia, Haka House in Rotorua and Wellington, and Blue Water Lodge in Nadi.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Camping & holiday parks",
+        "body": "Ōrewa Beach Holiday Park on arrival, and four nights at the Tawharanui campground during our conservation project.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Village & island stays",
+        "body": "Three nights in Culanuku Village, Club Oceanus at Pacific Harbour and Ratu Kini Dive Resort on Mana Island.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Northland history & Tawharanui",
+        "location": "Auckland → Paihia → Tawharanui, New Zealand",
+        "body": "Kia ora, welcome to New Zealand! You’ll meet your Program Instructors in Auckland, then we head north to Paihia in the Bay of Islands for orientation. Here we visit the Waitangi Treaty Grounds to learn how New Zealand’s history was shaped, and spend a day kayaking with Moana Kayak.\n\nThen we drive south to Tawharanui Regional Park and settle into the campground, where we begin our conservation project alongside DOC.",
+        "tags": "Orientation, History, Kayaking",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Rotorua adventures & Wellington",
+        "location": "Tawharanui → Rotorua → Wellington, New Zealand",
+        "body": "A final day of conservation work wraps up our time at Tawharanui before we travel to Rotorua, the geothermal heartland of the country. We explore Waimangu Volcanic Valley and join a Matariki experience, go mountain biking with Planet Bike and have a day to explore.\n\nAfter rafting with Rotorua Rafting, we travel south to Wellington, the capital, to visit Te Papa, the national museum, Zealandia and Parliament.",
+        "tags": "Conservation, Mountain biking, Rafting",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/New%20Zealand%20%26%20Australia/IMG_20190310_110237.jpg",
+        "imageAlt": "Students mountain biking on a trail through tall forest"
+      },
+      {
+        "title": "Village life in Fiji",
+        "location": "Nadi → Culanuku Village → Pacific Harbour, Fiji",
+        "body": "We fly from Wellington to Nadi and start our time in Fiji with an orientation. In the Sigatoka Valley we get a cultural introduction and work on a sand dune conservation project at Sigatoka Sand Dunes National Park.\n\nThen we transfer to Culanuku Village, where a welcome kava ceremony opens our stay. We spend a day craft making and head out on a fishing trip with our hosts, before moving to Club Oceanus at Pacific Harbour for a day of river tubing.",
+        "tags": "Culture, Conservation, River tubing",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Fiji/IMG_6378.jpg",
+        "imageAlt": "Student on a boat holding up a string of fish"
+      },
+      {
+        "title": "Mana Island & farewell",
+        "location": "Pacific Harbour → Mana Island → Nadi, Fiji",
+        "body": "A day at Kila World rounds off our time at Pacific Harbour, then we travel back to Nadi and take the ferry to Mana Island.\n\nWe stay at Ratu Kini Dive Resort and head out on two snorkeling trips. Then we take the ferry back to Nadi for our program wrap, reflecting on everything we’ve experienced together, before flying home from Nadi.",
+        "tags": "Snorkeling, Island, Program wrap",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Low activity level. Anyone with average fitness and enthusiasm for the outdoors and new experiences will be fine. Expect kayaking, mountain biking, rafting, river tubing and snorkeling, and some physical work on the conservation projects."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "History and culture in two countries",
+        "body": "Learn how New Zealand’s history was shaped at the Waitangi Treaty Grounds, visit Te Papa and Parliament in Wellington, then live and learn alongside our hosts in Culanuku Village in Fiji.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "How fit do I need to be?",
+        "a": "This program has a low activity level and suits anyone of average fitness with an enthusiasm for the outdoors. You don’t need experience with any of the activities, but be ready to try kayaking, mountain biking, rafting and snorkeling. The conservation projects also involve some physical work."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly lodges and hostels, plus camping at Tawharanui during our conservation project, three nights in Culanuku Village in Fiji and a dive resort on Mana Island."
+      },
+      {
+        "q": "What is the village stay like?",
+        "a": "We spend three nights in Culanuku Village. Our stay begins with a welcome kava ceremony, and we spend our days craft making and fishing with our hosts."
+      },
+      {
+        "q": "How do we get around?",
+        "a": "By group van in New Zealand, with a flight from Wellington to Nadi. In Fiji we travel by road transfer and take the ferry to and from Mana Island."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "[Add Summer 2027 dates]",
+    "sessions": []
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      },
+      {
+        "title": "Ecuador & Galápagos Summer Program",
+        "meta": "4 weeks · $7,950",
+        "url": "https://www.pacificdiscovery.org/programs/ecuador-and-galapagos-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/galapagos-turtle%282%29.jpg"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}

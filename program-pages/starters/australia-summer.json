@@ -1,0 +1,444 @@
+{
+  "v": 1,
+  "name": "Australia Summer Program",
+  "seo": {
+    "title": "Australia Summer Program | Pacific Discovery",
+    "description": "Australia in 4 weeks: sandboarding on Stradbroke Island, a K’gari 4WD tour, kayaking in Byron Bay, surf lessons, canyoning in the Blue Mountains and conservation work. Ages 17–22.",
+    "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/australia-college-summer.png"
+  },
+  "settings": {
+    "applyUrl": "https://www.pacificdiscovery.org/apply",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "callUrl": "",
+    "whatsappUrl": "",
+    "currency": "USD"
+  },
+  "layout": [
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
+  ],
+  "hero": {
+    "eyebrow": "Summer program · Australia",
+    "headline": "Brisbane to Sydney in four weeks",
+    "intro": "Sandboard on Stradbroke Island, tour K’gari by 4WD, learn to surf at Crescent Head and canyon in the Blue Mountains before finishing in Sydney.",
+    "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/Australia%20Mini%20Semester%202.png",
+    "imageAlt": "Group in wetsuits and helmets beside a small waterfall in a canyon",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "reviews": [],
+    "widgets": [
+      {
+        "type": "GoAbroad",
+        "code": "<iframe style=\"border:none;height:84px;overflow:auto;width:352px;\" src=\"https://www.goabroad.com/reviews/generator/provider/5491/0/352/84/0/0?layout_type=2&theme=light&show_name=0&show_logo=1&is_stacked=0&logo_size=100\" frameborder=\"0\" scrolling=\"no\" allowtransparency=\"true\"></iframe>"
+      }
+    ]
+  },
+  "facts": {
+    "countries": "Australia",
+    "start": "Brisbane, Australia",
+    "finish": "Sydney, Australia",
+    "weeks": 4,
+    "groupMax": 12,
+    "ages": "17–22",
+    "tuition": 7950,
+    "promoPrice": "",
+    "promoText": "",
+    "promoEnds": "",
+    "flightsEstimate": 2500,
+    "activityLevel": "Medium",
+    "credit": "Optional · University of Montana"
+  },
+  "why": {
+    "heading": "What makes this program different",
+    "items": [
+      {
+        "title": "Islands, sand and surf",
+        "body": "Sandboarding on Stradbroke Island, a three-day 4WD tour of K’gari, kayaking with dolphins in Byron Bay and surf lessons at Crescent Head.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/20240208_140421.jpg",
+        "imageAlt": "Group standing beside a 4WD vehicle on a wide sandy beach"
+      },
+      {
+        "title": "Canyoning in the Blue Mountains",
+        "body": "Hike to Inspiration Point, then spend a day canyoning and abseiling from our base in Katoomba.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/Australia%20Mini%20Semester%202.png",
+        "imageAlt": "Group in wetsuits and helmets beside a small waterfall in a canyon"
+      },
+      {
+        "title": "Two service projects",
+        "body": "Service learning at Crescent Head, then permaculture, Landcare and forest regeneration days at The Crossing, with a bushfire prevention and wildlife tour at Potoroo Palace.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/Australia%20-%20Volunteer.jpg",
+        "imageAlt": "Two people with a tool on a grassy hillside above a beach"
+      },
+      {
+        "title": "All-inclusive On The Ground",
+        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/Australia%20Mini%20Semester%204.png",
+        "imageAlt": "Group in wetsuits posing with surfboards on a beach"
+      }
+    ]
+  },
+  "route": {
+    "heading": "Your journey at a glance",
+    "mapImage": "",
+    "mapAlt": "Route map from Brisbane north to K’gari, then south along Australia’s east coast to Sydney",
+    "phases": [
+      {
+        "label": "Week 1",
+        "text": "Orientation in Brisbane, sandboarding on Stradbroke Island, then north to Rainbow Beach and K’gari"
+      },
+      {
+        "label": "Week 2",
+        "text": "A 4WD tour of K’gari, kayaking with dolphins in Byron Bay and service learning at Crescent Head"
+      },
+      {
+        "label": "Week 3",
+        "text": "Surf lessons at Crescent Head, then hiking and canyoning in the Blue Mountains"
+      },
+      {
+        "label": "Week 4",
+        "text": "Permaculture, Landcare and forest regeneration at The Crossing, then Sydney and program wrap"
+      }
+    ]
+  },
+  "stay": {
+    "heading": "Where you’ll stay",
+    "intro": "",
+    "items": [
+      {
+        "title": "Hostels & lodges",
+        "body": "Clean, comfortable hostels and lodges including Breeze Lodge in Brisbane, Manta Lodge on Stradbroke Island, the Blue Mountains YHA and Pacific House in Sydney.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Campgrounds & holiday parks",
+        "body": "Byron Discovery Park in Byron Bay and Waves Campground at Crescent Head.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Tour & project stays",
+        "body": "Accommodation with our tour operator on K’gari, and a stay at The Crossing during our service project.",
+        "image": "",
+        "imageAlt": ""
+      }
+    ]
+  },
+  "itinerary": {
+    "heading": "Week by week",
+    "intro": "",
+    "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
+    "weeks": [
+      {
+        "title": "Brisbane, Stradbroke & the road north",
+        "location": "Brisbane → Stradbroke Island → Rainbow Beach, Australia",
+        "body": "You’ll meet your Program Instructors in Brisbane, where we spend our first days on orientation, getting to know each other and adjusting to life down under.\n\nThen we take the ferry to Stradbroke Island for an afternoon of sandboarding and a day to explore the island. At the end of the week we head north to Rainbow Beach, with a zoo visit on the way, ready to cross to K’gari.",
+        "tags": "Orientation, Sandboarding, Island",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/Australia%20Gap%20Summer%206.png",
+        "imageAlt": "Group jumping on a beach at sunset"
+      },
+      {
+        "title": "K’gari, Byron Bay & service learning",
+        "location": "K’gari → Byron Bay → Crescent Head, Australia",
+        "body": "We spend three days on a 4WD tour of K’gari with Drop Bear, exploring the island with local guides. Then we drive south to Byron Bay for a day to relax and explore, and a day kayaking with dolphins.\n\nNext we continue to Crescent Head and settle into Waves Campground, where we spend two days on a service learning project, getting our hands dirty helping to look after the local environment.",
+        "tags": "4WD, Kayaking, Service",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/20240208_140421.jpg",
+        "imageAlt": "Group standing beside a 4WD vehicle on a wide sandy beach"
+      },
+      {
+        "title": "Surf lessons & canyoning",
+        "location": "Crescent Head → Katoomba, Australia",
+        "body": "Two days of surf lessons at Crescent Head get everyone up on a board, whether it’s your first time or not. Then we travel south to the Blue Mountains and our base in Katoomba.\n\nHere we hike to Inspiration Point and spend a day canyoning and abseiling. At the end of the week we move to The Crossing and begin our second service project with a permaculture design experience day.",
+        "tags": "Surfing, Hiking, Canyoning",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/Australia%20Mini%20Semester%202.png",
+        "imageAlt": "Group in wetsuits and helmets beside a small waterfall in a canyon"
+      },
+      {
+        "title": "Conservation days & Sydney",
+        "location": "The Crossing → Sydney, Australia",
+        "body": "Our time at The Crossing continues with a Landcare day, a bushfire prevention and wildlife tour at Potoroo Palace, and a forest regeneration day followed by an overnight hike.\n\nThen we travel to Sydney for a day exploring the city before our program wrap, where we reflect on everything we’ve experienced together. Students fly home from Sydney the next day.",
+        "tags": "Conservation, Hiking, Program wrap",
+        "image": "https://www.pacificdiscovery.org/library/images/programs/Australia/PacificDiscovery%20-%20Aus.jpg",
+        "imageAlt": "Group looking across the harbour to the Sydney Opera House and Harbour Bridge"
+      }
+    ]
+  },
+  "day": {
+    "heading": "What a typical day looks like",
+    "slots": [],
+    "notes": [
+      {
+        "title": "Free time",
+        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi is available where we stay in cities and towns."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect hiking, canyoning, surfing and kayaking, and some physical work on the service projects."
+      }
+    ]
+  },
+  "learning": {
+    "heading": "Learn while you travel",
+    "items": [
+      {
+        "title": "Hands-on land care at The Crossing",
+        "body": "A permaculture design experience day, a Landcare day, a forest regeneration day and a bushfire prevention and wildlife tour at Potoroo Palace.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
+    ]
+  },
+  "faq": {
+    "heading": "Questions we get about this program",
+    "items": [
+      {
+        "q": "Do I need to know how to surf?",
+        "a": "No. Surf lessons at Crescent Head are for all levels, so it doesn’t matter whether it’s your first time on a board."
+      },
+      {
+        "q": "How fit do I need to be?",
+        "a": "The program suits anyone of average fitness with an enthusiasm for the outdoors. You don’t need experience with any of the activities, but be ready to try hiking, canyoning, surfing and kayaking. The service projects also involve some physical work."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "Mostly clean, comfortable hostels and lodges, plus campground stays at Byron Bay and Crescent Head, and an overnight hike during our time at The Crossing."
+      },
+      {
+        "q": "Is there any camping?",
+        "a": "Only a little. The camping level on this program is low, and you’ll spend most of your time in comfortable hostels and lodges."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, laundry, personal shopping and optional activities. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
+    ]
+  },
+  "safety": {
+    "heading": "For parents: how we keep students safe",
+    "items": [
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
+    ],
+    "linkText": "Read our full safety approach",
+    "linkUrl": "https://www.pacificdiscovery.org/safety"
+  },
+  "cost": {
+    "heading": "What it costs, all in",
+    "lines": [
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
+    ],
+    "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
+    "included": [
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
+    ],
+    "excluded": [
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
+    ]
+  },
+  "dates": {
+    "heading": "Pick your start date",
+    "help": "[Add Summer 2027 dates]",
+    "sessions": []
+  },
+  "cta": {
+    "heading": "Summer 2027 is filling. Hold your place.",
+    "body": "$2500 holds your spot.",
+    "primaryText": "Apply now",
+    "secondaryText": "Request the itinerary"
+  },
+  "instructors": {
+    "heading": "Who you’ll travel with",
+    "intro": "",
+    "people": [
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
+    ]
+  },
+  "related": {
+    "heading": "You may also like",
+    "items": [
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      },
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}
