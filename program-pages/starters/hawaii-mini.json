@@ -133,7 +133,7 @@
   },
   "route": {
     "heading": "Your journey at a glance",
-    "mapImage": "",
+    "mapImage": "https://pd-program-pages.netlify.app/_pd/maps/hawaii-mini-semester.png",
     "mapAlt": "Route map from Hilo around Hawaiʻi Island, then to Haleʻiwa and Honolulu on Oʻahu",
     "phases": [
       {

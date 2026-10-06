@@ -133,7 +133,7 @@
   },
   "route": {
     "heading": "Your journey at a glance",
-    "mapImage": "",
+    "mapImage": "https://pd-program-pages.netlify.app/_pd/maps/new-zealand-and-fiji-summer.png",
     "mapAlt": "Route map from Auckland north to Paihia, south to Rotorua and Wellington, then Nadi, the Sigatoka Valley, Pacific Harbour and Mana Island in Fiji",
     "phases": [
       {

@@ -133,7 +133,7 @@
   },
   "route": {
     "heading": "Your journey at a glance",
-    "mapImage": "",
+    "mapImage": "https://pd-program-pages.netlify.app/_pd/maps/new-zealand-australia-gap-semester.png",
     "mapAlt": "Route map from Brisbane down Australia’s east coast to Sydney, then from Auckland through New Zealand to Christchurch",
     "phases": [
       {

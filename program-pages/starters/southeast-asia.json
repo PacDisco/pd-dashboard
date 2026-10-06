@@ -133,7 +133,7 @@
   },
   "route": {
     "heading": "Your journey at a glance",
-    "mapImage": "",
+    "mapImage": "https://pd-program-pages.netlify.app/_pd/maps/southeast-asia-gap-semester.png",
     "mapAlt": "Route map from Bangkok through northern Thailand, Laos, Vietnam and Cambodia back to Krabi",
     "phases": [
       {

@@ -133,7 +133,7 @@
   },
   "route": {
     "heading": "Your journey at a glance",
-    "mapImage": "",
+    "mapImage": "https://pd-program-pages.netlify.app/_pd/maps/japan-mini-semester.png",
     "mapAlt": "Route map from Tokyo through Kyoto, Nara and Takayama to Hiroshima",
     "phases": [
       {

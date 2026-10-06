@@ -133,7 +133,7 @@
   },
   "route": {
     "heading": "Your journey at a glance",
-    "mapImage": "",
+    "mapImage": "https://pd-program-pages.netlify.app/_pd/maps/marine-conservation-summer-program.png",
     "mapAlt": "Route map from Honolulu to Haleʻiwa on Oʻahu’s North Shore and back",
     "phases": [
       {

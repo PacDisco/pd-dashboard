@@ -57,7 +57,7 @@ async function upload(req) {
   const actual = sniff(buf);
   if (actual !== declared) return json({ error: "That file isn't the image type it claims to be." }, 415);
 
-  const stored = await storeImage(buf, { name: req.headers.get("x-filename"), actor: user.actor, origin: new URL(req.url).origin });
+  const stored = await storeImage(buf, { name: decodeName(req.headers.get("x-filename")), actor: user.actor, origin: new URL(req.url).origin });
   return json(stored, 201);
 }
 
@@ -124,3 +124,9 @@ export default async (req) => {
     return json({ error: "Image request failed." }, 500);
   }
 };
+
+/** The editor URL-encodes the file name (headers can't carry characters like á or ʻ). */
+function decodeName(v) {
+  if (!v) return v;
+  try { return decodeURIComponent(v); } catch { return v; }
+}

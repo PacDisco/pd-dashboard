@@ -133,7 +133,7 @@
   },
   "route": {
     "heading": "Your journey at a glance",
-    "mapImage": "",
+    "mapImage": "https://pd-program-pages.netlify.app/_pd/maps/polynesian-journey-gap-semester.png",
     "mapAlt": "Route map from Hilo and Oʻahu in Hawaiʻi to Fiji, then Auckland to Wellington",
     "phases": [
       {

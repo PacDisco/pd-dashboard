@@ -884,7 +884,8 @@ async function uploadFile(file, path, { name = file.name, alt = null, altText = 
   const small = await shrink(file);
   const res = await fetch(MEDIA, {
     method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': small.type, 'X-Filename': String(name || '').slice(0, 120) },
+    // Headers must be Latin-1, so names like “Galápagos map.png” or “Hawaiʻi.jpg” are URL-encoded.
+    headers: { 'Content-Type': small.type, 'X-Filename': encodeURIComponent(String(name || '').slice(0, 120)) },
     body: small,
   });
   const body = await res.json().catch(() => ({}));
