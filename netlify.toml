@@ -78,6 +78,13 @@
     Content-Type = "text/javascript; charset=utf-8"
     Cache-Control = "no-cache"
 
+# Apply Form editor: the shared form engine is an ES module (.mjs).
+[[headers]]
+  for = "/apply-form/*.mjs"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"
+    Cache-Control = "no-cache"
+
 [[headers]]
   for = "/*"
   [headers.values]

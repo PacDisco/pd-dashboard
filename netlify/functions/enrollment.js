@@ -5,6 +5,7 @@
 
 import shirt from './_shared/shirt.js';
 import drops from './_shared/drops.mjs';
+import { applySubmissions } from './_shared/apply-source.mjs';
 
 const HUBSPOT_API = 'https://api.hubapi.com';
 const PORTAL_ID = '3855728';
@@ -152,6 +153,17 @@ async function fetchApplicationExtras() {
         if (batch.length < PAGE) break;
         offset += PAGE;
         page++;
+      }
+
+      // Applications made on pd-apply (apply.pacificdiscovery.org). While its
+      // Jotform mirror is on, the same application is also in Jotform — keep
+      // the pd-apply copy (it carries later edits) and drop the mirrored one.
+      const extra = await applySubmissions(formId);
+      if (extra.length) {
+        const mirrored = new Set(extra.map((s) => String(s.jotform_id || '')).filter(Boolean));
+        for (let i = submissions.length - 1; i >= 0; i--) if (mirrored.has(String(submissions[i].id))) submissions.splice(i, 1);
+        submissions.push(...extra);
+        formOk = true;
       }
 
       if (!formOk) continue;

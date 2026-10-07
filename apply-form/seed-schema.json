@@ -1,0 +1,2312 @@
+{
+ "schemaVersion": 1,
+ "settings": {
+  "appFee": 250,
+  "cardFeeRate": 0.035,
+  "currency": "usd",
+  "meetingUrl": "https://meetings.hubspot.com/eda-admissions/pacific-discovery-interviews",
+  "allowSkipInterview": false,
+  "jotform": {
+   "step1": "251668678208874",
+   "step2": "240277257210046"
+  },
+  "texts": {
+   "brand": "Pacific Discovery",
+   "welcomeTitle": "Apply to Pacific Discovery",
+   "welcomeBody": "Four short steps: tell us about yourself, complete your application, book your interview, then pay the $250 application fee.",
+   "interviewTitle": "Book your admissions interview",
+   "interviewBody": "Pick a time that suits you and a parent or guardian. Your interview is a relaxed conversation with our admissions team about your goals and the program.",
+   "paymentTitle": "Pay your application fee",
+   "paymentBody": "Your application is reviewed once the application fee is received.",
+   "doneTitle": "Application complete",
+   "doneBody": "Thank you! We've received your application, interview booking and application fee. Our admissions team will be in touch shortly."
+  }
+ },
+ "programs": [
+  {
+   "name": "New Zealand and Australia Gap Semester",
+   "type": "semester",
+   "price": 16500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Australia and Bali Gap Semester",
+   "type": "semester",
+   "price": 15500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Polynesian Journey Gap Semester",
+   "type": "semester",
+   "price": 15500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "South America Gap Semester",
+   "type": "semester",
+   "price": 15500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Southeast Asia Gap Semester",
+   "type": "semester",
+   "price": 15000,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Nepal and Tibet Gap Semester",
+   "type": "semester",
+   "price": 15500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Central America Gap Semester",
+   "type": "semester",
+   "price": 15500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Japan Mini Semester",
+   "type": "mini",
+   "price": 10500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Costa Rica Mini Semester",
+   "type": "mini",
+   "price": 10500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Australia Mini Semester",
+   "type": "mini",
+   "price": 11500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Thailand Mini Semester",
+   "type": "mini",
+   "price": 10500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Hawaii Mini Semester",
+   "type": "mini",
+   "price": 11500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Australia Summer Program",
+   "type": "summer",
+   "price": 7950,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Bali Summer Program",
+   "type": "summer",
+   "price": 6550,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Costa Rica Summer Program",
+   "type": "summer",
+   "price": 7950,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Hawaii Summer Program",
+   "type": "summer",
+   "price": 8950,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Ecuador and Galapagos Summer Program",
+   "type": "summer",
+   "price": 7950,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Japan Summer Program",
+   "type": "summer",
+   "price": null,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Marine Conservation and Reef Monitoring Field Program",
+   "type": "summer",
+   "price": 6500,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "New Zealand and Fiji Summer Program",
+   "type": "summer",
+   "price": 7000,
+   "pdProgram": "",
+   "active": true
+  },
+  {
+   "name": "Thailand Summer Program",
+   "type": "summer",
+   "price": 6550,
+   "pdProgram": "",
+   "active": true
+  }
+ ],
+ "terms": [
+  {
+   "label": "Summer 2026",
+   "season": "Summer",
+   "year": 2026,
+   "active": true
+  },
+  {
+   "label": "Fall 2026",
+   "season": "Fall",
+   "year": 2026,
+   "active": true
+  },
+  {
+   "label": "Spring 2027",
+   "season": "Spring",
+   "year": 2027,
+   "active": true
+  },
+  {
+   "label": "Summer 2027",
+   "season": "Summer",
+   "year": 2027,
+   "active": true
+  },
+  {
+   "label": "Fall 2027",
+   "season": "Fall",
+   "year": 2027,
+   "active": true
+  },
+  {
+   "label": "Spring 2028",
+   "season": "Spring",
+   "year": 2028,
+   "active": true
+  },
+  {
+   "label": "Summer 2028",
+   "season": "Summer",
+   "year": 2028,
+   "active": true
+  },
+  {
+   "label": "Fall 2028",
+   "season": "Fall",
+   "year": 2028,
+   "active": true
+  },
+  {
+   "label": "Spring 2029",
+   "season": "Spring",
+   "year": 2029,
+   "active": true
+  },
+  {
+   "label": "Summer 2029",
+   "season": "Summer",
+   "year": 2029,
+   "active": true
+  },
+  {
+   "label": "Fall 2029",
+   "season": "Fall",
+   "year": 2029,
+   "active": true
+  }
+ ],
+ "lists": {
+  "countries": [
+   "Afghanistan",
+   "Albania",
+   "Algeria",
+   "American Samoa",
+   "Andorra",
+   "Angola",
+   "Anguilla",
+   "Antigua and Barbuda",
+   "Argentina",
+   "Armenia",
+   "Aruba",
+   "Australia",
+   "Austria",
+   "Azerbaijan",
+   "The Bahamas",
+   "Bahrain",
+   "Bangladesh",
+   "Barbados",
+   "Belarus",
+   "Belgium",
+   "Belize",
+   "Benin",
+   "Bermuda",
+   "Bhutan",
+   "Bolivia",
+   "Bosnia and Herzegovina",
+   "Botswana",
+   "Brazil",
+   "Brunei",
+   "Bulgaria",
+   "Burkina Faso",
+   "Burundi",
+   "Cambodia",
+   "Cameroon",
+   "Canada",
+   "Cape Verde",
+   "Cayman Islands",
+   "Central African Republic",
+   "Chad",
+   "Chile",
+   "China",
+   "Christmas Island",
+   "Cocos (Keeling) Islands",
+   "Colombia",
+   "Comoros",
+   "Congo",
+   "Cook Islands",
+   "Costa Rica",
+   "Cote d'Ivoire",
+   "Croatia",
+   "Cuba",
+   "Curaçao",
+   "Cyprus",
+   "Czech Republic",
+   "Democratic Republic of the Congo",
+   "Denmark",
+   "Djibouti",
+   "Dominica",
+   "Dominican Republic",
+   "Ecuador",
+   "Egypt",
+   "El Salvador",
+   "Equatorial Guinea",
+   "Eritrea",
+   "Estonia",
+   "Ethiopia",
+   "Falkland Islands",
+   "Faroe Islands",
+   "Fiji",
+   "Finland",
+   "France",
+   "French Polynesia",
+   "Gabon",
+   "The Gambia",
+   "Georgia",
+   "Germany",
+   "Ghana",
+   "Gibraltar",
+   "Greece",
+   "Greenland",
+   "Grenada",
+   "Guadeloupe",
+   "Guam",
+   "Guatemala",
+   "Guernsey",
+   "Guinea",
+   "Guinea-Bissau",
+   "Guyana",
+   "Haiti",
+   "Honduras",
+   "Hong Kong",
+   "Hungary",
+   "Iceland",
+   "India",
+   "Indonesia",
+   "Iran",
+   "Iraq",
+   "Ireland",
+   "Israel",
+   "Italy",
+   "Jamaica",
+   "Japan",
+   "Jersey",
+   "Jordan",
+   "Kazakhstan",
+   "Kenya",
+   "Kiribati",
+   "North Korea",
+   "South Korea",
+   "Kosovo",
+   "Kuwait",
+   "Kyrgyzstan",
+   "Laos",
+   "Latvia",
+   "Lebanon",
+   "Lesotho",
+   "Liberia",
+   "Libya",
+   "Liechtenstein",
+   "Lithuania",
+   "Luxembourg",
+   "Macau",
+   "Macedonia",
+   "Madagascar",
+   "Malawi",
+   "Malaysia",
+   "Maldives",
+   "Mali",
+   "Malta",
+   "Marshall Islands",
+   "Martinique",
+   "Mauritania",
+   "Mauritius",
+   "Mayotte",
+   "Mexico",
+   "Micronesia",
+   "Moldova",
+   "Monaco",
+   "Mongolia",
+   "Montenegro",
+   "Montserrat",
+   "Morocco",
+   "Mozambique",
+   "Myanmar",
+   "Nagorno-Karabakh",
+   "Namibia",
+   "Nauru",
+   "Nepal",
+   "Netherlands",
+   "Netherlands Antilles",
+   "New Caledonia",
+   "New Zealand",
+   "Nicaragua",
+   "Niger",
+   "Nigeria",
+   "Niue",
+   "Norfolk Island",
+   "Turkish Republic of Northern Cyprus",
+   "Northern Mariana",
+   "Norway",
+   "Oman",
+   "Pakistan",
+   "Palau",
+   "Palestine",
+   "Panama",
+   "Papua New Guinea",
+   "Paraguay",
+   "Peru",
+   "Philippines",
+   "Pitcairn Islands",
+   "Poland",
+   "Portugal",
+   "Puerto Rico",
+   "Qatar",
+   "Republic of the Congo",
+   "Romania",
+   "Russia",
+   "Rwanda",
+   "Saint Barthelemy",
+   "Saint Helena",
+   "Saint Kitts and Nevis",
+   "Saint Lucia",
+   "Saint Martin",
+   "Saint Pierre and Miquelon",
+   "Saint Vincent and the Grenadines",
+   "Samoa",
+   "San Marino",
+   "Sao Tome and Principe",
+   "Saudi Arabia",
+   "Senegal",
+   "Serbia",
+   "Seychelles",
+   "Sierra Leone",
+   "Singapore",
+   "Slovakia",
+   "Slovenia",
+   "Solomon Islands",
+   "Somalia",
+   "Somaliland",
+   "South Africa",
+   "South Ossetia",
+   "South Sudan",
+   "Spain",
+   "Sri Lanka",
+   "Sudan",
+   "Suriname",
+   "Svalbard",
+   "eSwatini",
+   "Sweden",
+   "Switzerland",
+   "Syria",
+   "Taiwan",
+   "Tajikistan",
+   "Tanzania",
+   "Thailand",
+   "Timor-Leste",
+   "Togo",
+   "Tokelau",
+   "Tonga",
+   "Transnistria Pridnestrovie",
+   "Trinidad and Tobago",
+   "Tristan da Cunha",
+   "Tunisia",
+   "Turkey",
+   "Turkmenistan",
+   "Turks and Caicos Islands",
+   "Tuvalu",
+   "Uganda",
+   "Ukraine",
+   "United Arab Emirates",
+   "United Kingdom",
+   "United States",
+   "Uruguay",
+   "Uzbekistan",
+   "Vanuatu",
+   "Vatican City",
+   "Venezuela",
+   "Vietnam",
+   "British Virgin Islands",
+   "Isle of Man",
+   "US Virgin Islands",
+   "Wallis and Futuna",
+   "Western Sahara",
+   "Yemen",
+   "Zambia",
+   "Zimbabwe"
+  ]
+ },
+ "steps": [
+  {
+   "key": "step1",
+   "title": "About you",
+   "intro": "",
+   "submitLabel": "Next",
+   "sections": [
+    {
+     "key": "student",
+     "title": "Student Information",
+     "intro": "",
+     "fields": [
+      {
+       "key": "intro1",
+       "type": "html",
+       "label": "",
+       "html": "<p>Please take a few minutes of your time to answer the questions below to start your journey with Pacific Discovery.</p>"
+      },
+      {
+       "key": "name",
+       "qid": "4",
+       "type": "fullname",
+       "label": "Name",
+       "required": true,
+       "jf": {
+        "name": "name",
+        "type": "control_fullname",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "hubspot": {
+        "contact": {
+         "first": "firstname",
+         "last": "lastname"
+        }
+       }
+      },
+      {
+       "key": "preferredName",
+       "qid": "7",
+       "type": "text",
+       "label": "I like to be called",
+       "required": true,
+       "jf": {
+        "name": "iLike",
+        "type": "control_textbox",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "dob",
+       "qid": "6",
+       "type": "date",
+       "label": "Date of birth",
+       "required": true,
+       "jf": {
+        "name": "dateOf",
+        "type": "control_datetime",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "email",
+       "qid": "16",
+       "type": "email",
+       "label": "Participant's email",
+       "required": true,
+       "jf": {
+        "name": "participantsEmail",
+        "type": "control_email",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "width": "half",
+       "hubspot": {
+        "contact": "email"
+       }
+      },
+      {
+       "key": "mobile",
+       "qid": "14",
+       "type": "phone",
+       "label": "Participant's mobile number",
+       "required": true,
+       "jf": {
+        "name": "participantsMobile",
+        "type": "control_phone",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "width": "half",
+       "hubspot": {
+        "contact": "mobilephone"
+       }
+      },
+      {
+       "key": "gender",
+       "qid": "8",
+       "type": "radio",
+       "label": "Gender",
+       "required": true,
+       "options": [
+        "Male",
+        "Female",
+        "Gender non-binary",
+        "I prefer not to say"
+       ],
+       "jf": {
+        "name": "gender",
+        "type": "control_radio",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "pronouns",
+       "qid": "9",
+       "type": "text",
+       "label": "Pronouns",
+       "required": false,
+       "jf": {
+        "name": "pronouns",
+        "type": "control_textbox",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "program",
+       "qid": "119",
+       "type": "select",
+       "label": "What program are you applying for?",
+       "required": true,
+       "jf": {
+        "name": "whatProgram",
+        "type": "control_dropdown",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       },
+       "optionsFrom": "programs"
+      },
+      {
+       "key": "term",
+       "qid": "120",
+       "type": "select",
+       "label": "When are you traveling?",
+       "required": true,
+       "optionsFrom": "terms",
+       "help": "Only the departures available for the program you picked are listed.",
+       "showIf": {
+        "match": "all",
+        "rules": [
+         {
+          "field": "program",
+          "op": "isFilled"
+         }
+        ]
+       },
+       "jf": {
+        "name": "whenAre",
+        "type": "control_dropdown",
+        "forms": [
+         "step1",
+         "step2"
+        ],
+        "summerQid": "132",
+        "summerName": "whenAre132"
+       }
+      },
+      {
+       "key": "utm_source",
+       "qid": "128",
+       "type": "hidden",
+       "label": "utm_source",
+       "source": "query:utm_source",
+       "jf": {
+        "name": "utm_source",
+        "type": "control_textbox",
+        "forms": [
+         "step1"
+        ]
+       }
+      },
+      {
+       "key": "utm_medium",
+       "qid": "129",
+       "type": "hidden",
+       "label": "utm_medium",
+       "source": "query:utm_medium",
+       "jf": {
+        "name": "utm_medium",
+        "type": "control_textbox",
+        "forms": [
+         "step1"
+        ]
+       }
+      },
+      {
+       "key": "utm_campaign",
+       "qid": "130",
+       "type": "hidden",
+       "label": "utm_campaign",
+       "source": "query:utm_campaign",
+       "jf": {
+        "name": "utm_campaign",
+        "type": "control_textbox",
+        "forms": [
+         "step1"
+        ]
+       }
+      },
+      {
+       "key": "gclid",
+       "qid": "133",
+       "type": "hidden",
+       "label": "gclid",
+       "source": "query:gclid",
+       "jf": {
+        "name": "gclid",
+        "type": "control_textbox",
+        "forms": [
+         "step1"
+        ]
+       }
+      },
+      {
+       "key": "fbclid",
+       "qid": "134",
+       "type": "hidden",
+       "label": "fbclid",
+       "source": "query:fbclid",
+       "jf": {
+        "name": "fbclid",
+        "type": "control_textbox",
+        "forms": [
+         "step1"
+        ]
+       }
+      },
+      {
+       "key": "pageUrl",
+       "qid": "131",
+       "type": "hidden",
+       "label": "Get Page URL",
+       "source": "pageUrl",
+       "jf": {
+        "name": "typeA",
+        "type": "control_widget",
+        "forms": [
+         "step1"
+        ]
+       }
+      },
+      {
+       "key": "dealAmount",
+       "qid": "127",
+       "type": "hidden",
+       "label": "Deal Amount",
+       "source": "computed:dealAmount",
+       "jf": {
+        "name": "dealAmount",
+        "type": "control_textbox",
+        "forms": [
+         "step1",
+         "step2"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "step2",
+   "title": "Your application",
+   "intro": "",
+   "submitLabel": "Submit application",
+   "sections": [
+    {
+     "key": "student",
+     "title": "Student Information Continued",
+     "intro": "",
+     "fields": [
+      {
+       "key": "homeAddress",
+       "qid": "13",
+       "type": "address",
+       "label": "What is your home address",
+       "required": true,
+       "jf": {
+        "name": "whatIs13",
+        "type": "control_address",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "homeCountry",
+       "qid": "22",
+       "type": "select",
+       "label": "Country",
+       "required": true,
+       "optionsFrom": "countries",
+       "jf": {
+        "name": "country",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "friend",
+       "qid": "17",
+       "type": "text",
+       "label": "If you plan on coming on program with a friend, please enter their name.",
+       "required": false,
+       "jf": {
+        "name": "ifYou",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "secondChoice",
+       "qid": "10",
+       "type": "select",
+       "label": "What would be your second choice program?",
+       "required": false,
+       "jf": {
+        "name": "whatWould",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       },
+       "hidden": true,
+       "optionsFrom": "programs"
+      },
+      {
+       "key": "homePhone",
+       "qid": "15",
+       "type": "phone",
+       "label": "Participant's home phone",
+       "required": false,
+       "jf": {
+        "name": "participantsHome",
+        "type": "control_phone",
+        "forms": [
+         "step2"
+        ]
+       },
+       "hidden": true
+      },
+      {
+       "key": "mobileText",
+       "qid": "135",
+       "type": "hidden",
+       "label": "Participant's mobile number",
+       "source": "copy:mobile:text",
+       "jf": {
+        "name": "participantsMobile135",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "dobText",
+       "qid": "136",
+       "type": "hidden",
+       "label": "Date of birth",
+       "source": "copy:dob:text",
+       "jf": {
+        "name": "dateOf136",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "passport",
+     "title": "Passport Information",
+     "intro": "",
+     "fields": [
+      {
+       "key": "hasPassport",
+       "qid": "19",
+       "type": "radio",
+       "label": "Do you hold a current passport?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "passportNumber",
+       "qid": "20",
+       "type": "text",
+       "label": "What is your passport number?",
+       "required": false,
+       "jf": {
+        "name": "whatIs",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "hidden": true
+      },
+      {
+       "key": "passportCountry",
+       "qid": "21",
+       "type": "select",
+       "label": "What country's passport do you hold?",
+       "required": true,
+       "optionsFrom": "countries",
+       "jf": {
+        "name": "whatCountrys",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "hasPassport",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "passportExpiry",
+       "qid": "138",
+       "type": "date",
+       "label": "When does it expire?",
+       "required": true,
+       "jf": {
+        "name": "whenDoes",
+        "type": "control_datetime",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "hasPassport",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "noPassportReason",
+       "qid": "23",
+       "type": "textarea",
+       "label": "I cannot submit my passport information because",
+       "required": false,
+       "jf": {
+        "name": "iCannot",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "hasPassport",
+          "op": "equals",
+          "value": "No"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "education",
+     "title": "Education Information",
+     "intro": "",
+     "fields": [
+      {
+       "key": "schoolYear",
+       "qid": "26",
+       "type": "select",
+       "label": "School year when joining program",
+       "required": true,
+       "options": [
+        "High School - Freshman",
+        "High School - Sophomore",
+        "High School - Junior",
+        "High School - Senior",
+        "High School Graduate",
+        "College - Freshman",
+        "College - Sophomore",
+        "College - Junior",
+        "College - Senior",
+        "College - Graduate",
+        "Not in College"
+       ],
+       "jf": {
+        "name": "schoolYear",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "highSchool",
+       "qid": "27",
+       "type": "text",
+       "label": "High School you graduated from or are currently attending",
+       "required": true,
+       "jf": {
+        "name": "highSchool",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "university",
+       "qid": "28",
+       "type": "text",
+       "label": "University you attend or are confirmed to attend. If not confirmed or not in school write 'NA'",
+       "required": true,
+       "jf": {
+        "name": "universityYou",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "collegeCredit",
+       "qid": "31",
+       "type": "radio",
+       "label": "Optional college credit may be available. Are you interested in earning credit on your program?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No",
+        "Unsure"
+       ],
+       "jf": {
+        "name": "optionalCollege",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "health",
+     "title": "Health & Medical Information",
+     "intro": "",
+     "fields": [
+      {
+       "key": "healthNote",
+       "type": "html",
+       "label": "",
+       "html": "<p>*Please answer these questions as truthfully as you can, to the best of your knowledge. This information is necessary for us to understand so we can do everything possible to ensure your safety and the safety of your group on program.</p>"
+      },
+      {
+       "key": "height",
+       "qid": "115",
+       "type": "text",
+       "label": "Height (Feet & Inches)",
+       "required": true,
+       "placeholder": "e.g., 5'11\" or 5ft 11in",
+       "jf": {
+        "name": "heightfeet",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "width": "half"
+      },
+      {
+       "key": "weight",
+       "qid": "36",
+       "type": "number",
+       "label": "Weight (lbs)",
+       "required": true,
+       "placeholder": "e.g., 170",
+       "jf": {
+        "name": "weightlbs",
+        "type": "control_number",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "width": "half"
+      },
+      {
+       "key": "swimming",
+       "qid": "37",
+       "type": "select",
+       "label": "What is your swimming ability?",
+       "required": true,
+       "options": [
+        "Can't swim",
+        "Poor swimmer",
+        "Moderate swimmer",
+        "Confident swimmer"
+       ],
+       "jf": {
+        "name": "whatIs37",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "width": "half"
+      },
+      {
+       "key": "biking",
+       "qid": "38",
+       "type": "select",
+       "label": "What is your biking ability?",
+       "required": true,
+       "options": [
+        "Can't bike",
+        "Poor biker",
+        "Moderate biker",
+        "Confident biker"
+       ],
+       "jf": {
+        "name": "whatIs38",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "width": "half"
+      },
+      {
+       "key": "smoker",
+       "qid": "39",
+       "type": "radio",
+       "label": "Are you a smoker?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "areYou",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "respiratory",
+       "qid": "40",
+       "type": "radio",
+       "label": "Do you have any respiratory problems? e.g. Asthma",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou40",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "respiratoryDetails",
+       "qid": "122",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide122",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "respiratory",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "migraines",
+       "qid": "41",
+       "type": "radio",
+       "label": "Do you get migraines?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou41",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "skin",
+       "qid": "42",
+       "type": "radio",
+       "label": "Do you have any skin disorders?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou42",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "skinDetails",
+       "qid": "99",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide99",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "skin",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "muscular",
+       "qid": "43",
+       "type": "radio",
+       "label": "Do you have muscular-skeletal problems?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou43",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "muscularDetails",
+       "qid": "100",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide100",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "muscular",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "diabetes",
+       "qid": "44",
+       "type": "radio",
+       "label": "Do you have Diabetes?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou44",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "diabetesDetails",
+       "qid": "101",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide101",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "diabetes",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "claustrophobia",
+       "qid": "45",
+       "type": "radio",
+       "label": "Do you have Claustrophobia or get motion sickness?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou45",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "claustrophobiaDetails",
+       "qid": "102",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide102",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "claustrophobia",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "neurodevelopmental",
+       "qid": "46",
+       "type": "radio",
+       "label": "Do you have any of the following conditions: autism, adhd, a learning disability (e.g., dyslexia, dyscalculia) or any other neurodevelopmental condition?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou46",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "neurodevelopmentalDetails",
+       "qid": "103",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide103",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "neurodevelopmental",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "allergies",
+       "qid": "47",
+       "type": "radio",
+       "label": "Do you have any allergies?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou47",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "allergiesDetails",
+       "qid": "104",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide104",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "allergies",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "dietary",
+       "qid": "48",
+       "type": "radio",
+       "label": "Do you have any dietary requirements or preferences? e.g. Gluten, Dairy, Nuts, Vegetarian, etc.",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou48",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "dietaryDetails",
+       "qid": "105",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide105",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "dietary",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "mentalHealth",
+       "qid": "49",
+       "type": "radio",
+       "label": "Have you been seen by a mental health professional more than once in the past two years?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "haveYou",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "mentalHealthDetails",
+       "qid": "106",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide106",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "mentalHealth",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "substance",
+       "qid": "50",
+       "type": "radio",
+       "label": "Have you ever been or are you currently being treated for substance abuse?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "haveYou50",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "substanceDetails",
+       "qid": "121",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide121",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "substance",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "physicalCondition",
+       "qid": "51",
+       "type": "radio",
+       "label": "Do you have any physical, psychological or chronic condition that may impact your participation in physical activities?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou51",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "physicalConditionDetails",
+       "qid": "108",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide108",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "physicalCondition",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "hospitalized",
+       "qid": "52",
+       "type": "radio",
+       "label": "Have you been hospitalized in the past three years?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "haveYou52",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "hospitalizedDetails",
+       "qid": "109",
+       "type": "textarea",
+       "label": "Please provide additional information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide109",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "hospitalized",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "healthOther",
+       "qid": "112",
+       "type": "textarea",
+       "label": "Is there anything else you think we should know?",
+       "required": false,
+       "jf": {
+        "name": "isThere112",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "medications",
+       "qid": "57",
+       "type": "textarea",
+       "label": "Please list any medications you currently take, or will be taking on program",
+       "required": false,
+       "jf": {
+        "name": "pleaseList",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "covidVaccinated",
+       "qid": "58",
+       "type": "radio",
+       "label": "Are you fully vaccinated for Covid-19?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "areYou58",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      }
+     ]
+    },
+    {
+     "key": "parents",
+     "title": "Parent or Guardian Contact Information",
+     "intro": "",
+     "fields": [
+      {
+       "key": "parent1Name",
+       "qid": "60",
+       "type": "fullname",
+       "label": "Primary parent or guardian name",
+       "required": true,
+       "jf": {
+        "name": "primaryParent60",
+        "type": "control_fullname",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "parent1Phone",
+       "qid": "61",
+       "type": "phone",
+       "label": "Primary parent or guardian phone number",
+       "required": true,
+       "jf": {
+        "name": "primaryParent61",
+        "type": "control_phone",
+        "forms": [
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "parent1Email",
+       "qid": "62",
+       "type": "email",
+       "label": "Primary parent or guardian email",
+       "required": true,
+       "jf": {
+        "name": "primaryParent62",
+        "type": "control_email",
+        "forms": [
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "parent1Relationship",
+       "qid": "63",
+       "type": "text",
+       "label": "Primary parent or guardian relationship to you",
+       "required": true,
+       "jf": {
+        "name": "primaryParent63",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "parent1Address",
+       "qid": "64",
+       "type": "address",
+       "label": "Primary parent or guardian address",
+       "required": true,
+       "jf": {
+        "name": "primaryParent64",
+        "type": "control_address",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "parent1Country",
+       "qid": "65",
+       "type": "select",
+       "label": "Primary parent or guardian country",
+       "required": true,
+       "optionsFrom": "countries",
+       "jf": {
+        "name": "primaryParent65",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "parent2Name",
+       "qid": "66",
+       "type": "fullname",
+       "label": "Secondary parent or guardian name",
+       "required": false,
+       "jf": {
+        "name": "primaryParent66",
+        "type": "control_fullname",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "parent2Phone",
+       "qid": "67",
+       "type": "phone",
+       "label": "Secondary parent or guardian phone number",
+       "required": false,
+       "jf": {
+        "name": "primaryParent67",
+        "type": "control_phone",
+        "forms": [
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "parent2Email",
+       "qid": "68",
+       "type": "email",
+       "label": "Secondary parent or guardian email",
+       "required": false,
+       "jf": {
+        "name": "primaryParent68",
+        "type": "control_email",
+        "forms": [
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "parent2Relationship",
+       "qid": "69",
+       "type": "text",
+       "label": "Secondary parent or guardian relationship to you",
+       "required": false,
+       "jf": {
+        "name": "primaryParent69",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "parent2Address",
+       "qid": "70",
+       "type": "address",
+       "label": "Secondary parent or guardian address",
+       "required": false,
+       "jf": {
+        "name": "primaryParent70",
+        "type": "control_address",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "parent2Country",
+       "qid": "71",
+       "type": "select",
+       "label": "Secondary parent or guardian country",
+       "required": false,
+       "optionsFrom": "countries",
+       "jf": {
+        "name": "primaryParent71",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "ccParent2",
+       "qid": "72",
+       "type": "radio",
+       "label": "Important email correspondence with you is CC’d to your Primary parent / guardian. Would you like correspondence CC'd to your Secondary parent/guardian as well?",
+       "required": false,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "importantEmail",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "financialAid",
+     "title": "Financial Aid",
+     "intro": "",
+     "fields": [
+      {
+       "key": "scholarships",
+       "qid": "74",
+       "type": "checkbox",
+       "label": "Would you like to apply for any of the following scholarships? Select all that apply",
+       "required": false,
+       "options": [
+        "Diverse Voices Scholarship",
+        "Gap Year Ambassador Fellowship",
+        "Financial Need Scholarship",
+        "Exploration Scholarship"
+       ],
+       "jf": {
+        "name": "wouldYou",
+        "type": "control_checkbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "hidden": true
+      },
+      {
+       "key": "scholarshipNote",
+       "type": "html",
+       "label": "",
+       "html": "<p>Please note, you must meet all requirements to be eligible for the scholarship/s you select. You will not be considered until you submit your scholarship application to info@pacificdiscovery.org. </p>\n<p>You can find more information on our <a href=\"https://www.pacificdiscovery.org/helpful-info/financial-aid-scholarships/\" rel=\"nofollow\" target=\"_blank\">finanical aid and scholarships page here.</a></p>",
+       "hidden": true
+      }
+     ]
+    },
+    {
+     "key": "found",
+     "title": "How Did You Find Pacific Discovery?",
+     "intro": "",
+     "fields": [
+      {
+       "key": "foundUs",
+       "qid": "81",
+       "type": "select",
+       "label": "Please let us know how you found us",
+       "required": true,
+       "options": [
+        "High School Counsellor",
+        "Gap Year Advisor or Independent Educational Consultant",
+        "Gap Year Fair, College Fair, High School Event or similar",
+        "Gap Year Association",
+        "Canadian Gap Year Association",
+        "Go Overseas",
+        "Go Abroad",
+        "TeenLife",
+        "College Outreach (Colorado)",
+        "Social Media",
+        "Word of Mouth"
+       ],
+       "jf": {
+        "name": "pleaseLet",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "eventName",
+       "qid": "79",
+       "type": "text",
+       "label": "Please state the name and location of the event (ie: Gap Year Fair at _ High School, College Fair at _ High School, Alternative to College Fair, etc.)",
+       "required": false,
+       "jf": {
+        "name": "pleaseState",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "foundUs",
+          "op": "equals",
+          "value": "Gap Year Fair, College Fair, High School Event or similar"
+         }
+        ]
+       },
+       "hubspot": {
+        "contact": "event_name_and_location"
+       }
+      },
+      {
+       "key": "advisorName",
+       "qid": "82",
+       "type": "text",
+       "label": "Advisor or Educational Consultant Name",
+       "required": false,
+       "jf": {
+        "name": "advisorOr",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "foundUs",
+          "op": "equals",
+          "value": "Gap Year Advisor or Independent Educational Consultant"
+         }
+        ]
+       },
+       "hubspot": {
+        "contact": "advisor_name"
+       }
+      },
+      {
+       "key": "referralName",
+       "qid": "83",
+       "type": "text",
+       "label": "Word of Mouth Referral Name",
+       "required": false,
+       "jf": {
+        "name": "wordOf",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "foundUs",
+          "op": "equals",
+          "value": "Word of Mouth"
+         }
+        ]
+       },
+       "hubspot": {
+        "contact": "word_of_mouth_referral_name"
+       }
+      },
+      {
+       "key": "whoFound",
+       "qid": "86",
+       "type": "select",
+       "label": "Who found us?",
+       "required": true,
+       "options": [
+        "You (the student)",
+        "Your parents",
+        "Another family member",
+        "Friends",
+        "Other"
+       ],
+       "jf": {
+        "name": "whoFound",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "additional",
+     "title": "Additional Information",
+     "intro": "",
+     "fields": [
+      {
+       "key": "shirtSize",
+       "qid": "88",
+       "type": "select",
+       "label": "Please choose your t-shirt size",
+       "required": true,
+       "options": [
+        "X-small",
+        "Small",
+        "Medium",
+        "Large",
+        "X-large",
+        "XX-large"
+       ],
+       "jf": {
+        "name": "pleaseChoose",
+        "type": "control_dropdown",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "instagram",
+       "qid": "89",
+       "type": "text",
+       "label": "What is your Instagram handle?",
+       "required": false,
+       "jf": {
+        "name": "whatIs89",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "tiktok",
+       "qid": "90",
+       "type": "text",
+       "label": "What is your TikTok handle?",
+       "required": false,
+       "jf": {
+        "name": "whatIs90",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       },
+       "width": "half"
+      },
+      {
+       "key": "siblings",
+       "qid": "91",
+       "type": "text",
+       "label": "Do you have any siblings? And if so, what age are they?",
+       "required": false,
+       "jf": {
+        "name": "doYou91",
+        "type": "control_textbox",
+        "forms": [
+         "step2"
+        ]
+       }
+      },
+      {
+       "key": "criminalRecord",
+       "qid": "93",
+       "type": "radio",
+       "label": "Do you have a criminal record?",
+       "required": true,
+       "options": [
+        "Yes",
+        "No"
+       ],
+       "jf": {
+        "name": "doYou93",
+        "type": "control_radio",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true
+      },
+      {
+       "key": "criminalRecordDetails",
+       "qid": "95",
+       "type": "textarea",
+       "label": "Please provide further information",
+       "required": true,
+       "jf": {
+        "name": "pleaseProvide",
+        "type": "control_textarea",
+        "forms": [
+         "step2"
+        ]
+       },
+       "sensitive": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "criminalRecord",
+          "op": "equals",
+          "value": "Yes"
+         }
+        ]
+       }
+      },
+      {
+       "key": "photo",
+       "qid": "92",
+       "type": "file",
+       "label": "Please upload an image of yourself",
+       "required": true,
+       "jf": {
+        "name": "pleaseUpload",
+        "type": "control_fileupload",
+        "forms": [
+         "step2"
+        ]
+       },
+       "accept": "image/*",
+       "maxMb": 10
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

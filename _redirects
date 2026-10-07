@@ -21,6 +21,7 @@
 # ARE currently unauthenticated (auth-gate.js excludes /api/*); the fix
 # belongs in auth-gate.js, not here. See INSTRUCTOR-CHECKLIST.md.
 /Contacts/*                  200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
+/apply-form/*                200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /cash-forecast/*             200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /enrollment/*                200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /field-budget/*              200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer

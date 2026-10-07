@@ -35,7 +35,10 @@
     "sync:template": "node scripts/sync-program-template.mjs",
     "test:program-pages": "node test/program-pages.test.mjs",
     "test:program-pages-ui": "node test/program-pages.smoke.mjs",
-    "test:program-drive": "node test/program-drive.test.mjs"
+    "test:program-drive": "node test/program-drive.test.mjs",
+    "test:apply-forms": "node test/apply-forms.test.mjs",
+    "test:apply-form-ui": "node test/apply-form.smoke.mjs",
+    "sync:form-kit": "node scripts/sync-form-kit.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

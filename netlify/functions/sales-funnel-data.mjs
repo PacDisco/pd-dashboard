@@ -17,6 +17,8 @@
 //   - Deal name exactly matches "SAS", "Bali Summer", "Australia Summer 2027"
 //   - pd_program = "College Credit Program"
 
+import { applySubmissions } from "./_shared/apply-source.mjs";
+
 const HUBSPOT_TOKEN = process.env.HUBSPOT_PRIVATE_APP_TOKEN || process.env.HUBSPOT_TOKEN;
 const HS_BASE = "https://api.hubapi.com";
 
@@ -535,7 +537,9 @@ async function fetchJotformAttribution() {
         console.warn("Jotform fetch threw:", err.message);
         break;
       }
-      const content = data.content || [];
+      const jfContent = data.content || [];
+      // Applications made on pd-apply ride along with the first page.
+      const content = page === 0 ? [...jfContent, ...(await applySubmissions(formId))] : jfContent;
       for (const sub of content) {
         const answers = sub.answers || {};
         let email = null, emailRank = -1;
@@ -568,7 +572,7 @@ async function fetchJotformAttribution() {
           wordOfMouth: wom || prev.wordOfMouth || null,
         });
       }
-      if (content.length < 100) break;
+      if (jfContent.length < 100) break;
       offset += 100;
     }
   }

@@ -1,0 +1,9 @@
+{
+  "title": "Apply Form",
+  "description": "Edit the online application (apply.pacificdiscovery.org) — fields, programs, prices and travel dates — and follow each applicant through application, interview and fee.",
+  "category": "Enrollment",
+  "icon": "📝",
+  "colors": ["#288195", "#81c243"],
+  "allowedRoles": ["admin", "admissions", "outreach"],
+  "order": 25
+}

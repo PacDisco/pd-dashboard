@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T05:08:22.135Z",
+  "generatedAt": "2026-10-07T20:32:49.592Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -19,6 +19,26 @@
         "outreach"
       ],
       "url": "/Contacts/"
+    },
+    {
+      "slug": "apply-form",
+      "title": "Apply Form",
+      "description": "Edit the online application (apply.pacificdiscovery.org) — fields, programs, prices and travel dates — and follow each applicant through application, interview and fee.",
+      "category": "Enrollment",
+      "icon": "📝",
+      "owner": "",
+      "pinned": false,
+      "order": 25,
+      "colors": [
+        "#288195",
+        "#81c243"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "outreach"
+      ],
+      "url": "/apply-form/"
     },
     {
       "slug": "cash-forecast",
