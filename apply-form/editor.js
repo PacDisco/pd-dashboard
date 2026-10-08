@@ -585,7 +585,9 @@ function renderSettings() {
       </div></div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
-      <label class="check"><input type="checkbox" id="s-skip"${st.allowSkipInterview ? ' checked' : ''}> Let applicants skip booking and go straight to payment</label></div>
+      <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
+      <div class="field" style="max-width:260px"><label for="s-fbdelay">Show that option after (seconds)</label><input type="number" id="s-fbdelay" min="0" max="600" value="${esc(st.interviewFallbackDelaySec ?? 30)}"><span class="help">It shows straight away if the calendar fails to load.</span></div>
+      <label class="check"><input type="checkbox" id="s-skip"${st.allowSkipInterview ? ' checked' : ''}><span>Let applicants skip booking with no follow-up <span class="help">(not recommended — nobody is alerted)</span></span></label></div>
     <div class="panel"><h2 class="serif">Wording</h2><p class="sub">Headings and short messages on each screen.</p>
       <div class="cols"><div>${txt('welcomeTitle', 'Step 1 heading', 1)}${txt('welcomeBody', 'Step 1 intro', 3)}${txt('interviewTitle', 'Interview heading', 1)}${txt('interviewBody', 'Interview intro', 3)}</div>
       <div>${txt('paymentTitle', 'Payment heading', 1)}${txt('paymentBody', 'Payment intro', 3)}${txt('doneTitle', 'Finished heading', 1)}${txt('doneBody', 'Finished message', 3)}</div></div></div>
@@ -598,13 +600,16 @@ function renderSettings() {
   $('#s-rate').addEventListener('input', (e) => { st.cardFeeRate = Math.round(Number(e.target.value) * 10) / 1000; recalc(); changed({ rerender: false }); });
   $('#s-meet').addEventListener('input', (e) => { st.meetingUrl = e.target.value.trim(); changed({ rerender: false }); });
   $('#s-skip').addEventListener('change', (e) => { st.allowSkipInterview = e.target.checked; changed({ rerender: false }); });
+  $('#s-fb').addEventListener('change', (e) => { st.interviewFallback = e.target.checked; changed({ rerender: false }); });
+  $('#s-fbdelay').addEventListener('input', (e) => { st.interviewFallbackDelaySec = Math.max(0, Math.min(600, Number(e.target.value) || 0)); changed({ rerender: false }); });
   $('#s-jf1').addEventListener('input', (e) => { st.jotform.step1 = e.target.value.trim(); changed({ rerender: false }); });
   $('#s-jf2').addEventListener('input', (e) => { st.jotform.step2 = e.target.value.trim(); changed({ rerender: false }); });
   $$('[data-text]').forEach((el) => el.addEventListener('input', () => { st.texts[el.dataset.text] = el.value; changed({ rerender: false }); }));
 }
 
 // ── tab: applications ───────────────────────────────────────────────────────
-const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', paid: 'Fee paid', withdrawn: 'Withdrawn' };
+const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', needs_interview: 'Interview needed', paid: 'Fee paid', withdrawn: 'Withdrawn' };
+const needsInterview = (r) => !!(r.interview?.fallback && !r.interviewAt && r.status !== 'withdrawn');
 
 async function renderApps() {
   const a = S.apps;
@@ -613,7 +618,7 @@ async function renderApps() {
     const out = await api('GET', { action: 'applications', status: a.status, q: a.q });
     a.list = out.applications; a.counts = out.counts;
   } catch (err) { $('#apps-body').innerHTML = `<div class="notice notice--bad">${esc(err.message)}</div>`; return; }
-  const total = Object.entries(a.counts).filter(([k]) => k !== 'withdrawn').reduce((x, [, n]) => x + n, 0);
+  const total = Object.entries(a.counts).filter(([k]) => k !== 'withdrawn' && k !== 'needs_interview').reduce((x, [, n]) => x + n, 0);
   $('#flt').innerHTML = `<button class="chipbtn" data-st="" aria-pressed="${!a.status}">All · ${total}</button>${Object.keys(STATUS_LABEL).map((k) => `<button class="chipbtn" data-st="${k}" aria-pressed="${a.status === k}">${STATUS_LABEL[k]} · ${a.counts[k] || 0}</button>`).join('')}
     <input class="inp" id="q" placeholder="Search name, email or program" value="${esc(a.q)}" style="max-width:280px;margin-left:auto">`;
   $$('[data-st]').forEach((b) => b.addEventListener('click', () => { a.status = b.dataset.st; renderApps(); }));
@@ -626,7 +631,7 @@ async function renderApps() {
     ${a.list.map((r) => `<tr data-id="${r.id}" tabindex="0">
       <td><div class="nm">${esc(r.name)}</div><div class="em">${esc(r.email)}</div></td>
       <td>${esc(r.program || '')}<div class="em">${esc(r.term || '')}</div></td>
-      <td><div class="dots" title="${esc(STATUS_LABEL[r.status])}"><span class="on"></span><span class="${r.step2At ? 'on' : ''}"></span><span class="${r.interviewAt ? 'on' : ''}"></span><span class="${r.paidAt ? 'paid' : ''}"></span></div><div class="em">${esc(STATUS_LABEL[r.status])}</div></td>
+      <td><div class="dots" title="${esc(STATUS_LABEL[r.status])}"><span class="on"></span><span class="${r.step2At ? 'on' : ''}"></span><span class="${r.interviewAt ? 'on' : ''}"></span><span class="${r.paidAt ? 'paid' : ''}"></span></div><div class="em">${esc(STATUS_LABEL[r.status])}</div>${needsInterview(r) ? '<span class="chip chip--changes">Interview needed</span>' : ''}</td>
       <td class="em">${new Date(r.createdAt).toLocaleDateString()}</td>
       <td>${r.sync.ok ? '<span class="chip chip--live">OK</span>' : `<span class="chip chip--bad" title="${esc(r.sync.problems.join('\n'))}">Needs a look</span>`}</td></tr>`).join('')}
   </tbody></table></div>`;
@@ -663,9 +668,10 @@ async function showApplication(id) {
     <div class="dlg-body">
       <p><span class="chip chip--info">${esc(STATUS_LABEL[app.status])}</span>
         ${app.interview?.label ? ` · Interview: ${esc(app.interview.label)}` : ''}
+        ${needsInterview(app) ? ` · <span class="chip chip--changes">Interview needed</span> ${esc(app.interview.reasonLabel || '')}${app.interview.note ? ` — “${esc(app.interview.note)}”` : ''}` : ''}
         ${app.paidAt ? ` · Paid $${Number(app.payment?.total || 0).toFixed(2)} on ${new Date(app.paidAt).toLocaleDateString()}` : ''}</p>
       <ul class="sync">${syncRow('jf1', `Step 1 saved to Jotform${app.jotformStep1Id ? ` (#${esc(app.jotformStep1Id)})` : ''}`)}${syncRow('jf2', `Application saved to Jotform${app.jotformStep2Id ? ` (#${esc(app.jotformStep2Id)})` : ''}`)}
-        ${syncRow('alert1', `Admissions alerted${sync.alert1?.to ? ` (${esc(sync.alert1.to.join(', '))})` : ''}`)}${syncRow('alert1Error', 'Admissions alert email')}${syncRow('hsContact', 'HubSpot contact')}${syncRow('hsDeal', 'HubSpot deal created')}${syncRow('hsStep2', `Deal in ${esc(sync.hsStep2?.pipeline || 'PD Applications')}${sync.hsStep2?.stage ? ` / ${esc(sync.hsStep2.stage)}` : ''}`)}${syncRow('hsStep2Error', 'Moving the deal to PD Applications')}${syncRow('hsInterview', 'Interview noted in HubSpot')}${syncRow('hsFamily', `Parents linked${sync.hsFamily?.parents ? ` (${sync.hsFamily.parents.map((p) => esc(p.email)).join(', ') || 'none given'})` : ''}`)}${syncRow('hsFamilyError', 'Linking parents')}${syncRow('hsProgram', `Linked to program record${sync.hsProgram?.record ? `: ${esc(sync.hsProgram.record.name)} (${esc(sync.hsProgram.record.season || '')} ${esc(sync.hsProgram.record.year || '')})` : ''}`)}${syncRow('hsProgramError', 'Program record')}
+        ${syncRow('alert1', `Admissions alerted${sync.alert1?.to ? ` (${esc(sync.alert1.to.join(', '))})` : ''}`)}${syncRow('alert1Error', 'Admissions alert email')}${syncRow('hsContact', 'HubSpot contact')}${syncRow('hsDeal', 'HubSpot deal created')}${syncRow('hsStep2', `Deal in ${esc(sync.hsStep2?.pipeline || 'PD Applications')}${sync.hsStep2?.stage ? ` / ${esc(sync.hsStep2.stage)}` : ''}`)}${syncRow('hsStep2Error', 'Moving the deal to PD Applications')}${syncRow('hsInterview', 'Interview noted in HubSpot')}${syncRow('interviewNeeded', `Admissions asked to arrange the interview${sync.interviewNeeded?.to ? ` (${esc(sync.interviewNeeded.to.join(', '))})` : ''}`)}${syncRow('interviewNeededError', 'Interview-needed alert')}${syncRow('hsFamily', `Parents linked${sync.hsFamily?.parents ? ` (${sync.hsFamily.parents.map((p) => esc(p.email)).join(', ') || 'none given'})` : ''}`)}${syncRow('hsFamilyError', 'Linking parents')}${syncRow('hsProgram', `Linked to program record${sync.hsProgram?.record ? `: ${esc(sync.hsProgram.record.name)} (${esc(sync.hsProgram.record.season || '')} ${esc(sync.hsProgram.record.year || '')})` : ''}`)}${syncRow('hsProgramError', 'Program record')}
         ${syncRow('hsPaid', `Fee recorded in HubSpot${sync.hsPaid?.pipeline ? ` → ${esc(sync.hsPaid.pipeline)} / ${esc(sync.hsPaid.stage || '')}` : ''}`)}
         ${syncRow('hsError', 'HubSpot')}${syncRow('hsPaidError', 'HubSpot payment update')}${syncRow('hsInterviewError', 'HubSpot interview note')}</ul>
       <div class="acts"><button class="btn btn--sm" id="resync">Retry sync</button>${portal(app.hubspotDealId)}

@@ -254,11 +254,13 @@ async function listApplications(url) {
   const like = `%${q.replace(/[%_]/g, "")}%`;
   const rows = await db().query(
     `SELECT ${LIST_COLS} FROM applications
-      WHERE ($1 = '' OR status = $1)
+      WHERE ($1 = '' OR status = $1
+             OR ($1 = 'needs_interview' AND interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn'))
         AND ($2 = '%%' OR lower(email) LIKE $2 OR lower(first_name || ' ' || last_name) LIKE $2 OR lower(program) LIKE $2)
       ORDER BY created_at DESC LIMIT $3`, [status, like, limit]);
   const counts = await db()`SELECT status, count(*)::int AS n FROM applications GROUP BY status`;
-  return { applications: rows.map(summary), counts: Object.fromEntries(counts.map((c) => [c.status, c.n])) };
+  const need = await db()`SELECT count(*)::int AS n FROM applications WHERE interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn'`;
+  return { applications: rows.map(summary), counts: { ...Object.fromEntries(counts.map((c) => [c.status, c.n])), needs_interview: need[0]?.n || 0 } };
 }
 
 export function syncHealth(sync) {
