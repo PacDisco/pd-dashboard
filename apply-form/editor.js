@@ -97,6 +97,8 @@ function updateChrome() {
   pub.title = !S.user?.canPublish ? 'You can edit, but publishing needs an admin or admissions lead.' : errs ? 'Fix the problems listed in the Form fields tab first.' : 'Make these changes live for applicants';
   const live = $('#open-live');
   if (S.applySite) live.href = S.applySite; else live.classList.add('hidden');
+  const pv = $('#open-preview');
+  if (S.applySite) pv.href = `${S.applySite}/?preview=1`; else pv.classList.add('hidden');
 }
 
 async function publish() {
