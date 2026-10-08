@@ -11,6 +11,7 @@ import { requireManager } from "../netlify/functions/_shared/checkins-access.mjs
 import { applyAction } from "../netlify/functions/checkins-admin.mjs";
 import slots from "../netlify/functions/checkins-slots.mjs";
 import book, { checkBooking, buildEvent } from "../netlify/functions/checkins-book.mjs";
+import mine from "../netlify/functions/checkins-mine.mjs";
 
 const TZ = "Pacific/Auckland";
 const KEY = "k".repeat(32);
@@ -27,6 +28,11 @@ globalThis.fetch = async (url, init = {}) => {
   const r = (b, s = 200) => new Response(JSON.stringify(b), { status: s });
   if (url.includes("oauth2.googleapis.com/token")) return r({ access_token: "at", expires_in: 3600 });
   if (url.includes("/freeBusy")) return r({ calendars: { primary: { busy: BUSY } } });
+  if (url.includes("/events") && (init.method || "GET") === "GET") return r({ items: [
+    { id: "a", start: { dateTime: "2026-10-13T09:00:00+13:00" }, end: { dateTime: "2026-10-13T09:20:00+13:00" }, recurringEventId: "s", hangoutLink: "https://meet.google.com/x",
+      extendedProperties: { private: { instructorEmail: "ana@gmail.com" } }, attendees: [{ email: "ana@gmail.com" }] },
+    { id: "b", status: "cancelled", start: { dateTime: "2026-10-14T09:00:00+13:00" } },
+  ] });
   if (url.includes("/events")) return r({ id: "ev1", hangoutLink: "https://meet.google.com/x" });
   throw new Error("unexpected fetch " + url);
 };
@@ -155,4 +161,15 @@ test("pure booking helpers", () => {
   assert.equal(c.booking.repeat, cfg.maxRepeat);
   const ev = buildEvent(c.booking, cfg, []);
   assert.equal(ev.recurrence[0], `RRULE:FREQ=WEEKLY;COUNT=${cfg.maxRepeat}`);
+});
+
+test("mine handler filters to one instructor", async () => {
+  seed(); CALLS = [];
+  assert.equal((await mine(new Request("https://dash.test/api/checkins/mine?email=ana@gmail.com"))).status, 403);
+  assert.equal((await mine(portal("/api/checkins/mine"))).status, 400);
+  const d = await (await mine(portal("/api/checkins/mine?email=Ana@Gmail.com"))).json();
+  assert.equal(d.checkins.length, 1);
+  assert.equal(d.checkins[0].recurring, true);
+  const q = new URL(CALLS.find((c) => c.url.includes("/events")).url).searchParams.getAll("privateExtendedProperty");
+  assert.deepEqual(q, ["source=instructor-portal", "instructorEmail=ana@gmail.com"]);
 });

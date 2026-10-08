@@ -185,7 +185,7 @@ export async function hostCalendars(host) {
 }
 
 /** Upcoming check-ins booked through the portal (one row per occurrence). */
-export async function upcomingCheckins(settings, days = 28) {
+export async function upcomingCheckins(settings, { days = 28, instructorEmail = "" } = {}) {
   const host = hostOf(settings);
   if (!host) return [];
   const now = Date.now();
@@ -195,6 +195,7 @@ export async function upcomingCheckins(settings, days = 28) {
     singleEvents: "true", orderBy: "startTime", maxResults: "100",
     privateExtendedProperty: "source=instructor-portal",
   });
+  if (instructorEmail) q.append("privateExtendedProperty", `instructorEmail=${instructorEmail.toLowerCase()}`);
   const d = await gapi(host, `/calendars/${encodeURIComponent(settings.config.calendarId)}/events?${q}`);
   return (d.items || []).filter((e) => e.status !== "cancelled").map((e) => ({
     id: e.id,

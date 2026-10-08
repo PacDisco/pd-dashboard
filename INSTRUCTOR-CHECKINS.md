@@ -3,9 +3,9 @@
 Instructors book weekly check-ins from their portal. Staff manage everything from the **Instructor Check-ins** dashboard (`/instructor-checkins/`, roles `admin, programs, operations`).
 
 ```
-instructor portal (browser)
-   └─ /api/checkins/slots|book            portal function: netlify/functions/checkins.mjs
-        └─ X-PD-Service-Key ─────────────▶ dashboard: /api/checkins/slots|book
+instructor portal: Instructor Resources → QUICKLINKS → WEEKLY CHECK-IN
+   └─ /.netlify/functions/checkins        portal function (portal session required)
+        └─ X-PD-Service-Key ─────────────▶ dashboard: /api/checkins/slots | book | mine
                                              └─ Google Calendar (free/busy + create event)
 dashboard page /instructor-checkins/ ────▶ /api/checkins/admin, /api/checkins/oauth/*  (Netlify Identity)
 ```
@@ -28,6 +28,7 @@ dashboard page /instructor-checkins/ ────▶ /api/checkins/admin, /api/c
 | `netlify/functions/checkins-oauth.mjs` | `/api/checkins/oauth/start` + `/callback` |
 | `netlify/functions/checkins-slots.mjs` | `GET /api/checkins/slots` (portal key) |
 | `netlify/functions/checkins-book.mjs` | `POST /api/checkins/book` (portal key) |
+| `netlify/functions/checkins-mine.mjs` | `GET /api/checkins/mine?email=` (portal key): one instructor's upcoming check-ins |
 | `test/instructor-checkins.test.mjs` | `npm run test:checkins` |
 
 ## Setup
@@ -48,10 +49,10 @@ dashboard page /instructor-checkins/ ────▶ /api/checkins/admin, /api/c
 | `CHECKINS_GOOGLE_CLIENT_SECRET` | from step 1 |
 | `INSTRUCTOR_PORTAL_KEY` | **already set** (checklist). Reused here |
 
-### 3. Portal site
-- Add `netlify/functions/checkins.mjs`.
+### 3. Portal site (pd-instructors)
+- Add `netlify/functions/checkins.js` and replace `public/index.html` (or apply `index.html.diff`). This adds a **WEEKLY CHECK-IN** card to the Instructor Resources QUICKLINKS, which opens a booking view with the instructor's upcoming check-ins.
 - Set env `CHECKINS_API_URL=https://dashboard.pacificdiscovery.org/api/checkins`. `INSTRUCTOR_PORTAL_KEY` is already set.
-- Paste `checkin-widget.html` into the portal page where instructors should book. If the portal knows the logged-in instructor, fill `data-name` and `data-email`.
+- The booking email is always the instructor's portal login email, and their name pre-fills from their login.
 
 ### 4. Deploy both, then in the dashboard
 1. Open **Instructor Check-ins**, add yourself and click **Connect calendar**. On Google's "unverified app" screen, click Advanced → Continue, then tick both calendar boxes. The first connection becomes the **host**.
@@ -65,3 +66,4 @@ dashboard page /instructor-checkins/ ────▶ /api/checkins/admin, /api/c
 - **Calendar dropdown shows a "Reconnect" warning:** the host connected before the calendar-list scope existed. Click Reconnect.
 - **Portal form says "not set up yet":** no host calendar has been connected.
 - **Portal form says "isn't configured":** the portal is missing `CHECKINS_API_URL` or `INSTRUCTOR_PORTAL_KEY`.
+- **Portal shows "Couldn't reach the booking service":** the dashboard rejected the service key (the portal logs say so). Check that `INSTRUCTOR_PORTAL_KEY` matches on both sites.
