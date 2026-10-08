@@ -1,0 +1,8 @@
+{
+  "title": "Instructor Check-ins",
+  "description": "Weekly check-ins instructors book from their portal — see what's coming up, choose who's invited and whose calendars block times, connect Google Calendars on any domain, and set booking hours.",
+  "category": "Programs",
+  "icon": "🗓️",
+  "colors": ["#0f766e", "#22d3ee"],
+  "allowedRoles": ["admin", "programs", "operations"]
+}

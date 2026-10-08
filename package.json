@@ -38,6 +38,7 @@
     "test:program-drive": "node test/program-drive.test.mjs",
     "test:apply-forms": "node test/apply-forms.test.mjs",
     "test:apply-form-ui": "node test/apply-form.smoke.mjs",
+    "test:checkins": "node --test test/instructor-checkins.test.mjs",
     "sync:form-kit": "node scripts/sync-form-kit.mjs"
   },
   "dependencies": {

@@ -27,6 +27,7 @@
 /field-budget/*              200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /flight-programs/*           200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /flights/*                   200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
+/instructor-checkins/*       200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /instructor-field-reports/*  200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /instructors/*               200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /invoices/*                  200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer

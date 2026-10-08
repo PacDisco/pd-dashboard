@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T20:32:49.592Z",
+  "generatedAt": "2026-10-08T04:15:22.729Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -132,6 +132,25 @@
         "flights"
       ],
       "url": "/flights/"
+    },
+    {
+      "slug": "instructor-checkins",
+      "title": "Instructor Check-ins",
+      "description": "Weekly check-ins instructors book from their portal — see what's coming up, choose who's invited and whose calendars block times, connect Google Calendars on any domain, and set booking hours.",
+      "category": "Programs",
+      "icon": "🗓️",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#0f766e",
+        "#22d3ee"
+      ],
+      "allowedRoles": [
+        "admin",
+        "programs",
+        "operations"
+      ],
+      "url": "/instructor-checkins/"
     },
     {
       "slug": "instructor-field-reports",

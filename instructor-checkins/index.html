@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instructor Check-ins</title>
+<meta name="description" content="Weekly check-ins instructors book from their portal — upcoming bookings, who's invited, connected calendars and booking hours.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+  .loading-spinner { border: 4px solid #e5e7eb; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fld { width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; }
+  .fld:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+  .lbl { display:block; font-size:12px; font-weight:600; color:#4b5563; margin-bottom:4px; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+  .pill { font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; display:inline-block; }
+  .pill-on   { background:#dcfce7; color:#166534; }
+  .pill-off  { background:#f1f5f9; color:#475569; }
+  .pill-host { background:#dbeafe; color:#1d4ed8; }
+  .pill-rec  { background:#ede9fe; color:#6d28d9; }
+  .btn { font-size:13px; font-weight:600; padding:6px 12px; border-radius:8px; border:1px solid #d1d5db; background:#fff; color:#374151; cursor:pointer; white-space:nowrap; }
+  .btn:hover { background:#f9fafb; }
+  .btn-primary { background:#2563eb; border-color:#2563eb; color:#fff; }
+  .btn-primary:hover { background:#1d4ed8; }
+  .btn-sm { font-size:12px; padding:4px 9px; }
+  table.t { width:100%; border-collapse:collapse; font-size:14px; }
+  table.t th { text-align:left; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#94a3b8; padding:0 8px 8px; }
+  table.t td { padding:10px 8px; border-top:1px solid #f1f5f9; vertical-align:middle; }
+  .day-row { display:grid; grid-template-columns:56px 1fr; gap:10px; align-items:center; margin-bottom:6px; }
+  .ev { display:flex; gap:14px; align-items:flex-start; padding:12px 0; border-top:1px solid #f1f5f9; }
+  .ev:first-child { border-top:none; }
+  .ev-date { width:58px; flex:none; text-align:center; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:6px 0; }
+  .ev-date b { display:block; font-size:18px; color:#111827; line-height:1.1; }
+  .ev-date span { font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase; }
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 60; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { background: #b91c1c; }
+</style>
+</head>
+<body class="text-gray-800">
+<div class="max-w-5xl mx-auto px-4 py-8">
+
+  <div class="flex items-start justify-between gap-4 mb-2">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">🗓️ Instructor Check-ins</h1>
+      <p class="text-sm text-gray-500 mt-1">Instructors book weekly check-ins from their portal. Choose who's invited, whose calendars block times, and when people can book.</p>
+    </div>
+    <a href="/" class="text-sm text-blue-600 hover:underline whitespace-nowrap">← Dashboards</a>
+  </div>
+
+  <div id="warnings" class="mt-4 space-y-2"></div>
+  <div id="loading" class="flex justify-center py-16"><div class="loading-spinner"></div></div>
+  <div id="fatal" class="hidden card mt-5 text-sm text-red-700"></div>
+
+  <div id="app" class="hidden">
+    <!-- Setup nudge -->
+    <div id="setup" class="hidden card mt-5 border-blue-200" style="background:#eff6ff">
+      <h2 class="text-sm font-semibold text-blue-900">Get started</h2>
+      <p class="text-sm text-blue-900 mt-1">Add yourself below and click <b>Connect calendar</b>. The first calendar connected becomes the <b>host</b>: invites come from it and check-ins are saved to it. Until then, the portal form shows "not set up yet".</p>
+    </div>
+
+    <!-- Upcoming -->
+    <div class="card mt-5">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-sm font-semibold text-gray-700">Upcoming check-ins <span class="text-gray-400 font-normal">· next 4 weeks</span></h2>
+        <button id="refresh" class="btn btn-sm">⟳ Refresh</button>
+      </div>
+      <div id="upcoming"></div>
+      <p class="text-xs text-gray-400 mt-3">To change who's on a booked check-in, open it in Google Calendar → Edit → Guests. Anyone on the invite can do this, on any domain. For a weekly series, choose "All events".</p>
+    </div>
+
+    <!-- People -->
+    <div class="card mt-5">
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">People on every check-in</h2>
+      <div class="overflow-x-auto">
+        <table class="t">
+          <thead><tr><th>Person</th><th>Calendar</th><th>Blocks times</th><th></th></tr></thead>
+          <tbody id="people"></tbody>
+        </table>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mt-4 pt-4 border-t border-gray-100">
+        <div class="md:col-span-4"><label class="lbl">Name</label><input id="new-name" class="fld" placeholder="Zach Johnston"></div>
+        <div class="md:col-span-6"><label class="lbl">Email <span class="text-gray-400 font-normal">(any domain)</span></label><input id="new-email" type="email" class="fld" placeholder="name@pacificdiscovery.org"></div>
+        <div class="md:col-span-2 flex items-end"><button id="add" class="btn btn-primary w-full">Add</button></div>
+      </div>
+      <p class="text-xs text-gray-400 mt-3">Everyone listed is invited to new bookings. <b>Connect calendar</b> so a person's busy times hide slots too. They need to sign in to Google as themselves, so either sit with them or have them open this page while signed in to the dashboard. Changes apply to new bookings only.</p>
+    </div>
+
+    <!-- Settings -->
+    <div class="card mt-5">
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">Booking settings</h2>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+        <div class="md:col-span-6"><label class="lbl">Save check-ins to</label><select id="c-calendar" class="fld"></select>
+          <p class="text-xs text-gray-400 mt-1">A calendar the host can edit. Share a dedicated calendar with the team so everyone sees every check-in.</p></div>
+        <div class="md:col-span-6"><label class="lbl">Event title</label><input id="c-title" class="fld"></div>
+        <div class="md:col-span-2"><label class="lbl">Length (min)</label><input id="c-duration" type="number" min="10" max="120" class="fld"></div>
+        <div class="md:col-span-2"><label class="lbl">Buffer (min)</label><input id="c-buffer" type="number" min="0" max="60" class="fld"></div>
+        <div class="md:col-span-2"><label class="lbl">Notice (hours)</label><input id="c-lead" type="number" min="0" max="168" class="fld"></div>
+        <div class="md:col-span-3"><label class="lbl">Bookable ahead (days)</label><input id="c-horizon" type="number" min="1" max="60" class="fld"></div>
+        <div class="md:col-span-3"><label class="lbl">Longest weekly series</label><input id="c-repeat" type="number" min="1" max="26" class="fld"></div>
+      </div>
+      <div class="mt-5">
+        <label class="lbl">Weekly hours <span id="tz-label" class="text-gray-400 font-normal"></span></label>
+        <p class="text-xs text-gray-400 mb-2">Comma-separate several ranges, e.g. <code>09:00-12:00, 14:00-16:00</code>. Leave a day blank to close it.</p>
+        <div id="hours"></div>
+      </div>
+      <div class="mt-4 flex items-center gap-3">
+        <button id="save" class="btn btn-primary">Save settings</button>
+        <span id="save-err" class="text-sm text-red-600"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+var API = '/api/checkins/admin';
+var DAYS = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+var STATE = null;
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function toast(msg, isErr){ var t=$('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); clearTimeout(toast._t); toast._t=setTimeout(function(){ t.className=''; }, 2600); }
+
+async function api(method, payload, path){
+  var opts={method:method}; if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
+  var r=await fetch(path||API, opts); var d=await r.json().catch(function(){return {};});
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status)); return d;
+}
+async function act(action, extra){
+  var d = await api('POST', Object.assign({action:action}, extra||{}));
+  render(d); return d;
+}
+
+function fmt(iso, opts){ return new Date(iso).toLocaleString('en-NZ', Object.assign({ timeZone: STATE.config.tz }, opts)); }
+
+function renderWarnings(list){
+  $('warnings').innerHTML = (list||[]).map(function(w){
+    return '<div class="card text-sm" style="background:#fffbeb;border-color:#fde68a;color:#92400e;padding:12px 16px">⚠ '+esc(w)+'</div>';
+  }).join('');
+}
+
+function renderUpcoming(){
+  var up = STATE.upcoming || [];
+  var hasHost = STATE.people.some(function(p){ return p.host && p.connected; });
+  if (!hasHost) { $('upcoming').innerHTML = '<p class="text-sm text-gray-400 py-4">Connect a host calendar to see bookings here.</p>'; return; }
+  if (!up.length) { $('upcoming').innerHTML = '<p class="text-sm text-gray-400 py-4">No check-ins booked in the next four weeks.</p>'; return; }
+  var staff = {}; STATE.people.forEach(function(p){ staff[p.email]=p.name||p.email; });
+  $('upcoming').innerHTML = up.map(function(e){
+    var others = e.guests.filter(function(g){ return g.email !== e.instructor; }).map(function(g){
+      var mark = g.status==='accepted'?' ✓':g.status==='declined'?' ✕':'';
+      return esc(staff[g.email]||g.email)+mark;
+    });
+    return '<div class="ev">'
+      + '<div class="ev-date"><span>'+esc(fmt(e.start,{weekday:'short'}))+'</span><b>'+esc(fmt(e.start,{day:'numeric'}))+'</b><span>'+esc(fmt(e.start,{month:'short'}))+'</span></div>'
+      + '<div class="flex-1 min-w-0">'
+      +   '<div class="text-sm font-semibold text-gray-900">'+esc(fmt(e.start,{hour:'numeric',minute:'2-digit'}))+' · '+esc((e.title||'').split(' — ').pop())
+      +     (e.recurring?' <span class="pill pill-rec">weekly</span>':'')+'</div>'
+      +   '<div class="text-xs text-gray-500 mt-0.5 truncate">'+esc(e.instructor)+(others.length?' · with '+others.join(', '):'')+'</div>'
+      + '</div>'
+      + '<div class="flex gap-2 flex-none">'
+      +   (e.meet?'<a class="btn btn-sm" target="_blank" rel="noopener" href="'+esc(e.meet)+'">Meet</a>':'')
+      +   '<a class="btn btn-sm" target="_blank" rel="noopener" href="'+esc(e.link)+'">Open</a>'
+      + '</div></div>';
+  }).join('');
+}
+
+function renderPeople(){
+  var rows = STATE.people;
+  $('setup').classList.toggle('hidden', rows.some(function(p){ return p.host && p.connected; }));
+  if (!rows.length) { $('people').innerHTML = '<tr><td colspan="4" class="text-sm text-gray-400">Nobody yet. Add yourself below.</td></tr>'; return; }
+  $('people').innerHTML = rows.map(function(p){
+    var e = esc(p.email);
+    return '<tr>'
+      + '<td><div class="font-semibold text-gray-900">'+(esc(p.name)||'<span class="text-gray-400 font-normal">No name</span>')+'</div><div class="text-xs text-gray-500">'+e+'</div>'
+      +   (p.host?'<span class="pill pill-host mt-1">Host · sends invites</span>':'')+'</td>'
+      + '<td>'+(p.connected?'<span class="pill pill-on">Connected</span>':'<span class="pill pill-off">Invite only</span>')+'</td>'
+      + '<td>'+(p.connected
+          ? '<input type="checkbox" class="rounded" data-act="avail" data-email="'+e+'" '+((p.checkAvailability||p.host)?'checked':'')+' '+(p.host?'disabled title="The host always blocks times"':'')+' aria-label="Block times for '+e+'">'
+          : '<span class="text-gray-300">—</span>')+'</td>'
+      + '<td><div class="flex gap-2 justify-end flex-wrap">'
+      +   (p.connected?'':'<button class="btn btn-sm btn-primary" data-act="connect" data-email="'+e+'">Connect calendar</button>')
+      +   (p.connected&&p.host?'<button class="btn btn-sm" data-act="connect" data-email="'+e+'">Reconnect</button>':'')
+      +   (p.connected&&!p.host?'<button class="btn btn-sm" data-act="setHost" data-email="'+e+'">Make host</button><button class="btn btn-sm" data-act="disconnect" data-email="'+e+'">Disconnect</button>':'')
+      +   (!p.host?'<button class="btn btn-sm" data-act="remove" data-email="'+e+'">Remove</button>':'')
+      + '</div></td></tr>';
+  }).join('');
+}
+
+function renderSettings(){
+  var c = STATE.config;
+  var cals = STATE.calendars.slice();
+  if (!cals.some(function(x){ return x.id===c.calendarId || (c.calendarId==='primary' && x.primary); })) {
+    cals.unshift({ id:c.calendarId, name: c.calendarId==='primary' ? "Host's main calendar" : c.calendarId });
+  }
+  $('c-calendar').innerHTML = cals.map(function(x){
+    var sel = x.id===c.calendarId || (c.calendarId==='primary' && x.primary);
+    return '<option value="'+esc(x.primary?'primary':x.id)+'"'+(sel?' selected':'')+'>'+esc(x.name)+(x.primary?' (main)':'')+'</option>';
+  }).join('');
+  $('c-calendar').disabled = !STATE.people.some(function(p){ return p.host && p.connected; });
+  $('c-title').value = c.title; $('c-duration').value = c.duration; $('c-buffer').value = c.buffer;
+  $('c-lead').value = c.leadHours; $('c-horizon').value = c.horizonDays; $('c-repeat').value = c.maxRepeat;
+  $('tz-label').textContent = '(' + c.tz + ')';
+  var h = '';
+  for (var d=1; d<=7; d++) {
+    h += '<div class="day-row"><span class="text-sm font-semibold text-gray-600">'+DAYS[d]+'</span>'
+       + '<input class="fld" data-day="'+d+'" placeholder="Closed" value="'+esc((c.hours[d]||[]).join(', '))+'"></div>';
+  }
+  $('hours').innerHTML = h;
+}
+
+function render(d){
+  STATE = d;
+  $('loading').classList.add('hidden'); $('app').classList.remove('hidden');
+  renderWarnings(d.warnings); renderUpcoming(); renderPeople(); renderSettings();
+}
+
+async function load(){
+  try { render(await api('GET')); }
+  catch(e){ $('loading').classList.add('hidden'); $('fatal').textContent = e.message; $('fatal').classList.remove('hidden'); }
+}
+
+$('refresh').onclick = function(){ load().then(function(){ toast('Refreshed'); }); };
+
+$('add').onclick = async function(){
+  try { await act('add', { name:$('new-name').value, email:$('new-email').value }); $('new-name').value=''; $('new-email').value=''; toast('Added'); }
+  catch(e){ toast(e.message, true); }
+};
+
+$('people').addEventListener('click', async function(ev){
+  var b = ev.target.closest('button[data-act]'); if (!b) return;
+  var email = b.dataset.email, a = b.dataset.act;
+  try {
+    if (a === 'connect') {
+      var r = await api('POST', { email: email }, '/api/checkins/oauth/start');
+      location.href = r.url; return;
+    }
+    if (a === 'remove' && !confirm('Remove '+email+' from future check-ins?')) return;
+    if (a === 'disconnect' && !confirm('Disconnect '+email+"'s calendar? They'll stay on the invite list.")) return;
+    if (a === 'setHost' && !confirm(email+' will send the invites from now on, and check-ins will save to their main calendar until you pick another.')) return;
+    await act(a, { email: email });
+    toast({ remove:'Removed', disconnect:'Disconnected', setHost:'Host changed' }[a]);
+  } catch(e){ toast(e.message, true); }
+});
+
+$('people').addEventListener('change', async function(ev){
+  var c = ev.target.closest('input[data-act="avail"]'); if (!c) return;
+  try { await act('update', { email:c.dataset.email, checkAvailability:c.checked }); toast(c.checked?'Now blocks times':'No longer blocks times'); }
+  catch(e){ c.checked=!c.checked; toast(e.message, true); }
+});
+
+$('save').onclick = async function(){
+  $('save-err').textContent = '';
+  var hours = {};
+  document.querySelectorAll('#hours input[data-day]').forEach(function(i){
+    var v = i.value.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+    if (v.length) hours[i.dataset.day] = v;
+  });
+  var cfg = {
+    calendarId: $('c-calendar').value || STATE.config.calendarId, title: $('c-title').value,
+    duration: +$('c-duration').value, buffer: +$('c-buffer').value, leadHours: +$('c-lead').value,
+    horizonDays: +$('c-horizon').value, maxRepeat: +$('c-repeat').value, hours: hours
+  };
+  try { await act('config', { config: cfg }); toast('Settings saved'); }
+  catch(e){ $('save-err').textContent = e.message; }
+};
+
+load();
+</script>
+</body>
+</html>
