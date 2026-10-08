@@ -274,7 +274,59 @@ export function validateStep(schema, stepKey, values) {
     if (err) { errors[field.key] = err; continue; }
     if (!isEmptyValue(field, v)) clean[field.key] = normalise(field, v);
   }
+  const dup = uniquenessErrors(schema, stepKey, values || {});
+  for (const [k, msg] of Object.entries(dup)) if (!errors[k]) { errors[k] = msg; delete clean[k]; }
   return { ok: Object.keys(errors).length === 0, errors, clean };
+}
+
+// ── uniqueness: student vs parents ──────────────────────────────────────────
+// The student's email and phone, and each parent's, must all be different —
+// every one becomes its own HubSpot contact and portal login. Built in for the
+// standard keys; any other field can join a group with `unique: "email"` or
+// `unique: "phone"` (fields earlier in the list win; later ones get the error).
+
+export const UNIQUE_GROUPS = {
+  email: { keys: ['email', 'parent1Email', 'parent2Email'], what: 'email address' },
+  phone: { keys: ['mobile', 'parent1Phone', 'parent2Phone'], what: 'phone number' },
+};
+
+const WHO = { email: 'the student', mobile: 'the student', parent1Email: 'the primary parent/guardian', parent1Phone: 'the primary parent/guardian', parent2Email: 'the secondary parent/guardian', parent2Phone: 'the secondary parent/guardian' };
+
+/** Comparable forms of a value: emails lower-cased; phones as full and national digits. */
+export function uniqueKeys(kind, v) {
+  if (v == null || v === '') return [];
+  if (kind === 'email') { const e = String(v).trim().toLowerCase(); return e ? [e] : []; }
+  const cc = String(v.cc ?? '').replace(/\D/g, '');
+  const national = String(v.number ?? v).replace(/\D/g, '').replace(/^0+/, '');
+  if (national.length < 6) return [];
+  return [`n:${national}`, `f:${cc}${national}`];
+}
+
+export function uniquenessErrors(schema, stepKey, values) {
+  const errors = {};
+  const inStep = new Set(stepFields(schema, stepKey).map((f) => f.key));
+  for (const [kind, group] of Object.entries(UNIQUE_GROUPS)) {
+    const keys = [...group.keys];
+    for (const { field } of allFields(schema)) if (field.unique === kind && !keys.includes(field.key)) keys.push(field.key);
+    const seen = [];
+    for (const key of keys) {
+      const f = fieldByKey(schema, key);
+      if (!f) continue;
+      const v = values[key];
+      // Only count answers the applicant can actually see (or earlier steps' answers).
+      if (inStep.has(key) && !isVisible(schema, f, values)) continue;
+      const ks = uniqueKeys(kind, v);
+      if (!ks.length) continue;
+      const clash = seen.find((s) => s.ks.some((k) => ks.includes(k)));
+      if (clash && inStep.has(key)) {
+        const other = WHO[clash.key] || `"${fieldByKey(schema, clash.key)?.label || clash.key}"`;
+        errors[key] = `This must be different from ${other}'s ${group.what} — each person needs their own.`;
+      } else {
+        seen.push({ key, ks });
+      }
+    }
+  }
+  return errors;
 }
 
 function normalise(field, v) {
