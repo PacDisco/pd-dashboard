@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-08T04:15:22.729Z",
+  "generatedAt": "2026-10-07T20:32:49.592Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -39,6 +39,26 @@
         "outreach"
       ],
       "url": "/apply-form/"
+    },
+    {
+      "slug": "lead-sources",
+      "title": "Lead Sources",
+      "description": "Where leads really came from — HubSpot's Original Source next to the source captured by the quiz and the application, with Offline records recovered, and what each channel turns into.",
+      "category": "Enrollment",
+      "icon": "🧭",
+      "owner": "",
+      "pinned": false,
+      "order": 26,
+      "colors": [
+        "#55bbd2",
+        "#81c243"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "outreach"
+      ],
+      "url": "/lead-sources/"
     },
     {
       "slug": "cash-forecast",
@@ -132,25 +152,6 @@
         "flights"
       ],
       "url": "/flights/"
-    },
-    {
-      "slug": "instructor-checkins",
-      "title": "Instructor Check-ins",
-      "description": "Weekly check-ins instructors book from their portal — see what's coming up, choose who's invited and whose calendars block times, connect Google Calendars on any domain, and set booking hours.",
-      "category": "Programs",
-      "icon": "🗓️",
-      "owner": "",
-      "pinned": false,
-      "colors": [
-        "#0f766e",
-        "#22d3ee"
-      ],
-      "allowedRoles": [
-        "admin",
-        "programs",
-        "operations"
-      ],
-      "url": "/instructor-checkins/"
     },
     {
       "slug": "instructor-field-reports",

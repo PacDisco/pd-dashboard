@@ -85,6 +85,13 @@
     Content-Type = "text/javascript; charset=utf-8"
     Cache-Control = "no-cache"
 
+# Lead Sources dashboard: the shared channel rules are an ES module too.
+[[headers]]
+  for = "/lead-sources/*.mjs"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"
+    Cache-Control = "no-cache"
+
 [[headers]]
   for = "/*"
   [headers.values]

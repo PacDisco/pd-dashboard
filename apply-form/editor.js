@@ -593,6 +593,9 @@ function renderSettings() {
     <div class="panel"><h2 class="serif">Wording</h2><p class="sub">Headings and short messages on each screen.</p>
       <div class="cols"><div>${txt('welcomeTitle', 'Step 1 heading', 1)}${txt('welcomeBody', 'Step 1 intro', 3)}${txt('interviewTitle', 'Interview heading', 1)}${txt('interviewBody', 'Interview intro', 3)}</div>
       <div>${txt('paymentTitle', 'Payment heading', 1)}${txt('paymentBody', 'Payment intro', 3)}${txt('doneTitle', 'Finished heading', 1)}${txt('doneBody', 'Finished message', 3)}</div></div></div>
+    <div class="panel"><h2 class="serif">HubSpot source tracking</h2><p class="sub">Step 1 is submitted to this HubSpot form with the visitor's HubSpot cookie <em>before</em> anything else, so the contact's Original Source in HubSpot is the real channel instead of "Offline Sources". The source details (UTMs, ad click, landing page, referring site) are also written to the contact's <code>pd_first_*</code> / <code>pd_last_*</code> properties — see the Lead Sources dashboard.</p>
+      <div class="field" style="max-width:520px"><label for="s-hsform">HubSpot form ID</label><div style="display:flex;gap:8px"><input type="text" id="s-hsform" value="${esc(st.hubspotFormGuid || '')}" placeholder="e.g. 1a2b3c4d-5e6f-…"><button class="btn btn--sm" type="button" id="s-hsform-new">Create in HubSpot</button></div>
+      <span class="help">Leave empty to skip the form (the contact is still created, but HubSpot will call it Offline). Turn off HubSpot's own notification emails for this form — admissions already gets one.</span></div></div>
     <div class="panel"><h2 class="serif">Jotform mirror</h2><p class="sub">While pd-apply's <code>JOTFORM_MIRROR</code> is on, each step is also saved into these Jotform forms (same field IDs) so anything still reading Jotform keeps working. Once the portals read pd-apply directly you can turn the mirror off and archive both forms.</p>
       <div class="cols"><div class="field"><label for="s-jf1">Step 1 form ID</label><input type="text" id="s-jf1" value="${esc(st.jotform.step1 || '')}"></div>
       <div class="field"><label for="s-jf2">Full application form ID</label><input type="text" id="s-jf2" value="${esc(st.jotform.step2 || '')}"></div></div></div>
@@ -604,6 +607,16 @@ function renderSettings() {
   $('#s-skip').addEventListener('change', (e) => { st.allowSkipInterview = e.target.checked; changed({ rerender: false }); });
   $('#s-fb').addEventListener('change', (e) => { st.interviewFallback = e.target.checked; changed({ rerender: false }); });
   $('#s-fbdelay').addEventListener('input', (e) => { st.interviewFallbackDelaySec = Math.max(0, Math.min(600, Number(e.target.value) || 0)); changed({ rerender: false }); });
+  $('#s-hsform').addEventListener('input', (e) => { st.hubspotFormGuid = e.target.value.trim(); changed({ rerender: false }); });
+  $('#s-hsform-new').addEventListener('click', async (e) => {
+    if (st.hubspotFormGuid && !(await confirmDialog('Create another HubSpot form?', 'A form ID is already set. Create a new form and use it instead?', 'Create', false))) return;
+    e.target.disabled = true;
+    try {
+      const out = await api('POST', {}, { action: 'hubspot-form-create', form: 'application' });
+      st.hubspotFormGuid = out.id; $('#s-hsform').value = out.id; changed({ rerender: false });
+      toast(`Created “${esc(out.name)}” in HubSpot. Publish to start using it.`, 7000);
+    } catch (err) { toast(esc(err.message), 9000); } finally { e.target.disabled = false; }
+  });
   $('#s-jf1').addEventListener('input', (e) => { st.jotform.step1 = e.target.value.trim(); changed({ rerender: false }); });
   $('#s-jf2').addEventListener('input', (e) => { st.jotform.step2 = e.target.value.trim(); changed({ rerender: false }); });
   $$('[data-text]').forEach((el) => el.addEventListener('input', () => { st.texts[el.dataset.text] = el.value; changed({ rerender: false }); }));

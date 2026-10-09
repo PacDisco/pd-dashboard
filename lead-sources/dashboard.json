@@ -1,0 +1,9 @@
+{
+  "title": "Lead Sources",
+  "description": "Where leads really came from — HubSpot's Original Source next to the source captured by the quiz and the application, with Offline records recovered, and what each channel turns into.",
+  "category": "Enrollment",
+  "icon": "🧭",
+  "colors": ["#55bbd2", "#81c243"],
+  "allowedRoles": ["admin", "admissions", "outreach"],
+  "order": 26
+}

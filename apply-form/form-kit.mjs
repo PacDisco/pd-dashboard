@@ -245,6 +245,7 @@ export function validateField(schema, field, v, values) {
     case 'checkbox': {
       const opts = optionsFor(schema, field, values).map(norm);
       if (opts.length && v.some((x) => !opts.includes(norm(x)))) return 'Please choose from the options.';
+      if (Number(field.maxChoices) > 0 && v.length > Number(field.maxChoices)) return `Please choose up to ${Number(field.maxChoices)}.`;
       break;
     }
     default: break;

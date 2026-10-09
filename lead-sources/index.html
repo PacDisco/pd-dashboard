@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pacific Discovery · Lead Sources</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --pd-teal:#55BBD2; --pd-green:#81C243; --pd-navy:#3B5998; --pd-orange:#f15c39; --pd-white:#fefeff; --pd-black:#212121;
+    --bg:#16191c; --panel:#1d2226; --panel-2:#252b30; --line:#2f363d; --text:var(--pd-white); --muted:#8a949c;
+    --accent:var(--pd-teal); --accent-2:var(--pd-green); --warn:var(--pd-orange);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+  body { min-height: 100vh; background: radial-gradient(1100px 600px at 85% -10%, rgba(85,187,210,.10), transparent 60%), radial-gradient(900px 500px at -10% 30%, rgba(129,194,67,.06), transparent 60%), var(--bg); }
+  a { color: var(--accent); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 40px 24px 96px; }
+  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 26px; }
+  .crumb { color: var(--muted); font-size: 13px; text-decoration: none; display: inline-block; margin-bottom: 10px; }
+  .title { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: clamp(34px, 4.5vw, 50px); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 8px; }
+  .title em { font-style: italic; font-weight: 400; background: linear-gradient(135deg, var(--pd-teal), var(--pd-green)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .subtitle { color: var(--muted); font-size: 14px; max-width: 640px; line-height: 1.55; margin: 0; }
+  .bar { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin-bottom: 22px; display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end; }
+  .grp { display: flex; flex-direction: column; gap: 7px; }
+  .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  input[type=date], select { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 8px 10px; border-radius: 6px; font: inherit; font-size: 13px; color-scheme: dark; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .preset { background: transparent; border: 1px solid var(--line); color: var(--muted); padding: 5px 11px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; }
+  .preset:hover { color: var(--text); border-color: var(--muted); }
+  .preset.active { background: var(--accent); color: var(--pd-black); border-color: var(--accent); font-weight: 600; }
+  .btn { background: var(--accent); color: var(--pd-black); border: 0; padding: 10px 18px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn:disabled { opacity: .5; cursor: wait; }
+  .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  .check { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .check input { accent-color: var(--accent-2); }
+  .meta { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; }
+  .kpi::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-2) 70%, transparent); }
+  .kpi .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .kpi .v { font-family: 'Fraunces', serif; font-size: 34px; font-weight: 500; margin-top: 6px; line-height: 1.1; }
+  .kpi .s { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; margin-bottom: 22px; }
+  .card h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 22px; margin: 0 0 4px; }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.5; }
+  .cols { display: grid; gap: 22px; grid-template-columns: 1fr; }
+  @media (min-width: 1020px) { .cols { grid-template-columns: 1.1fr .9fr; } }
+  .chart { position: relative; height: 380px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 8px; border-bottom: 1px solid #262c31; vertical-align: top; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: rgba(85,187,210,.06); }
+  tr.on td { background: rgba(85,187,210,.12); }
+  .scroll { overflow-x: auto; }
+  .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .b-site { background: rgba(129,194,67,.16); color: var(--pd-green); }
+  .b-hubspot { background: rgba(85,187,210,.16); color: var(--pd-teal); }
+  .b-recovered { background: rgba(216,166,87,.18); color: #e2b56b; }
+  .b-none { background: rgba(138,148,156,.15); color: var(--muted); }
+  .off { color: var(--warn); }
+  .em { color: var(--muted); font-size: 12px; }
+  .bar2 { height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); min-width: 2px; }
+  .err { background: rgba(241,92,57,.12); color: #ff9a80; border: 1px solid rgba(241,92,57,.35); padding: 12px 16px; border-radius: 10px; margin-bottom: 18px; }
+  .loading { color: var(--muted); padding: 40px 0; text-align: center; }
+  details.setup summary { cursor: pointer; font-weight: 600; }
+  details.setup ol { line-height: 1.7; color: #c9d1d6; font-size: 14px; padding-left: 20px; }
+  code { background: var(--panel-2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; font-size: 12px; color: #dfe7ec; }
+  pre { background: var(--panel-2); border: 1px solid var(--line); padding: 10px 12px; border-radius: 8px; overflow-x: auto; font-size: 12px; }
+  .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <a class="crumb" href="/">← Dashboards</a>
+      <h1 class="title">Lead <em>Sources</em></h1>
+      <p class="subtitle">Where leads really came from. HubSpot files every contact created by Zapier, Make or the API under “Offline Sources”; this puts HubSpot's answer next to the source the quiz and the application captured themselves, recovers what it can from the drill-downs, and follows each channel through to applications and fees.</p>
+    </div>
+  </header>
+
+  <div class="bar">
+    <div class="grp"><span class="lbl">Contacts created</span>
+      <div class="row"><input type="date" id="from"><span class="em">to</span><input type="date" id="to"></div>
+      <div class="row" id="presets"><button class="preset" data-days="30">30 days</button><button class="preset active" data-days="90">90 days</button><button class="preset" data-days="180">6 months</button><button class="preset" data-days="365">12 months</button></div></div>
+    <div class="grp"><span class="lbl">Brand (company tag)</span><select id="brand"><option value="">All</option></select></div>
+    <div class="grp"><span class="lbl">Show</span>
+      <label class="check"><input type="checkbox" id="onlySite"> Only quiz / application leads</label>
+      <label class="check"><input type="checkbox" id="parents"> Include parents (from applications)</label></div>
+    <button class="btn" id="go">Refresh</button>
+  </div>
+
+  <div id="msg"></div>
+  <p class="meta" id="meta"></p>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="cols">
+    <div class="card"><h2>HubSpot says vs. real source</h2><p class="sub">Same leads, two answers. The difference is mostly “Offline Sources” being put back where it belongs.</p><div class="chart"><canvas id="chart"></canvas></div></div>
+    <div class="card"><h2>How the real source was found</h2><p class="sub"><span class="chip b-hubspot">HubSpot</span> HubSpot's Original Source (it tracked the visit). <span class="chip b-site">Site</span> the quiz / application's own first-visit record. <span class="chip b-recovered">Recovered</span> an Offline record whose drill-downs name the channel (same rules as the Sales Funnel). <span class="chip b-none">Unknown</span> nothing to go on.</p><div id="basis"></div></div>
+  </div>
+
+  <div class="card"><h2>Channel funnel</h2><p class="sub">By real source. Click a channel to filter the campaign table and the lead list.</p><div class="scroll" id="funnel"></div></div>
+  <div class="card"><h2>Campaigns &amp; referrers</h2><p class="sub">Source › medium › campaign from the first visit (UTM tags, ad clicks, referring sites), or HubSpot's drill-down when the site didn't see the visit.</p><div class="scroll" id="campaigns"></div></div>
+  <div class="card"><h2>Leads</h2><p class="sub" id="leadsSub"></p><div class="row" style="justify-content:flex-end;margin-bottom:8px"><button class="btn ghost" id="csv">Download CSV</button></div><div class="scroll" id="leads"></div><div class="pager" id="pager"></div></div>
+
+  <div class="card"><details class="setup"><summary>Setup: getting the real source into HubSpot</summary>
+    <ol>
+      <li><strong>Create the contact properties</strong> the quiz and application write to (<code>pd_first_*</code>, <code>pd_last_*</code>, <code>pd_quiz_*</code>) — <button class="btn ghost" id="setup" type="button">Set up HubSpot properties</button> <span id="setupOut" class="em"></span></li>
+      <li><strong>HubSpot forms:</strong> in <a href="/apply-form/quiz.html">Quiz → Settings &amp; HubSpot</a> and <a href="/apply-form/">Apply Form → Fee, interview &amp; text</a>, click <em>Create in HubSpot</em> (or paste a form ID), then Publish. From then on HubSpot's own Original Source is right for new leads.</li>
+      <li><strong>Track first visits on the main website.</strong> Add this to every page of www.pacificdiscovery.org (e.g. the WordPress footer), so a visitor who lands from an ad, then browses, then takes the quiz days later is still credited to the ad:
+        <pre>&lt;script src="https://apply.pacificdiscovery.org/attribution.js" async&gt;&lt;/script&gt;</pre></li>
+      <li><strong>Turn off the old Zaps / Make scenarios</strong> that create HubSpot contacts from the Jotform quiz and step 1 — they create contacts before the form can, which is what makes them “Offline”.</li>
+    </ol></details></div>
+</div>
+
+<script type="module">
+import { CHANNELS } from '/lead-sources/attribution-kit.mjs';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const S = { data: null, channel: '', page: 0 };
+const PAGE = 100;
+const COLORS = { 'Organic Search': '#55BBD2', 'Paid Search': '#0A96DB', 'Paid Social': '#b07cff', 'Organic Social': '#e17fbd', 'Email Marketing': '#d8a657', 'AI Referrals': '#7ad3c0', 'Referrals': '#81C243', 'Other Campaigns': '#9aa7b0', 'Direct Traffic': '#6c7a86', 'Offline Sources': '#f15c39', 'Unknown (offline)': '#f15c39', 'Unknown': '#4c565e' };
+const iso = (d) => d.toISOString().slice(0, 10);
+function setDays(n) { const to = new Date(); $('#to').value = iso(to); $('#from').value = iso(new Date(to - (n - 1) * 864e5)); }
+setDays(90);
+document.querySelectorAll('.preset').forEach((b) => b.onclick = () => { document.querySelectorAll('.preset').forEach((x) => x.classList.toggle('active', x === b)); setDays(Number(b.dataset.days)); load(); });
+$('#go').onclick = load;
+['brand', 'onlySite', 'parents'].forEach((id) => $(`#${id}`).addEventListener('change', () => { S.page = 0; render(); }));
+
+async function load() {
+  $('#go').disabled = true; $('#msg').innerHTML = ''; $('#meta').textContent = 'Loading from HubSpot…';
+  try {
+    const r = await fetch(`/api/lead-sources?from=${$('#from').value}&to=${$('#to').value}`, { cache: 'no-store' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    S.data = d; S.channel = ''; S.page = 0;
+    const brands = [...new Set(d.leads.map((l) => l.brand).filter(Boolean))].sort();
+    const cur = $('#brand').value;
+    $('#brand').innerHTML = `<option value="">All</option>${brands.map((b) => `<option${b === cur ? ' selected' : ''}>${esc(b)}</option>`).join('')}`;
+    if (!cur && brands.includes('Pacific Discovery')) $('#brand').value = 'Pacific Discovery';
+    render();
+  } catch (err) { $('#msg').innerHTML = `<div class="err">${esc(err.message)}</div>`; $('#meta').textContent = ''; }
+  finally { $('#go').disabled = false; }
+}
+
+function filtered() {
+  const brand = $('#brand').value; const onlySite = $('#onlySite').checked; const parents = $('#parents').checked;
+  return S.data.leads.filter((l) => (!brand || l.brand === brand || (!l.brand && (l.quiz || l.app)))
+    && (!onlySite || l.quiz || l.app)
+    && (parents || !l.parent));
+}
+const count = (arr, f) => arr.reduce((m, x) => { const k = f(x); m.set(k, (m.get(k) || 0) + 1); return m; }, new Map());
+const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+
+let chart;
+function render() {
+  const all = filtered();
+  const d = S.data;
+  $('#meta').textContent = `${all.length.toLocaleString()} leads · ${d.range.from} → ${d.range.to}${d.truncated ? ' · HubSpot returned the first 4,000 contacts only — pick a shorter range' : ''} · updated ${new Date(d.generatedAt).toLocaleTimeString()}`;
+  const offline = all.filter((l) => l.hubspot === 'Offline Sources');
+  const fixed = offline.filter((l) => l.real.basis === 'site' || l.real.basis === 'recovered');
+  const known = all.filter((l) => !/^Unknown/.test(l.real.channel));
+  const quiz = all.filter((l) => l.quiz).length; const applied = all.filter((l) => l.app).length;
+  const complete = all.filter((l) => l.app === 'complete' || l.app === 'paid').length; const paid = all.filter((l) => l.app === 'paid').length;
+  $('#kpis').innerHTML = [
+    ['Leads', all.length.toLocaleString(), 'contacts created in the range'],
+    ['Real source known', pct(known.length, all.length), `${known.length.toLocaleString()} of ${all.length.toLocaleString()}`],
+    ['“Offline” in HubSpot', offline.length.toLocaleString(), `${fixed.length.toLocaleString()} put back to their real channel`],
+    ['Took the quiz', quiz.toLocaleString(), pct(quiz, all.length) + ' of leads'],
+    ['Applications', applied.toLocaleString(), `${complete} complete · ${paid} fee paid`],
+  ].map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+
+  // chart
+  const hsC = count(all, (l) => l.hubspot || 'Unknown'); const realC = count(all, (l) => l.real.channel);
+  const labels = [...new Set([...CHANNELS, 'Unknown (offline)', 'Unknown'])].filter((c) => hsC.get(c) || realC.get(c));
+  chart?.destroy();
+  chart = new Chart($('#chart'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'HubSpot Original Source', data: labels.map((c) => hsC.get(c) || 0), backgroundColor: 'rgba(138,148,156,.55)', borderRadius: 4 },
+      { label: 'Real source', data: labels.map((c) => realC.get(c) || 0), backgroundColor: labels.map((c) => COLORS[c] || '#55BBD2'), borderRadius: 4 },
+    ] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { labels: { color: '#c9d1d6' } } }, scales: { x: { ticks: { color: '#8a949c' }, grid: { color: '#262c31' } }, y: { ticks: { color: '#dfe7ec' }, grid: { display: false } } } },
+  });
+
+  // basis
+  const bc = count(all, (l) => l.real.basis);
+  const names = { hubspot: ['HubSpot', 'b-hubspot'], site: ['Site', 'b-site'], recovered: ['Recovered', 'b-recovered'], none: ['Unknown', 'b-none'] };
+  const max = Math.max(1, ...bc.values());
+  $('#basis').innerHTML = `<table><tbody>${['hubspot', 'site', 'recovered', 'none'].map((k) => `<tr><td><span class="chip ${names[k][1]}">${names[k][0]}</span></td><td style="width:55%"><div class="bar2" style="width:${((bc.get(k) || 0) / max) * 100}%"></div></td><td class="n">${(bc.get(k) || 0).toLocaleString()}</td><td class="n em">${pct(bc.get(k) || 0, all.length)}</td></tr>`).join('')}</tbody></table>
+    <p class="sub" style="margin-top:14px">“How did you find us?” answered on ${all.filter((l) => l.howFound).length.toLocaleString()} of these leads — it's shown in the lead list for comparison.</p>`;
+
+  // funnel
+  const by = new Map();
+  for (const l of all) {
+    const k = l.real.channel; const r = by.get(k) || { leads: 0, quiz: 0, app: 0, complete: 0, paid: 0, offline: 0 };
+    r.leads++; if (l.quiz) r.quiz++; if (l.app) r.app++; if (l.app === 'complete' || l.app === 'paid') r.complete++; if (l.app === 'paid') r.paid++; if (l.hubspot === 'Offline Sources') r.offline++;
+    by.set(k, r);
+  }
+  const rows = [...by].sort((a, b) => b[1].leads - a[1].leads);
+  $('#funnel').innerHTML = `<table><thead><tr><th>Real source</th><th class="n">Leads</th><th class="n">% of leads</th><th class="n">HubSpot said Offline</th><th class="n">Quiz</th><th class="n">Applied</th><th class="n">Complete</th><th class="n">Fee paid</th><th class="n">Lead → paid</th></tr></thead><tbody>
+    ${rows.map(([k, r]) => `<tr class="click${S.channel === k ? ' on' : ''}" data-ch="${esc(k)}"><td><span class="chip" style="background:${COLORS[k] || '#55BBD2'}22;color:${COLORS[k] || '#55BBD2'}">${esc(k)}</span></td><td class="n">${r.leads}</td><td class="n">${pct(r.leads, all.length)}</td><td class="n${r.offline ? ' off' : ''}">${r.offline || ''}</td><td class="n">${r.quiz || ''}</td><td class="n">${r.app || ''}</td><td class="n">${r.complete || ''}</td><td class="n">${r.paid || ''}</td><td class="n">${pct(r.paid, r.leads)}</td></tr>`).join('')}</tbody></table>`;
+  document.querySelectorAll('[data-ch]').forEach((tr) => tr.onclick = () => { S.channel = S.channel === tr.dataset.ch ? '' : tr.dataset.ch; S.page = 0; render(); });
+
+  const view = S.channel ? all.filter((l) => l.real.channel === S.channel) : all;
+  // campaigns
+  const camp = new Map();
+  for (const l of view) {
+    const s = l.site; const key = s && s.channel !== 'Direct Traffic' ? [s.source || '(none)', s.medium || '—', s.campaign || '—'].join(' › ') : l.real.detail ? `${l.real.detail} (HubSpot)` : null;
+    if (!key) continue;
+    const r = camp.get(key) || { ch: l.real.channel, leads: 0, app: 0, paid: 0 };
+    r.leads++; if (l.app) r.app++; if (l.app === 'paid') r.paid++; camp.set(key, r);
+  }
+  const crow = [...camp].sort((a, b) => b[1].leads - a[1].leads).slice(0, 60);
+  $('#campaigns').innerHTML = crow.length ? `<table><thead><tr><th>Source › medium › campaign</th><th>Channel</th><th class="n">Leads</th><th class="n">Applied</th><th class="n">Fee paid</th></tr></thead><tbody>${crow.map(([k, r]) => `<tr><td>${esc(k)}</td><td class="em">${esc(r.ch)}</td><td class="n">${r.leads}</td><td class="n">${r.app || ''}</td><td class="n">${r.paid || ''}</td></tr>`).join('')}</tbody></table>` : '<p class="em">No campaign or referrer details for these leads yet.</p>';
+
+  // leads
+  $('#leadsSub').textContent = `${view.length.toLocaleString()} leads${S.channel ? ` from ${S.channel}` : ''}, newest first.`;
+  const pageRows = view.slice(S.page * PAGE, (S.page + 1) * PAGE);
+  const basis = (b) => `<span class="chip ${names[b]?.[1] || 'b-none'}">${names[b]?.[0] || b}</span>`;
+  $('#leads').innerHTML = `<table><thead><tr><th>Created</th><th>Lead</th><th>HubSpot says</th><th>Real source</th><th>First visit</th><th>“How did you find us?”</th><th>Quiz</th><th>Application</th></tr></thead><tbody>
+    ${pageRows.map((l) => `<tr><td class="em">${l.created ? new Date(l.created).toLocaleDateString() : ''}</td>
+      <td>${l.id ? `<a href="https://app.hubspot.com/contacts/3855728/record/0-1/${esc(l.id)}" target="_blank" rel="noopener">${esc(l.name || l.email)}</a>` : esc(l.name || l.email)}<div class="em">${esc(l.email)}</div></td>
+      <td class="${l.hubspot === 'Offline Sources' ? 'off' : ''}">${esc(l.hubspot || '—')}<div class="em">${esc(l.hubspotDetail)}</div></td>
+      <td>${esc(l.real.channel)} ${basis(l.real.basis)}<div class="em">${esc(l.real.detail || '')}</div></td>
+      <td class="em">${l.site?.touch ? esc([l.site.touch.landing && l.site.touch.landing.replace(/^https?:\/\//, ''), l.site.touch.referrer && `from ${l.site.touch.referrer.replace(/^https?:\/\//, '')}`].filter(Boolean).join(' · ')) : ''}</td>
+      <td class="em">${esc(l.howFound)}</td><td>${esc(l.quiz)}</td><td>${esc(l.app ? `${l.app}${l.program ? ` · ${l.program}` : ''}` : '')}</td></tr>`).join('')}</tbody></table>`;
+  const pages = Math.ceil(view.length / PAGE);
+  $('#pager').innerHTML = pages > 1 ? `<button class="preset" id="prev"${S.page ? '' : ' disabled'}>← Newer</button><span>Page ${S.page + 1} of ${pages}</span><button class="preset" id="next"${S.page + 1 < pages ? '' : ' disabled'}>Older →</button>` : '';
+  $('#prev')?.addEventListener('click', () => { S.page--; render(); });
+  $('#next')?.addEventListener('click', () => { S.page++; render(); });
+  $('#csv').onclick = () => {
+    const cols = ['created', 'email', 'name', 'brand', 'hubspot', 'hubspotDetail', 'realChannel', 'realDetail', 'basis', 'firstSource', 'firstMedium', 'firstCampaign', 'firstLanding', 'firstReferrer', 'howFound', 'quiz', 'app', 'program'];
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = view.map((l) => [l.created, l.email, l.name, l.brand, l.hubspot, l.hubspotDetail, l.real.channel, l.real.detail, l.real.basis, l.site?.source, l.site?.medium, l.site?.campaign, l.site?.touch?.landing, l.site?.touch?.referrer, l.howFound, l.quiz, l.app, l.program].map(q).join(','));
+    const blob = new Blob([[cols.join(','), ...lines].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `lead-sources-${d.range.from}-${d.range.to}.csv`; a.click();
+  };
+}
+
+$('#setup').onclick = async (e) => {
+  e.target.disabled = true; $('#setupOut').textContent = 'Working…';
+  try {
+    const r = await fetch('/api/lead-sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'setup' }) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status);
+    $('#setupOut').textContent = `Created ${d.created.length}, already there ${d.existing.length}${d.failed.length ? `, failed ${d.failed.length}: ${d.failed[0].error}` : ''}.`;
+  } catch (err) { $('#setupOut').textContent = err.message; } finally { e.target.disabled = false; }
+};
+load();
+</script>
+</body>
+</html>

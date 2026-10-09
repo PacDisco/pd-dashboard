@@ -154,7 +154,7 @@ const OFFLINE_UNRECOVERED = "Not recoverable";
 // Returns { channel, detail } for an Offline record, or null when the
 // drill-downs are empty. `detail` is the most specific true thing available —
 // the referring domain, the campaign, or the raw source — never a guess.
-function recoverOffline(dd3, dd4, dd5) {
+export function recoverOffline(dd3, dd4, dd5) {
   const raw3 = (dd3 || "").trim();
   const raw4 = (dd4 || "").trim();
   const raw5 = (dd5 || "").trim();

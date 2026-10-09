@@ -39,10 +39,10 @@ function store() {
   }
 }
 
-async function accessInputs() {
+async function accessInputs(slug = DASHBOARD_SLUG, allowedRoles = DEFAULT_ALLOWED_ROLES) {
   const s = store();
   let grants = null;
-  let dashboard = { slug: DASHBOARD_SLUG, allowedRoles: DEFAULT_ALLOWED_ROLES };
+  let dashboard = { slug, allowedRoles };
   if (s) {
     try {
       const raw = await s.get("grants", { type: "json" });
@@ -52,7 +52,7 @@ async function accessInputs() {
     }
     try {
       const perms = await s.get("permissions", { type: "json" });
-      const entry = (perms?.dashboards || []).find((d) => d.slug === DASHBOARD_SLUG);
+      const entry = (perms?.dashboards || []).find((d) => d.slug === slug);
       if (entry) dashboard = entry;
     } catch { /* defaults */ }
   }
@@ -70,4 +70,19 @@ export async function requireEditor(req, deps = {}) {
   }
   const roles = publishRoles();
   return { ...user, actor: actorName(user), canPublish: isAdmin(user.roles) || (user.roles || []).some((r) => roles.includes(r)) };
+}
+
+/**
+ * Same check for another dashboard (e.g. Lead Sources).
+ * @returns {Promise<Response | {email,name,roles,actor}>}
+ */
+export async function requireDashboard(req, slug, allowedRoles, deps = {}) {
+  const verify = deps.verifiedUser || verifiedUser;
+  const user = await verify(req, slug);
+  if (!user) return json({ error: "Sign in required." }, 401);
+  const { grants, dashboard } = deps.accessInputs ? await deps.accessInputs() : await accessInputs(slug, allowedRoles);
+  if (!canAccess({ email: user.email, roles: user.roles, slug, dashboard, grants })) {
+    return json({ error: "You don't have access to this dashboard." }, 403);
+  }
+  return { ...user, actor: actorName(user), isAdmin: isAdmin(user.roles) };
 }

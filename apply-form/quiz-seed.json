@@ -1,0 +1,514 @@
+{
+ "kind": "quiz",
+ "title": "Which gap year traveler are you?",
+ "settings": {
+  "introTitle": "Which gap year traveler are you?",
+  "introBody": "Answer 15 quick questions and we’ll match you with the kind of program — and places — that suit you best. It takes about 3 minutes.",
+  "startLabel": "Start the quiz",
+  "submitLabel": "See my result",
+  "hubspotFormGuid": "",
+  "leadStatus": "NEW",
+  "archetypeProperty": "pd_quiz_archetype",
+  "answersProperty": "pd_quiz_answers",
+  "secondaryCtaLabel": "Talk to an advisor",
+  "secondaryCtaUrl": "https://www.pacificdiscovery.org/contact/",
+  "showScores": false,
+  "jotformFormId": "252958612162864"
+ },
+ "archetypes": [
+  {
+   "key": "adventurer",
+   "name": "The Adventurer",
+   "headline": "You’re an Adventurer!",
+   "html": "<p>You come alive outdoors and learn best by doing. Trekking to remote villages, surfing, diving and summiting are what a gap year is for — and you’ll come home more capable and confident than you left.</p><p><strong>Programs to look at:</strong> South America Gap Semester, Nepal and Tibet Gap Semester, New Zealand and Australia Gap Semester.</p>",
+   "hubspotValue": "The Adventurer",
+   "ctaLabel": "Start your application",
+   "ctaUrl": "/"
+  },
+  {
+   "key": "connector",
+   "name": "The Cultural Connector",
+   "headline": "You’re a Cultural Connector!",
+   "html": "<p>You travel to understand people. Homestays, local languages, food and festivals are where your best memories will come from, and you’ll leave with friends on the other side of the world.</p><p><strong>Programs to look at:</strong> Southeast Asia Gap Semester, Japan Mini Semester, Central America Gap Semester.</p>",
+   "hubspotValue": "The Cultural Connector",
+   "ctaLabel": "Start your application",
+   "ctaUrl": "/"
+  },
+  {
+   "key": "ocean",
+   "name": "The Ocean Guardian",
+   "headline": "You’re an Ocean Guardian!",
+   "html": "<p>The sea is your classroom. Reef monitoring, marine science and conservation work give you real skills — and real credentials — while you explore some of the most beautiful coastlines on earth.</p><p><strong>Programs to look at:</strong> Marine Conservation and Reef Monitoring Field Program, Australia and Bali Gap Semester, Hawaii Mini Semester.</p>",
+   "hubspotValue": "The Ocean Guardian",
+   "ctaLabel": "Start your application",
+   "ctaUrl": "/"
+  },
+  {
+   "key": "changemaker",
+   "name": "The Changemaker",
+   "headline": "You’re a Changemaker!",
+   "html": "<p>You want your time away to matter. Service projects, sustainability and global citizenship will challenge how you see the world and what you want to do next.</p><p><strong>Programs to look at:</strong> Polynesian Journey Gap Semester, South America Gap Semester, Costa Rica Mini Semester.</p>",
+   "hubspotValue": "The Changemaker",
+   "ctaLabel": "Start your application",
+   "ctaUrl": "/"
+  },
+  {
+   "key": "seeker",
+   "name": "The Seeker",
+   "headline": "You’re a Seeker!",
+   "html": "<p>For you, a gap year is about growth. Space to reflect, mindful practice and a small, supportive group will help you come back clear on who you are and what’s next.</p><p><strong>Programs to look at:</strong> Nepal and Tibet Gap Semester, Japan Mini Semester, New Zealand and Australia Gap Semester.</p>",
+   "hubspotValue": "The Seeker",
+   "ctaLabel": "Start your application",
+   "ctaUrl": "/"
+  }
+ ],
+ "programs": [],
+ "terms": [],
+ "lists": {},
+ "steps": [
+  {
+   "key": "quiz",
+   "title": "Quiz",
+   "sections": [
+    {
+     "key": "q_motivation",
+     "fields": [
+      {
+       "key": "motivation",
+       "type": "radio",
+       "label": "What is your motivation for taking a gap year?",
+       "required": true,
+       "options": [
+        "Adventure and fun — I want to see and do new things!",
+        "Personal growth — I want to challenge myself and build confidence.",
+        "Cultural immersion — I want to live and learn alongside locals.",
+        "Skills and career prep — I want certifications or academic credit."
+       ],
+       "jfQid": "5",
+       "scores": {
+        "Skills and career prep — I want certifications or academic credit.": [
+         "changemaker",
+         "ocean"
+        ],
+        "Cultural immersion — I want to live and learn alongside locals.": [
+         "connector"
+        ],
+        "Personal growth — I want to challenge myself and build confidence.": [
+         "seeker"
+        ],
+        "Adventure and fun — I want to see and do new things!": [
+         "adventurer"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "q_feelAtEnd",
+     "fields": [
+      {
+       "key": "feelAtEnd",
+       "type": "radio",
+       "label": "How do you hope to feel at the end of your program?",
+       "required": true,
+       "options": [
+        "Energized and inspired",
+        "Accomplished and proud of overcoming challenges",
+        "Connected to a new culture and community",
+        "More focused on what’s next in life or study"
+       ],
+       "jfQid": "7",
+       "scores": {
+        "More focused on what’s next in life or study": [
+         "ocean",
+         "seeker"
+        ],
+        "Connected to a new culture and community": [
+         "changemaker",
+         "connector"
+        ],
+        "Accomplished and proud of overcoming challenges": [
+         "seeker"
+        ],
+        "Energized and inspired": [
+         "adventurer"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "q_travelExcites",
+     "fields": [
+      {
+       "key": "travelExcites",
+       "type": "radio",
+       "label": "When you think about travel, what excites you most?",
+       "required": true,
+       "options": [
+        "Physical adventure (hiking, diving, climbing)",
+        "Trying new foods and languages",
+        "Giving back through service",
+        "Meeting new people and finding my place in a group"
+       ],
+       "jfQid": "18"
+      }
+     ]
+    },
+    {
+     "key": "q_idealDay",
+     "fields": [
+      {
+       "key": "idealDay",
+       "type": "radio",
+       "label": "Which of these sounds most like your ideal day?",
+       "required": true,
+       "options": [
+        "Trekking to waterfalls or mountains",
+        "Living with a host family, learning local customs",
+        "Diving on coral reefs or cleaning beaches",
+        "Collaborating on a service project",
+        "Journaling in nature or meditating after group reflection"
+       ],
+       "jfQid": "22",
+       "scores": {
+        "Journaling in nature or meditating after group reflection": [
+         "seeker"
+        ],
+        "Collaborating on a service project": [
+         "changemaker"
+        ],
+        "Living with a host family, learning local customs": [
+         "connector"
+        ],
+        "Trekking to waterfalls or mountains": [
+         "adventurer"
+        ],
+        "Diving on coral reefs or cleaning beaches": [
+         "ocean"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "q_offGrid",
+     "fields": [
+      {
+       "key": "offGrid",
+       "type": "radio",
+       "label": "How comfortable are you being off-grid or without Wi-Fi?",
+       "required": true,
+       "options": [
+        "Totally fine – I’d enjoy the break",
+        "A bit nervous but I’d adapt",
+        "I’d like a balance of connection and adventure",
+        "I prefer being more connected and comfortable"
+       ],
+       "jfQid": "25",
+       "scores": {
+        "I prefer being more connected and comfortable": [
+         "ocean"
+        ],
+        "I’d like a balance of connection and adventure": [
+         "seeker"
+        ],
+        "A bit nervous but I’d adapt": [
+         "changemaker",
+         "connector"
+        ],
+        "Totally fine – I’d enjoy the break": [
+         "adventurer"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "q_climate",
+     "fields": [
+      {
+       "key": "climate",
+       "type": "radio",
+       "label": "What kind of climate do you thrive in?",
+       "required": true,
+       "options": [
+        "Warm, tropical, near the ocean",
+        "Mountainous or temperate with a mix of cool and warm days",
+        "Variable – I’m happy anywhere as long as it’s new",
+        "Cool or mild, with some city comforts nearby"
+       ],
+       "jfQid": "23"
+      }
+     ]
+    },
+    {
+     "key": "q_groupRole",
+     "fields": [
+      {
+       "key": "groupRole",
+       "type": "radio",
+       "label": "In a group setting, you’re usually…",
+       "required": true,
+       "options": [
+        "The motivator – I get everyone involved",
+        "The observer – I like to take it in before jumping in",
+        "The connector – I bring people together",
+        "The planner – I like structure and knowing what’s next"
+       ],
+       "jfQid": "30"
+      }
+     ]
+    },
+    {
+     "key": "q_challenge",
+     "fields": [
+      {
+       "key": "challenge",
+       "type": "radio",
+       "label": "When facing a challenge, I usually…",
+       "required": true,
+       "options": [
+        "Dive right in and figure it out",
+        "Look for help or guidance",
+        "Reflect and find my own solution",
+        "Stay calm and support others"
+       ],
+       "jfQid": "31"
+      }
+     ]
+    },
+    {
+     "key": "q_learnStyle",
+     "fields": [
+      {
+       "key": "learnStyle",
+       "type": "radio",
+       "label": "How do you like to learn best?",
+       "required": true,
+       "options": [
+        "Through adventure and challenge",
+        "Immersed in local culture",
+        "Through reflection and discussion",
+        "With structure and clear outcomes"
+       ],
+       "jfQid": "32",
+       "scores": {
+        "With structure and clear outcomes": [
+         "changemaker",
+         "ocean"
+        ],
+        "Through reflection and discussion": [
+         "seeker"
+        ],
+        "Immersed in local culture": [
+         "connector"
+        ],
+        "Through adventure and challenge": [
+         "adventurer"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "q_topic",
+     "fields": [
+      {
+       "key": "topic",
+       "type": "radio",
+       "label": "Which topic interests you most?",
+       "required": true,
+       "options": [
+        "Outdoor leadership and wilderness skills",
+        "Language and cultural studies",
+        "Marine ecology or ocean conservation",
+        "Global citizenship and sustainability",
+        "Personal growth and mindfulness"
+       ],
+       "jfQid": "33",
+       "scores": {
+        "Personal growth and mindfulness": [
+         "seeker"
+        ],
+        "Global citizenship and sustainability": [
+         "changemaker"
+        ],
+        "Marine ecology or ocean conservation": [
+         "ocean"
+        ],
+        "Language and cultural studies": [
+         "connector"
+        ],
+        "Outdoor leadership and wilderness skills": [
+         "adventurer"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "key": "q_experience",
+     "fields": [
+      {
+       "key": "experience",
+       "type": "radio",
+       "label": "Which of these experiences would you most want to include?",
+       "required": true,
+       "options": [
+        "Scuba diving or surfing",
+        "Hiking and camping in national parks",
+        "Volunteering or community homestays",
+        "Learning a new language or art form"
+       ],
+       "jfQid": "35"
+      }
+     ]
+    },
+    {
+     "key": "q_credit",
+     "fields": [
+      {
+       "key": "credit",
+       "type": "radio",
+       "label": "Would you like to earn college credit or certifications during your program?",
+       "required": true,
+       "options": [
+        "Yes, that’s a key goal for me",
+        "It’s a bonus, but not required",
+        "Not really — I’m more focused on experience"
+       ],
+       "jfQid": "36"
+      }
+     ]
+    },
+    {
+     "key": "q_travelLength",
+     "fields": [
+      {
+       "key": "travelLength",
+       "type": "radio",
+       "label": "How long do you want to travel for?",
+       "required": true,
+       "options": [
+        "10 weeks (Semester)",
+        "4–6 weeks (Mini Semester/Summer Program)"
+       ],
+       "jfQid": "38"
+      }
+     ]
+    },
+    {
+     "key": "q_travelWhen",
+     "fields": [
+      {
+       "key": "travelWhen",
+       "type": "radio",
+       "label": "When are you looking to travel?",
+       "required": true,
+       "options": [
+        "Spring 2027",
+        "Summer 2027",
+        "Fall 2027",
+        "Spring 2028",
+        "Summer 2028",
+        "Fall 2028",
+        "Spring 2029",
+        "Not sure yet"
+       ],
+       "jfQid": "98"
+      }
+     ]
+    },
+    {
+     "key": "q_regions",
+     "fields": [
+      {
+       "key": "regions",
+       "type": "checkbox",
+       "label": "Which regions excite you most?",
+       "required": true,
+       "options": [
+        "Southeast Asia (Bali, Thailand, Vietnam, Cambodia)",
+        "South America (Peru, Ecuador, Galapagos)",
+        "Central America (Mexico, Guatemala, Costa Rica)",
+        "Oceania (New Zealand, Australia, Hawaii)",
+        "Japan",
+        "The Himalayas (Nepal, Tibet, India)"
+       ],
+       "jfQid": "40",
+       "maxChoices": 2,
+       "help": "Pick up to 2.",
+       "scores": {
+        "The Himalayas (Nepal, Tibet, India)": [
+         "seeker",
+         "adventurer"
+        ],
+        "Japan": [
+         "seeker",
+         "connector"
+        ],
+        "Oceania (New Zealand, Australia, Hawaii)": [
+         "seeker",
+         "ocean",
+         "adventurer"
+        ],
+        "South America (Peru, Ecuador, Galapagos)": [
+         "changemaker",
+         "connector",
+         "adventurer"
+        ],
+        "Southeast Asia (Bali, Thailand, Vietnam, Cambodia)": [
+         "changemaker",
+         "connector"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "contact",
+   "title": "Your details",
+   "sections": [
+    {
+     "key": "contact",
+     "title": "Almost there — where should we send your results?",
+     "fields": [
+      {
+       "key": "name",
+       "type": "fullname",
+       "label": "What is your name?",
+       "required": true,
+       "hubspot": {
+        "contact": {
+         "first": "firstname",
+         "last": "lastname"
+        }
+       }
+      },
+      {
+       "key": "email",
+       "type": "email",
+       "label": "What is your preferred email address?",
+       "required": true,
+       "hubspot": {
+        "contact": "email"
+       }
+      },
+      {
+       "key": "mobile",
+       "type": "phone",
+       "label": "Phone number",
+       "required": true,
+       "hubspot": {
+        "contact": "phone"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

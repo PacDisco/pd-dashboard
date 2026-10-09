@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Apply Form — Pacific Discovery</title>
-<meta name="description" content="Edit the online application (apply.pacificdiscovery.org) — fields, programs, prices and travel dates — and follow each applicant through application, interview and fee.">
+<title>Gap Year Quiz — Pacific Discovery</title>
+<meta name="description" content="Edit the gap-year quiz at apply.pacificdiscovery.org/quiz — questions, scoring and results — and see who took it.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -143,32 +143,46 @@ dialog::backdrop{background:rgba(20,30,35,.45)}
 .sync li{display:flex;gap:8px;padding:3px 0}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#263238;color:#fff;padding:10px 16px;border-radius:10px;z-index:100;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:90vw}
 .loading{padding:60px;text-align:center;color:var(--muted)}
+
+/* quiz editor */
+.qcard{background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:12px}
+.qcard__head{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);background:#fafbfb;border-radius:12px 12px 0 0}
+.qcard__head .n{font-weight:700;color:var(--teal);min-width:28px}
+.qcard__head .t{flex:1;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.qcard__body{padding:12px 14px}
+.qcard.closed .qcard__body{display:none}
+.optrow{display:grid;grid-template-columns:minmax(0,1fr) auto 30px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed #edf0f1}
+.optrow:last-child{border-bottom:0}
+.archs{display:flex;gap:4px;flex-wrap:wrap}
+.archs button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:2px 9px;font-size:12px;cursor:pointer;color:var(--muted)}
+.archs button[aria-pressed=true]{background:var(--teal);border-color:var(--teal);color:#fff}
+.legend{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:0 0 12px}
+.reach{font-size:12px;color:var(--muted)}
+.chan{display:inline-block;font-size:12px;border-radius:999px;padding:2px 9px;background:var(--soft);color:var(--teal-dk);font-weight:600}
 </style>
 </head>
 <body>
 <header class="bar">
-  <a class="crumb" href="/">← Dashboards</a>
-  <h1 class="serif">Apply Form</h1>
+  <a class="crumb" href="/apply-form/">← Apply Form</a>
+  <h1 class="serif">Gap Year Quiz</h1>
   <span id="status-chip"></span>
   <span class="save-state" id="save-state" aria-live="polite"></span>
   <span class="spacer"></span>
-  <a class="btn btn--sm" href="/apply-form/quiz.html">Quiz editor</a>
-  <a class="btn btn--sm" id="open-live" target="_blank" rel="noopener" href="#">Open live form ↗</a>
-  <a class="btn btn--sm" id="open-preview" target="_blank" rel="noopener" href="#" title="Click through every step without saving anything (uses the published form)">Test the flow ↗</a>
+  <a class="btn btn--sm" id="open-live" target="_blank" rel="noopener" href="#">Open live quiz ↗</a>
+  <a class="btn btn--sm" id="open-preview" target="_blank" rel="noopener" href="#" title="Take the published quiz without saving anything or creating HubSpot contacts">Test the quiz ↗</a>
   <button class="btn btn--sm" id="btn-versions" type="button">Versions</button>
   <button class="btn btn--sm btn--danger hidden" id="btn-discard" type="button">Discard changes</button>
   <button class="btn btn--primary" id="btn-publish" type="button">Publish</button>
 </header>
 <nav class="tabs" role="tablist" aria-label="Sections">
-  <button role="tab" data-tab="fields" aria-selected="true">Form fields</button>
-  <button role="tab" data-tab="programs" aria-selected="false">Programs &amp; dates</button>
-  <button role="tab" data-tab="settings" aria-selected="false">Fee, interview &amp; text</button>
-  <button role="tab" data-tab="apps" aria-selected="false">Applications</button>
+  <button role="tab" data-tab="questions" aria-selected="true">Questions &amp; scoring</button>
+  <button role="tab" data-tab="results" aria-selected="false">Results</button>
+  <button role="tab" data-tab="settings" aria-selected="false">Settings &amp; HubSpot</button>
+  <button role="tab" data-tab="responses" aria-selected="false">Responses</button>
 </nav>
 <div id="notices"></div>
 <main id="app"><div class="loading">Loading…</div></main>
-
 <dialog id="dlg"></dialog>
-<script type="module" src="/apply-form/editor.js"></script>
+<script type="module" src="/apply-form/quiz-editor.js"></script>
 </body>
 </html>
