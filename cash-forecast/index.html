@@ -53,6 +53,11 @@
   .fy { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
     letter-spacing: .07em; text-transform: uppercase; color: #98a2b3; }
   .who { display: flex; align-items: center; gap: 11px; margin-left: auto; }
+  .export { display: flex; align-items: center; gap: 6px; }
+  .export select { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff; color: var(--ink); }
+  .export button:hover:not(:disabled) { border-color: var(--topaz); color: var(--topaz-dark); }
+  .export button:disabled, .export select:disabled { opacity: .6; cursor: default; }
   .email { font-family: ui-monospace, monospace; font-size: 11px; color: #98a2b3; }
   .panel { display: flex; flex-direction: column; gap: 16px; }
 

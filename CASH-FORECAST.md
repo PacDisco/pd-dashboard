@@ -40,6 +40,9 @@ cash-forecast/
   app.js          client; imports engine.mjs directly
   engine.mjs      the forecast — pure functions, no I/O, no clock
   model.mjs       types and defaults
+  report.mjs      one fiscal year cut out of the forecast, for the PDF (pure)
+  report-pdf.js   draws that year as a PDF in the browser
+  vendor/         jsPDF + AutoTable, loaded on the first export only
   dashboard.json  title, icon, allowedRoles
 
 netlify/functions/
@@ -142,6 +145,37 @@ calendar-day "30-day average" would be built from about 21 readings.
 
 The Payment rules tab re-runs the year at the observed 90-day high and low.
 Neither source is a dealing rate; your bank's spread sits on top.
+
+---
+
+## PDF export
+
+**Export PDF** in the header downloads a fiscal-year cash flow report for the
+year picked beside it. Any complete April–March year in the horizon can be
+exported; a year with no programs departing says so in the picker and on the
+report.
+
+The PDF is three pages, A4 landscape:
+
+1. Summary tiles (opening and closing NZD account, cash in and out, lowest
+   point, USD converted and held, total position) and the NZD account chart.
+2. The monthly table — the same rows as the Cash flow tab, plus a year column.
+   Flow rows sum; balance rows show 31 March. Closed months are tinted, and
+   forecast components inside them are italic, as on screen.
+3. Programs departing in the year with gross profit, the year's warnings, and
+   the basis of preparation.
+
+It exports **what the page is showing**. With unsaved edits that is the live
+preview, so the file is stamped DRAFT in its name, header and footer.
+
+Every figure comes from that year's own twelve months, not `forecast.totals`,
+which only ever describes the model's first year. `test/cash-report.test.mjs`
+holds that line; `test/cash-report-pdf.smoke.mjs` clicks the button in
+Chromium and reads the PDF back with `pdftotext`.
+
+The libraries are vendored in `cash-forecast/vendor/` (see its README for
+versions) rather than loaded from a CDN, because this page carries bank
+balances.
 
 ---
 

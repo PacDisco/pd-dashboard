@@ -13,6 +13,7 @@
  */
 
 import { buildForecast } from "./engine.mjs";
+import { fiscalYearsIn, fiscalYearReport } from "./report.mjs";
 
 const state = {
   assumptions: null,
@@ -38,6 +39,11 @@ const state = {
   pnlByMonth: false,
   pnlOpen: {},
   dirty: false,
+  // The fiscal year the PDF export is set to, by its April year. Null means
+  // "the model's year" and is resolved at render, so it follows the model when
+  // the fiscal year rolls over rather than sticking to last year's choice.
+  exportFy: null,
+  exporting: false,
   tab: "forecast",
   saving: false,
   error: null,
@@ -278,6 +284,7 @@ function topBar(f) {
         </div>
       </div>
       <div class="who">
+        ${exportControl(f)}
         ${state.canEdit
           ? `<button id="save" class="btn-primary" ${state.dirty && !state.saving ? "" : "disabled"}>${
               state.saving ? "Saving…" : state.dirty ? "Save changes" : "Saved"
@@ -286,6 +293,63 @@ function topBar(f) {
         <span class="email">${escapeHtml(state.email)}</span>
       </div>
     </header>`;
+}
+
+/**
+ * Fiscal-year PDF export: a year picker and a button, in the header so it is
+ * reachable from every tab. Any complete April–March year in the horizon can
+ * be exported; years with nothing entered say so in the picker.
+ */
+function exportControl(f) {
+  const years = fiscalYearsIn(f);
+  if (!years.length) return "";
+  const chosen = state.exportFy ?? f.fiscalYearStartYear;
+  return `<div class="export">
+    <label class="sr-only" for="pdffy">Fiscal year to export</label>
+    <select id="pdffy" ${state.exporting ? "disabled" : ""}>
+      ${years.map((y) => `<option value="${y.startYear}" ${y.startYear === chosen ? "selected" : ""}>${
+        escapeHtml(y.label)}${y.noPrograms ? " (no programs)" : ""}</option>`).join("")}
+    </select>
+    <button id="exportpdf" ${state.exporting ? "disabled" : ""}
+      title="Download a PDF cash flow report for the selected fiscal year${state.dirty ? " — includes your unsaved changes, marked as a draft" : ""}">${
+      state.exporting ? "Preparing…" : "Export PDF"}</button>
+  </div>`;
+}
+
+const RATE_LABELS = {
+  avg90: "90-day average", avg60: "60-day average", avg30: "30-day average",
+  current: "spot", manual: "pinned",
+};
+
+async function exportPdf() {
+  const f = displayForecast();
+  const startYear = state.exportFy ?? f.fiscalYearStartYear;
+  if (state.error?.startsWith("PDF export failed")) state.error = null;
+  state.exporting = true; render();
+  try {
+    const report = fiscalYearReport(f, startYear, {
+      forecastOnly: state.forecastOnly,
+      programs: state.assumptions.programs ?? [],
+      buffer: state.assumptions.baseMinimumBuffer ?? 0,
+    });
+    // Loaded on first use: the PDF library is ~450 KB and most visits never
+    // export anything.
+    const { exportCashFlowPdf } = await import("./report-pdf.js");
+    await exportCashFlowPdf(report, {
+      generatedAt: new Date(),
+      generatedBy: state.email,
+      planningRate: f.totals.planningRate,
+      planningRateLabel: RATE_LABELS[state.assumptions.planningRateSource || "manual"] ?? "pinned",
+      // Unsaved edits are what's on screen, so they are what gets exported —
+      // but stamped, so a draft never circulates as the agreed forecast.
+      draft: state.dirty,
+    });
+  } catch (err) {
+    state.error = `PDF export failed: ${err.message}`;
+  } finally {
+    state.exporting = false;
+    render();
+  }
 }
 
 /**
@@ -1922,6 +1986,8 @@ function wire() {
     b.addEventListener("click", () => { state.tab = b.dataset.tab; render(); }));
 
   el("save")?.addEventListener("click", save);
+  el("exportpdf")?.addEventListener("click", exportPdf);
+  el("pdffy")?.addEventListener("change", (e) => { state.exportFy = Number(e.target.value); });
   el("seed")?.addEventListener("click", seed);
   el("addprog")?.addEventListener("click", addProgram);
 

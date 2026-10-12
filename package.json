@@ -13,6 +13,8 @@
     "test:access-ui": "node test/dashboard-access.smoke.mjs",
     "test:cash": "node test/field-cash.test.mjs",
     "test:cash-ui": "node test/field-cash.smoke.mjs",
+    "test:cash-report": "node test/cash-report.test.mjs",
+    "test:cash-report-ui": "node test/cash-report-pdf.smoke.mjs",
     "test:export": "node test/field-export.test.mjs",
     "test:fx": "node test/field-fx.test.mjs",
     "test:duplicate": "node test/field-duplicate.test.mjs",
