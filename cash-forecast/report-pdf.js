@@ -216,7 +216,7 @@ export async function buildCashFlowPdf(report, meta) {
         content: v === null ? (r.variance ? "–" : "n/a") : acct(v),
         _row: r, _v: v, _col: cols[i],
       })),
-      { content: r.total === null ? "n/a" : `${acct(r.total)}${r.partialTotal ? "*" : ""}`,
+      { content: r.total === null ? (r.variance ? "–" : "n/a") : `${acct(r.total)}${r.partialTotal ? "*" : ""}`,
         _row: r, _v: r.total, _total: true },
     ]);
   }
@@ -303,6 +303,11 @@ export async function buildCashFlowPdf(report, meta) {
   }
   if (report.summary.actualMonths) {
     foot.push(`Actual columns (through ${report.summary.actualsThrough}) use Xero for cash in, cash out and the balances. Figures in italics are still forecast: a bank summary gives a month's totals, not the split across categories.`);
+  }
+  const lv = report.summary.latestVariance;
+  if (lv) {
+    const word = Math.round(lv.value) > 0 ? "better than" : Math.round(lv.value) < 0 ? "worse than" : "in line with";
+    foot.push(`NZD vs forecast is the closed month's actual NZD account less what the original forecast expected for that month. It has no year figure: the latest closed month, ${lv.label}, is ${acct(Math.abs(lv.value))} ${word} forecast.`);
   }
   y = footnotes(doc, y, foot);
 

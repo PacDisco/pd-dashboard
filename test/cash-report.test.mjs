@@ -151,6 +151,10 @@ const TODAY = { today: new Date("2026-10-12T00:00:00Z") };
   near(variance.values[aug], f.months[aug].baseClosing - forecastOnly.months[aug].baseClosing, 0.01,
     "variance is actual less forecast on the NZD account");
   assert.equal(variance.values[aug + 1], null, "forecast months have no variance");
+  assert.equal(variance.total, null,
+    "no year figure: the last closed month's variance is not a 31 March variance");
+  assert.equal(r.summary.latestVariance.label, "Aug 26", "the latest variance names its month");
+  near(r.summary.latestVariance.value, variance.values[aug], 0.01, "and carries that month's figure");
 
   const conv = r.rows.find((x) => x.label === "USD converted");
   if (conv.values.some((v) => v === null)) {

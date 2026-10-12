@@ -110,6 +110,8 @@ const text = async (fyValue) => {
   check(/Monthly cash flow/.test(txt) && /Apr 26/.test(txt) && /Mar 27/.test(txt), "has the monthly table, April to March");
   check(/Actual/.test(txt), "closed months are marked actual");
   check(/NZD vs forecast/.test(txt), "includes the variance row");
+  check(/the latest closed month, Aug 26, is [\d,]+ (better than|worse than|in line with) forecast/.test(txt),
+    "the latest variance is footnoted with its month, not printed as a year figure");
   check(/Programs departing in the year/.test(txt) && /NZA/.test(txt), "lists the year's programs");
   check(/Page 1 of \d/.test(txt) && /Confidential/.test(txt), "has the running footer");
   check(!/undefined|NaN|Infinity/.test(txt), "no undefined or NaN anywhere");

@@ -153,7 +153,12 @@ export function fiscalYearReport(forecast, startYear, { forecastOnly = null, pro
       rows.push({ section: "Variance" });
       rows.push({
         label: "NZD vs forecast", style: "strong", kind: "balance", realWhenClosed: true,
-        values, total: [...values].reverse().find((v) => v !== null) ?? null,
+        // No year figure. Each month is a balance difference, so summing them
+        // is meaningless, and the last closed month's figure is not a 31 March
+        // one — printed under the "Year / 31 Mar" heading it read as the
+        // year-end variance when it was September's. The latest variance is
+        // stated in a footnote, with its month named.
+        values, total: null,
         partialTotal: false, variance: true,
       });
     }
@@ -181,7 +186,14 @@ export function fiscalYearReport(forecast, startYear, { forecastOnly = null, pro
     recognisedRevenue: sum(months.map((m) => m.recognisedRevenue)),
     actualMonths: actualCount,
     actualsThrough: actualCount ? months.filter((m) => m.isActual).at(-1).label : null,
+    latestVariance: null,
   };
+
+  const varianceRow = rows.find((r) => r.variance);
+  if (varianceRow) {
+    const i = varianceRow.values.map((v) => v !== null).lastIndexOf(true);
+    summary.latestVariance = { label: months[i].label, value: varianceRow.values[i] };
+  }
 
   /* ---- programs departing in the year ---- */
 
