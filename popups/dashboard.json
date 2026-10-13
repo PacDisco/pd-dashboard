@@ -1,0 +1,9 @@
+{
+  "title": "Website Popups",
+  "description": "Design popups for pacificdiscovery.org — choose the pages and timing, collect details, and send every sign-up straight into HubSpot as a new Pacific Discovery lead.",
+  "category": "Outreach",
+  "icon": "💬",
+  "colors": ["#F15B39", "#288195"],
+  "allowedRoles": ["admin", "outreach", "admissions"],
+  "order": 31
+}

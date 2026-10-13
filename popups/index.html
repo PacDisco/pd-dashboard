@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Website Popups — Pacific Discovery</title>
+<meta name="description" content="Design popups for pacificdiscovery.org and send sign-ups straight into HubSpot.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --topaz:#55bbd2;--teal:#288195;--teal-dk:#1f6b7c;--orange:#F15B39;--ink:#2f2f2f;--body:#4a4a4a;--muted:#5f666b;
+  --line:#e1e6e8;--bg:#f4f6f7;--soft:#eef6f8;--warn:#8a4b00;--warn-bg:#fff4e0;--bad:#a8321d;--bad-bg:#fdecea;--ok:#3c6b14;--ok-bg:#e9f5dd;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:Poppins,system-ui,sans-serif;color:var(--body);background:var(--bg);font-size:14px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--teal)}
+h1,h2,h3{margin:0;color:var(--ink)}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.hidden{display:none!important}
+.btn{display:inline-flex;align-items:center;gap:6px;justify-content:center;min-height:38px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:500;white-space:nowrap;text-decoration:none;color:var(--ink)}
+.btn:hover{background:var(--soft)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn--primary{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn--primary:hover{background:var(--teal-dk);border-color:var(--teal-dk)}
+.btn--danger{color:var(--bad);border-color:#f0c9c2}
+.btn--danger:hover{background:var(--bad-bg)}
+.btn--sm{min-height:32px;padding:0 10px;font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.chip--on{background:var(--ok-bg);color:var(--ok)}
+.chip--off{background:#eef0f1;color:#4f565b}
+.chip--sched{background:var(--warn-bg);color:var(--warn)}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field>label,.field>.lbl{font-size:12px;font-weight:600;color:var(--ink)}
+.help{font-size:12px;color:var(--muted)}
+.field input[type=text],.field input[type=url],.field input[type=number],.field input[type=date],.field select,.field textarea{width:100%;border:1px solid #cfd7da;border-radius:8px;padding:8px 10px;background:#fff;min-height:38px}
+.field textarea{min-height:80px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--topaz);outline-offset:0;border-color:var(--topaz)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.radios{display:flex;flex-direction:column;gap:6px}
+.radios label{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink)}
+.tile[aria-pressed=true]{border-color:var(--teal);box-shadow:0 0 0 2px var(--soft);color:var(--teal)}
+.tile svg{width:56px;height:40px}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.swatch{width:30px;height:30px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer}
+.swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--ink)}
+.switch{position:relative;display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:13px}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch .tr{width:40px;height:22px;border-radius:999px;background:#c9d1d4;position:relative;transition:background .15s;flex:none}
+.switch .tr::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.switch input:checked+.tr{background:#4f8a1f}
+.switch input:checked+.tr::after{transform:translateX(18px)}
+.switch input:focus-visible+.tr{outline:2px solid var(--topaz);outline-offset:2px}
+
+#view-list{max-width:1100px;margin:0 auto;padding:28px 20px 60px}
+.topline{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.topline h1{font-size:30px}
+.crumb{font-size:13px;color:var(--muted);text-decoration:none}
+table.list{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.list th{font-size:12px;text-align:left;color:var(--muted);font-weight:600;padding:10px 16px;background:#fafbfb;border-bottom:1px solid var(--line)}
+.list td{padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:middle}
+.list tr:last-child td{border-bottom:0}
+.list .nm{font-weight:600;color:var(--ink)}
+.list .sl{font-size:12px;color:var(--muted)}
+.list .acts{display:flex;gap:6px;justify-content:flex-end}
+.empty{background:#fff;border:1px dashed #c8d2d6;border-radius:12px;padding:40px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.setup{margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.setup summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.setup code,.setup pre{font-size:12px;background:#f3f6f7;border-radius:6px;padding:2px 6px}
+.setup pre{padding:10px 12px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+
+#view-editor{display:flex;flex-direction:column;height:100vh}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.bar .name{font-weight:600;color:var(--ink);font-size:15px}
+.bar .spacer{flex:1}
+.save-state{font-size:12px;color:var(--muted)}
+.save-state.err{color:var(--bad);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:0 12px;min-height:34px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--soft);color:var(--teal);font-weight:600}
+.notice{padding:10px 14px;font-size:13px}
+.notice--bad{background:var(--bad-bg);color:var(--bad)}
+.notice--info{background:var(--soft);color:var(--teal-dk)}
+.work{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0;flex:1}
+.canvas{overflow:auto;padding:18px;display:flex;justify-content:center;background:#e9eef0}
+.canvas iframe{border:0;background:#fff;width:100%;max-width:1280px;height:100%;min-height:560px;box-shadow:0 2px 14px rgba(0,0,0,.08);border-radius:6px;transition:max-width .25s}
+.canvas.mobile iframe{max-width:390px}
+.inspector{background:#fff;border-left:1px solid var(--line);overflow:auto;display:flex;flex-direction:column}
+.tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:2}
+.tabs button{border:0;background:transparent;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;color:var(--muted);font-weight:500}
+.tabs button[aria-pressed=true]{background:var(--soft);color:var(--teal)}
+.panel{padding:16px}
+.fieldrow{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff}
+.fieldrow.off{background:#fafbfb}
+.fieldrow.off .more{display:none}
+.fieldrow .top{display:flex;align-items:center;gap:8px}
+.fieldrow .top .t{flex:1;font-weight:600;color:var(--ink)}
+.fieldrow .more{margin-top:10px}
+.fieldrow .mv{border:0;background:none;cursor:pointer;color:var(--muted);padding:2px 4px;font-size:14px}
+.fieldrow .mv:disabled{opacity:.3;cursor:default}
+.req{display:flex;gap:6px;align-items:center;font-size:12px}
+.imgbox{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#f6f8f9}
+.imgbox img{display:block;width:100%;max-height:170px;object-fit:cover}
+.imgbox .none{padding:22px;text-align:center;color:var(--muted);font-size:13px}
+.imgacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.quick button{font-size:12px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:90vw}
+h3.sub{font-size:13px;margin:18px 0 10px;color:var(--ink);text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:980px){.work{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) 50vh}.inspector{border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+
+<main id="view-list" class="hidden" aria-labelledby="list-title">
+  <a class="crumb" href="/">← All dashboards</a>
+  <div class="topline">
+    <div>
+      <h1 id="list-title" class="serif">Website Popups</h1>
+      <p style="margin:4px 0 0;color:var(--muted)">Popups on pacificdiscovery.org. Every sign-up goes into HubSpot as a new Pacific Discovery lead.</p>
+    </div>
+    <button class="btn btn--primary" id="btn-new" type="button">+ New popup</button>
+  </div>
+  <div id="list-error" class="notice notice--bad hidden" role="alert"></div>
+  <div id="list-body" aria-live="polite"><p>Loading…</p></div>
+  <details class="setup" id="setup">
+    <summary>Website setup (one time, in Google Tag Manager)</summary>
+    <ol>
+      <li>In GTM, add a <b>Custom HTML</b> tag with this code:<pre id="gtm-code"></pre></li>
+      <li>Trigger: <b>All Pages</b> (each popup decides which pages it shows on).</li>
+      <li>Preview, check a popup appears, then <b>Submit</b> the container.</li>
+    </ol>
+    <p class="help">GTM data-layer events you can use for GA4 conversions: <code>pd_popup_view</code>, <code>pd_popup_submit</code>, <code>pd_popup_close</code> (with <code>popupId</code>, <code>popupName</code>, <code>program</code>).</p>
+  </details>
+</main>
+
+<div id="view-editor" class="hidden">
+  <div class="bar">
+    <button class="btn btn--sm" id="btn-back" type="button">← Popups</button>
+    <span class="name" id="ed-name"></span>
+    <label class="switch" title="Show this popup on the website"><input type="checkbox" id="ed-on"><span class="tr"></span><span id="ed-on-lbl">Off</span></label>
+    <span class="save-state" id="ed-save" aria-live="polite"></span>
+    <span class="spacer"></span>
+    <div class="seg" role="group" aria-label="Preview size">
+      <button type="button" id="dev-desktop" aria-pressed="true">Desktop</button>
+      <button type="button" id="dev-mobile" aria-pressed="false">Phone</button>
+    </div>
+    <button class="btn btn--sm" id="btn-replay" type="button">↻ Show again</button>
+    <button class="btn btn--primary" id="btn-save" type="button">Save</button>
+  </div>
+  <div id="ed-notice" class="notice hidden" role="status"></div>
+  <div class="work">
+    <div class="canvas" id="canvas"><iframe id="frame" title="Popup preview"></iframe></div>
+    <aside class="inspector" aria-label="Popup settings">
+      <div class="tabs" role="toolbar" aria-label="Settings">
+        <button type="button" data-tab="content" aria-pressed="true">Content</button>
+        <button type="button" data-tab="form" aria-pressed="false">Form</button>
+        <button type="button" data-tab="where" aria-pressed="false">Where &amp; when</button>
+        <button type="button" data-tab="style" aria-pressed="false">Style</button>
+      </div>
+      <div class="panel" id="panel"></div>
+    </aside>
+  </div>
+</div>
+
+<script type="module" src="./popups.js"></script>
+</body>
+</html>
