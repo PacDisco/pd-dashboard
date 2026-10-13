@@ -147,6 +147,19 @@ await frame().locator('[data-add="faq.items"]').click();
 ok((await S()).faq.items.length === faqBefore + 1, "added a question");
 ok((await page.locator(".insp-head h2").textContent()) === `Question ${faqBefore + 1} of ${faqBefore + 1}`, "new question is selected");
 
+// Review wall: add a card, switch it to an award, the panel swaps fields
+const cardsBefore = (await S()).reviews.quotes.length;
+await frame().locator('[data-add="reviews.quotes"]').click();
+ok((await S()).reviews.quotes.length === cardsBefore + 1, "added a review card");
+ok(await page.locator('.insp-body [data-path$=".quote"]').count() > 0, "review card shows review fields");
+const kindSel = page.locator('.insp-body select[data-path$=".kind"]');
+await kindSel.selectOption("Award");
+await page.waitForTimeout(700);
+ok(await page.locator('.insp-body [data-path$=".awardTitle"]').count() > 0 && await page.locator('.insp-body [data-path$=".quote"]').count() === 0, "award card shows award fields only");
+await page.locator('.insp-body input[data-path$=".awardTitle"]').fill("Top Rated Program");
+await page.waitForTimeout(500);
+ok(await frame().locator('.pdp-award__title', { hasText: "Top Rated Program" }).count() === 1, "award shows on the page");
+
 // Structured value: click tuition on the page → panel field → page updates
 await frame().locator('[data-group="facts"] [data-v="facts.tuition"]').click();
 const tuition = page.locator('#f-facts_tuition');

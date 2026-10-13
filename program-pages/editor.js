@@ -676,7 +676,7 @@ function fieldHtml(f, path) {
     case 'money': return `<div class="field" data-path="${esc(path)}">${lbl}<div class="money"><span>${esc(S.data.settings?.currency || 'USD')} $</span><input type="number" min="0" step="50" id="${id}" data-path="${esc(path)}" data-type="number" value="${esc(v)}"></div>${help}</div>`;
     case 'date': return `<div class="field" data-path="${esc(path)}">${lbl}<input type="date" id="${id}" data-path="${esc(path)}" data-type="text" value="${esc(v)}">${help}</div>`;
     case 'url': return `<div class="field" data-path="${esc(path)}">${lbl}<input type="url" id="${id}" data-path="${esc(path)}" data-type="text" value="${esc(v)}" placeholder="https://…">${v ? `<a class="help" href="${esc(v)}" target="_blank" rel="noopener">Test link ↗</a>` : ''}${help}</div>`;
-    case 'select': return `<div class="field" data-path="${esc(path)}">${lbl}<select id="${id}" data-path="${esc(path)}" data-type="text">${(f.options || []).map((o) => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>${help}</div>`;
+    case 'select': return `<div class="field" data-path="${esc(path)}">${lbl}<select id="${id}" data-path="${esc(path)}" data-type="text"${f.repaint ? ' data-repaint-panel="1"' : ''}>${(f.options || []).map((o) => `<option value="${esc(o)}"${o === (v ?? '') ? ' selected' : ''}>${esc(o || '—')}</option>`).join('')}</select>${help}</div>`;
     case 'image': return `<div class="field" data-path="${esc(path)}"><span class="lbl">${esc(f.label)}</span>${imageBox(path, null)}${help}</div>`;
     case 'focus': return focusPicker(f, path, help);
     default: return `<div class="field" data-path="${esc(path)}">${lbl}<input type="text" id="${id}" data-path="${esc(path)}" data-type="text" value="${esc(v)}">${help}</div>`;
@@ -762,6 +762,8 @@ function renderPanel() {
           <button class="btn btn--sm" type="button" data-op="dup">Duplicate</button>
           <button class="btn btn--sm btn--danger" type="button" data-op="del">Delete</button></div>` +
         (def?.fields || []).map((f) => {
+          // Fields that only apply to one kind of item (e.g. review vs award cards).
+          if (f.when && String(getPath(S.data, `${s.path}.${f.when[0]}`) ?? '') !== f.when[1]) return '';
           if (f.type === 'image') {
             const alt = def.fields.find((x) => x.k === `${f.k}Alt`);
             return `<div class="field"><span class="lbl">${esc(f.label)}</span>${imageBox(`${s.path}.${f.k}`, alt ? `${s.path}.${alt.k}` : null)}</div>`;

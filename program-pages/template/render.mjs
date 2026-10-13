@@ -143,6 +143,11 @@ export function stripQuotes(v) {
 
 export const WIDGET_TYPES = ['GoAbroad', 'GoOverseas', 'Google'];
 
+// Review wall: each card is a student/parent review or an award.
+export const CARD_KINDS = ['Review', 'Award'];
+export const REVIEW_SITES = ['', 'GoAbroad', 'GoOverseas', 'Google', 'Facebook', 'Instagram', 'Trustpilot', 'Other'];
+const READ_MORE_AT = 190; // characters before a review gets a "Read more" toggle
+
 /**
  * Turn whatever an editor pasted into a small, validated description of the
  * widget. The pasted code itself is NEVER output — the page rebuilds the embed
@@ -241,7 +246,7 @@ export const SCHEMA = {
     instructors: { fields: [{ k: 'instructors.heading', label: 'Heading', type: 'text' }, { k: 'instructors.intro', label: 'Intro', type: 'multiline' }] },
     safety:      { fields: [{ k: 'safety.heading', label: 'Heading', type: 'text' }, { k: 'safety.linkText', label: 'Link text', type: 'text' }, { k: 'safety.linkUrl', label: 'Link', type: 'url' }] },
     cost:        { fields: [{ k: 'cost.heading', label: 'Heading', type: 'text' }, { k: 'cost.note', label: 'Note under the table', type: 'multiline' }] },
-    reviews:     { fields: [{ k: 'reviews.heading', label: 'Heading', type: 'text' }, { k: 'reviews.videoUrl', label: 'YouTube or Vimeo link (optional)', type: 'url' }] },
+    reviews:     { fields: [{ k: 'reviews.heading', label: 'Heading', type: 'text' }, { k: 'reviews.visible', label: 'Cards shown before the “more” button', type: 'number', help: 'Usually 6 (two rows). 0 shows every card.' }, { k: 'reviews.moreText', label: '“More” button text', type: 'text' }, { k: 'reviews.videoUrl', label: 'YouTube or Vimeo link (optional)', type: 'url' }] },
     dates:       { fields: [{ k: 'dates.heading', label: 'Heading', type: 'text' }, { k: 'dates.help', label: 'Help line', type: 'text' }] },
     faq:         { fields: [{ k: 'faq.heading', label: 'Heading', type: 'text' }] },
     cta:         { fields: [{ k: 'cta.heading', label: 'Heading', type: 'text' }, { k: 'cta.body', label: 'Supporting line', type: 'text' }, { k: 'cta.primaryText', label: 'Main button text', type: 'text' }, { k: 'cta.secondaryText', label: 'Second button text', type: 'text' }] },
@@ -264,7 +269,21 @@ export const SCHEMA = {
     'cost.lines':        { label: 'Cost line', add: 'Add a cost line', fields: [{ k: 'label', label: 'Label', type: 'text' }, { k: 'amount', label: 'Amount (as shown)', type: 'text' }], blank: { label: 'Item', amount: '$0' } },
     'cost.included':     { label: 'Included item', add: 'Add an included item', fields: [{ k: 'text', label: 'Text', type: 'text' }], blank: { text: 'Included item' } },
     'cost.excluded':     { label: 'Not-included item', add: 'Add an item', fields: [{ k: 'text', label: 'Text', type: 'text' }], blank: { text: 'Not included' } },
-    'reviews.quotes':    { label: 'Quote', add: 'Add a quote', fields: [{ k: 'quote', label: 'Quote', type: 'multiline', help: 'No need to type quote marks. The page adds them.' }, { k: 'name', label: 'Who said it', type: 'text' }], blank: { quote: 'Quote', name: 'Name, semester' } },
+    'reviews.quotes':    { label: 'Review card', add: 'Add a review or award', fields: [
+      { k: 'kind', label: 'This card shows', type: 'select', options: CARD_KINDS, repaint: true },
+      { k: 'quote', label: 'Review', type: 'multiline', when: ['kind', 'Review'], help: 'No need to type quote marks. The page adds them. Long reviews get a “Read more” link.' },
+      { k: 'name', label: 'Who said it', type: 'text', when: ['kind', 'Review'] },
+      { k: 'detail', label: 'Program or role (optional)', type: 'text', when: ['kind', 'Review'], help: 'e.g. “South America, Spring 2026” or “Parent”.' },
+      { k: 'photo', label: 'Photo (optional)', type: 'image', when: ['kind', 'Review'], help: 'A small round photo. Without one, their initials show instead.' },
+      { k: 'source', label: 'Posted on (optional)', type: 'select', options: REVIEW_SITES, when: ['kind', 'Review'] },
+      { k: 'url', label: 'Link to the original review (optional)', type: 'url', when: ['kind', 'Review'] },
+      { k: 'awardLabel', label: 'Small label', type: 'text', when: ['kind', 'Award'], help: 'e.g. “Go Overseas” or “2025”.' },
+      { k: 'awardTitle', label: 'Award', type: 'text', when: ['kind', 'Award'], help: 'e.g. “Top Rated Program”.' },
+      { k: 'awardText', label: 'Line underneath (optional)', type: 'text', when: ['kind', 'Award'] },
+      { k: 'badge', label: 'Award badge image (optional)', type: 'image', when: ['kind', 'Award'], help: 'Use the official badge if you have one. Without it, laurels are drawn around the award.' },
+      { k: 'badgeAlt', label: 'Badge description', type: 'text', when: ['kind', 'Award'] },
+      { k: 'url', label: 'Link (optional)', type: 'url', when: ['kind', 'Award'] },
+    ], blank: { kind: 'Review', quote: 'Review', name: 'Name', detail: '', photo: '', source: '', url: '', awardLabel: '', awardTitle: '', awardText: '', badge: '', badgeAlt: '' } },
     'dates.sessions':    { label: 'Start date', add: 'Add a start date', fields: [{ k: 'start', label: 'Start', type: 'date' }, { k: 'end', label: 'End', type: 'date' }, { k: 'season', label: 'Season', type: 'select', options: ['Spring', 'Summer', 'Fall', 'Winter'] }, { k: 'status', label: 'Status', type: 'select', options: ['Open', 'Limited spots', 'Waitlist', 'Full', 'Closed'] }, { k: 'spotsLeft', label: 'Spots left (optional)', type: 'number' }, { k: 'applyUrl', label: 'Apply link (optional, overrides page default)', type: 'url' }], blank: { start: '', end: '', season: 'Spring', status: 'Open', spotsLeft: '', applyUrl: '' } },
     'faq.items':         { label: 'Question', add: 'Add a question', fields: [{ k: 'q', label: 'Question', type: 'text' }, { k: 'a', label: 'Answer', type: 'multiline' }], blank: { q: 'New question?', a: 'Answer.' } },
     'related.items':     { label: 'Related program', add: 'Add a program', fields: [{ k: 'title', label: 'Title', type: 'text' }, { k: 'meta', label: 'Length · price', type: 'text' }, { k: 'url', label: 'Link', type: 'url' }, { k: 'image', label: 'Photo', type: 'image' }], blank: { title: 'Program', meta: '10 weeks · $0', url: '', image: '' } },
@@ -300,7 +319,7 @@ export function blankProgram(name = 'New program') {
     instructors: { heading: 'Who you’ll travel with', intro: '', people: [] },
     safety: { heading: 'How we keep students safe', items: [], linkText: 'Read our full safety approach', linkUrl: 'https://www.pacificdiscovery.org/safety' },
     cost: { heading: 'What it costs, all in', lines: [], note: '', included: [], excluded: [] },
-    reviews: { heading: 'From past students and parents', videoUrl: '', widgets: [], quotes: [] },
+    reviews: { heading: 'From past students and parents', visible: 6, moreText: 'More reviews', videoUrl: '', widgets: [], quotes: [] },
     dates: { heading: 'Pick your start date', help: 'Not sure yet? Talk to an advisor.', sessions: [] },
     faq: { heading: 'Questions we get about this program', items: [] },
     cta: { heading: 'Ready to go?', body: '', primaryText: 'Apply now', secondaryText: 'Talk to an advisor' },
@@ -320,6 +339,8 @@ export function normalizeProgram(p) {
   if (!Array.isArray(out.hero.reviews)) out.hero.reviews = [];
   if (!Array.isArray(out.hero.widgets)) out.hero.widgets = [];
   if (!Array.isArray(out.reviews.widgets)) out.reviews.widgets = [];
+  if (!Array.isArray(out.reviews.quotes)) out.reviews.quotes = [];
+  out.reviews.quotes = out.reviews.quotes.map((q) => ({ kind: 'Review', ...(q || {}), kind: q?.kind === 'Award' ? 'Award' : 'Review' }));
   // Pages saved before review badges existed had one free-text line.
   if (!out.hero.reviews.length && out.hero.reviewText) {
     out.hero.reviews = [{ source: 'Other', score: String(out.hero.reviewText), count: '', url: out.hero.reviewUrl || '' }];
@@ -477,13 +498,7 @@ const R = {
     return `<h2 class="pdp-h2">${c.t('reviews.heading', 'span')}</h2>` +
       renderWidgets(p, c, 'reviews.widgets', 'pdp-widgets-wrap pdp-widgets-wrap--reviews') +
       (vid ? `<div class="pdp-video"${c.ed ? ' data-v="reviews.videoUrl"' : ''}><iframe src="${attr(vid)}" title="Student video" loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>` : '') +
-      c.list('reviews.quotes', 'div', 'pdp-grid pdp-grid--3 pdp-quotes', (it, ip) => {
-        if (!c.ed && !stripQuotes(it.quote)) return null;
-        const text = c.ed ? c.t(`${ip}.quote`, 'p', 'pdp-quote__text', { multiline: true })
-          : (stripQuotes(it.quote) ? `<p class="pdp-quote__text pdp-ml">${esc(stripQuotes(it.quote))}</p>` : '');
-        const name = c.t(`${ip}.name`, 'span', 'pdp-quote__name');
-        return `<span class="pdp-quote__mark" aria-hidden="true">\u201C</span><blockquote class="pdp-quote">${text}</blockquote><span class="pdp-quote__mark pdp-quote__mark--close" aria-hidden="true">\u201D</span>${name ? `<figcaption class="pdp-quote__by">${name}</figcaption>` : ''}`;
-      }, 'figure', 'pdp-card pdp-quote-card');
+      reviewWall(p, c);
   },
   dates(p, c) {
     const today = new Date().toISOString().slice(0, 10);
@@ -580,6 +595,61 @@ function renderWidgets(p, c, path = 'hero.widgets', wrap = 'pdp-widgets-wrap') {
   // Live page: nothing at all when no widget produced output (e.g. Google not fetched).
   if (!c.ed && !html.includes('<li')) return '';
   return `<div class="${wrap}">${html}</div>`;
+}
+
+const LAUREL = (flip) => `<svg class="pdp-award__laurel${flip ? ' pdp-award__laurel--r' : ''}" viewBox="0 0 40 96" aria-hidden="true" focusable="false"><path d="M30 92C14 78 8 58 10 36 11 24 15 13 22 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>` +
+  [[13, 80, -50], [9, 66, -35], [8, 51, -20], [9, 37, -8], [13, 23, 8], [19, 11, 22]].map(([x, y, r]) =>
+    `<ellipse cx="${x}" cy="${y}" rx="4" ry="9" transform="rotate(${r} ${x} ${y})" fill="currentColor"/><ellipse cx="${x + 9}" cy="${y + 3}" rx="3.6" ry="8" transform="rotate(${r + 55} ${x + 9} ${y + 3})" fill="currentColor"/>`).join('') + `</svg>`;
+
+function initials(name) {
+  const words = String(name || '').replace(/,.*$/, '').trim().split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] || '').slice(0, 1)).toUpperCase();
+}
+
+/** Review wall: a bordered grid of review cards and award cards, with a “more” button. */
+function reviewWall(p, c) {
+  const limit = Math.max(0, Number(p.reviews.visible) || 0);
+  let n = 0;
+  let hidden = 0;
+  const grid = c.list('reviews.quotes', 'div', 'pdp-wall', (it, ip, i) => {
+    const award = it.kind === 'Award';
+    if (!c.ed && (award ? !(it.awardTitle || it.badge) : !stripQuotes(it.quote))) return null;
+    const extra = !c.ed && limit > 0 && n >= limit;
+    n++;
+    if (extra) hidden++;
+    const cls = `pdp-card-${award ? 'award' : 'rev'}${extra ? ' is-extra' : ''}`;
+    if (award) {
+      // Images are added from the side panel, so empty ones show nothing here.
+      const badge = it.badge ? c.img(`${ip}.badge`, `${ip}.badgeAlt`, 'pdp-award__badge') : '';
+      const body = `<span class="pdp-award__label">${c.t(`${ip}.awardLabel`, 'span', '')}</span>` +
+        `<strong class="pdp-award__title">${c.t(`${ip}.awardTitle`, 'span', '')}</strong>` +
+        `<span class="pdp-award__text">${c.t(`${ip}.awardText`, 'span', '')}</span>`;
+      const inner = it.badge
+        ? `<div class="pdp-award pdp-award--badge ${cls}">${badge}${body}</div>`
+        : `<div class="pdp-award ${cls}">${LAUREL(false)}<div class="pdp-award__core">${body}</div>${LAUREL(true)}</div>`;
+      return !c.ed && it.url ? `<a class="pdp-wall__link" href="${attr(safeUrl(it.url))}" target="_blank" rel="noopener">${inner}</a>` : inner;
+    }
+    const q = stripQuotes(it.quote);
+    const long = !c.ed && q.length > READ_MORE_AT;
+    const tid = `pdp-rm-${i}`;
+    const text = c.ed ? c.t(`${ip}.quote`, 'p', 'pdp-rev__text', { multiline: true })
+      : `<p class="pdp-rev__text pdp-ml${long ? ' is-clamped' : ''}">${esc(q)}</p>`;
+    const toggle = long ? `<input type="checkbox" id="${tid}" class="pdp-rev__t"><label for="${tid}" class="pdp-rev__more"><span>Read more</span><span>Show less</span></label>` : '';
+    const photo = it.photo ? c.img(`${ip}.photo`, null, 'pdp-rev__photo') : '';
+    const avatar = it.photo ? photo : `<span class="pdp-rev__initials" aria-hidden="true">${esc(initials(it.name)) || '•'}</span>`;
+    const site = String(it.source || '').trim();
+    const where = it.url && !c.ed
+      ? `<a class="pdp-rev__src" href="${attr(safeUrl(it.url))}" target="_blank" rel="noopener">${site ? `View on ${esc(site)}` : 'View review'}</a>`
+      : (site ? `<span class="pdp-rev__src">on ${esc(site)}</span>` : '');
+    const detail = c.t(`${ip}.detail`, 'span', 'pdp-rev__detail');
+    return `<figure class="pdp-rev ${cls}"><span class="pdp-rev__mark" aria-hidden="true">\u201C</span>` +
+      `<div class="pdp-rev__main">${long ? toggle.replace(/<label[\s\S]*$/, '') : ''}<blockquote class="pdp-rev__q">${text}</blockquote>${long ? toggle.replace(/^<input[^>]*>/, '') : ''}` +
+      `<figcaption class="pdp-rev__by"><span class="pdp-rev__who">${c.t(`${ip}.name`, 'strong', 'pdp-rev__name')}${detail}${where}</span>${avatar}</figcaption></div></figure>`;
+  }, 'div', 'pdp-wall__item');
+  if (!grid) return '';
+  const more = hidden ? `<input type="checkbox" id="pdp-wall-more" class="pdp-wall__t"><label for="pdp-wall-more" class="pdp-wall__more">${esc(p.reviews.moreText || 'More reviews')}</label>` : '';
+  // The toggle sits before the grid so CSS can reveal the extra cards.
+  return `<div class="pdp-wall-wrap">${hidden ? more.replace(/<label[\s\S]*$/, '') : ''}${grid}${hidden ? more.replace(/^<input[^>]*>/, '') : ''}</div>`;
 }
 
 function renderReviews(p, c) {
@@ -950,14 +1020,48 @@ details[open]>summary .pdp-chev{transform:rotate(-135deg)}
 /* reviews */
 .pdp-video{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000;max-width:860px}
 .pdp-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.pdp-quotes{align-items:stretch}
-.pdp-quote-card{position:relative;padding:30px 26px 24px;gap:0;border:0;border-top:4px solid var(--pdp-topaz);box-shadow:0 10px 30px rgba(31,107,124,.10);background:linear-gradient(180deg,#fff 0%,#fff 70%,var(--pdp-soft) 100%);overflow:visible}
-.pdp-quote__mark{display:block;font-family:'DM Serif Display',Georgia,serif;font-size:76px;line-height:.8;height:44px;color:var(--pdp-topaz);margin-bottom:6px}
-.pdp-quote{flex:1}
-.pdp-quote__text{font-family:'DM Serif Display',Georgia,serif;font-size:21px;line-height:1.45;color:var(--pdp-ink)}
-.pdp-quote__mark--close{text-align:right;height:30px;margin:4px 0 0;line-height:.9}
-.pdp-quote__by{display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:16px;border-top:1px solid var(--pdp-line);font-size:14px;font-weight:600;color:var(--pdp-teal);letter-spacing:.01em}
-.pdp-quote__by::before{content:"";width:22px;height:2px;background:var(--pdp-orange);flex:none}
+.pdp-wall-wrap{display:flex;flex-direction:column;align-items:center;gap:22px}
+.pdp-wall{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:#fff;border:1px solid var(--pdp-line);border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(31,107,124,.08)}
+.pdp-wall__item{display:flex;min-width:0;margin:-1px 0 0 -1px;box-shadow:inset 1px 0 0 var(--pdp-line),inset 0 1px 0 var(--pdp-line)}
+.pdp-wall__item>*{flex:1;min-width:0;margin:1px 0 0 1px}
+.pdp-wall__item:has(>.is-extra),.pdp-wall__item:has(>a>.is-extra){display:none}
+.pdp-wall__t:checked~.pdp-wall .pdp-wall__item{display:flex}
+.pdp-wall__t,.pdp-rev__t{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.pdp-wall__more{display:inline-flex;align-items:center;gap:8px;padding:12px 26px;border-radius:999px;background:var(--pdp-orange);color:#fff;font-weight:600;font-size:15px;cursor:pointer;box-shadow:0 6px 16px rgba(241,91,57,.28);transition:background .15s}
+.pdp-wall__more:hover{background:var(--pdp-orange-dk)}
+.pdp-wall__t:focus-visible~.pdp-wall__more{outline:3px solid var(--pdp-topaz);outline-offset:3px}
+.pdp-wall__t:checked~.pdp-wall__more{display:none}
+.pdp-wall__link{display:flex;color:inherit;text-decoration:none}
+.pdp-rev{display:flex;gap:12px;padding:26px 24px 22px 18px;margin:0}
+.pdp-rev__mark{flex:none;font-family:'DM Serif Display',Georgia,serif;font-size:58px;line-height:.9;height:40px;color:var(--pdp-orange)}
+.pdp-rev__main{flex:1;min-width:0;display:flex;flex-direction:column}
+.pdp-rev__q{flex:1;margin:0}
+.pdp-rev__text{font-size:15px;line-height:1.6;color:var(--pdp-body)}
+.pdp-rev__text.is-clamped{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden}
+.pdp-rev__t:checked~.pdp-rev__q .pdp-rev__text{display:block;-webkit-line-clamp:unset}
+.pdp-rev__more{align-self:flex-start;margin-top:6px;font-size:13px;font-weight:600;color:var(--pdp-teal);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.pdp-rev__more span+span,.pdp-rev__t:checked~.pdp-rev__more span:first-child{display:none}
+.pdp-rev__t:checked~.pdp-rev__more span+span{display:inline}
+.pdp-rev__t:focus-visible~.pdp-rev__more{outline:2px solid var(--pdp-topaz);outline-offset:2px}
+.pdp-rev__by{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:16px;text-align:right}
+.pdp-rev__who{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
+.pdp-rev__name{font-weight:700;color:var(--pdp-ink);font-size:15px}
+.pdp-rev__detail{font-size:13px;color:var(--pdp-muted)}
+.pdp-rev__src{font-size:12px;color:var(--pdp-teal);text-decoration:none}
+a.pdp-rev__src:hover{text-decoration:underline}
+.pdp-rev__photo,.pdp-rev__initials{flex:none;width:44px;height:44px;border-radius:50%;object-fit:cover}
+.pdp-rev__initials{display:inline-flex;align-items:center;justify-content:center;background:var(--pdp-soft);color:var(--pdp-teal);font-weight:700;font-size:15px;border:2px solid #fff;box-shadow:0 0 0 1px var(--pdp-line)}
+.pdp-rev__photo.pdp-img--empty{display:inline-flex;align-items:center;justify-content:center;font-size:18px;min-height:0}
+.pdp-award{display:flex;align-items:center;justify-content:center;gap:6px;padding:28px 18px;background:linear-gradient(180deg,#fff 0%,var(--pdp-soft) 100%);text-align:center}
+.pdp-award__laurel{flex:none;width:34px;height:84px;color:#9aa7ad}
+.pdp-award__laurel--r{transform:scaleX(-1)}
+.pdp-award__core,.pdp-award--badge{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.pdp-award--badge{flex-direction:column}
+.pdp-award__label,.pdp-award__label *{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--pdp-teal)}
+.pdp-award__title{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-size:28px;line-height:1.1;color:var(--pdp-ink)}
+.pdp-award__text{font-size:13px;font-style:italic;color:var(--pdp-muted)}
+.pdp-award__badge{max-width:120px;max-height:110px;width:auto;height:auto;object-fit:contain;margin-bottom:8px}
+.pdp-award__badge.pdp-img--empty{width:120px;height:60px;font-size:12px}
 /* dates */
 .pdp-dates{display:flex;flex-direction:column;border:1px solid var(--pdp-line);border-radius:14px;background:#fff;overflow:hidden}
 .pdp-date{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:16px;align-items:center;padding:16px 22px;border-top:1px solid var(--pdp-line)}
@@ -981,14 +1085,14 @@ details[open]>summary .pdp-chev{transform:rotate(-135deg)}
 .pdp-img--empty{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#eef3f4,#eef3f4 10px,#e6eef0 10px,#e6eef0 20px);color:#5b6166;font-size:13px;font-weight:600;min-height:140px}
 .pdp-hero__media .pdp-img--empty{height:100%;background:repeating-linear-gradient(45deg,#2b8798,#2b8798 14px,#2f8fa0 14px,#2f8fa0 28px);color:#e5f4f7}
 .pdp-person .pdp-img--empty{width:76px;height:76px;min-height:0;border-radius:50%;flex-shrink:0}
-@media (max-width:900px){
+@media (max-width:900px){.pdp-wall{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pdp-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pdp-fact{border-bottom:1px solid var(--pdp-line)}
   .pdp-fact:nth-child(2n){border-right:0}
   .pdp-week__body{grid-template-columns:1fr;padding:0 22px 22px}
   .pdp-bar__nav a{display:none}
 }
-@media (max-width:640px){
+@media (max-width:640px){.pdp-wall{grid-template-columns:1fr}
   .pdp-sec{padding:44px 0}
   .pdp-hero{min-height:460px}
   .pdp-hero__inner{padding-top:96px;padding-bottom:52px}
