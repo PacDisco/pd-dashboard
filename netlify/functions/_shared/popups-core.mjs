@@ -72,6 +72,7 @@ export function blankPopup(name = "New popup") {
     devices: "all",
     trigger: { delay: 8, scroll: 0, exit: true },
     frequency: { hideDays: 7 },
+    notify: { emails: [] },
   });
 }
 
@@ -125,6 +126,7 @@ export function normalizePopup(p = {}) {
     devices: pick(p.devices, DEVICES, "all"),
     trigger: { delay: num(p.trigger?.delay, 8, 0, 600), scroll: num(p.trigger?.scroll, 0, 0, 100), exit: bool(p.trigger?.exit, false) },
     frequency: { hideDays: num(p.frequency?.hideDays, 7, 0, 365) },
+    notify: { emails: cleanEmails(p.notify?.emails) },
     updatedAt: str(p.updatedAt, 40),
     updatedBy: str(p.updatedBy, 120),
   };
@@ -139,6 +141,20 @@ export function safeUrl(v) {
   return "";
 }
 
+/** Team notification addresses: lower-cased, de-duplicated, max 10. Invalid ones are kept so the editor can flag them. */
+export function cleanEmails(list) {
+  const out = [];
+  for (const e of Array.isArray(list) ? list : []) {
+    const v = str(e, 200).trim().toLowerCase();
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out.slice(0, 10);
+}
+
+export function isEmail(v) {
+  return EMAIL_RE.test(String(v || ""));
+}
+
 /** Problems that should stop a save (the editor shows them). */
 export function validateDoc(doc) {
   if (!doc || !Array.isArray(doc.popups)) return "Expected { popups: [...] }.";
@@ -151,6 +167,8 @@ export function validateDoc(doc) {
     ids.add(p.id);
     if (p.enabled && !p.headline) return `“${p.name}” needs a headline before it can be switched on.`;
     if (p.enabled && p.pages.mode !== "all" && !p.pages.rules.length) return `“${p.name}” is set to specific pages but has no pages listed.`;
+    const badEmail = p.notify.emails.find((e) => !isEmail(e));
+    if (badEmail) return `“${p.name}”: “${badEmail}” isn't a valid email address for notifications.`;
     for (const f of p.fields) {
       if (p.enabled && f.on && f.options && !f.options.length) return `“${p.name}”: the “${f.label}” dropdown has no options.`;
     }

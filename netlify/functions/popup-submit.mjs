@@ -8,6 +8,8 @@
 //     (HubSpot doesn't allow moving a contact backwards)
 //   - the popup's fields go to the HubSpot properties chosen in the designer
 //   - a note on the contact's timeline: which popup, which page, what they chose
+//   - optionally, an email to the team (the popup's notification list), sent
+//     through the connected Google Workspace mailbox, Reply-To = the visitor
 //
 // Request (JSON): { popup, fields: {email, firstname, …}, page: {uri, title}, website, t }
 // (The popup also tells HubSpot's tracking code who the visitor is, so their
@@ -17,7 +19,8 @@
 // Only accepted from the website's origins (POPUP_ALLOWED_ORIGINS, comma
 // separated; default https://www.pacificdiscovery.org,https://pacificdiscovery.org).
 
-import { checkSubmission } from "./_shared/popups-core.mjs";
+import { checkSubmission, isEmail } from "./_shared/popups-core.mjs";
+import { notificationEmail, sendMail } from "./_shared/popups-gmail.mjs";
 import { readDoc, bumpStats, popupStore } from "./_shared/popups-store.mjs";
 import { upsertContact } from "./_shared/popups-hubspot.mjs";
 
@@ -86,13 +89,38 @@ export default async (req, context) => {
   if (Object.keys(errors).length) return respond({ error: "Please check the highlighted fields.", errors }, 400, ok);
 
   const page = { uri: String(body.page?.uri || "").slice(0, 500), title: String(body.page?.title || "").slice(0, 200) };
+  let contact = null;
   try {
-    const r = await upsertContact(popup, values, page);
-    await bumpStats(popup.id, store).catch(() => {});
-    console.log(`[popup-submit] ${popup.id} → contact ${r.id} (${r.created ? "new" : "updated"})`);
-    return respond({ ok: true }, 200, ok);
+    contact = await upsertContact(popup, values, page);
+    console.log(`[popup-submit] ${popup.id} → contact ${contact.id} (${contact.created ? "new" : "updated"})`);
   } catch (e) {
     console.error("[popup-submit] HubSpot failed:", e.message);
-    return respond({ error: "Sorry, something went wrong on our side. Please try again in a moment." }, 502, ok);
   }
+  const emailed = await notifyTeam(popup, values, page, contact, store);
+  // If HubSpot was down but the team got the email, the lead isn't lost: tell the visitor it worked.
+  if (!contact && !emailed) return respond({ error: "Sorry, something went wrong on our side. Please try again in a moment." }, 502, ok);
+  await bumpStats(popup.id, store).catch(() => {});
+  return respond({ ok: true }, 200, ok);
 };
+
+/** Email the popup's notification list through the connected Gmail mailbox. Never throws. */
+export async function notifyTeam(popup, values, page, contact, store, deps = {}) {
+  const to = (popup.notify?.emails || []).filter(isEmail);
+  if (!to.length) return false;
+  try {
+    const conn = await store.get("gmail", { type: "json" });
+    if (!conn?.refreshToken) { console.warn("[popup-submit] notifications on but no Gmail mailbox connected"); return false; }
+    const msg = notificationEmail(popup, values, page, contact);
+    await (deps.sendMail || sendMail)(conn, { to, replyTo: values.email, ...msg });
+    if (conn.lastError) await store.setJSON("gmail", { ...conn, lastError: "" }).catch(() => {});
+    return true;
+  } catch (e) {
+    console.error("[popup-submit] notification email failed:", e.message);
+    // Shown in the designer, so someone notices a revoked or broken connection.
+    try {
+      const conn = await store.get("gmail", { type: "json" });
+      if (conn) await store.setJSON("gmail", { ...conn, lastError: `${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC: ${e.message.slice(0, 200)}` });
+    } catch { /* ignore */ }
+    return false;
+  }
+}

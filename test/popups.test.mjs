@@ -180,3 +180,33 @@ test("access and submit guards", async () => {
   assert.equal(throttled("1.2.3.4", t0 + 10), true);
   assert.equal(throttled("1.2.3.4", t0 + 70_000), false, "window resets");
 });
+
+test("team notification email", async () => {
+  const { notificationEmail, buildMessage } = await import("../netlify/functions/_shared/popups-gmail.mjs");
+  const { notifyTeam } = await import("../netlify/functions/popup-submit.mjs");
+  const pop = on(normalizePopup({ ...blankPopup("Early bird"), notify: { emails: ["Admissions@PD.org", "admissions@pd.org", "  "] } }), ["firstname", "program"]);
+  assert.deepEqual(pop.notify.emails, ["admissions@pd.org"], "cleaned and de-duplicated");
+  pop.fields.find((f) => f.key === "program").options = [{ label: "South America Semester", value: "SAS" }];
+  const values = { email: "anna@example.com", firstname: "Anna", program: "SAS" };
+  const m = notificationEmail(pop, values, { uri: "https://www.pacificdiscovery.org/programs/x" }, { id: "901", created: true });
+  assert.equal(m.subject, "New website lead: Anna · South America Semester");
+  assert.ok(m.html.includes("record/0-1/901") && m.html.includes("mailto:anna@example.com") && m.text.includes("New contact in HubSpot"));
+  const evil = notificationEmail(pop, { ...values, firstname: '<img src=x onerror=1>' }, {}, null);
+  assert.ok(!evil.html.includes("<img src=x") && evil.text.includes("Not saved to HubSpot"));
+
+  const raw = Buffer.from(buildMessage({ from: "info@pd.org", fromName: "PD website", to: ["a@pd.org"], replyTo: "anna@example.com\r\nBcc: evil@x.com", subject: "Nouveau · prospect", text: "hi", html: "<p>hi</p>" }), "base64url").toString();
+  assert.ok(raw.includes("Reply-To: anna@example.com Bcc: evil@x.com") && !/\r\nBcc:/.test(raw), "no header injection");
+  assert.ok(raw.includes("Subject: =?UTF-8?B?"), "non-ASCII subject encoded");
+
+  const mem = new Map([["gmail", { refreshToken: "rt", email: "info@pd.org" }]]);
+  const store = { get: async (k) => mem.get(k) ?? null, setJSON: async (k, v) => mem.set(k, v) };
+  const sent = [];
+  assert.equal(await notifyTeam(pop, values, {}, { id: "1", created: false }, store, { sendMail: async (c, msg) => sent.push({ c, msg }) }), true);
+  assert.deepEqual(sent[0].msg.to, ["admissions@pd.org"]);
+  assert.equal(sent[0].msg.replyTo, "anna@example.com", "reply goes to the visitor");
+  assert.equal(await notifyTeam({ ...pop, notify: { emails: [] } }, values, {}, null, store, { sendMail: async () => { throw new Error("no"); } }), false, "no list, no email");
+  assert.equal(await notifyTeam(pop, values, {}, null, store, { sendMail: async () => { throw new Error("invalid_grant"); } }), false, "failure never throws");
+  assert.match(mem.get("gmail").lastError, /invalid_grant/, "failure shown in the designer");
+  mem.delete("gmail");
+  assert.equal(await notifyTeam(pop, values, {}, null, store, { sendMail: async () => true }), false, "no mailbox connected");
+});

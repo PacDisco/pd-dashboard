@@ -16,7 +16,7 @@ const LAYOUTS = [
   ['bar', 'Bottom bar', '<rect x="1" y="1" width="54" height="38" rx="4" fill="#e9eef0"/><rect x="1" y="28" width="54" height="11" rx="2" fill="#fff" stroke="#288195"/>'],
 ];
 
-const S = { doc: { rev: 0, popups: [] }, stats: {}, blank: null, fieldDefs: [], embedUrl: '', cur: null, tab: 'content', dirty: false, props: null, propsErr: '', programs: null, saving: false };
+const S = { doc: { rev: 0, popups: [] }, stats: {}, blank: null, fieldDefs: [], embedUrl: '', cur: null, tab: 'content', dirty: false, props: null, propsErr: '', programs: null, saving: false, gmail: null };
 window.__popups = { S };
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -139,6 +139,17 @@ async function save(quiet) {
 // ─── list view ────────────────────────────────────────────────────────────
 
 function route() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const gm = h.get('gmail');
+  if (gm) {
+    const msgs = { connected: 'Mailbox connected — popup notifications will send from it.', cancelled: 'Gmail connection cancelled.', expired: 'That took too long — please try connecting again.', error: `Couldn’t connect Gmail${h.get('msg') ? `: ${h.get('msg')}` : '.'}` };
+    toast(msgs[gm] || msgs.error, 7000);
+    let back = '';
+    try { back = sessionStorage.getItem('pdpop-return') || ''; sessionStorage.removeItem('pdpop-return'); } catch { /* ignore */ }
+    S.gmail = null;
+    if (back) { S.tab = 'form'; document.querySelectorAll('.tabs [data-tab]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.tab === 'form'))); }
+    history.replaceState(null, '', back ? `#edit=${back}` : location.pathname);
+  }
   const id = new URLSearchParams(location.hash.slice(1)).get('edit');
   if (id && S.doc.popups.some((p) => p.id === id)) openEditor(id);
   else showList();
@@ -224,6 +235,7 @@ function openEditor(id) {
   renderPanel();
   loadPreview();
   if (!S.props) loadProps();
+  if (!S.gmail) loadGmail();
 }
 
 function syncToggle() {
@@ -372,7 +384,26 @@ function formPanel(p) {
             <span class="help">Write “Label | value” when HubSpot stores a different value from what visitors see.</span>
             ${f.property ? `<div class="quick"><button class="btn btn--sm" type="button" data-fload="${f.key}">Use the choices from HubSpot</button></div>` : ''}</div>` : ''}
         </div></div>`;
-    }).join('');
+    }).join('') + notifyPanel(p);
+}
+
+function notifyPanel(p) {
+  const g = S.gmail;
+  const bad = p.notify.emails.filter((e) => !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e));
+  let conn;
+  if (!g) conn = '<p class="help">Checking the email connection…</p>';
+  else if (!g.configured) conn = '<div class="notice notice--bad">The dashboard’s Google sign-in isn’t set up (GOOGLE_OAUTH_CLIENT_ID / SECRET), so emails can’t be sent yet.</div>';
+  else if (g.connected) conn = `<div class="gmail ok"><b>Sending from ${esc(g.email || 'the connected mailbox')}</b><span class="help">Connected${g.by ? ` by ${esc(g.by)}` : ''}${g.at ? ` · ${new Date(g.at).toLocaleDateString()}` : ''}</span>
+      ${g.lastError ? `<span class="help" style="color:var(--bad)">Last send failed: ${esc(g.lastError)}</span>` : ''}
+      <div class="quick"><button class="btn btn--sm" type="button" id="gm-test"${p.notify.emails.length ? '' : ' disabled'}>Send a test email</button><button class="btn btn--sm" type="button" id="gm-connect">Use a different mailbox</button><button class="btn btn--sm btn--danger" type="button" id="gm-off">Disconnect</button></div></div>`;
+  else conn = `<div class="gmail"><b>No mailbox connected yet</b><span class="help">Connect the Google Workspace address the emails should come from (e.g. info@pacificdiscovery.org). It only gets permission to <i>send</i>, not read.</span>
+      <div class="quick"><button class="btn btn--sm btn--primary" type="button" id="gm-connect">Connect Gmail</button></div>
+      <span class="help">First time? Add <code>${esc(g.redirectUri)}</code> as an authorised redirect URI on the dashboard’s Google OAuth client.</span></div>`;
+  return `<h3 class="sub">Email the team</h3>
+    <div class="field"><label for="notify-emails">When someone signs up, email</label><textarea id="notify-emails" placeholder="admissions@pacificdiscovery.org" style="min-height:64px">${esc(p.notify.emails.join('\n'))}</textarea>
+    <span class="help">One address per line (up to 10). Leave empty for no emails. Each email has their details, the page, and a link to the contact in HubSpot. Replying goes straight to them.</span>
+    ${bad.length ? `<span class="help" style="color:var(--bad)">Not a valid address: ${bad.map(esc).join(', ')}</span>` : ''}</div>
+    ${p.notify.emails.length || g?.connected ? conn : ''}`;
 }
 
 function wherePanel(p) {
@@ -452,6 +483,34 @@ function wirePanel(box) {
     markDirty();
     renderPanel();
   });
+  // team emails
+  const ne = box.querySelector('#notify-emails');
+  if (ne) {
+    ne.addEventListener('input', () => { p.notify.emails = ne.value.split(/[\n,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean).slice(0, 10); markDirty(); });
+    ne.addEventListener('change', () => renderPanel());
+  }
+  const gc = box.querySelector('#gm-connect');
+  if (gc) gc.onclick = async () => {
+    if (S.dirty && !(await save(true))) return;
+    try { sessionStorage.setItem('pdpop-return', S.cur); } catch { /* ignore */ }
+    location.href = '/api/popups-gmail?action=connect';
+  };
+  const go = box.querySelector('#gm-off');
+  if (go) go.onclick = async () => {
+    if (!confirm('Disconnect this mailbox? Popup notification emails stop until another one is connected.')) return;
+    await fetch('/api/popups-gmail', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{"action":"disconnect"}' });
+    await loadGmail();
+  };
+  const gt = box.querySelector('#gm-test');
+  if (gt) gt.onclick = async () => {
+    gt.disabled = true;
+    gt.textContent = 'Sending…';
+    try {
+      const res = await fetch('/api/popups-gmail', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'test', to: p.notify.emails, name: p.name }) });
+      const j = await res.json().catch(() => ({}));
+      toast(res.ok ? `Test email sent to ${j.to.join(', ')}` : `Test failed: ${j.error || res.status}`, 6000);
+    } finally { gt.disabled = false; gt.textContent = 'Send a test email'; }
+  };
   // where & when
   box.querySelectorAll('[name=pmode]').forEach((r) => r.onchange = () => { p.pages.mode = r.value; markDirty(); renderPanel(); });
   const rules = box.querySelector('#prules');
@@ -477,6 +536,16 @@ function wirePanel(box) {
 }
 
 function field(key) { return cur().fields.find((f) => f.key === key); }
+
+async function loadGmail() {
+  try {
+    const res = await fetch('/api/popups-gmail?action=status', { credentials: 'include' });
+    S.gmail = res.ok ? await res.json() : { configured: true, connected: false, redirectUri: `${location.origin}/api/popups-gmail?action=callback` };
+  } catch {
+    S.gmail = { configured: true, connected: false, redirectUri: `${location.origin}/api/popups-gmail?action=callback` };
+  }
+  if (S.cur && S.tab === 'form') renderPanel();
+}
 
 async function loadProps() {
   try {

@@ -11,11 +11,13 @@ HubSpot as a new Pacific Discovery lead.
 | `popups/` | The designer: list, live preview (desktop / phone), content, form fields, pages, timing, style. |
 | `netlify/functions/popups.mjs` | Designer API (signed-in users with access to the Website Popups dashboard). Saves to Netlify Blobs, uploads images, lists HubSpot properties. |
 | `netlify/functions/popup-embed.mjs` | **Public.** The script the website loads (via GTM), plus uploaded popup images. Only switched-on popups, cached 60 s. |
-| `netlify/functions/popup-submit.mjs` | **Public.** Receives a sign-up and writes it to HubSpot. Only accepts requests from the website's own origins. |
+| `netlify/functions/popup-submit.mjs` | **Public.** Receives a sign-up, writes it to HubSpot and emails the team. Only accepts requests from the website's own origins. |
+| `netlify/functions/popups-gmail.mjs` | Connects the Google Workspace mailbox that sends team notifications (designer only). |
+| `netlify/functions/_shared/popups-gmail.mjs` | Builds and sends the notification email (Gmail API, send-only permission). |
 | `netlify/functions/_shared/popups-core.mjs` | Data model, validation, page matching, HubSpot mapping (pure, tested). |
 | `netlify/functions/_shared/popup-runtime.mjs` | The popup itself. The same code runs on the website and in the designer preview. Drawn in a Shadow DOM so the site's CSS can't restyle it. |
 
-Storage: Netlify Blobs store `popups` (`doc` = all popups, `stats` = sign-up counts, `img/*` = images). No database migration needed.
+Storage: Netlify Blobs store `popups` (`doc` = all popups, `stats` = sign-up counts, `img/*` = images, `gmail` = the connected mailbox's refresh token). No database migration needed.
 
 ## One-time setup
 
@@ -30,6 +32,20 @@ Storage: Netlify Blobs store `popups` (`doc` = all popups, `stats` = sign-up cou
    ```
    (The designer's list page shows the exact snippet.) Each popup decides its own pages, so the tag can run everywhere.
 4. Optional: `POPUP_ALLOWED_ORIGINS` (comma-separated) if sign-ups should also be accepted from another domain. Default: `https://www.pacificdiscovery.org,https://pacificdiscovery.org`.
+
+## Team email notifications
+
+Each popup has an **Email the team** list (Form tab, up to 10 addresses). When someone signs up, each address gets an email with their name, answers, the page, whether they're new or existing in HubSpot, and an **Open in HubSpot** button. **Reply-To is the visitor**, so hitting reply answers them directly.
+
+Emails are sent from a Google Workspace mailbox you connect once in the designer (**Connect Gmail**). It gets the `gmail.send` permission only — it can send, not read. One-time Google setup:
+
+1. Google Cloud console → the project with the dashboard's OAuth client (`GOOGLE_OAUTH_CLIENT_ID`) → **APIs & Services → Library** → enable **Gmail API**.
+2. **Credentials** → that OAuth client → add the authorised redirect URI shown in the designer:
+   `https://dashboard.pacificdiscovery.org/api/popups-gmail?action=callback`
+3. **OAuth consent screen**: if it's set to *Internal* (your Workspace only), no Google review is needed. Add the `.../auth/gmail.send` scope if the screen lists scopes.
+4. In the designer, click **Connect Gmail**, sign in as the sending address (e.g. info@pacificdiscovery.org), then **Send a test email**.
+
+If sending ever fails (e.g. the mailbox's password changed and Google revoked access), the designer shows the last error; reconnect to fix it. If HubSpot is down when someone signs up but the email goes out, the visitor still sees "thanks" and the lead is in your inbox.
 
 ## What happens in HubSpot
 

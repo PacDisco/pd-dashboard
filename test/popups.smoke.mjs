@@ -69,6 +69,10 @@ await ctx.route(`${DASH}/**`, async (route) => {
     submits.push(JSON.parse(req.postData()));
     return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": SITE }, body: '{"ok":true}' });
   }
+  if (url.pathname === "/api/popups-gmail") {
+    if (req.method() === "POST") { const b = JSON.parse(req.postData()); db.gmailTests = (db.gmailTests || []).concat([b]); return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, to: b.to }) }); }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ configured: true, connected: true, email: "info@pacificdiscovery.org", by: "Jake", at: new Date().toISOString(), redirectUri: `${DASH}/api/popups-gmail?action=callback`, lastError: "" }) });
+  }
   if (url.pathname === "/api/program-pages") {
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ programs: [{ slug: "japan-mini-semester", name: "Japan Mini Semester", status: "live" }] }) });
   }
@@ -117,6 +121,16 @@ ok(await page.evaluate(() => !!document.querySelector("#frame").contentDocument.
 await page.locator('[data-fon="role"]').check({ force: true });
 await page.locator('[data-fon="term"]').check({ force: true });
 
+await page.locator("#notify-emails").fill("admissions@pacificdiscovery.org\nJake@BoulderDigitalMedia.com");
+await page.locator("#notify-emails").blur();
+await page.waitForSelector(".gmail.ok");
+ok((await page.locator(".gmail.ok b").textContent()).includes("info@pacificdiscovery.org"), "shows the connected sending mailbox");
+await page.locator("#gm-test").click();
+await page.waitForFunction(() => document.querySelector(".toast")?.textContent.startsWith("Test email sent"));
+ok(db.gmailTests?.[0]?.to.length === 2, "test email goes to the notification list");
+await page.locator(".gmail.ok").scrollIntoViewIfNeeded();
+await shot(page, "popup-notify");
+
 await page.locator('.tabs [data-tab="where"]').click();
 await page.locator('[name=pmode][value=include]').check();
 await page.locator('[data-addrule="/programs/*"]').click();
@@ -140,6 +154,7 @@ await page.locator("#btn-save").click();
 await page.waitForFunction(() => document.querySelector("#ed-save").textContent.startsWith("Saved"));
 ok(db.popups[0].headline === "Plan your gap semester" && db.popups[0].pages.rules.includes("/programs/*"), "saved");
 ok(db.popups[0].fields.find((f) => f.key === "program").options.length === 2, "HubSpot choices saved");
+ok(JSON.stringify(db.popups[0].notify.emails) === JSON.stringify(["admissions@pacificdiscovery.org", "jake@boulderdigitalmedia.com"]), "notification list saved");
 
 // switch it on — role dropdown has its default choices so it's valid
 await page.locator(".bar .switch").click();
