@@ -76,30 +76,56 @@ const hdr = (s) => String(s ?? "").replace(/[\r\n]+/g, " ").trim();
 const enc = (s) => (/^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, "utf8").toString("base64")}?=`);
 const addr = (email, name) => (name ? `${enc(hdr(name).replace(/"/g, ""))} <${hdr(email)}>` : hdr(email));
 
-/** A complete RFC 2822 message (text + HTML), base64url-encoded for the Gmail API. */
-export function buildMessage({ from, fromName, to, replyTo, subject, text, html }) {
-  const boundary = `pd_${Math.random().toString(36).slice(2)}`;
+/**
+ * A complete RFC 2822 message (text + HTML), base64url-encoded for the Gmail API.
+ *
+ * `attachments` is optional — [{ filename, mime, content: Buffer|string }]. With
+ * none the message is exactly what it always was (multipart/alternative); with
+ * some, that alternative part is wrapped in multipart/mixed alongside the files.
+ * Used by the Time Tracker's scheduled report emails.
+ */
+export function buildMessage({ from, fromName, to, replyTo, subject, text, html, attachments }) {
+  const rand = () => Math.random().toString(36).slice(2);
+  const boundary = `pd_${rand()}`;
+  const b64 = (buf) => Buffer.from(buf).toString("base64").replace(/.{76}/g, "$&\r\n");
+  const files = Array.isArray(attachments) ? attachments.filter((a) => a && a.filename && a.content != null) : [];
+  const mixed = files.length ? `pdm_${rand()}` : null;
+  const alternative = [
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(Buffer.from(text, "utf8")),
+    `--${boundary}`,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(Buffer.from(html, "utf8")),
+    `--${boundary}--`,
+  ];
   const lines = [
     `From: ${addr(from, fromName)}`,
     `To: ${to.map((t) => hdr(t)).join(", ")}`,
     ...(replyTo ? [`Reply-To: ${hdr(replyTo)}`] : []),
     `Subject: ${enc(hdr(subject))}`,
     "MIME-Version: 1.0",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    "",
-    `--${boundary}`,
-    "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: base64",
-    "",
-    Buffer.from(text, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
-    `--${boundary}`,
-    "Content-Type: text/html; charset=UTF-8",
-    "Content-Transfer-Encoding: base64",
-    "",
-    Buffer.from(html, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
-    `--${boundary}--`,
-    "",
   ];
+  if (!mixed) {
+    lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`, "", ...alternative, "");
+  } else {
+    // Filenames are ours (report-<name>-<dates>.csv), but quote-strip anyway.
+    const fname = (n) => enc(hdr(n).replace(/["\\]/g, ""));
+    lines.push(`Content-Type: multipart/mixed; boundary="${mixed}"`, "",
+      `--${mixed}`, `Content-Type: multipart/alternative; boundary="${boundary}"`, "", ...alternative);
+    for (const f of files) {
+      lines.push(`--${mixed}`,
+        `Content-Type: ${hdr(f.mime || "application/octet-stream")}; name="${fname(f.filename)}"`,
+        `Content-Disposition: attachment; filename="${fname(f.filename)}"`,
+        "Content-Transfer-Encoding: base64", "",
+        b64(typeof f.content === "string" ? Buffer.from(f.content, "utf8") : f.content));
+    }
+    lines.push(`--${mixed}--`, "");
+  }
   return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
 }
 

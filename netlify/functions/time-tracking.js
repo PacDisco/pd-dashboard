@@ -40,6 +40,15 @@
  *                              times, undoing the old per-entry rounding; dry_run
  *                              (the default) reports the effect per contractor
  *
+ *   Reports (see _shared/time-report.js)
+ *     report                 POST  -> { options, format: csv|pdf, tz } — the caller's own time, as a file
+ *     team-report            POST  -> same, across the team (review)
+ *     report-schedules       GET   -> own scheduled emails (admin: everyone's) + mailbox status
+ *     save-report-schedule   POST  -> { id?, scope: self|team, frequency: weekly|fortnightly,
+ *                                       formats[], recipients[], options, name?, tz, is_active? }
+ *     delete-report-schedule POST  -> { id }
+ *     send-report-schedule   POST  -> { id } — send the last whole period now
+ *
  * Required env var:
  *   NETLIFY_DATABASE_URL   (auto-injected when Netlify DB / Neon is provisioned)
  *
@@ -65,6 +74,8 @@
 
 const { neon } = require('@neondatabase/serverless');
 const { randomUUID } = require('node:crypto');
+const REPORTS = require('./_shared/time-report.js');
+const MAIL = require('./_shared/time-report-mail.js');
 
 let _sql;
 function sql() {
@@ -397,6 +408,7 @@ async function handleMe(caller) {
   const [projects, running] = await Promise.all([
     listProjects(caller.isManager),
     runningFor(self.id),
+    refreshScheduleAccess(caller),
   ]);
   return ok({
     contractor: self,
@@ -1457,6 +1469,203 @@ function defaultDueDate(periodEnd) {
   return base.toISOString().slice(0, 10);
 }
 
+// ------------------------------------------------------------- reports
+/**
+ * Export report — CSV or PDF, built server-side by _shared/time-report.js so a
+ * download and the Monday email are the same file.
+ *
+ *   report        anyone, about themselves. Any contractor filter in the body
+ *                 is discarded: the report is pinned to the caller.
+ *   team-report   reviewers and admins, across the team, with the people,
+ *                 projects, brands, columns and grouping they pick.
+ *
+ * Money (rate / amount) follows the existing boundary: a person may include
+ * their own; on a team report it needs review, which the action already does.
+ */
+function fileResponse(file) {
+  return {
+    statusCode: 200,
+    headers: {
+      'Content-Type': file.mime + (file.mime === 'text/csv' ? '; charset=utf-8' : ''),
+      'Content-Disposition': `attachment; filename="${file.filename}"`,
+      'Cache-Control': 'no-store',
+      'X-Report-Filename': file.filename,
+    },
+    isBase64Encoded: true,
+    body: Buffer.from(file.content).toString('base64'),
+  };
+}
+
+function reportFormat(raw) {
+  const f = String(raw || 'csv').toLowerCase();
+  if (!REPORTS.FORMATS.includes(f)) throw new Error('format must be csv or pdf');
+  return f;
+}
+
+async function handleReport(caller, body, scope) {
+  const self = await ensureContractor(caller);
+  let options, format;
+  try {
+    options = REPORTS.normalizeOptions(body.options, { scope });
+    format = reportFormat(body.format);
+  } catch (e) { return bad(e.message); }
+
+  const contractorIds = scope === 'self' ? [self.id] : options.contractor_ids;
+  const entries = await REPORTS.loadReportEntries(sql(), { from: options.from, to: options.to, contractorIds });
+  const report = REPORTS.buildReport({
+    // Belt and braces on the pin: the query already filtered to the caller.
+    entries: scope === 'self' ? entries.filter((e) => e.contractor_id === self.id) : entries,
+    options, scope, subject: self.full_name || self.email, tz: body.tz,
+  });
+  const [file] = REPORTS.renderFiles(report, [format]);
+  return fileResponse(file);
+}
+
+// --------------------------------------------------- scheduled report emails
+const SCHEDULE_COLS = `id, owner_email, owner_name, owner_can_review, scope, name, frequency, formats,
+  recipients, options, timezone, next_send_on, is_active, last_sent_at, last_period_start,
+  last_period_end, last_error, last_error_at, created_at`;
+
+function scheduleOut(row, caller) {
+  const period = REPORTS.periodForSend(dstr(row.next_send_on), row.frequency);
+  return {
+    ...row,
+    next_send_on: dstr(row.next_send_on),
+    last_period_start: dstr(row.last_period_start),
+    last_period_end: dstr(row.last_period_end),
+    next_period: period,
+    mine: row.owner_email === caller.email,
+  };
+}
+
+/** Load a schedule the caller may act on: their own, or any for an admin. */
+async function ownSchedule(caller, id) {
+  const rows = await sql().query(`SELECT ${SCHEDULE_COLS} FROM time_report_schedules WHERE id = $1`, [id]);
+  const row = rows[0];
+  if (!row) throw Object.assign(new Error('that scheduled report no longer exists'), { status: 404 });
+  if (row.owner_email !== caller.email && !caller.isManager) {
+    throw Object.assign(new Error('that scheduled report belongs to someone else'), { status: 403 });
+  }
+  return row;
+}
+
+async function handleReportSchedules(caller) {
+  // An admin sees everyone's, so a report left running by someone who's moved
+  // on can be found and stopped. Everybody else sees their own.
+  const rows = caller.isManager
+    ? await sql().query(`SELECT ${SCHEDULE_COLS} FROM time_report_schedules ORDER BY scope, LOWER(owner_email), id`)
+    : await sql().query(`SELECT ${SCHEDULE_COLS} FROM time_report_schedules WHERE owner_email = $1 ORDER BY scope, id`, [caller.email]);
+  const mailer = await MAIL.gmailMailer.status();
+  return ok({ schedules: rows.map((r) => scheduleOut(r, caller)), mail: mailer });
+}
+
+async function handleSaveReportSchedule(caller, body) {
+  const self = await ensureContractor(caller);
+  let id, scope, frequency, formats, recipients, options, name, tz, active;
+  try {
+    id = optId('id', body.id);
+    scope = body.scope === 'team' ? 'team' : 'self';
+    if (scope === 'team' && !caller.canReview) {
+      return bad('you need the admin or timesheet-reviewer role to schedule a team report', 403);
+    }
+    frequency = String(body.frequency || '');
+    if (!REPORTS.FREQUENCIES[frequency]) throw new Error('choose weekly or every other week');
+    formats = [...new Set((Array.isArray(body.formats) ? body.formats : [body.formats]).map((f) => String(f || '').toLowerCase()))]
+      .filter((f) => REPORTS.FORMATS.includes(f));
+    if (!formats.length) throw new Error('attach at least one of CSV or PDF');
+    // A personal report goes to its owner and nobody else — otherwise the
+    // self-service action would become a way to mail your hours anywhere.
+    recipients = scope === 'self' ? [self.email] : REPORTS.normalizeRecipients(body.recipients);
+    if (!recipients.length) throw new Error('add at least one email address to send it to');
+    options = REPORTS.normalizeOptions(body.options, { scope, requireDates: false });
+    delete options.from; delete options.to;           // the period is worked out at send time
+    name = optText(body.name, 120);
+    tz = REPORTS.validTz(body.tz);
+    active = body.is_active === undefined ? true : !!body.is_active;
+  } catch (e) { return bad(e.message); }
+
+  if (id) {
+    let existing;
+    try { existing = await ownSchedule(caller, id); } catch (e) { return bad(e.message, e.status || 400); }
+    // Editing someone else's (admin only) keeps it theirs; it doesn't switch scope.
+    if (existing.scope !== scope) return bad('a report can\'t switch between personal and team — make a new one');
+    // A personal report stays addressed to its owner, even when an admin edits it.
+    if (scope === 'self') recipients = [existing.owner_email];
+    // Keep the cadence it's on unless the cadence changed — or it was paused long
+    // enough that its send date is already behind us, in which case resuming it
+    // waits for the next Monday rather than firing a stale report straight away.
+    const today = REPORTS.todayIn(tz);
+    let nextSend = dstr(existing.next_send_on);
+    if (existing.frequency !== frequency || nextSend < today) nextSend = REPORTS.firstSendOn(today);
+    const rows = await sql().query(
+      `UPDATE time_report_schedules
+          SET frequency = $2, formats = $3, recipients = $4, options = $5::jsonb, name = $6,
+              timezone = $7, is_active = $8, next_send_on = $9, updated_at = NOW(),
+              last_error = CASE WHEN $8 THEN last_error ELSE NULL END
+        WHERE id = $1 RETURNING ${SCHEDULE_COLS}`,
+      [id, frequency, formats, recipients, JSON.stringify(options), name, tz, active, nextSend]);
+    return ok({ schedule: scheduleOut(rows[0], caller) });
+  }
+
+  const count = await sql().query('SELECT COUNT(*)::int AS n FROM time_report_schedules WHERE owner_email = $1', [caller.email]);
+  if (count[0].n >= 20) return bad('you already have 20 scheduled reports — remove one first');
+
+  const rows = await sql().query(
+    `INSERT INTO time_report_schedules
+       (owner_email, owner_name, owner_can_review, scope, name, frequency, formats, recipients, options, timezone, next_send_on, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12)
+     RETURNING ${SCHEDULE_COLS}`,
+    [caller.email, self.full_name || caller.name, caller.canReview, scope, name, frequency, formats, recipients,
+      JSON.stringify(options), tz, REPORTS.firstSendOn(REPORTS.todayIn(tz)), active]);
+  return ok({ schedule: scheduleOut(rows[0], caller) });
+}
+
+async function handleDeleteReportSchedule(caller, body) {
+  let id;
+  try { id = reqId('id', body.id); } catch (e) { return bad(e.message); }
+  try { await ownSchedule(caller, id); } catch (e) { return bad(e.message, e.status || 400); }
+  await sql().query('DELETE FROM time_report_schedules WHERE id = $1', [id]);
+  return ok({ deleted: id });
+}
+
+/**
+ * Send a schedule's report right now, for the period its next email would cover
+ * if it went out today — i.e. the last whole week (or two). Doesn't move the
+ * schedule: Monday's email still goes.
+ */
+async function handleSendReportSchedule(caller, body, event) {
+  let id;
+  try { id = reqId('id', body.id); } catch (e) { return bad(e.message); }
+  let row;
+  try { row = await ownSchedule(caller, id); } catch (e) { return bad(e.message, e.status || 400); }
+  // A team report sent by hand is sent with the clicker's CURRENT access, so a
+  // stale snapshot can't block (or allow) it.
+  if (row.scope === 'team') row.owner_can_review = row.owner_email === caller.email ? caller.canReview : row.owner_can_review;
+
+  await MAIL.connectBlobs(event);
+  const sendOn = REPORTS.mondayOfYmd(REPORTS.todayIn(row.timezone));
+  try {
+    const out = await MAIL.runSchedule(sql(), row, { sendOn, siteUrl: process.env.URL });
+    return ok({ sent: true, ...out });
+  } catch (e) {
+    console.error('time-tracking: send-report-schedule failed:', e);
+    return bad(e.message, e.status || 502);
+  }
+}
+
+/** Keep each owner's team-report permission in step with their roles. */
+async function refreshScheduleAccess(caller) {
+  try {
+    await sql().query(
+      `UPDATE time_report_schedules SET owner_can_review = $2
+        WHERE owner_email = $1 AND owner_can_review IS DISTINCT FROM $2`,
+      [caller.email, caller.canReview]);
+  } catch (e) {
+    // Table not migrated yet — never let that break opening the timer.
+    if (!/time_report_schedules/.test(e.message || '')) console.error('time-tracking: schedule access refresh failed:', e);
+  }
+}
+
 // Pure, DB-free pieces of the import path, exposed for test/time-import.test.mjs.
 // Netlify only ever looks at `handler`, so this is inert in production.
 exports.__test = {
@@ -1504,6 +1713,13 @@ const ACTION_ACCESS = {
   'delete-project': 'manage',
   'push-payment': 'manage',
   'restore-exact': 'manage',
+
+  report: 'self',                    // pinned to the caller inside
+  'team-report': 'review',
+  'report-schedules': 'self',        // own schedules; an admin sees all
+  'save-report-schedule': 'self',    // a team schedule needs review, inside
+  'delete-report-schedule': 'self',  // own, or any for an admin, inside
+  'send-report-schedule': 'self',    // same
 };
 
 function accessProblem(caller, action) {
@@ -1544,6 +1760,7 @@ exports.handler = async (event, context) => {
       if (action === 'contractors') return await handleContractors(caller, qs);
       if (action === 'projects')    return ok({ projects: await listProjects(caller.isManager) });
       if (action === 'approvals')   return await handleApprovals(caller, qs);
+      if (action === 'report-schedules') { await MAIL.connectBlobs(event); return await handleReportSchedules(caller); }
     }
     if (method === 'POST') {
       if (action === 'start')            return await handleStart(caller, body);
@@ -1561,11 +1778,19 @@ exports.handler = async (event, context) => {
       if (action === 'unapprove')        return await handleUnapprove(caller, body);
       if (action === 'push-payment')     return await handlePushPayment(caller, body);
       if (action === 'restore-exact')    return await handleRestoreExact(caller, body);
+      if (action === 'report')           return await handleReport(caller, body, 'self');
+      if (action === 'team-report')      return await handleReport(caller, body, 'team');
+      if (action === 'save-report-schedule')   return await handleSaveReportSchedule(caller, body);
+      if (action === 'delete-report-schedule') return await handleDeleteReportSchedule(caller, body);
+      if (action === 'send-report-schedule')   return await handleSendReportSchedule(caller, body, event);
     }
 
     return bad(`unknown action '${action}' for method ${method}`);
   } catch (err) {
     console.error('time-tracking error:', err);
+    if (/relation "time_report_schedules/i.test(err.message || '')) {
+      return bad('Scheduled reports need one more table — run MIGRATION-time-report-schedules.sql against the database.', 500);
+    }
     if (/relation "time_/i.test(err.message || '')) {
       return bad('Time tracking tables are missing — run MIGRATION-time-tracking.sql against the database.', 500);
     }

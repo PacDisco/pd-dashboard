@@ -77,6 +77,8 @@ test("every route has a recorded decision", () => {
     "create-entry", "update-entry", "delete-entry", "import-entries", "undo-import",
     "contractors", "approvals", "approve", "unapprove",
     "save-contractor", "save-project", "delete-project", "push-payment", "restore-exact",
+    "report", "team-report", "report-schedules", "save-report-schedule",
+    "delete-report-schedule", "send-report-schedule",
   ];
   for (const r of routes) {
     assert.ok(ACTION_ACCESS[r], `no access level recorded for "${r}"`);
@@ -106,6 +108,16 @@ test("a reviewer sees the team and signs a period off", () => {
     assert.equal(allows(CONTRACTOR, action), false);
     assert.equal(allows(NOBODY, action), false);
   }
+});
+
+test("anyone can export their own report; the team report needs review", () => {
+  for (const action of ["report", "report-schedules", "save-report-schedule", "delete-report-schedule", "send-report-schedule"]) {
+    assert.equal(allows(NOBODY, action), true, `${action} is self-service (the handler pins it to the caller)`);
+  }
+  assert.equal(allows(REVIEWER, "team-report"), true);
+  assert.equal(allows(ADMIN, "team-report"), true);
+  assert.equal(allows(OPERATIONS, "team-report"), false, "operations must NOT export the team's hours");
+  assert.equal(allows(CONTRACTOR, "team-report"), false);
 });
 
 test("approving is allowed but paying is not — that's the whole seam", () => {

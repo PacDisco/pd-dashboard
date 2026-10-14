@@ -58,6 +58,13 @@
   .imp-note { background:#f0fdfa; border:1px solid #99f6e4; color:#115e59; font-size:12px; padding:8px 10px; border-radius:8px; }
   .imp-warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:12px; padding:8px 10px; border-radius:8px; }
   .pill-timer { background:#e0f2fe; color:#075985; }
+  /* Export report dialog */
+  .rchk { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#374151; cursor:pointer; }
+  .rchk input { accent-color:#0f766e; width:15px; height:15px; }
+  .rchk-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:6px 12px;
+               max-height:150px; overflow:auto; border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; margin-top:4px; }
+  .rdet > summary { cursor:pointer; list-style:revert; }
+  .rsched { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px 14px; }
   .pill-paid { background:#dcfce7; color:#166534; }
   .pill-due { background:#fee2e2; color:#b91c1c; }
   .segbtn { font-size:13px; font-weight:600; padding:6px 14px; border:1px solid #d1d5db; background:#fff; color:#374151; cursor:pointer; }
@@ -194,7 +201,8 @@
       <button id="wk-prev" class="btn btn-ghost">←</button>
       <button id="wk-today" class="btn btn-ghost">This week</button>
       <button id="wk-next" class="btn btn-ghost">→</button>
-      <button id="btn-csv" class="btn btn-ghost" title="Download this period as CSV">⭳ CSV</button>
+      <button id="btn-csv" class="btn btn-ghost" title="Quick CSV of the week on screen — the same layout Bulk import reads back">⭳ CSV</button>
+      <button id="btn-report" class="btn btn-primary" title="Choose what goes in a CSV or PDF report, or have it emailed every week">📄 Export report</button>
     </div>
   </div>
 
@@ -221,6 +229,8 @@
     <div id="wk-empty" class="hidden text-center text-gray-400 py-12 text-sm bg-white border border-gray-200 rounded-xl">
       No time logged this week yet. Hit ▶ Start above, or add an entry by hand.
     </div>
+
+    <div id="sched-self" class="bg-white border border-gray-200 rounded-xl overflow-hidden mt-5"></div>
   </section>
 
   <!-- ============================== TEAM ============================== -->
@@ -255,6 +265,8 @@
         <tbody id="appr-rows"></tbody>
       </table></div>
     </div>
+
+    <div id="sched-team" class="bg-white border border-gray-200 rounded-xl overflow-hidden mt-5"></div>
   </section>
 
   <!-- ============================= PROJECTS ============================= -->
@@ -568,6 +580,7 @@ async function boot() {
   fillSelect($('p-brand'), BRANDS);
   renderTimer();
   await loadWeek();
+  loadSchedules();
 }
 
 function fillProjectSelect(sel, projects, selected) {
@@ -1637,6 +1650,392 @@ function exportCsv() {
   URL.revokeObjectURL(a.href);
 }
 
+/* --------------------------------------------------------------- reports */
+/* "Export report" — build a CSV or PDF of your own time (My week) or of the
+   team's (Team tab, reviewers and admins), and optionally have the same report
+   emailed every week or every other week. The file is built by the server
+   (_shared/time-report.js), so a download and the Monday email always match. */
+
+var REPORT_COLUMNS = [
+  { key: 'date', label: 'Date' }, { key: 'contractor', label: 'Contractor', team: true },
+  { key: 'email', label: 'Email', team: true }, { key: 'project', label: 'Project' },
+  { key: 'code', label: 'Code' }, { key: 'brand', label: 'Brand' },
+  { key: 'description', label: 'Description' }, { key: 'started', label: 'Started' },
+  { key: 'finished', label: 'Finished' }, { key: 'hours', label: 'Hours' },
+  { key: 'status', label: 'Status' }, { key: 'source', label: 'Source' }
+];
+var REPORT_DEFAULT_COLUMNS = {
+  self: ['date', 'project', 'brand', 'description', 'started', 'finished', 'hours', 'status'],
+  team: ['date', 'contractor', 'project', 'brand', 'description', 'hours', 'status']
+};
+var SCHEDULES = [];
+var MAILBOX = null;
+var REPORT_UI = null;   // { scope, editing } while the dialog is open
+
+function browserTz() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Pacific/Auckland'; } catch (e) { return 'Pacific/Auckland'; } }
+
+// Remember the last report each person built, per scope — a convenience only,
+// so every read and write is allowed to fail.
+function lastReportOpts(scope) {
+  try { return JSON.parse(localStorage.getItem('tt-report-' + scope) || 'null'); } catch (e) { return null; }
+}
+function saveReportOpts(scope, o) {
+  try { localStorage.setItem('tt-report-' + scope, JSON.stringify(o)); } catch (e) {}
+}
+
+function presetRange(preset) {
+  var today = new Date();
+  var b = weekBounds();
+  if (preset === 'this-week') return { from: ymdLocal(mondayOf(today)), to: ymdLocal(addDays(mondayOf(today), 6)) };
+  if (preset === 'last-week') { var m = addDays(mondayOf(today), -7); return { from: ymdLocal(m), to: ymdLocal(addDays(m, 6)) }; }
+  if (preset === 'last-2-weeks') { var m2 = addDays(mondayOf(today), -14); return { from: ymdLocal(m2), to: ymdLocal(addDays(m2, 13)) }; }
+  if (preset === 'this-month') return { from: ymdLocal(new Date(today.getFullYear(), today.getMonth(), 1)), to: ymdLocal(new Date(today.getFullYear(), today.getMonth() + 1, 0)) };
+  if (preset === 'last-month') return { from: ymdLocal(new Date(today.getFullYear(), today.getMonth() - 1, 1)), to: ymdLocal(new Date(today.getFullYear(), today.getMonth(), 0)) };
+  return b;   // 'shown' — the week on screen
+}
+
+function chk(name, value, label, on, extra) {
+  return '<label class="rchk"><input type="checkbox" name="' + name + '" value="' + esc(value) + '"' + (on ? ' checked' : '') + (extra || '') + '> <span>' + label + '</span></label>';
+}
+function checkedValues(name) {
+  return Array.prototype.slice.call(document.querySelectorAll('input[name="' + name + '"]:checked')).map(function (n) { return n.value; });
+}
+function allBoxes(name, on) {
+  document.querySelectorAll('input[name="' + name + '"]').forEach(function (n) { n.checked = on; });
+  updateReportCounts();
+}
+
+/**
+ * Open the report dialog. `scope` is 'self' or 'team'; `schedule` pre-loads a
+ * saved scheduled report for editing.
+ */
+async function reportModal(scope, schedule) {
+  if (scope === 'team' && !TEAM.length) { try { await loadTeam(); } catch (e) {} }
+  REPORT_UI = { scope: scope, editing: schedule || null };
+  var saved = schedule ? schedule.options : (lastReportOpts(scope) || {});
+  var cols = (saved.columns && saved.columns.length) ? saved.columns : REPORT_DEFAULT_COLUMNS[scope];
+  var team = scope === 'team';
+  var b = weekBounds();
+
+  var people = team ? TEAM.map(function (c) {
+    var picked = !(saved.contractor_ids && saved.contractor_ids.length) || saved.contractor_ids.indexOf(c.id) >= 0;
+    return chk('r-person', c.id, esc(c.full_name || c.email) + (c.is_active ? '' : ' <span class="text-gray-400">(inactive)</span>'), picked);
+  }).join('') : '';
+  var projects = (PROJECTS || []).map(function (p) {
+    var on = !(saved.project_ids && saved.project_ids.length) || saved.project_ids.indexOf(p.id) >= 0;
+    return chk('r-project', p.id, esc(p.name) + (p.code ? ' <span class="text-gray-400">' + esc(p.code) + '</span>' : '') + (p.is_active ? '' : ' <span class="text-gray-400">(archived)</span>'), on);
+  }).join('') + chk('r-project', 0, '<em>No project</em>', !(saved.project_ids && saved.project_ids.length) || saved.project_ids.indexOf(0) >= 0);
+  var brands = brandChoices().map(function (bn) {
+    var on = !(saved.brands && saved.brands.length) || saved.brands.indexOf(bn) >= 0;
+    return chk('r-brand', bn, bn ? esc(bn) : '<em>' + NO_BRAND + '</em>', on);
+  }).join('');
+  var colBoxes = REPORT_COLUMNS.filter(function (c) { return team || !c.team; }).map(function (c) {
+    return chk('r-col', c.key, c.label, cols.indexOf(c.key) >= 0);
+  }).join('');
+
+  var sel = function (id, opts, val) {
+    return '<select id="' + id + '" class="fld">' + opts.map(function (o) {
+      return '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('') + '</select>';
+  };
+
+  var s = schedule || {};
+  var recipients = s.recipients ? s.recipients.join(', ') : ((ME.contractor && ME.contractor.email) || '');
+
+  $('modal-root').innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal wide p-5">'
+    + '<div class="flex items-start justify-between gap-3"><div>'
+      + '<h3 class="text-base font-bold text-gray-900">' + (schedule ? 'Edit scheduled report' : (team ? 'Export team report' : 'Export my time')) + '</h3>'
+      + '<p class="text-xs text-gray-500 mt-0.5">' + (team
+          ? 'Pick who and what goes in it. Hours are exact per entry; billable hours round each person\'s total to the nearest quarter hour.'
+          : 'Your own time only. Hours are exact per entry; billable hours round the period total to the nearest quarter hour.') + '</p>'
+    + '</div><button class="btn btn-ghost" onclick="closeModal()" aria-label="Close">×</button></div>'
+
+    + '<div class="grid grid-cols-1 md:grid-cols-12 gap-4 mt-4">'
+      // ---- left: what's in it
+      + '<div class="md:col-span-7 space-y-4">'
+        + (schedule ? '<div class="imp-note">The period is set by the schedule: each email covers the ' + (s.frequency === 'fortnightly' ? 'two weeks' : 'week') + ' (Mon–Sun) before it\'s sent.</div>'
+          : '<div class="grid grid-cols-12 gap-3">'
+            + '<div class="col-span-12 md:col-span-4"><label class="lbl">Period</label>'
+              + sel('r-preset', [['shown', 'Week on screen'], ['this-week', 'This week'], ['last-week', 'Last week'], ['last-2-weeks', 'Last 2 weeks'], ['this-month', 'This month'], ['last-month', 'Last month'], ['custom', 'Custom…']], 'shown') + '</div>'
+            + '<div class="col-span-6 md:col-span-4"><label class="lbl">From</label><input id="r-from" type="date" class="fld" value="' + b.from + '"></div>'
+            + '<div class="col-span-6 md:col-span-4"><label class="lbl">To</label><input id="r-to" type="date" class="fld" value="' + b.to + '"></div>'
+          + '</div>')
+        + (team ? '<div><div class="flex items-center justify-between"><label class="lbl">People <span id="r-person-n" class="font-normal text-gray-400"></span></label>'
+            + '<span class="text-xs"><a class="lnk" href="javascript:void 0" onclick="allBoxes(\'r-person\', true)">all</a> · <a class="lnk" href="javascript:void 0" onclick="allBoxes(\'r-person\', false)">none</a></span></div>'
+            + '<div class="rchk-list">' + (people || '<span class="text-xs text-gray-400">No one has logged time yet.</span>') + '</div></div>' : '')
+        + '<details class="rdet"' + (saved.project_ids && saved.project_ids.length ? ' open' : '') + '><summary class="lbl">Projects <span id="r-project-n" class="font-normal text-gray-400"></span></summary>'
+          + '<div class="text-xs my-1"><a class="lnk" href="javascript:void 0" onclick="allBoxes(\'r-project\', true)">all</a> · <a class="lnk" href="javascript:void 0" onclick="allBoxes(\'r-project\', false)">none</a></div>'
+          + '<div class="rchk-list">' + projects + '</div></details>'
+        + '<details class="rdet"' + (saved.brands && saved.brands.length ? ' open' : '') + '><summary class="lbl">Brands <span id="r-brand-n" class="font-normal text-gray-400"></span></summary>'
+          + '<div class="rchk-list">' + brands + '</div></details>'
+        + '<details class="rdet"><summary class="lbl">Columns <span id="r-col-n" class="font-normal text-gray-400"></span></summary>'
+          + '<div class="rchk-list">' + colBoxes + '</div></details>'
+      + '</div>'
+      // ---- right: how it's laid out
+      + '<div class="md:col-span-5 space-y-3">'
+        + '<div><label class="lbl">Entries</label>' + sel('r-status', [['all', 'All entries'], ['approved', 'Approved only'], ['unapproved', 'Not yet approved']], saved.status || 'all') + '</div>'
+        + '<div><label class="lbl">Group by</label>' + sel('r-group', [['none', 'No grouping'], ['day', 'Day'], ['week', 'Week'], ['project', 'Project'], ['brand', 'Brand']].concat(team ? [['contractor', 'Person']] : []), saved.group_by || (team ? 'contractor' : 'day')) + '</div>'
+        + '<div><label class="lbl">Detail</label>' + sel('r-detail', [['entries', 'Every entry, plus totals'], ['summary', 'Totals only']], saved.detail || 'entries') + '</div>'
+        + '<label class="rchk"><input type="checkbox" id="r-money"' + (saved.include_money ? ' checked' : '') + '> <span>' + (team ? 'Include rates and amounts' : 'Include my rate and amount') + '</span></label>'
+        + '<div><label class="lbl">Report title <span class="font-normal text-gray-400">(optional)</span></label><input id="r-title" class="fld" maxlength="120" value="' + esc(saved.title || s.name || '') + '" placeholder="' + (team ? 'Team time report' : 'Time report — ' + esc((ME.contractor && (ME.contractor.full_name || ME.contractor.email)) || 'me')) + '"></div>'
+      + '</div>'
+    + '</div>'
+
+    // ---- schedule
+    + '<div class="rsched mt-5">'
+      + '<div class="flex items-center justify-between flex-wrap gap-2">'
+        + '<div><div class="text-sm font-semibold text-gray-800">📧 Email this automatically</div>'
+          + '<div class="text-xs text-gray-500">Sent Monday mornings with the week just finished (or the last two). ' + (team ? '' : 'Goes to your own email address.') + '</div></div>'
+        + '<div style="width:210px">' + sel('r-freq', [['', 'Don\'t email'], ['weekly', 'Every week'], ['fortnightly', 'Every other week']], s.frequency || '') + '</div>'
+      + '</div>'
+      + '<div id="r-sched-fields" class="' + (s.frequency ? '' : 'hidden ') + 'grid grid-cols-1 md:grid-cols-12 gap-3 mt-3">'
+        + '<div class="md:col-span-4"><label class="lbl">Attach</label><div class="flex gap-3">'
+          + chk('r-fmt', 'csv', 'CSV', !s.formats || s.formats.indexOf('csv') >= 0) + chk('r-fmt', 'pdf', 'PDF', !s.formats || s.formats.indexOf('pdf') >= 0) + '</div></div>'
+        + (team ? '<div class="md:col-span-8"><label class="lbl">Send to <span class="font-normal text-gray-400">(comma-separated, up to 10)</span></label>'
+            + '<input id="r-to-emails" class="fld" value="' + esc(recipients) + '"></div>'
+          : '<div class="md:col-span-8"><label class="lbl">Send to</label><div class="text-sm text-gray-700 py-2">' + esc((ME.contractor && ME.contractor.email) || '') + '</div></div>')
+        + (MAILBOX && !MAILBOX.connected ? '<div class="md:col-span-12 imp-warn">No mailbox is connected for sending yet, so the schedule will save but can\'t send. An admin connects one in the Popups dashboard (“Connect Gmail”) — the Time Tracker uses the same mailbox.</div>' : '')
+      + '</div>'
+    + '</div>'
+
+    + '<div id="r-err" class="text-sm text-red-600 mt-3"></div>'
+    + '<div class="flex items-center justify-between flex-wrap gap-2 mt-4">'
+      + '<div class="text-xs text-gray-500" id="r-summary"></div>'
+      + '<div class="flex items-center gap-2">'
+        + (schedule ? '' : '<div class="inline-flex"><button id="r-fmt-csv" class="segbtn active">CSV</button><button id="r-fmt-pdf" class="segbtn">PDF</button></div>'
+          + '<button id="r-download" class="btn btn-primary">⭳ Download</button>')
+        + '<button id="r-save-sched" class="btn ' + (schedule ? 'btn-primary' : 'btn-ghost') + (s.frequency || schedule ? '' : ' hidden') + '">' + (schedule ? 'Save changes' : 'Save schedule') + '</button>'
+      + '</div>'
+    + '</div>'
+    + '</div></div>';
+
+  if (!schedule) {
+    $('r-preset').onchange = function () {
+      if (this.value === 'custom') { $('r-from').focus(); return; }
+      var r = presetRange(this.value); $('r-from').value = r.from; $('r-to').value = r.to;
+    };
+    $('r-from').onchange = $('r-to').onchange = function () { $('r-preset').value = 'custom'; };
+    var fmt = 'csv';
+    $('r-fmt-csv').onclick = function () { fmt = 'csv'; this.classList.add('active'); $('r-fmt-pdf').classList.remove('active'); };
+    $('r-fmt-pdf').onclick = function () { fmt = 'pdf'; this.classList.add('active'); $('r-fmt-csv').classList.remove('active'); };
+    $('r-download').onclick = function () { downloadReport(fmt); };
+  }
+  $('r-freq').onchange = function () {
+    $('r-sched-fields').classList.toggle('hidden', !this.value);
+    $('r-save-sched').classList.toggle('hidden', !this.value && !REPORT_UI.editing);
+  };
+  $('r-save-sched').onclick = saveReportSchedule;
+  document.querySelectorAll('#modal-root input[type=checkbox]').forEach(function (n) { n.addEventListener('change', updateReportCounts); });
+  updateReportCounts();
+}
+
+/** "3 of 7" beside each checkbox group, so an unticked box doesn't go unnoticed. */
+function updateReportCounts() {
+  ['r-person', 'r-project', 'r-brand', 'r-col'].forEach(function (name) {
+    var all = document.querySelectorAll('input[name="' + name + '"]').length;
+    var on = document.querySelectorAll('input[name="' + name + '"]:checked').length;
+    var el = $(name + '-n');
+    if (el) el.textContent = name === 'r-col' ? '(' + on + ')' : (on === all ? '(all)' : '(' + on + ' of ' + all + ')');
+  });
+}
+
+/** Read the dialog into the options the server expects. */
+function reportOptionsFromForm() {
+  var scope = REPORT_UI.scope;
+  // "Everything ticked" is sent as no filter, so a project or person added
+  // later is included in a scheduled report rather than silently left out.
+  var pick = function (name, asNumber) {
+    var all = document.querySelectorAll('input[name="' + name + '"]').length;
+    var vals = checkedValues(name);
+    if (!vals.length) return null;            // nothing ticked: caller decides
+    if (vals.length === all) return [];
+    return asNumber ? vals.map(Number) : vals;
+  };
+  var o = {
+    project_ids: pick('r-project', true),
+    brands: pick('r-brand', false),
+    columns: checkedValues('r-col'),
+    status: $('r-status').value,
+    group_by: $('r-group').value,
+    detail: $('r-detail').value,
+    include_money: $('r-money').checked,
+    title: $('r-title').value.trim()
+  };
+  if (scope === 'team') o.contractor_ids = pick('r-person', true);
+  if ($('r-from')) { o.from = $('r-from').value; o.to = $('r-to').value; }
+  var err = null;
+  if (o.project_ids === null) err = 'Tick at least one project.';
+  else if (o.brands === null) err = 'Tick at least one brand.';
+  else if (scope === 'team' && o.contractor_ids === null) err = 'Tick at least one person.';
+  else if (o.detail === 'entries' && !o.columns.length) err = 'Tick at least one column.';
+  return { options: o, error: err };
+}
+
+async function apiFile(action, body) {
+  var headers = { 'Content-Type': 'application/json' };
+  if (IDENTITY_USER) { try { headers.Authorization = 'Bearer ' + (await IDENTITY_USER.jwt()); } catch (e) {} }
+  var res = await fetch(API + '?action=' + encodeURIComponent(action), {
+    method: 'POST', headers: headers, credentials: 'include', body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    var data = {}; try { data = await res.json(); } catch (e) {}
+    if (res.status === 401) showGate('Your session expired — sign in again.');
+    throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  }
+  var name = res.headers.get('X-Report-Filename') || 'time-report';
+  return { blob: await res.blob(), filename: name };
+}
+
+async function downloadReport(format) {
+  var f = reportOptionsFromForm();
+  $('r-err').textContent = f.error || '';
+  if (f.error) return;
+  var btn = $('r-download');
+  btn.disabled = true; btn.textContent = 'Building…';
+  try {
+    var out = await apiFile(REPORT_UI.scope === 'team' ? 'team-report' : 'report',
+      { options: f.options, format: format, tz: browserTz() });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(out.blob);
+    a.download = out.filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    var keep = Object.assign({}, f.options); delete keep.from; delete keep.to;
+    saveReportOpts(REPORT_UI.scope, keep);
+    toast('Downloaded ' + out.filename);
+  } catch (e) { $('r-err').textContent = e.message; }
+  finally { btn.disabled = false; btn.textContent = '⭳ Download'; }
+}
+
+async function saveReportSchedule() {
+  var f = reportOptionsFromForm();
+  $('r-err').textContent = f.error || '';
+  if (f.error) return;
+  var editing = REPORT_UI.editing;
+  var freq = $('r-freq').value;
+  if (!freq && editing) {
+    // Choosing "Don't email" on an existing schedule pauses it rather than
+    // deleting it — the delete button is on the list.
+    freq = editing.frequency;
+  }
+  var formats = checkedValues('r-fmt');
+  if (!formats.length) { $('r-err').textContent = 'Attach a CSV, a PDF, or both.'; return; }
+  var body = {
+    id: editing ? editing.id : undefined,
+    scope: REPORT_UI.scope, frequency: freq, formats: formats,
+    recipients: $('r-to-emails') ? $('r-to-emails').value : undefined,
+    options: f.options, name: f.options.title || null, tz: browserTz(),
+    is_active: editing ? ($('r-freq').value ? true : false) : true
+  };
+  delete body.options.from; delete body.options.to;
+  var btn = $('r-save-sched'); btn.disabled = true;
+  try {
+    var out = await api('POST', 'save-report-schedule', body);
+    closeModal();
+    toast(out.schedule.is_active
+      ? 'Scheduled — first email ' + fmtDayLong(out.schedule.next_send_on)
+      : 'Saved and paused');
+    await loadSchedules();
+  } catch (e) { $('r-err').textContent = e.message; btn.disabled = false; }
+}
+
+function fmtDayLong(s) {
+  var p = String(s || '').split('-'); if (p.length !== 3) return s || '';
+  return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+/* ---- the scheduled-reports lists (one under My week, one under Team) ---- */
+async function loadSchedules() {
+  try {
+    var out = await api('GET', 'report-schedules');
+    SCHEDULES = out.schedules || [];
+    MAILBOX = out.mail || null;
+  } catch (e) {
+    SCHEDULES = []; MAILBOX = null;
+    $('sched-self').innerHTML = '<div class="text-xs text-gray-400 px-4 py-3">' + esc(e.message) + '</div>';
+    return;
+  }
+  renderSchedules('self');
+  if (canReview()) renderSchedules('team');
+}
+
+function renderSchedules(scope) {
+  var host = $('sched-' + scope);
+  if (!host) return;
+  var list = SCHEDULES.filter(function (s) { return s.scope === scope; });
+  var head = '<div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2"><div>'
+    + '<h2 class="text-sm font-semibold text-gray-700">📧 Scheduled report emails</h2>'
+    + '<p class="text-xs text-gray-500 mt-0.5">' + (scope === 'team'
+        ? 'Team reports emailed every week or every other week, Monday morning.' + (isMgr() ? ' As an admin you see everyone\'s.' : '')
+        : 'Your own time, emailed to you every week or every other week, Monday morning.') + '</p></div>'
+    + '<button class="btn btn-ghost" onclick="reportModal(\'' + scope + '\')">+ New</button></div>';
+  var warn = MAILBOX && !MAILBOX.connected && list.length
+    ? '<div class="imp-warn m-3">No mailbox is connected, so these can\'t send. Connect one in the Popups dashboard (“Connect Gmail”).</div>' : '';
+  if (!list.length) {
+    host.innerHTML = head + '<div class="text-center text-gray-400 py-6 text-sm">None yet. Use <b>Export report</b> and pick “Every week” or “Every other week”.</div>';
+    return;
+  }
+  host.innerHTML = head + warn + '<div class="overflow-x-auto"><table class="tbl"><thead><tr>'
+    + '<th>Report</th><th>Every</th><th>Next email</th><th>Sends to</th><th>Last sent</th><th></th></tr></thead><tbody>'
+    + list.map(function (s) {
+      var o = s.options || {};
+      var desc = [o.group_by && o.group_by !== 'none' ? 'by ' + (o.group_by === 'contractor' ? 'person' : o.group_by) : null,
+        o.detail === 'summary' ? 'totals only' : null, o.include_money ? 'with amounts' : null,
+        (s.formats || []).join(' + ').toUpperCase()].filter(Boolean).join(' · ');
+      var last = s.last_error
+        ? '<span class="pill pill-err" title="' + esc(s.last_error) + '">failed</span><div class="text-xs text-red-600 mt-1" style="max-width:220px">' + esc(s.last_error) + '</div>'
+        : (s.last_sent_at ? '<span class="text-xs text-gray-600">' + esc(fmtRange(s.last_period_start, s.last_period_end)) + '</span>' : '<span class="text-xs text-gray-400">not yet</span>');
+      return '<tr' + (s.is_active ? '' : ' style="opacity:.6"') + '>'
+        + '<td><div class="font-semibold text-gray-800">' + esc(s.name || (scope === 'team' ? 'Team time report' : 'My time report')) + '</div>'
+          + '<div class="text-xs text-gray-400">' + esc(desc) + (s.mine ? '' : ' · set up by ' + esc(s.owner_name || s.owner_email)) + '</div></td>'
+        + '<td class="text-xs whitespace-nowrap">' + (s.frequency === 'fortnightly' ? 'Other week' : 'Week') + '</td>'
+        + '<td class="text-xs whitespace-nowrap">' + (s.is_active
+            ? fmtDayLong(s.next_send_on) + '<div class="text-gray-400">' + esc(fmtRange(s.next_period.from, s.next_period.to)) + '</div>'
+            : '<span class="pill pill-lock">paused</span>') + '</td>'
+        + '<td class="text-xs" style="max-width:200px">' + esc((s.recipients || []).join(', ')) + '</td>'
+        + '<td>' + last + '</td>'
+        + '<td class="text-right whitespace-nowrap">'
+          + '<button class="btn btn-ghost" onclick="sendScheduleNow(' + s.id + ', this)" title="Email the last whole period now">Send now</button> '
+          + '<button class="btn btn-ghost" onclick="editSchedule(' + s.id + ')">Edit</button> '
+          + '<button class="btn btn-ghost" onclick="toggleSchedule(' + s.id + ')">' + (s.is_active ? 'Pause' : 'Resume') + '</button> '
+          + '<button class="text-xs text-red-600 hover:underline ml-1" onclick="deleteSchedule(' + s.id + ')">delete</button>'
+        + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function scheduleById(id) { return SCHEDULES.filter(function (s) { return s.id === id; })[0]; }
+function editSchedule(id) { var s = scheduleById(id); if (s) reportModal(s.scope, s); }
+
+async function toggleSchedule(id) {
+  var s = scheduleById(id); if (!s) return;
+  try {
+    await api('POST', 'save-report-schedule', {
+      id: s.id, scope: s.scope, frequency: s.frequency, formats: s.formats, recipients: s.recipients,
+      options: s.options, name: s.name, tz: s.timezone, is_active: !s.is_active
+    });
+    toast(s.is_active ? 'Paused' : 'Resumed');
+    await loadSchedules();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Stop sending this report and delete the schedule?')) return;
+  try { await api('POST', 'delete-report-schedule', { id: id }); toast('Deleted'); await loadSchedules(); }
+  catch (e) { toast(e.message, true); }
+}
+
+async function sendScheduleNow(id, btn) {
+  var s = scheduleById(id); if (!s) return;
+  if (!confirm('Email this report now to ' + (s.recipients || []).join(', ') + '?\n\nIt covers the last whole '
+    + (s.frequency === 'fortnightly' ? 'two weeks' : 'week') + '. Monday\'s scheduled email still goes as normal.')) return;
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    var out = await api('POST', 'send-report-schedule', { id: id });
+    toast('Sent ' + fmtRange(out.period.from, out.period.to) + ' to ' + out.recipients.length + ' address' + (out.recipients.length === 1 ? '' : 'es'));
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = 'Send now'; }
+}
+
 /* ------------------------------------------------------------------ team */
 var TEAM = [];
 var TEAM_ENTRIES = [];
@@ -1906,6 +2305,7 @@ $('btn-stop').onclick = stopTimer;
 $('btn-discard').onclick = discardTimer;
 $('btn-manual').onclick = function () { manualEntryModal(null); };
 $('btn-csv').onclick = exportCsv;
+$('btn-report').onclick = function () { reportModal(tab === 'team' ? 'team' : 'self'); };
 $('btn-import').onclick = importModal;
 $('tab-week').onclick = function () { setTab('week'); };
 $('tab-team').onclick = function () { setTab('team'); };

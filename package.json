@@ -27,6 +27,8 @@
     "test:time-brands": "node test/time-brand-split.test.mjs",
     "test:time-brands-db": "node test/time-brand-approvals.db.test.mjs",
     "test:time-brands-ui": "node test/time-brand-hours.smoke.mjs",
+    "test:time-reports-db": "node test/time-reports.db.test.mjs",
+    "test:time-reports-ui": "node test/time-reports.smoke.mjs",
     "test:shirt": "node test/enrollment-shirt.test.mjs",
     "test:shirt-ui": "node test/shirt-order.smoke.mjs",
     "test:shirt-auth": "node test/shirt-orders-auth.test.mjs",
@@ -48,7 +50,9 @@
     "@anthropic-ai/sdk": "^0.90.0",
     "@neondatabase/serverless": "^1.1.0",
     "@netlify/blobs": "^8.1.0",
-    "googleapis": "^171.4.0"
+    "googleapis": "^171.4.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

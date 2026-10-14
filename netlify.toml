@@ -38,6 +38,17 @@
 [functions."shirt-orders"]
   timeout = 26
 
+# Time Tracker reports are built as PDFs server-side (jsPDF), which is a few
+# hundred ms of work on a cold start for a long team report.
+[functions."time-tracking"]
+  timeout = 26
+
+# Scheduled report emails. Daily at 19:00 UTC = 8am NZDT / 7am NZST; each run
+# sends whatever is due today (schedules are always due on a Monday, in the
+# schedule's own timezone), so the daily cadence is just "check every morning".
+[functions."time-report-emails"]
+  schedule = "0 19 * * *"
+
 # Route /api/config → config function, /api/users[/*] → users function.
 [[redirects]]
   from = "/api/config"
