@@ -73,12 +73,18 @@ function triggerSummary(t) {
 
 /** Same shape /api/popup-embed sends the website (popupConfig in popups-core.mjs). */
 function toPublic(p) {
+  const link = isLink(p);
   return {
     ...p,
     imagePos: p.image ? p.imagePos : 'none',
-    fields: p.fields.filter((f) => f.on).map((f) => ({ key: f.key, label: f.label, type: def(f.key).type, required: f.required, autocomplete: def(f.key).autocomplete || '', ...(f.options ? { options: f.options } : {}) })),
+    privacy: link ? '' : p.privacy,
+    fields: link ? [] : p.fields.filter((f) => f.on).map((f) => ({ key: f.key, label: f.label, type: def(f.key).type, required: f.required, autocomplete: def(f.key).autocomplete || '', ...(f.options ? { options: f.options } : {}) })),
   };
 }
+
+/** A link popup has no form: its button just opens a page. */
+function isLink(p) { return p && p.action === 'link'; }
+function ensureLink(p) { if (!p.link) p.link = { url: '', newTab: false }; return p.link; }
 
 function markDirty() {
   S.dirty = true;
@@ -170,10 +176,10 @@ function showList() {
       const [k, label] = statusOf(p);
       const st = S.stats[p.id];
       return `<tr data-id="${esc(p.id)}">
-        <td><div class="nm">${esc(p.name)}</div><div class="sl">${esc(LAYOUTS.find((l) => l[0] === p.layout)[1])} · ${esc(triggerSummary(p.trigger))}</div></td>
+        <td><div class="nm">${esc(p.name)}</div><div class="sl">${esc(LAYOUTS.find((l) => l[0] === p.layout)[1])}${isLink(p) ? ' · link, no form' : ''} · ${esc(triggerSummary(p.trigger))}</div></td>
         <td><label class="switch"><input type="checkbox" data-toggle="${esc(p.id)}"${p.enabled ? ' checked' : ''} aria-label="Show ${esc(p.name)} on the website"><span class="tr"></span></label> <span class="chip chip--${k}">${esc(label)}</span></td>
         <td>${esc(pagesSummary(p))}${p.devices !== 'all' ? `<div class="sl">${p.devices === 'mobile' ? 'Phones only' : 'Desktop only'}</div>` : ''}</td>
-        <td>${st ? `<b>${st.submits}</b><div class="sl">last ${new Date(st.last).toLocaleDateString()}</div>` : '<span class="sl">—</span>'}</td>
+        <td>${isLink(p) ? '<span class="sl" title="Link popups don’t collect sign-ups. Clicks are tracked in Google Analytics as pd_popup_click.">link</span>' : st ? `<b>${st.submits}</b><div class="sl">last ${new Date(st.last).toLocaleDateString()}</div>` : '<span class="sl">—</span>'}</td>
         <td><div class="acts">
           <button class="btn btn--sm" type="button" data-up="${i}"${i === 0 ? ' disabled' : ''} title="Higher priority (one popup shows per page)">↑</button>
           <button class="btn btn--sm" type="button" data-edit="${esc(p.id)}">Edit</button>
@@ -334,17 +340,25 @@ function renderPanel() {
 }
 
 function contentPanel(p) {
+  const link = isLink(p);
+  const l = ensureLink(p);
   return fText('name', 'Popup name (only you see this)', { max: 80 }) +
+    `<div class="field"><span class="lbl">When they click the button</span><div class="seg" role="group" aria-label="What the button does">${[['form', 'Collect their details'], ['link', 'Just open a link']].map(([v, t]) => `<button type="button" data-action="${v}" aria-pressed="${(p.action || 'form') === v}">${t}</button>`).join('')}</div>
+      <span class="help">${link ? 'No form and no email: the popup is a message with a button that goes to the link below. Nothing is sent to HubSpot.' : 'A short form. Sign-ups go into HubSpot, and can email the team (Form tab).'}</span></div>` +
     fText('eyebrow', 'Small heading (optional)', { max: 80 }) +
     fText('headline', 'Headline', { max: 160 }) +
     fText('body', 'Text', { multiline: true, max: 600 }) +
-    fText('button', 'Button text', { max: 60 }) +
-    fText('privacy', 'Small print under the button', { multiline: true, max: 300 }) +
-    `<h3 class="sub">Image</h3>${imagePanel(p)}` +
+    fText('button', 'Button text', { max: 60, placeholder: link ? 'e.g. See the early-bird offer' : '' }) +
+    (link
+      ? `<div class="field"><label for="f-link_url">Button link</label><input type="url" id="f-link_url" data-path="link.url" maxlength="1000" value="${esc(l.url)}" placeholder="https://www.pacificdiscovery.org/apply">
+          ${l.url && !/^(https?:\/\/|\/(?!\/))/i.test(l.url) ? '<span class="help" style="color:var(--bad)">Use a full https:// address, or a page on the site starting with /.</span>' : '<span class="help">A full address (https://…), or a page on the website starting with /, e.g. <code>/apply</code>.</span>'}</div>
+        <label class="req" style="font-size:13px;margin:-4px 0 12px"><input type="checkbox" id="link-newtab"${l.newTab ? ' checked' : ''}> Open in a new tab</label>`
+      : fText('privacy', 'Small print under the button', { multiline: true, max: 300 })) +
+    `<h3 class="sub">Image</h3>${imagePanel(p)}` + (link ? '' :
     `<h3 class="sub">After they sign up</h3>` +
     fText('success.headline', 'Thank-you headline', { max: 160 }) +
     fText('success.body', 'Thank-you text', { multiline: true, max: 600 }) +
-    `<div class="two">${fText('success.linkText', 'Button (optional)', { max: 60, placeholder: 'e.g. Book a call' })}${fText('success.linkUrl', 'Button link', { max: 500, placeholder: 'https://…' })}</div>`;
+    `<div class="two">${fText('success.linkText', 'Button (optional)', { max: 60, placeholder: 'e.g. Book a call' })}${fText('success.linkUrl', 'Button link', { max: 500, placeholder: 'https://…' })}</div>`);
 }
 
 function imagePanel(p) {
@@ -365,7 +379,11 @@ function propSelect(f) {
 }
 
 function formPanel(p) {
-  return `<p class="help" style="margin-top:0">Every sign-up is created or updated in HubSpot with <b>company_tag = Pacific Discovery</b> and <b>Lead status = New</b>, and lifecycle stage <b>Lead</b> if they're not already further along. A note on the contact records the popup and page.</p>` +
+  if (isLink(p)) {
+    return `<div class="notice notice--info">This popup just opens a link, so it has no form and sends no emails.</div>
+      <p class="help">To collect details instead, go to <b>Content</b> and choose <b>Collect their details</b>. The form you set up before is kept.</p>`;
+  }
+  return `<p class="help" style="margin-top:0">Every sign-up is created or updated in HubSpot with <b>company_tag = Pacific Discovery</b> and <b>Lead status = New lead</b>, and lifecycle stage <b>Lead</b> if they're not already further along. A note on the contact records the popup and page.</p>` +
     p.fields.map((f, i) => {
       const d = def(f.key);
       const isSel = d.type === 'select';
@@ -454,6 +472,19 @@ function wirePanel(box) {
   const clr = box.querySelector('#img-clear');
   if (clr) clr.onclick = () => { p.image = ''; markDirty(); renderPanel(); };
   box.querySelectorAll('[data-imgpos]').forEach((b) => b.onclick = () => { p.imagePos = b.dataset.imgpos; markDirty(); renderPanel(); });
+  // form or link
+  box.querySelectorAll('[data-action]').forEach((b) => b.onclick = () => {
+    if ((p.action || 'form') === b.dataset.action) return;
+    p.action = b.dataset.action;
+    ensureLink(p);
+    // A form's default button text reads wrong on a plain link, and vice versa.
+    if (p.action === 'link' && p.button === (S.blank && S.blank.button)) p.button = 'Find out more';
+    markDirty(); renderPanel();
+  });
+  const nt = box.querySelector('#link-newtab');
+  if (nt) nt.onchange = () => { ensureLink(p).newTab = nt.checked; markDirty(); };
+  const lu = box.querySelector('#f-link_url');
+  if (lu) lu.addEventListener('change', () => renderPanel());
   // form fields
   box.querySelectorAll('[data-fon]').forEach((c) => c.onchange = () => { field(c.dataset.fon).on = c.checked; markDirty(); renderPanel(); });
   box.querySelectorAll('[data-freq]').forEach((c) => c.onchange = () => { field(c.dataset.freq).required = c.checked; markDirty(); });

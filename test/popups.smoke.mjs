@@ -228,6 +228,54 @@ const box = await mob.locator("[data-pd-popup]").locator(".card").boundingBox();
 ok(box && box.width >= 380 && Math.round(box.y + box.height) >= 795, "full-width bottom sheet on phones");
 await shot(mob, "popup-phone");
 
+// ── a link popup: no form, just a button that goes somewhere ─────────────
+await page.bringToFront();
+await page.locator("#btn-new").click();
+await page.waitForSelector("#view-editor:not(.hidden)");
+await page.locator('.tabs [data-tab="content"]').click();
+await page.locator('[data-action="link"]').click();
+ok(await page.locator('[data-path="privacy"]').count() === 0, "no small print for a link popup");
+ok(!(await page.locator("#panel").textContent()).includes("After they sign up"), "no thank-you section");
+await page.locator('[data-path="headline"]').fill("Early-bird pricing ends Friday");
+await page.locator('[data-path="button"]').fill("See the offer");
+await page.locator("#f-link_url").fill("/apply");
+await page.locator("#link-newtab").uncheck();
+await page.waitForTimeout(400);
+const pv = await page.evaluate(() => {
+  const r = document.querySelector("#frame").contentDocument.querySelector("[data-pd-popup]").shadowRoot;
+  return { form: !!r.querySelector("form"), a: r.querySelector("a.go")?.getAttribute("href"), text: r.querySelector("a.go")?.textContent };
+});
+ok(!pv.form && pv.a === "/apply" && pv.text === "See the offer", "preview shows a link button and no form");
+await page.locator('.tabs [data-tab="form"]').click();
+ok((await page.locator("#panel").textContent()).includes("no form and sends no emails"), "Form tab explains there is no form");
+await page.locator('.tabs [data-tab="where"]').click();
+await page.locator('[name=pmode][value=include]').check();
+await page.locator("#prules").fill("/offers");
+await page.locator("#t-delay").fill("1");
+await page.locator("#btn-save").click();
+await page.waitForFunction(() => document.querySelector("#ed-save").textContent.startsWith("Saved"));
+await page.locator(".bar .switch").click();
+await page.waitForFunction(() => document.querySelector("#ed-on-lbl").textContent === "On");
+const lp = db.popups.find((x) => x.action === "link");
+ok(lp && lp.enabled && lp.link.url === "/apply", "link popup saved and on");
+await shot(page, "popup-link-editor");
+await page.locator("#btn-back").click();
+await page.waitForSelector("table.list");
+ok((await page.locator("table.list").textContent()).includes("link, no form"), "list marks it as a link popup");
+
+const site3 = await ctx.newPage();
+site3.on("pageerror", (e) => errors.push(`site3: ${e.message}`));
+await site3.goto(`${SITE}/offers`);
+await site3.waitForSelector("[data-pd-popup]", { state: "attached", timeout: 4000 });
+const lr = (sel) => site3.locator("[data-pd-popup]").locator(sel);
+ok((await lr(".h").textContent()) === "Early-bird pricing ends Friday", "link popup shows on its page");
+ok(await lr("form").count() === 0 && await lr("input").count() === 0, "no form on the website either");
+await shot(site3, "popup-link-site");
+const before = submits.length;
+await Promise.all([site3.waitForURL(`${SITE}/apply`), lr("a.go").click()]);
+ok(submits.length === before, "clicking sends nothing to HubSpot");
+ok(await site3.evaluate((id) => (JSON.parse(localStorage.getItem("pdpop:" + id) || "{}").done === 1), lp.id), "clicked through: not shown again");
+
 ok(errors.length === 0, `no page errors: ${errors.join(" | ")}`);
 await browser.close();
 console.log(`popups smoke: ${passed} assertions passed`);

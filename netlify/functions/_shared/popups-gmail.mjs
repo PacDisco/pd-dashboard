@@ -149,7 +149,7 @@ export function notificationEmail(popup, values, page, contact) {
     ...rows.map(([l, v]) => `${l}: ${v}`),
     "",
     `Page: ${page?.uri || "—"}`,
-    `${status}. Lead status: New.`,
+    `${status}. Lead status: New lead.`,
     hsUrl ? `Open in HubSpot: ${hsUrl}` : "",
     "",
     "Reply to this email to answer them directly.",
@@ -161,7 +161,7 @@ export function notificationEmail(popup, values, page, contact) {
 <table cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;border:1px solid #e1e6e8">
 ${rows.map(([l, v, k]) => `<tr><td style="background:#f4f6f7;width:38%;font-weight:bold;border-bottom:1px solid #e1e6e8">${esc(l)}</td><td style="border-bottom:1px solid #e1e6e8">${k === "email" ? `<a href="mailto:${esc(v)}">${esc(v)}</a>` : esc(v)}</td></tr>`).join("\n")}
 </table>
-<p style="margin:16px 0 4px;font-size:13px;color:#5f666b">Page: ${page?.uri ? `<a href="${esc(page.uri)}">${esc(page.uri)}</a>` : "—"}<br>${esc(status)} · Lead status: New</p>
+<p style="margin:16px 0 4px;font-size:13px;color:#5f666b">Page: ${page?.uri ? `<a href="${esc(page.uri)}">${esc(page.uri)}</a>` : "—"}<br>${esc(status)} · Lead status: New lead</p>
 ${hsUrl ? `<p style="margin:18px 0"><a href="${esc(hsUrl)}" style="display:inline-block;background:#288195;color:#fff;text-decoration:none;padding:10px 18px;border-radius:999px;font-weight:bold">Open in HubSpot</a></p>` : ""}
 <p style="font-size:12px;color:#8a9196">Reply to this email to answer ${esc(values.firstname || "them")} directly.</p></div>`;
   return { subject, text, html };

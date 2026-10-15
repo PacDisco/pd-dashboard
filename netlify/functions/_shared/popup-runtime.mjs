@@ -105,6 +105,10 @@ export function popupRuntime(win, doc, CFG, OPTS, matchPage) {
     ".go:active{transform:translateY(1px)}",
     ".go:disabled{opacity:.6;cursor:wait}",
     ".bar .go{margin-top:20px;flex:none}",
+    "a.go{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;align-self:flex-start}",
+    ".cta{display:flex;flex-direction:column;margin:0}",
+    ".bar .cta{flex:none}",
+    ".bar a.go{margin-top:0}",
     ".privacy{margin:4px 0 0;font-size:11.5px;color:#6b7176;line-height:1.45}",
     ".bar .privacy{flex-basis:100%;margin:0}",
     ".err{margin:0;font-size:13px;color:#b03a22}",
@@ -131,6 +135,7 @@ export function popupRuntime(win, doc, CFG, OPTS, matchPage) {
     ".slide{right:10px;left:10px;bottom:10px;width:auto}",
     ".bar .content{flex-direction:column;align-items:stretch;gap:12px;padding:18px 20px}",
     ".bar .go{margin-top:0;width:100%}",
+    "a.go{align-self:stretch}",
     ".row{flex-direction:column}",
     "}",
     "@media (prefers-reduced-motion:reduce){.ov,.card{animation:none}}",
@@ -170,6 +175,15 @@ export function popupRuntime(win, doc, CFG, OPTS, matchPage) {
       (p.privacy ? '<p class="privacy">' + esc(p.privacy) + "</p>" : "") + "</form>";
   }
 
+  // A link popup: no form, just the button. It's a real <a>, so it behaves like
+  // any link (middle-click, long-press, screen readers announce it as a link).
+  function linkHtml(p) {
+    var l = p.link || {};
+    return '<div class="cta"><a class="go" href="' + esc(l.url || "#") + '"' +
+      (l.newTab ? ' target="_blank" rel="noopener"' : "") + ">" + esc(p.button || "Find out more") + "</a></div>";
+  }
+  function actionHtml(p) { return p.action === "link" ? linkHtml(p) : formHtml(p); }
+
   function show(p) {
     if (active) return;
     var host = doc.createElement("div");
@@ -182,8 +196,8 @@ export function popupRuntime(win, doc, CFG, OPTS, matchPage) {
     var intro = (p.eyebrow ? '<p class="eyebrow">' + esc(p.eyebrow) + "</p>" : "") +
       '<h2 class="h" id="pdp-h">' + esc(p.headline) + "</h2>" + (p.body ? '<p class="body">' + nl(p.body) + "</p>" : "");
     var content = layout === "bar"
-      ? '<div class="content"><div class="intro">' + intro + "</div>" + formHtml(p) + "</div>"
-      : '<div class="content">' + intro + formHtml(p) + "</div>";
+      ? '<div class="content"><div class="intro">' + intro + "</div>" + actionHtml(p) + "</div>"
+      : '<div class="content">' + intro + actionHtml(p) + "</div>";
     var card = '<div class="card ' + layout + (side ? " side" : "") + '" role="dialog" aria-labelledby="pdp-h"' +
       (layout === "modal" ? ' aria-modal="true"' : "") + ' style="--accent:' + esc(p.accent || "#F15B39") + '">' +
       '<button class="x" type="button" aria-label="Close">&times;</button>' + media + content + "</div>";
@@ -249,7 +263,19 @@ export function popupRuntime(win, doc, CFG, OPTS, matchPage) {
       if (h) h.focus();
     }
 
-    form.addEventListener("submit", function (e) {
+    var cta = root.querySelector("a.go");
+    if (cta) {
+      cta.addEventListener("click", function (e) {
+        if (preview) { e.preventDefault(); if (OPTS.onClick) OPTS.onClick(p.link); return; }
+        // Clicked through: they've seen it and acted, so don't show it again.
+        store(p.id, { done: 1 });
+        track("pd_popup_click", p, { linkUrl: (p.link && p.link.url) || "" });
+        // In this tab the page is about to change; in a new tab, tidy up here.
+        if (p.link && p.link.newTab) close("done");
+      });
+    }
+
+    if (form) form.addEventListener("submit", function (e) {
       e.preventDefault();
       var data = {};
       var bad = false;

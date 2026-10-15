@@ -210,3 +210,35 @@ test("team notification email", async () => {
   mem.delete("gmail");
   assert.equal(await notifyTeam(pop, values, {}, null, store, { sendMail: async () => true }), false, "no mailbox connected");
 });
+
+test("link popups: no form, no HubSpot, a button that goes somewhere", async () => {
+  const base = { ...blankPopup("Early bird"), enabled: true };
+  const link = normalizePopup({ ...base, action: "link", link: { url: "/apply", newTab: true } });
+  assert.equal(link.action, "link");
+  assert.deepEqual(link.link, { url: "/apply", newTab: true });
+  assert.equal(normalizePopup({ ...base, action: "weird" }).action, "form", "unknown → form");
+  assert.equal(normalizePopup(base).action, "form", "existing popups stay forms");
+  assert.equal(normalizePopup({ ...base, action: "link", link: { url: "javascript:alert(1)" } }).link.url, "", "unsafe links dropped");
+
+  assert.match(validateDoc({ popups: [normalizePopup({ ...base, action: "link" })] }), /needs a link/);
+  assert.equal(validateDoc({ popups: [normalizePopup({ ...base, action: "link", enabled: false })] }), null, "a draft can be missing its link");
+  // Bad team email on a link popup doesn't block it — it never sends any.
+  assert.equal(validateDoc({ popups: [{ ...link, notify: { emails: ["nope"] } }] }), null);
+
+  const [cfg] = publicConfig({ popups: [link] }, "https://dash.test");
+  assert.equal(cfg.action, "link");
+  assert.deepEqual(cfg.fields, [], "no fields are sent to the website");
+  assert.equal(cfg.success, null);
+  assert.equal(cfg.link.url, "/apply");
+
+  // The runtime draws a real link, not a form.
+  const { popupRuntime } = await import("../netlify/functions/_shared/popup-runtime.mjs");
+  assert.ok(popupRuntime.toString().includes('class="go" href="'), "link button markup present");
+});
+
+test("every sign-up is a New lead in HubSpot", () => {
+  const pop = normalizePopup(blankPopup());
+  // NEW is the internal value of the portal's "New lead" option.
+  assert.equal(hubspotProperties(pop, { email: "a@b.co" }, null).hs_lead_status, "NEW");
+  assert.equal(hubspotProperties(pop, { email: "a@b.co" }, { hs_lead_status: "Admissions", lifecyclestage: "opportunity" }).hs_lead_status, "NEW");
+});

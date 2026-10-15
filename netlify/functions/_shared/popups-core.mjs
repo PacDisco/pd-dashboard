@@ -14,6 +14,11 @@ export const LAYOUTS = ["modal", "slide", "bar"];
 export const IMAGE_POS = ["top", "side", "none"];
 export const DEVICES = ["all", "desktop", "mobile"];
 export const PAGE_MODES = ["all", "include", "exclude"];
+// What the popup's button does:
+//   form  collect details → HubSpot (and optionally email the team)
+//   link  no form at all: the button just opens a page (an offer, an
+//         application, a booking link). Nothing is sent to HubSpot or emailed.
+export const ACTIONS = ["form", "link"];
 export const MAX_POPUPS = 30;
 export const MAX_DOC_BYTES = 256 * 1024;
 
@@ -120,6 +125,8 @@ export function normalizePopup(p = {}) {
     body: str(p.body, 600),
     button: str(p.button, 60) || "Submit",
     privacy: str(p.privacy, 300),
+    action: pick(p.action, ACTIONS, "form"),
+    link: { url: safeUrl(p.link?.url), newTab: bool(p.link?.newTab, false) },
     success: { headline: str(s.headline, 160) || "Thank you!", body: str(s.body, 600), linkText: str(s.linkText, 60), linkUrl: safeUrl(s.linkUrl) },
     fields,
     pages: { mode: pick(p.pages?.mode, PAGE_MODES, "all"), rules },
@@ -167,6 +174,8 @@ export function validateDoc(doc) {
     ids.add(p.id);
     if (p.enabled && !p.headline) return `“${p.name}” needs a headline before it can be switched on.`;
     if (p.enabled && p.pages.mode !== "all" && !p.pages.rules.length) return `“${p.name}” is set to specific pages but has no pages listed.`;
+    if (p.enabled && p.action === "link" && !p.link.url) return `“${p.name}” needs a link for its button before it can be switched on.`;
+    if (p.action === "link") continue; // no form, so the field and email checks don't apply
     const badEmail = p.notify.emails.find((e) => !isEmail(e));
     if (badEmail) return `“${p.name}”: “${badEmail}” isn't a valid email address for notifications.`;
     for (const f of p.fields) {
@@ -223,17 +232,22 @@ export function publicConfig(doc, origin) {
     headline: p.headline,
     body: p.body,
     button: p.button,
-    privacy: p.privacy,
-    success: p.success,
-    fields: p.fields.filter((f) => f.on).map((f) => {
-      const def = FIELD_DEFS.find((d) => d.key === f.key);
-      return { key: f.key, label: f.label, type: def.type, required: f.required, autocomplete: def.autocomplete || "", ...(f.options ? { options: f.options } : {}) };
-    }),
+    action: p.action,
+    ...(p.action === "link"
+      ? { link: p.link, privacy: "", success: null, fields: [] }
+      : { privacy: p.privacy, success: p.success, fields: publicFields(p) }),
     pages: p.pages,
     devices: p.devices,
     trigger: p.trigger,
     frequency: p.frequency,
   }));
+}
+
+function publicFields(p) {
+  return p.fields.filter((f) => f.on).map((f) => {
+      const def = FIELD_DEFS.find((d) => d.key === f.key);
+      return { key: f.key, label: f.label, type: def.type, required: f.required, autocomplete: def.autocomplete || "", ...(f.options ? { options: f.options } : {}) };
+  });
 }
 
 /** Uploaded images are stored as "media:<key>" and served by /api/popup-embed. */

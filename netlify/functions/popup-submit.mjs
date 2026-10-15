@@ -84,6 +84,8 @@ export default async (req, context) => {
   const doc = await readDoc(store);
   const popup = doc.popups.find((p) => p.id === body?.popup && p.enabled);
   if (!popup) return respond({ error: "This form is no longer available. Please refresh the page." }, 410, ok);
+  // A link-only popup has no form, so nothing should ever be posted for it.
+  if (popup.action === "link") return respond({ error: "This popup doesn't collect details." }, 400, ok);
 
   const { errors, values } = checkSubmission(popup, body.fields || {});
   if (Object.keys(errors).length) return respond({ error: "Please check the highlighted fields.", errors }, 400, ok);
