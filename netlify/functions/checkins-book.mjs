@@ -5,6 +5,7 @@ import {
   getSettings, hostOf, busyIntervals, isFree, weeklyOccurrences, candidateSlots,
   utcToZoned, localIso, createEvent, json, portalKeyOk,
 } from "./_shared/checkins.mjs";
+import { bumpBadgeCounter } from "./_shared/tile-badges.mjs";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -75,6 +76,7 @@ export default async (req) => {
     const staff = settings.people.filter((p) => !p.host).map((p) => ({ email: p.email, displayName: p.name || undefined }));
     const created = await createEvent(host, cfg.calendarId, buildEvent(b, cfg, staff));
     console.log(`[checkins-book] ${b.email} booked ${new Date(b.start).toISOString()} x${b.repeat} → ${created.id}`);
+    await bumpBadgeCounter("instructor-checkins"); // landing-page tile bubble; never throws
     return json({ ok: true, start: new Date(b.start).toISOString(), weeks: b.repeat, meetLink: created.hangoutLink || null });
   } catch (e) {
     console.error("[checkins-book]", e.message);

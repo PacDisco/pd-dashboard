@@ -145,6 +145,7 @@
     }
     .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .icon {
+      position: relative;
       width: 44px; height: 44px; border-radius: 10px;
       display: grid; place-items: center; font-size: 22px;
       background: linear-gradient(135deg, rgba(124,155,255,.18), rgba(110,231,183,.14));
@@ -159,6 +160,19 @@
     .card p { margin: 0 0 16px; color: var(--text-dim); font-size: 14px; line-height: 1.5; flex: 1; }
     .card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-dim); }
     .open { color: var(--accent); font-weight: 600; }
+    /* "New submissions since you last opened it" bubble — see TILE-BADGES.md */
+    .tile-badge {
+      position: absolute; top: -8px; right: -10px;
+      min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box;
+      border-radius: 999px; background: #f15b39; color: #fff;
+      font: 700 12px/22px -apple-system, "Segoe UI", Roboto, sans-serif;
+      text-align: center; letter-spacing: 0;
+      box-shadow: 0 0 0 3px var(--card), 0 2px 6px rgba(0,0,0,.35);
+      animation: badge-pop .25s ease-out;
+    }
+    .card:hover .tile-badge { box-shadow: 0 0 0 3px var(--card-hover), 0 2px 6px rgba(0,0,0,.35); }
+    @keyframes badge-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .tile-badge { animation: none; } }
     .role-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
 
     .empty, .loading, .gate {
@@ -462,7 +476,8 @@
       grants: {},              // saved server state: { email: [slug, …] }
       draftGrants: null,       // in-flight edits in admin modal
       peopleFilter: "",
-      users: []                // loaded on admin modal open
+      users: [],               // loaded on admin modal open
+      badges: {}               // { slug: { count, capped, label } } from /api/tile-badges
     };
 
     // --- Auth lifecycle ---
@@ -470,7 +485,7 @@
       if (!window.netlifyIdentity) { showGate("Netlify Identity didn't load."); return; }
       netlifyIdentity.on("init", u => u ? onLogin(u) : showGate());
       netlifyIdentity.on("login", u => { netlifyIdentity.close(); onLogin(u); });
-      netlifyIdentity.on("logout", () => { STATE.user = null; STATE.roles = []; showGate(); });
+      netlifyIdentity.on("logout", () => { STATE.user = null; STATE.roles = []; STATE.badges = {}; showGate(); });
       netlifyIdentity.init();
     });
 
@@ -573,7 +588,50 @@
       buildChips();
       $("toolbar").style.display = "";
       draw();
+      loadBadges();
     }
+
+    // --- New-submission bubbles ---
+    // Counts come from /api/tile-badges; they clear when the dashboard is
+    // opened (the edge gate records the visit, and the click below does too in
+    // case the gate's background call is dropped).
+    let badgesLoadedAt = 0;
+    async function loadBadges() {
+      if (!STATE.user) return;
+      badgesLoadedAt = Date.now();
+      try {
+        const res = await api("GET", "/api/tile-badges");
+        if (!res.ok) return;
+        const data = await safeJson(res);
+        STATE.badges = data.badges || {};
+        draw();
+      } catch (err) {
+        console.warn("tile badges:", err);
+      }
+    }
+    async function markSeen(slug) {
+      const b = STATE.badges[slug];
+      if (b) STATE.badges[slug] = { ...b, count: 0, label: "" };
+      try {
+        const headers = { "Content-Type": "application/json" };
+        try { headers.Authorization = `Bearer ${await STATE.user.jwt()}`; } catch {}
+        fetch("/api/tile-badges", {
+          method: "POST", headers, credentials: "include", keepalive: true,
+          body: JSON.stringify({ slug }),
+        }).catch(() => {});
+      } catch {}
+    }
+    $("grid").addEventListener("click", e => {
+      const card = e.target.closest("a.card[data-slug]");
+      if (card && STATE.badges[card.dataset.slug]?.count) markSeen(card.dataset.slug);
+    });
+    // Coming back with the browser's Back button restores the old page from
+    // cache — refresh so the bubble for the dashboard just visited is gone.
+    window.addEventListener("pageshow", e => { if (e.persisted) loadBadges(); });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && Date.now() - badgesLoadedAt > 30000) loadBadges();
+    });
+    setInterval(() => { if (document.visibilityState === "visible") loadBadges(); }, 2 * 60 * 1000);
 
     // /api/config already returns only what this person may open (and the edge
     // gate enforces it on the way in), so there's nothing left to filter here.
@@ -616,8 +674,11 @@
         const tag = STATE.isAdmin
           ? `<span class="role-tag">${peopleWithAccess(d.slug)}</span>`
           : "";
-        return `<a class="card" href="${esc(href)}" style="--c1:${c1};--c2:${c2}">
-          <div class="card-top"><div class="icon" style="background:linear-gradient(135deg, ${c1}33, ${c2}22)">${icon}</div>${cat}</div>
+        const b = STATE.badges[d.slug];
+        const newText = b && b.count ? `${b.label || b.count} new since you last opened it` : "";
+        const bubble = newText ? `<span class="tile-badge" aria-hidden="true">${esc(b.label || b.count)}</span>` : "";
+        return `<a class="card" href="${esc(href)}" data-slug="${esc(d.slug||"")}" style="--c1:${c1};--c2:${c2}"${newText ? ` title="${esc(newText)}" aria-label="${esc((d.title||d.slug||"") + " — " + newText)}"` : ""}>
+          <div class="card-top"><div class="icon" style="background:linear-gradient(135deg, ${c1}33, ${c2}22)">${icon}${bubble}</div>${cat}</div>
           <h3>${esc(d.title||d.slug||"Untitled")}</h3>
           <p>${esc(d.description||"")}</p>
           <div class="card-footer">${tag}<span class="open">Open →</span></div>

@@ -10,6 +10,7 @@
     "build": "node scripts/build-manifest.js",
     "test": "node test/instructor-checklist.test.mjs",
     "test:access": "node test/dashboard-access.test.mjs",
+    "test:badges": "node test/tile-badges.test.mjs",
     "test:access-ui": "node test/dashboard-access.smoke.mjs",
     "test:cash": "node test/field-cash.test.mjs",
     "test:cash-ui": "node test/field-cash.smoke.mjs",

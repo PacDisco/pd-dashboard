@@ -13,6 +13,7 @@
 
 import { getStore } from "@netlify/blobs";
 import { ADMIN_ROLE, canAccess, normalizeGrants } from "./lib/dashboard-access.js";
+import { BADGED_SLUGS, isDashboardRoot } from "./lib/tile-badges.js";
 
 const STORE = "dashboards";
 const GRANTS_KEY = "grants";
@@ -32,7 +33,10 @@ export default async (request, context) => {
   const roles = user.app_metadata?.roles || [];
 
   // Admin always passes.
-  if (roles.includes(ADMIN_ROLE)) return context.next();
+  if (roles.includes(ADMIN_ROLE)) {
+    noteVisit(request, context, slug, url);
+    return context.next();
+  }
 
   const store = openEdgeStore();
 
@@ -49,6 +53,7 @@ export default async (request, context) => {
   }
 
   if (canAccess({ email: user.email, roles, slug, dashboard, grants })) {
+    noteVisit(request, context, slug, url);
     return context.next();
   }
   return unauthorized("You haven't been given access to this dashboard.");
@@ -108,6 +113,25 @@ async function loadDashboardEntry(slug, store, request) {
     console.error("auth-gate discovery fetch error", err);
   }
   return null;
+}
+
+// Opening a badged dashboard clears its "new submissions" bubble on the
+// landing page (see TILE-BADGES.md). Done here rather than in each dashboard
+// so bookmarks and direct links count too. Fire-and-forget: it must never
+// slow down or break the page itself.
+function noteVisit(request, context, slug, url) {
+  try {
+    if (request.method !== "GET") return;
+    if (!BADGED_SLUGS.has(slug) || !isDashboardRoot(url.pathname, slug)) return;
+    const dest = request.headers.get("sec-fetch-dest");
+    if (dest && dest !== "document") return;
+    const p = fetch(new URL("/api/tile-badges", url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: request.headers.get("cookie") || "" },
+      body: JSON.stringify({ slug }),
+    }).catch(() => {});
+    if (typeof context.waitUntil === "function") context.waitUntil(p);
+  } catch {}
 }
 
 async function readUserFromRequest(request) {
