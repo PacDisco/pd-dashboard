@@ -13,6 +13,18 @@
 - Scheduled team reports can go to up to 10 addresses (e.g. accounts@).
 - Admins see everyone's schedules (so a report left running by someone who's left can be paused or deleted).
 
+**Every report leads with "Time by project"** — each project's code, brand, entries, hours and % of the period. Team reports add each project's owner and head-count, plus a "Projects by person" breakdown. The email body shows the same project table. The chosen grouping (day, week, brand, person) still gets its own summary underneath.
+
+## Personal projects
+
+Everyone now has the **Projects** tab.
+- Anyone can add a project. A non-admin's project is **personal**: it appears only in their own timer/entry pickers (under "My projects") and only they — or an admin — can rename, archive or delete it. Nobody else can log time to it.
+- Team projects (made by an admin) are read-only to everyone else, as before.
+- Reviewers and admins see everyone's personal projects, labelled with the owner, so reports and filters cover them.
+- An admin can click **Make team project** to open a personal project up to everyone; existing time stays put.
+- Names are unique per list: a personal project can't copy a team project's name or one of the owner's own, but two people can each have their own "Research".
+- Requires `MIGRATION-time-projects-owner.sql`. Until it's run everything still works; adding a personal project just asks for the migration.
+
 The quick **⭳ CSV** button is unchanged — it's still the Bulk-import-compatible layout of the week on screen.
 
 ## How the emails work
@@ -32,7 +44,7 @@ Same rule as the rest of the tracker: entries are exact; billable = each person'
 
 ## Deploy
 
-1. Run `MIGRATION-time-report-schedules.sql` (Neon SQL editor or `netlify db exec < MIGRATION-time-report-schedules.sql`). Idempotent.
+1. Run `MIGRATION-time-projects-owner.sql` and `MIGRATION-time-report-schedules.sql` (Neon SQL editor or `netlify db exec < MIGRATION-time-report-schedules.sql`). Idempotent.
 2. Deploy. `npm install` picks up `jspdf` + `jspdf-autotable` (same versions as the cash-forecast vendored copies), used server-side for PDFs.
 3. Make sure Gmail is connected in the Popups dashboard.
 
@@ -52,5 +64,5 @@ Same rule as the rest of the tracker: entries are exact; billable = each person'
 ## Tests
 
 - `npm run test:time-access` — permission table includes the new actions (team-report = review).
-- `npm run test:time-reports-db` — 24 checks against real Postgres: pinning, filters, billable maths, schedule saving rules, exactly-once sending, retry, role loss, auto-pause.
+- `npm run test:time-reports-db` — 36 checks (incl. personal-project permissions and the project tables) against real Postgres: pinning, filters, billable maths, schedule saving rules, exactly-once sending, retry, role loss, auto-pause.
 - `npm run test:time-reports-ui` — Chromium end-to-end against the real handler + Postgres: contractor CSV/PDF + schedule; admin filtered team report, fortnightly schedule, edit, send-now failure, pause, delete.

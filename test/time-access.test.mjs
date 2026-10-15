@@ -91,7 +91,7 @@ test("every route has a recorded decision", () => {
 test("money moves only for an admin", () => {
   // The four that change what someone is owed, plus the migration that rewrites
   // recorded minutes.
-  for (const action of ["save-contractor", "save-project", "delete-project", "push-payment", "restore-exact"]) {
+  for (const action of ["save-contractor", "push-payment", "restore-exact"]) {
     assert.equal(allows(ADMIN, action), true, `admin should do ${action}`);
     assert.equal(allows(REVIEWER, action), false, `a reviewer must NOT ${action}`);
     assert.equal(allows(OPERATIONS, action), false);
@@ -118,6 +118,19 @@ test("anyone can export their own report; the team report needs review", () => {
   assert.equal(allows(ADMIN, "team-report"), true);
   assert.equal(allows(OPERATIONS, "team-report"), false, "operations must NOT export the team's hours");
   assert.equal(allows(CONTRACTOR, "team-report"), false);
+});
+
+test("projects: anyone may add their own; team projects are guarded inside the handler", () => {
+  // Personal projects (owner_email) mean save/delete-project reach the handler
+  // for everyone. The handler then refuses a non-admin touching a team project
+  // or someone else's — pinned in time-reports.db.test.mjs against a database.
+  for (const action of ["save-project", "delete-project"]) {
+    assert.equal(ACTION_ACCESS[action], "self");
+    assert.equal(allows(CONTRACTOR, action), true);
+  }
+  assert.match(SOURCE, /if \(!caller\.isManager && !ownsProject\(caller, cur\)\)/, "edit guard");
+  assert.match(SOURCE, /if \(!caller\.isManager && !ownsProject\(caller, found\[0\]\)\)/, "delete guard");
+  assert.match(SOURCE, /const owner = caller\.isManager && body\.shared !== false \? null : caller\.email;/, "a non-admin's new project is always personal");
 });
 
 test("approving is allowed but paying is not — that's the whole seam", () => {

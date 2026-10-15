@@ -51,6 +51,7 @@ await q(`
     source text, locked boolean NOT NULL DEFAULT false, approval_id int, import_batch_id uuid, brand text);
 `);
 await q(readFileSync(path.join(root, 'MIGRATION-time-report-schedules.sql'), 'utf8'));
+await q(readFileSync(path.join(root, 'MIGRATION-time-projects-owner.sql'), 'utf8'));
 await q(`INSERT INTO time_contractors (email, full_name, hourly_rate) VALUES
   ('jake@pd.test','Jake',80), ('sam@pd.test','Sam Rivers',60), ('ana@pd.test','Ana Mercer',55)`);
 await q(`INSERT INTO time_projects (name, code, brand) VALUES
@@ -131,6 +132,11 @@ await session('contractor', async (page) => {
   const buf = await readDownload(pdf);
   assert.equal(buf.subarray(0, 5).toString(), '%PDF-');
 
+  // The PDF/CSV both lead with time per project.
+  await page.click('#r-fmt-csv');
+  const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#r-download')]);
+  assert.match((await readDownload(dl2)).toString(), /^Time by project,Code,Brand,Entries,Hours,% of total/m);
+
   // Schedule it weekly — recipients aren't editable, it's me.
   await page.selectOption('#r-freq', 'weekly');
   assert.equal(await page.locator('#r-to-emails').count(), 0, 'a personal report always goes to its owner');
@@ -140,6 +146,40 @@ await session('contractor', async (page) => {
   assert.match(rowText, /sam@pd\.test/);
   assert.match(rowText, /Week/);
   if (SHOT) await page.screenshot({ path: `${SHOT}/2-self-scheduled.png`, fullPage: true });
+
+  // ── personal projects ──
+  assert.equal(await page.isVisible('#tab-admin'), true, 'everyone gets the Projects tab now');
+  await page.click('#tab-admin');
+  await page.waitForSelector('#proj-rows tr');
+  assert.equal(await page.isVisible('#rh-section'), false, 'admin migration tool stays hidden');
+  assert.equal(await page.isVisible('#p-team'), false, 'no team-project option for a contractor');
+  assert.equal(await page.locator('#proj-rows tr', { hasText: 'Website rebuild' }).locator('input').count(), 0,
+    'team projects are read-only to a contractor');
+  await page.fill('#p-name', 'Client research');
+  await page.fill('#p-code', 'RES');
+  await page.selectOption('#p-brand', 'Pacific Discovery');
+  await page.click('#p-add');
+  await page.waitForSelector('#proj-rows tr:has-text("You")');
+  const mineRow = page.locator('#proj-rows tr', { has: page.locator('.pill-own') });
+  assert.equal(await mineRow.locator('input.fld').first().inputValue(), 'Client research');
+  // It's in the timer picker, under My projects.
+  const groups = await page.$$eval('#t-project optgroup', (gs) => gs.map((g) => g.label + ':' + [...g.children].map((o) => o.textContent).join('|')));
+  assert.ok(groups.some((g) => /^My projects:Client research \(RES\)$/.test(g)), groups.join(' / '));
+  if (SHOT) await page.screenshot({ path: `${SHOT}/5-my-projects.png`, fullPage: true });
+
+  // Log 30 min to it by hand and see it in the report's project table.
+  await page.click('#tab-week');
+  await page.click('#btn-manual');
+  await page.selectOption('#m-project', { label: 'Client research (RES)' });
+  await page.fill('#m-start', '10:00');
+  await page.fill('#m-end', '10:30');
+  await page.click('#m-save');
+  await page.waitForSelector('#modal-root:empty', { state: 'attached' });
+  await page.click('#btn-report');
+  await page.waitForSelector('#r-download');
+  await page.click('#r-fmt-csv');
+  const [dl3] = await Promise.all([page.waitForEvent('download'), page.click('#r-download')]);
+  assert.match((await readDownload(dl3)).toString(), /^Client research,RES,Pacific Discovery,1,0\.50,/m);
 });
 
 // ── an admin builds a team report and a fortnightly email ───────────────────
@@ -194,6 +234,25 @@ await session('admin', async (page) => {
   assert.match(await row.textContent(), /accounts@example\.com/);
   assert.match(await row.textContent(), /by person · with amounts · PDF \+ CSV|by person · with amounts · CSV \+ PDF/);
 
+  // The team report's project table names the owner of a personal project, and
+  // splits each project by person.
+  await page.click('#btn-report');
+  await page.waitForSelector('#r-download');
+  await page.click('#r-fmt-csv');
+  await page.check('input[name="r-person"][value="1"]');
+  await page.$$eval('input[name="r-brand"]', (els) => els.forEach((e) => { e.checked = true; }));
+  const [dl4] = await Promise.all([page.waitForEvent('download'), page.click('#r-download')]);
+  const tcsv = (await readDownload(dl4)).toString();
+  assert.match(tcsv, /^Client research,RES,Pacific Discovery,Sam Rivers,1,1,0\.50,/m);
+  assert.match(tcsv, /^Project,Person,Entries,Hours/m);
+  if (SHOT) {
+    await page.click('#r-fmt-pdf');
+    const [p4] = await Promise.all([page.waitForEvent('download'), page.click('#r-download')]);
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(`${SHOT}/team.pdf`, await readDownload(p4));
+  }
+  await page.keyboard.press('Escape');
+
   // An admin also sees Sam's personal schedule under My week, flagged as hers.
   await page.click('#tab-week');
   assert.match(await page.textContent('#sched-self'), /set up by Sam Rivers/);
@@ -220,6 +279,16 @@ await session('admin', async (page) => {
   if (SHOT) await page.screenshot({ path: `${SHOT}/4-team-schedules.png`, fullPage: true });
   await row.locator('button', { hasText: 'delete' }).click();
   await page.waitForFunction(() => !/Payroll fortnight/.test(document.getElementById('sched-team').textContent));
+
+  // Projects tab: Sam's personal project shows with her name and can be opened up.
+  await page.click('#tab-admin');
+  await page.waitForSelector('#proj-rows tr:has-text("Sam Rivers")');
+  assert.equal(await page.isVisible('#rh-section'), true);
+  if (SHOT) await page.screenshot({ path: `${SHOT}/6-admin-projects.png`, fullPage: true });
+  await page.locator('#proj-rows tr', { hasText: 'Sam Rivers' }).locator('button', { hasText: 'Make team project' }).click();
+  await page.waitForFunction(() => !/Sam Rivers/.test(document.getElementById('proj-rows').textContent));
+  const shared = await q(`SELECT owner_email FROM time_projects WHERE name = 'Client research'`);
+  assert.equal(shared[0].owner_email, null);
 
   const left = await q(`SELECT scope, owner_email FROM time_report_schedules ORDER BY id`);
   assert.deepEqual(left, [{ scope: 'self', owner_email: 'sam@pd.test' }]);

@@ -36,8 +36,14 @@ const REPORT_BRAND_SQL =
 const REPORT_SELECT = `
   SELECT e.id, e.contractor_id, e.project_id, e.work_date, e.started_at, e.ended_at,
          e.minutes, e.description, e.source, e.locked, e.approval_id,
-         p.name AS project_name, p.code AS project_code,
+         p.name AS project_name, p.code AS project_code, p.brand AS project_brand,
          ${REPORT_BRAND_SQL} AS brand,
+         -- Personal projects (MIGRATION-time-projects-owner.sql). Read through
+         -- to_jsonb so this select still runs on a database that hasn't had
+         -- that migration yet — every project is then simply a team project.
+         to_jsonb(p)->>'owner_email' AS project_owner,
+         (SELECT COALESCE(oc.full_name, oc.email) FROM time_contractors oc
+           WHERE oc.email = to_jsonb(p)->>'owner_email') AS project_owner_name,
          c.email AS contractor_email, c.full_name AS contractor_name,
          c.hourly_rate, c.currency
   FROM time_entries e
@@ -339,6 +345,7 @@ function buildReport({ entries, options, scope, subject, tz, now = new Date() })
     });
 
   const minutes = rows.reduce((s, e) => s + (Number(e.minutes) || 0), 0);
+  const minutesTotal = minutes;
   const billable = people.reduce((s, p) => s + p.billable_minutes, 0);
 
   // Money totals only add up within one currency.
@@ -349,7 +356,24 @@ function buildReport({ entries, options, scope, subject, tz, now = new Date() })
   }
 
   const byBrand = summarise(rows, (e) => groupKey('brand', e)).sort((a, b) => b.minutes - a.minutes || a.sort.localeCompare(b.sort));
-  const byProject = summarise(rows, (e) => groupKey('project', e)).sort((a, b) => b.minutes - a.minutes || a.sort.localeCompare(b.sort));
+  // Time per project for the period — the table every report leads with.
+  const byProject = summarise(rows, (e) => groupKey('project', e))
+    .sort((a, b) => b.minutes - a.minutes || a.sort.localeCompare(b.sort))
+    .map((g) => {
+      const f = g.entries[0];
+      const peopleOn = summarise(g.entries, (e) => ({ key: `c${e.contractor_id}`, label: personName(e), sort: personName(e).toLowerCase() }))
+        .sort((a, b) => b.minutes - a.minutes || a.sort.localeCompare(b.sort));
+      return {
+        label: g.label,
+        code: f.project_id ? (f.project_code || '') : '',
+        brand: f.project_id ? (String(f.project_brand || '').trim() || NO_BRAND) : '',
+        owner: f.project_id ? (f.project_owner ? (f.project_owner_name || f.project_owner) : 'Team') : '',
+        minutes: g.minutes,
+        count: g.count,
+        share: minutesTotal ? g.minutes / minutesTotal : 0,
+        people: peopleOn.map((x) => ({ name: x.label, minutes: x.minutes, count: x.count })),
+      };
+    });
 
   const title = o.title || (scope === 'team' ? 'Team time report' : `Time report — ${subject || 'me'}`);
 
@@ -373,7 +397,7 @@ function buildReport({ entries, options, scope, subject, tz, now = new Date() })
     })),
     people,
     byBrand: byBrand.map((g) => ({ label: g.label, minutes: g.minutes, count: g.count })),
-    byProject: byProject.map((g) => ({ label: g.label, minutes: g.minutes, count: g.count })),
+    byProject,
     totals: { minutes, billable_minutes: billable, count: rows.length, money: moneyByCurrency },
   };
 }
@@ -402,13 +426,17 @@ function csvCell(v) {
 }
 const csvLine = (arr) => arr.map(csvCell).join(',');
 
-function summaryTitle(r) {
-  return r.options.group_by === 'none' ? 'Project' : GROUPS[r.options.group_by];
+const pct = (share) => `${(Math.round(share * 1000) / 10).toFixed(1)}%`;
+
+/** A second summary for the chosen grouping, when it isn't projects already. */
+function extraGroupSummary(r) {
+  const g = r.options.group_by;
+  if (g === 'none' || g === 'project') return null;
+  return { title: GROUPS[g], rows: r.groups.map((x) => ({ label: x.label, minutes: x.minutes, count: x.count })) };
 }
-function summaryRows(r) {
-  if (r.options.group_by === 'none') return r.byProject;
-  return r.groups.map((g) => ({ label: g.label, minutes: g.minutes, count: g.count }));
-}
+
+/** Team reports break each project down by who worked on it. */
+const showProjectPeople = (r) => r.scope === 'team' && r.people.length > 1 && r.byProject.length > 0;
 
 function toCsv(r) {
   const out = [];
@@ -426,7 +454,7 @@ function toCsv(r) {
     const grouped = r.options.group_by !== 'none' && !r.options.columns.includes(GROUP_COL[r.options.group_by]);
     // The group sits in its own first column rather than as header rows between
     // blocks, so the sheet still sorts and pivots as one table.
-    out.push(csvLine([...(grouped ? [summaryTitle(r)] : []), ...r.columns.map((c) => c.label)]));
+    out.push(csvLine([...(grouped ? [GROUPS[r.options.group_by]] : []), ...r.columns.map((c) => c.label)]));
     for (const g of r.groups) {
       for (const cells of g.rows) out.push(csvLine([...(grouped ? [g.label] : []), ...cells]));
     }
@@ -434,10 +462,28 @@ function toCsv(r) {
     out.push('');
   }
 
-  out.push(csvLine([`Hours by ${summaryTitle(r).toLowerCase()}`, 'Entries', 'Hours']));
-  for (const s of summaryRows(r)) out.push(csvLine([s.label, s.count, hours(s.minutes)]));
-  out.push(csvLine(['Total', r.totals.count, hours(r.totals.minutes)]));
+  // Time per project — always present, whatever the grouping.
+  const team = r.scope === 'team';
+  out.push(csvLine(['Time by project', 'Code', 'Brand', ...(team ? ['Owner', 'People'] : []), 'Entries', 'Hours', '% of total']));
+  for (const p of r.byProject) {
+    out.push(csvLine([p.label, p.code, p.brand, ...(team ? [p.owner, p.people.length] : []), p.count, hours(p.minutes), pct(p.share)]));
+  }
+  out.push(csvLine(['Total', '', '', ...(team ? ['', r.people.length] : []), r.totals.count, hours(r.totals.minutes), r.totals.count ? '100.0%' : '']));
   out.push('');
+
+  if (showProjectPeople(r)) {
+    out.push(csvLine(['Project', 'Person', 'Entries', 'Hours']));
+    for (const p of r.byProject) for (const x of p.people) out.push(csvLine([p.label, x.name, x.count, hours(x.minutes)]));
+    out.push('');
+  }
+
+  const extra = extraGroupSummary(r);
+  if (extra) {
+    out.push(csvLine([`Hours by ${extra.title.toLowerCase()}`, 'Entries', 'Hours']));
+    for (const x of extra.rows) out.push(csvLine([x.label, x.count, hours(x.minutes)]));
+    out.push(csvLine(['Total', r.totals.count, hours(r.totals.minutes)]));
+    out.push('');
+  }
 
   if (r.scope === 'team' || r.options.include_money) {
     const money = r.options.include_money;
@@ -534,17 +580,58 @@ function toPdf(r) {
   };
   const after = () => { y = doc.lastAutoTable.finalY + 20; };
 
-  // Summary for the chosen grouping (or by project when ungrouped).
-  section(`Hours by ${summaryTitle(r).toLowerCase()}`);
-  autoTable(doc, {
-    ...tableBase, startY: y,
-    head: [[pdfText(summaryTitle(r)), 'Entries', 'Hours']],
-    body: [...summaryRows(r).map((s) => [pdfText(s.label), String(s.count), hours(s.minutes)]),
-      [{ content: 'Total', styles: { fontStyle: 'bold' } }, { content: String(r.totals.count), styles: { fontStyle: 'bold' } },
-        { content: hours(r.totals.minutes), styles: { fontStyle: 'bold' } }]],
-    columnStyles: { 1: { halign: 'right', cellWidth: 60 }, 2: { halign: 'right', cellWidth: 70 } },
-  });
-  after();
+  const bold = (v) => ({ content: v, styles: { fontStyle: 'bold' } });
+  const team = r.scope === 'team';
+
+  // Time per project — every report leads with it.
+  section('Time by project');
+  {
+    const head = ['Project', 'Code', 'Brand', ...(team ? ['Owner', 'People'] : []), 'Entries', 'Hours', '%'];
+    const right = {};
+    for (let i = team ? 4 : 3; i < head.length; i++) right[i] = { halign: 'right' };
+    autoTable(doc, {
+      ...tableBase, startY: y,
+      head: [head],
+      body: [
+        ...r.byProject.map((p) => [pdfText(p.label), pdfText(p.code), pdfText(p.brand),
+          ...(team ? [pdfText(p.owner), String(p.people.length)] : []), String(p.count), hours(p.minutes), pct(p.share)]),
+        [bold('Total'), '', '', ...(team ? ['', bold(String(r.people.length))] : []),
+          bold(String(r.totals.count)), bold(hours(r.totals.minutes)), r.totals.count ? bold('100.0%') : ''],
+      ],
+      columnStyles: right,
+    });
+    after();
+  }
+
+  if (showProjectPeople(r)) {
+    section('Projects by person');
+    const body = [];
+    for (const p of r.byProject) {
+      body.push([{ content: pdfText(`${p.label}  —  ${hours(p.minutes)} h`), colSpan: 3,
+        styles: { fillColor: [240, 253, 250], fontStyle: 'bold', textColor: [17, 94, 89] } }]);
+      for (const x of p.people) body.push([pdfText(x.name), String(x.count), hours(x.minutes)]);
+    }
+    autoTable(doc, {
+      ...tableBase, startY: y,
+      head: [['Person', 'Entries', 'Hours']],
+      body,
+      columnStyles: { 1: { halign: 'right', cellWidth: 60 }, 2: { halign: 'right', cellWidth: 70 } },
+    });
+    after();
+  }
+
+  const extra = extraGroupSummary(r);
+  if (extra) {
+    section(`Hours by ${extra.title.toLowerCase()}`);
+    autoTable(doc, {
+      ...tableBase, startY: y,
+      head: [[pdfText(extra.title), 'Entries', 'Hours']],
+      body: [...extra.rows.map((x) => [pdfText(x.label), String(x.count), hours(x.minutes)]),
+        [bold('Total'), bold(String(r.totals.count)), bold(hours(r.totals.minutes))]],
+      columnStyles: { 1: { halign: 'right', cellWidth: 60 }, 2: { halign: 'right', cellWidth: 70 } },
+    });
+    after();
+  }
 
   if (r.options.group_by !== 'brand' && r.byBrand.length > 1) {
     section('Hours by brand');
@@ -624,7 +711,7 @@ const escHtml = (s) => String(s === null || s === undefined ? '' : s)
 function toEmail(r, { frequency, siteUrl, attachments = [] } = {}) {
   const every = frequency === 'fortnightly' ? 'fortnightly' : 'weekly';
   const subject = `${r.title} · ${r.period}`;
-  const sum = summaryRows(r);
+  const projects = r.byProject;
   const link = siteUrl ? `${siteUrl.replace(/\/+$/, '')}/time-tracking/` : '';
   const money = r.options.include_money && Object.keys(r.totals.money).length
     ? Object.entries(r.totals.money).map(([c, v]) => `${v.toFixed(2)} ${c}`).join(' + ') : '';
@@ -636,8 +723,8 @@ function toEmail(r, { frequency, siteUrl, attachments = [] } = {}) {
     `Entries: ${r.totals.count}`,
     ...(money ? [`Amount: ${money}`] : []),
     '',
-    `Hours by ${summaryTitle(r).toLowerCase()}:`,
-    ...sum.map((s) => `  ${s.label}: ${hours(s.minutes)} h`),
+    'Time by project:',
+    ...projects.map((p) => `  ${p.label}${p.code ? ` (${p.code})` : ''}: ${hours(p.minutes)} h · ${pct(p.share)}`),
     ...(r.scope === 'team' ? ['', 'By person:', ...r.people.map((p) => `  ${p.name}: ${hours(p.minutes)} h (billable ${hours(p.billable_minutes)} h)`)] : []),
     '',
     attachments.length ? `Attached: ${attachments.join(', ')}` : '',
@@ -655,9 +742,9 @@ ${[['Hours worked', `${hours(r.totals.minutes)} h`], ['Billable', `${hours(r.tot
     .map(([l, v]) => `<td style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px"><div style="font-size:11px;text-transform:uppercase;color:#6b7280">${escHtml(l)}</div><div style="font-size:18px;font-weight:bold;margin-top:4px">${escHtml(v)}</div></td>`).join('')}
 </tr></table>
 <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb">
-<tr><th style="${td};text-align:left;background:#0f766e;color:#fff">${escHtml(summaryTitle(r))}</th><th style="${td};text-align:right;background:#0f766e;color:#fff">Hours</th></tr>
-${sum.map((s) => `<tr><td style="${td}">${escHtml(s.label)}</td><td style="${td};text-align:right">${hours(s.minutes)}</td></tr>`).join('\n')}
-<tr><td style="${td};font-weight:bold">Total</td><td style="${td};text-align:right;font-weight:bold">${hours(r.totals.minutes)}</td></tr>
+<tr><th style="${td};text-align:left;background:#0f766e;color:#fff">Project</th><th style="${td};text-align:right;background:#0f766e;color:#fff">Hours</th><th style="${td};text-align:right;background:#0f766e;color:#fff">%</th></tr>
+${projects.map((p) => `<tr><td style="${td}">${escHtml(p.label)}${p.code ? ` <span style="color:#9ca3af">${escHtml(p.code)}</span>` : ''}${r.scope === 'team' && p.people.length ? `<div style="font-size:12px;color:#6b7280">${p.people.map((x) => `${escHtml(x.name)} ${hours(x.minutes)}`).join(' · ')}</div>` : ''}</td><td style="${td};text-align:right">${hours(p.minutes)}</td><td style="${td};text-align:right;color:#6b7280">${pct(p.share)}</td></tr>`).join('\n')}
+<tr><td style="${td};font-weight:bold">Total</td><td style="${td};text-align:right;font-weight:bold">${hours(r.totals.minutes)}</td><td style="${td}"></td></tr>
 </table>
 ${r.scope === 'team' && r.people.length ? `<table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;margin-top:14px">
 <tr><th style="${td};text-align:left;background:#f9fafb">Person</th><th style="${td};text-align:right;background:#f9fafb">Hours</th><th style="${td};text-align:right;background:#f9fafb">Billable</th>${r.options.include_money ? `<th style="${td};text-align:right;background:#f9fafb">Amount</th>` : ''}</tr>

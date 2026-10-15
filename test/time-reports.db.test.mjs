@@ -83,7 +83,9 @@ async function setup() {
       notes text, is_active boolean NOT NULL DEFAULT true);
     CREATE TABLE time_projects (
       id serial PRIMARY KEY, name text NOT NULL, code text, brand text,
-      sort_order int DEFAULT 100, is_active boolean NOT NULL DEFAULT true, notes text);
+      sort_order int DEFAULT 100, is_active boolean NOT NULL DEFAULT true, notes text,
+      -- The original table's whole-table name rule, which the owner migration replaces.
+      CONSTRAINT time_projects_name_uniq UNIQUE (name));
     CREATE TABLE time_approvals (
       id serial PRIMARY KEY, contractor_id int, period_start date, period_end date,
       total_minutes int, hourly_rate numeric, currency text, amount numeric,
@@ -141,7 +143,7 @@ try {
 
   await test('the running timer is not in a report', async () => {
     const r = await call(SAM, 'POST', 'report', { format: 'csv', options: OPTS });
-    assert.match(r.text, /^Total,2,2\.37/m, '120 + 22 minutes, two finished entries');
+    assert.match(r.text, /^Total,,,2,2\.37,100\.0%/m, '120 + 22 minutes, two finished entries');
   });
 
   await test('billable rounds the period total once', async () => {
@@ -203,6 +205,113 @@ try {
     const r = await call(REVIEWER, 'POST', 'team-report', { format: 'csv', options: { ...OPTS, group_by: 'week', columns: ['date', 'hours'] } });
     assert.match(r.text, /^Week,Date,Hours/m);
     assert.match(r.text, /^Week of 5 Oct 2026,2026-10-05,1\.12/m);
+  });
+
+  await test('every report leads with time per project, with its share of the period', async () => {
+    const r = await call(JAKE, 'POST', 'report', { format: 'csv', options: { ...OPTS, group_by: 'day' } });
+    // Jake: Website 67 + 38 = 105, STEM page 52 → 157 total.
+    assert.match(r.text, /^Time by project,Code,Brand,Entries,Hours,% of total/m);
+    assert.match(r.text, /^Website,WEB,Pacific Discovery,2,1\.75,66\.9%/m);
+    assert.match(r.text, /^STEM page,STEM,Unearthed Education,1,0\.87,33\.1%/m);
+    assert.match(r.text, /^Hours by day,Entries,Hours/m, 'and the chosen grouping still gets its own summary');
+  });
+
+  await test('a team report splits each project by person', async () => {
+    const r = await call(REVIEWER, 'POST', 'team-report', { format: 'csv', options: OPTS });
+    assert.match(r.text, /^Time by project,Code,Brand,Owner,People,Entries,Hours,% of total/m);
+    assert.match(r.text, /^Website,WEB,Pacific Discovery,Team,2,3,2\.12,/m, 'Jake 105 + Sam 22 = 127 min, two people');
+    assert.match(r.text, /^Project,Person,Entries,Hours/m);
+    assert.match(r.text, /^Website,Jake,2,1\.75/m);
+    assert.match(r.text, /^Website,Sam,1,0\.37/m);
+  });
+
+  console.log('\npersonal projects');
+
+  await test('before the owner migration, everything still works as team projects', async () => {
+    const me = await call(SAM, 'GET', 'me');
+    assert.equal(me.status, 200);
+    assert.equal(me.body.projects.length, 3);
+    const r = await call(SAM, 'POST', 'save-project', { name: 'Mine' });
+    assert.equal(r.status, 500);
+    assert.match(r.body.error, /MIGRATION-time-projects-owner\.sql/);
+  });
+
+  await test('the migration runs, twice', async () => {
+    const { readFileSync } = await import('node:fs');
+    const sqlText = readFileSync(path.join(root, 'MIGRATION-time-projects-owner.sql'), 'utf8');
+    await q(sqlText);
+    await q(sqlText);
+    const owners = await q(`SELECT COUNT(*)::int AS n FROM time_projects WHERE owner_email IS NOT NULL`);
+    assert.equal(owners[0].n, 0, 'existing projects stay team projects');
+  });
+
+  let samProj;
+  await test('anyone can add a project, and it is theirs', async () => {
+    const r = await call(SAM, 'POST', 'save-project', { name: 'Research', code: 'RES', brand: 'Pacific Discovery', shared: true });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    samProj = r.body.project;
+    assert.equal(samProj.owner_email, 'sam@pd.test', 'asking for a team project as a contractor is ignored');
+  });
+
+  await test('it shows in their list, not a colleague\'s, and in a reviewer\'s', async () => {
+    const ids = async (who) => (await call(who, 'GET', 'projects')).body.projects.map((p) => p.id);
+    assert.ok((await ids(SAM)).includes(samProj.id));
+    assert.ok(!(await ids(JAKE)).includes(samProj.id));
+    assert.ok((await ids(REVIEWER)).includes(samProj.id));
+  });
+
+  await test('someone else can\'t log to it, edit it or remove it', async () => {
+    const start = await call(JAKE, 'POST', 'start', { project_id: samProj.id, work_date: '2026-10-12' });
+    assert.equal(start.status, 403);
+    const make = await call(JAKE, 'POST', 'create-entry', { project_id: samProj.id, work_date: '2026-10-12',
+      started_at: '2026-10-12T01:00:00Z', ended_at: '2026-10-12T02:00:00Z' });
+    assert.equal(make.status, 403);
+    assert.equal((await call(JAKE, 'POST', 'save-project', { id: samProj.id, name: 'Hijacked' })).status, 403);
+    assert.equal((await call(JAKE, 'POST', 'delete-project', { id: samProj.id })).status, 403);
+    assert.equal((await call(REVIEWER, 'POST', 'save-project', { id: samProj.id, name: 'Hijacked' })).status, 403,
+      'reviewing is not managing');
+  });
+
+  await test('a contractor can\'t change or remove a team project', async () => {
+    assert.equal((await call(SAM, 'POST', 'save-project', { id: 1, name: 'Renamed' })).status, 403);
+    assert.equal((await call(SAM, 'POST', 'delete-project', { id: 1 })).status, 403);
+  });
+
+  await test('names: no copying a team project, but two people can share one', async () => {
+    const clash = await call(SAM, 'POST', 'save-project', { name: 'website' });
+    assert.equal(clash.status, 400);
+    const own = await call(SAM, 'POST', 'save-project', { name: 'RESEARCH' });
+    assert.equal(own.status, 400, 'same name twice in my own list');
+    const jakes = await call(JAKE, 'POST', 'save-project', { name: 'Research' });
+    assert.equal(jakes.status, 200, 'Jake can have his own Research');
+    await call(JAKE, 'POST', 'delete-project', { id: jakes.body.project.id });
+  });
+
+  await test('the owner logs to it and edits it; it shows in reports with its owner', async () => {
+    const make = await call(SAM, 'POST', 'create-entry', { project_id: samProj.id, work_date: '2026-10-08',
+      started_at: '2026-10-08T01:00:00Z', ended_at: '2026-10-08T01:45:00Z', description: 'Sam research' });
+    assert.equal(make.status, 200, JSON.stringify(make.body));
+    assert.equal((await call(SAM, 'POST', 'save-project', { id: samProj.id, code: 'R1' })).status, 200);
+    const mine = await call(SAM, 'POST', 'report', { format: 'csv', options: OPTS });
+    assert.match(mine.text, /^Research,R1,Pacific Discovery,1,0\.75,/m);
+    const team = await call(REVIEWER, 'POST', 'team-report', { format: 'csv', options: OPTS });
+    assert.match(team.text, /^Research,R1,Pacific Discovery,Sam,1,1,0\.75,/m, 'owner shown by name');
+  });
+
+  await test('an admin can open a personal project up to the team', async () => {
+    const r = await call(ADMIN, 'POST', 'save-project', { id: samProj.id, shared: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.project.owner_email, null);
+    assert.ok((await call(JAKE, 'GET', 'projects')).body.projects.some((p) => p.id === samProj.id));
+    assert.equal((await call(SAM, 'POST', 'save-project', { id: samProj.id, name: 'Back' })).status, 403,
+      'once it\'s a team project only admins change it');
+  });
+
+  await test('an admin\'s new project is a team one unless they say otherwise', async () => {
+    const t = await call(ADMIN, 'POST', 'save-project', { name: 'Ops' });
+    assert.equal(t.body.project.owner_email, null);
+    const p = await call(ADMIN, 'POST', 'save-project', { name: 'Boss notes', shared: false });
+    assert.equal(p.body.project.owner_email, 'boss@pd.test');
   });
 
   console.log('\nscheduled reports — saving');
@@ -277,7 +386,8 @@ try {
       'time-report-sam-2026-10-05_to_2026-10-11.csv', 'time-report-sam-2026-10-05_to_2026-10-11.pdf']);
     assert.match(m.attachments[0].content.toString(), /Sam admin/);
     assert.doesNotMatch(m.attachments[0].content.toString(), /Homepage hero/);
-    assert.match(m.html, /2\.37/);
+    assert.match(m.html, /3\.12 h/, '142 min + the 45 on her personal project');
+    assert.match(m.html, />Research <span[^>]*>R1</, 'the email leads with time per project');
     const row = (await q(`SELECT *, next_send_on::text AS d FROM time_report_schedules WHERE id = $1`, [samSched.id]))[0];
     assert.equal(row.d, MONDAY_19);
     assert.ok(row.last_sent_at);

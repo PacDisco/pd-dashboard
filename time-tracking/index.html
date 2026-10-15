@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Time Tracker</title>
+<link rel="icon" href="/assets/time-tracker.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/time-tracker-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/assets/time-tracker-180.png">
+<meta name="theme-color" content="#0f766e">
 <meta name="description" content="Tick timer for contractors — start/stop a live timer against a project, fix entries by hand, review the week's hours, and push approved timesheets into Invoices &amp; Payments.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
@@ -58,6 +62,10 @@
   .imp-note { background:#f0fdfa; border:1px solid #99f6e4; color:#115e59; font-size:12px; padding:8px 10px; border-radius:8px; }
   .imp-warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:12px; padding:8px 10px; border-radius:8px; }
   .pill-timer { background:#e0f2fe; color:#075985; }
+  /* Admin-only controls inside sections everyone can open (Projects tab). */
+  body:not(.is-mgr) .mgr-only { display:none !important; }
+  .pill-own { background:#ede9fe; color:#5b21b6; }
+  .pill-team { background:#f1f5f9; color:#475569; }
   /* Export report dialog */
   .rchk { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#374151; cursor:pointer; }
   .rchk input { accent-color:#0f766e; width:15px; height:15px; }
@@ -272,25 +280,29 @@
   <!-- ============================= PROJECTS ============================= -->
   <section id="view-admin" class="hidden mt-4">
     <div class="bg-white border border-gray-200 rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-gray-700 mb-3">Add a project</h2>
+      <h2 class="text-sm font-semibold text-gray-700">Add a project</h2>
+      <p id="p-add-hint" class="text-xs text-gray-500 mt-0.5 mb-3">&nbsp;</p>
       <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
         <div class="md:col-span-5"><label class="lbl">Project name</label><input id="p-name" class="fld" placeholder="Website rebuild"></div>
-        <div class="md:col-span-2"><label class="lbl">Code</label><input id="p-code" class="fld" placeholder="WEB"></div>
-        <div class="md:col-span-3"><label class="lbl">Brand</label><select id="p-brand" class="fld"></select></div>
-        <div class="md:col-span-2"><label class="lbl">Sort</label><input id="p-order" type="number" class="fld" placeholder="100"></div>
+        <div class="md:col-span-2"><label class="lbl">Code <span class="font-normal text-gray-400">(optional)</span></label><input id="p-code" class="fld" placeholder="WEB"></div>
+        <div class="md:col-span-3"><label class="lbl">Brand <span class="font-normal text-gray-400">(who it's for)</span></label><select id="p-brand" class="fld"></select></div>
+        <div class="md:col-span-2 mgr-only"><label class="lbl">Sort</label><input id="p-order" type="number" class="fld" placeholder="100"></div>
       </div>
-      <div class="mt-4"><button id="p-add" class="btn btn-primary">Add project</button></div>
+      <div class="mt-4 flex items-center gap-4 flex-wrap">
+        <button id="p-add" class="btn btn-primary">Add project</button>
+        <label class="rchk mgr-only"><input type="checkbox" id="p-team" checked> <span>Team project — everyone can log time to it</span></label>
+      </div>
     </div>
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden mt-5">
       <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-sm font-semibold text-gray-700">Project list</h2>
-        <p class="text-xs text-gray-500 mt-0.5">Contractors only see active projects. A project with logged time is deactivated rather than deleted, so history stays readable.</p></div>
+        <p id="p-list-hint" class="text-xs text-gray-500 mt-0.5">&nbsp;</p></div>
       <div class="overflow-x-auto"><table class="tbl">
-        <thead><tr><th>Name</th><th>Code</th><th>Brand</th><th>Sort</th><th>Active</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Code</th><th>Brand</th><th>Owner</th><th class="mgr-only">Sort</th><th>Active</th><th></th></tr></thead>
         <tbody id="proj-rows"></tbody>
       </table></div>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-xl p-5 mt-5">
+    <div id="rh-section" class="bg-white border border-gray-200 rounded-xl p-5 mt-5 mgr-only">
       <h2 class="text-sm font-semibold text-gray-700">Restore exact entry times</h2>
       <p class="text-xs text-gray-500 mt-0.5 mb-3">
         An earlier version rounded every entry to a quarter hour as it was saved, which lost real time as
@@ -570,7 +582,10 @@ async function boot() {
   $('who').textContent = (c.full_name || c.email || '')
     + (ME.isManager ? ' · manager' : (ME.canReview ? ' · timesheet reviewer' : ''));
   if (canReview()) $('tab-team').classList.remove('hidden');
-  if (ME.isManager) $('tab-admin').classList.remove('hidden');
+  // Everyone gets Projects now — it's where people add their own. The admin-only
+  // controls inside it are hidden by the .is-mgr class rather than per element.
+  $('tab-admin').classList.remove('hidden');
+  document.body.classList.toggle('is-mgr', !!ME.isManager);
 
   fillProjectSelect($('t-project'), PROJECTS, RUNNING ? RUNNING.project_id : null);
   fillBrandSelect($('t-brand'), $('t-project').value, RUNNING ? RUNNING.entry_brand : undefined);
@@ -583,15 +598,47 @@ async function boot() {
   loadSchedules();
 }
 
+/* Projects are TEAM (owner_email empty — an admin's, everyone logs to them) or
+   PERSONAL (made by one person for their own work). The server already hands a
+   contractor only team projects and their own; reviewers and admins get every
+   project for reporting, so the pickers below narrow it back to what *I* can log
+   to. A currently-selected project always stays, so editing an old entry never
+   silently drops its project. */
+function myEmail() { return String((ME && ME.contractor && ME.contractor.email) || '').toLowerCase(); }
+function isPersonalProject(p) { return !!(p && p.owner_email); }
+function isMyProject(p) { return isPersonalProject(p) && String(p.owner_email).toLowerCase() === myEmail(); }
+function canLogToProject(p) { return !isPersonalProject(p) || isMyProject(p); }
+function ownerName(p) {
+  if (!isPersonalProject(p)) return 'Team';
+  if (isMyProject(p)) return 'You';
+  var em = String(p.owner_email).toLowerCase();
+  var c = (TEAM || []).filter(function (x) { return String(x.email).toLowerCase() === em; })[0];
+  return c ? (c.full_name || c.email) : p.owner_email;
+}
+
 function fillProjectSelect(sel, projects, selected) {
-  var opts = ['<option value="">— no project —</option>'];
-  for (var i = 0; i < projects.length; i++) {
-    var p = projects[i];
-    if (!p.is_active && String(p.id) !== String(selected)) continue;
-    opts.push('<option value="' + p.id + '"' + (String(p.id) === String(selected) ? ' selected' : '') + '>' +
-      esc(p.name) + (p.code ? ' (' + esc(p.code) + ')' : '') + (p.is_active ? '' : ' — inactive') + '</option>');
+  var opt = function (p) {
+    return '<option value="' + p.id + '"' + (String(p.id) === String(selected) ? ' selected' : '') + '>' +
+      esc(p.name) + (p.code ? ' (' + esc(p.code) + ')' : '') + (p.is_active ? '' : ' — inactive')
+      + (isPersonalProject(p) && !isMyProject(p) ? ' — ' + esc(ownerName(p)) + '\'s' : '') + '</option>';
+  };
+  var shown = projects.filter(function (p) {
+    if (String(p.id) === String(selected)) return true;
+    return p.is_active && canLogToProject(p);
+  });
+  var mine = shown.filter(isMyProject);
+  var others = shown.filter(function (p) { return isPersonalProject(p) && !isMyProject(p); });
+  var team = shown.filter(function (p) { return !isPersonalProject(p); });
+  var html = '<option value="">— no project —</option>';
+  // Only bother with headings once there's more than one kind in the list.
+  if (mine.length || others.length) {
+    if (mine.length) html += '<optgroup label="My projects">' + mine.map(opt).join('') + '</optgroup>';
+    if (team.length) html += '<optgroup label="Team projects">' + team.map(opt).join('') + '</optgroup>';
+    if (others.length) html += '<optgroup label="Other people\'s">' + others.map(opt).join('') + '</optgroup>';
+  } else {
+    html += team.map(opt).join('');
   }
-  sel.innerHTML = opts.join('');
+  sel.innerHTML = html;
 }
 /**
  * The brands a person can pick from: the standing list, plus anything already in
@@ -1721,9 +1768,15 @@ async function reportModal(scope, schedule) {
     var picked = !(saved.contractor_ids && saved.contractor_ids.length) || saved.contractor_ids.indexOf(c.id) >= 0;
     return chk('r-person', c.id, esc(c.full_name || c.email) + (c.is_active ? '' : ' <span class="text-gray-400">(inactive)</span>'), picked);
   }).join('') : '';
-  var projects = (PROJECTS || []).map(function (p) {
+  var projects = (PROJECTS || []).filter(function (p) {
+    // A personal report only ever has my own time in it, so only list the
+    // projects I could have logged to.
+    return team || canLogToProject(p);
+  }).map(function (p) {
     var on = !(saved.project_ids && saved.project_ids.length) || saved.project_ids.indexOf(p.id) >= 0;
-    return chk('r-project', p.id, esc(p.name) + (p.code ? ' <span class="text-gray-400">' + esc(p.code) + '</span>' : '') + (p.is_active ? '' : ' <span class="text-gray-400">(archived)</span>'), on);
+    return chk('r-project', p.id, esc(p.name) + (p.code ? ' <span class="text-gray-400">' + esc(p.code) + '</span>' : '')
+      + (isPersonalProject(p) ? ' <span class="text-gray-400">· ' + esc(ownerName(p)) + '</span>' : '')
+      + (p.is_active ? '' : ' <span class="text-gray-400">(archived)</span>'), on);
   }).join('') + chk('r-project', 0, '<em>No project</em>', !(saved.project_ids && saved.project_ids.length) || saved.project_ids.indexOf(0) >= 0);
   var brands = brandChoices().map(function (bn) {
     var on = !(saved.brands && saved.brands.length) || saved.brands.indexOf(bn) >= 0;
@@ -1746,8 +1799,8 @@ async function reportModal(scope, schedule) {
     + '<div class="flex items-start justify-between gap-3"><div>'
       + '<h3 class="text-base font-bold text-gray-900">' + (schedule ? 'Edit scheduled report' : (team ? 'Export team report' : 'Export my time')) + '</h3>'
       + '<p class="text-xs text-gray-500 mt-0.5">' + (team
-          ? 'Pick who and what goes in it. Hours are exact per entry; billable hours round each person\'s total to the nearest quarter hour.'
-          : 'Your own time only. Hours are exact per entry; billable hours round the period total to the nearest quarter hour.') + '</p>'
+          ? 'Every report opens with the time spent on each project in the period, split by person. Hours are exact per entry; billable hours round each person\'s total to the nearest quarter hour.'
+          : 'Your own time only. Every report opens with the time spent on each project in the period. Hours are exact per entry; billable hours round the period total to the nearest quarter hour.') + '</p>'
     + '</div><button class="btn btn-ghost" onclick="closeModal()" aria-label="Close">×</button></div>'
 
     + '<div class="grid grid-cols-1 md:grid-cols-12 gap-4 mt-4">'
@@ -1775,7 +1828,7 @@ async function reportModal(scope, schedule) {
       + '<div class="md:col-span-5 space-y-3">'
         + '<div><label class="lbl">Entries</label>' + sel('r-status', [['all', 'All entries'], ['approved', 'Approved only'], ['unapproved', 'Not yet approved']], saved.status || 'all') + '</div>'
         + '<div><label class="lbl">Group by</label>' + sel('r-group', [['none', 'No grouping'], ['day', 'Day'], ['week', 'Week'], ['project', 'Project'], ['brand', 'Brand']].concat(team ? [['contractor', 'Person']] : []), saved.group_by || (team ? 'contractor' : 'day')) + '</div>'
-        + '<div><label class="lbl">Detail</label>' + sel('r-detail', [['entries', 'Every entry, plus totals'], ['summary', 'Totals only']], saved.detail || 'entries') + '</div>'
+        + '<div><label class="lbl">Detail</label>' + sel('r-detail', [['entries', 'Every entry, plus totals'], ['summary', 'Totals only (per project, person, brand)']], saved.detail || 'entries') + '</div>'
         + '<label class="rchk"><input type="checkbox" id="r-money"' + (saved.include_money ? ' checked' : '') + '> <span>' + (team ? 'Include rates and amounts' : 'Include my rate and amount') + '</span></label>'
         + '<div><label class="lbl">Report title <span class="font-normal text-gray-400">(optional)</span></label><input id="r-title" class="fld" maxlength="120" value="' + esc(saved.title || s.name || '') + '" placeholder="' + (team ? 'Team time report' : 'Time report — ' + esc((ME.contractor && (ME.contractor.full_name || ME.contractor.email)) || 'me')) + '"></div>'
       + '</div>'
@@ -2236,6 +2289,11 @@ async function unapprove(id) {
 /* -------------------------------------------------------------- projects */
 async function loadProjects() {
   try {
+    // Owner names for other people's personal projects come from the roster.
+    if (canReview() && !TEAM.length) {
+      var b = weekBounds();
+      try { TEAM = (await api('GET', 'contractors', undefined, 'from=' + b.from + '&to=' + b.to)).contractors || []; } catch (e) {}
+    }
     var out = await api('GET', 'projects');
     PROJECTS = out.projects || [];
     var keepBrand = $('t-brand').value;
@@ -2245,30 +2303,66 @@ async function loadProjects() {
   } catch (e) { toast(e.message, true); }
 }
 function renderProjects() {
-  if (!PROJECTS.length) { $('proj-rows').innerHTML = '<tr><td colspan="6" class="text-center text-gray-400 py-8">No projects yet — add one above.</td></tr>'; return; }
-  $('proj-rows').innerHTML = PROJECTS.map(function (p) {
+  var mgr = isMgr();
+  $('p-add-hint').textContent = mgr
+    ? 'Team projects show up for everyone. Untick the box to add one just for yourself.'
+    : 'Projects you add are yours: they show up in your own project list and reports. Team projects are set up by an admin.';
+  $('p-list-hint').textContent = mgr
+    ? 'Everyone\'s projects. Personal ones belong to the person who made them — “Make team project” opens one up to everyone. A project with logged time is deactivated rather than deleted, so history stays readable.'
+    : 'You can edit your own projects. A project with logged time is archived rather than deleted, so your history stays readable.';
+
+  // Mine first, then team, then (admins/reviewers) everyone else's.
+  var rank = function (p) { return isMyProject(p) ? 0 : (isPersonalProject(p) ? 2 : 1); };
+  var list = PROJECTS.slice().sort(function (a, b) {
+    return rank(a) - rank(b) || (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0)
+      || (a.sort_order || 0) - (b.sort_order || 0) || String(a.name).localeCompare(String(b.name));
+  });
+  if (!list.length) { $('proj-rows').innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-8">No projects yet — add one above.</td></tr>'; return; }
+
+  $('proj-rows').innerHTML = list.map(function (p) {
+    var editable = mgr || isMyProject(p);
+    var owner = '<span class="pill ' + (isPersonalProject(p) ? 'pill-own' : 'pill-team') + '">' + esc(ownerName(p)) + '</span>';
+    if (!editable) {
+      return '<tr' + (p.is_active ? '' : ' style="opacity:.55"') + '>'
+        + '<td class="font-semibold text-gray-800">' + esc(p.name) + '</td>'
+        + '<td class="text-gray-600">' + esc(p.code || '') + '</td>'
+        + '<td class="text-gray-600">' + esc(p.brand || '—') + '</td>'
+        + '<td>' + owner + '</td>'
+        + '<td class="mgr-only"></td>'
+        + '<td class="text-xs text-gray-500">' + (p.is_active ? 'active' : 'archived') + '</td><td></td></tr>';
+    }
     return '<tr' + (p.is_active ? '' : ' style="opacity:.55"') + '>'
       + '<td><input class="fld" value="' + esc(p.name) + '" onchange="saveProject(' + p.id + ', {name: this.value})"></td>'
       + '<td><input class="fld" style="width:80px" value="' + esc(p.code || '') + '" onchange="saveProject(' + p.id + ', {code: this.value})"></td>'
       + '<td><select class="fld" style="width:170px" onchange="saveProject(' + p.id + ', {brand: this.value})">'
         + BRANDS.map(function (b) { return '<option value="' + esc(b) + '"' + ((p.brand || '') === b ? ' selected' : '') + '>' + (b ? esc(b) : '— none —') + '</option>'; }).join('')
         + '</select></td>'
-      + '<td><input class="fld" style="width:70px" type="number" value="' + (p.sort_order == null ? '' : p.sort_order) + '" onchange="saveProject(' + p.id + ', {sort_order: this.value})"></td>'
+      + '<td class="whitespace-nowrap">' + owner
+        + (mgr && isPersonalProject(p) ? ' <button class="text-xs lnk ml-1" onclick="shareProject(' + p.id + ')">Make team project</button>' : '') + '</td>'
+      + '<td class="mgr-only"><input class="fld" style="width:70px" type="number" value="' + (p.sort_order == null ? '' : p.sort_order) + '" onchange="saveProject(' + p.id + ', {sort_order: this.value})"></td>'
       + '<td><input type="checkbox"' + (p.is_active ? ' checked' : '') + ' onchange="saveProject(' + p.id + ', {is_active: this.checked})"></td>'
       + '<td class="text-right"><button class="text-xs text-red-600 hover:underline" onclick="deleteProject(' + p.id + ')">delete</button></td>'
       + '</tr>';
   }).join('');
 }
+async function shareProject(id) {
+  var p = PROJECTS.filter(function (x) { return x.id === id; })[0];
+  if (!p) return;
+  if (!confirm('Make “' + p.name + '” a team project?\n\nEveryone will be able to log time to it, and only admins will be able to change it. Time already logged stays where it is.')) return;
+  await saveProject(id, { shared: true });
+}
 async function addProject() {
   var name = $('p-name').value.trim();
   if (!name) { toast('Give the project a name.', true); return; }
   try {
-    await api('POST', 'save-project', {
+    var out = await api('POST', 'save-project', {
       name: name, code: $('p-code').value || null, brand: $('p-brand').value || null,
-      sort_order: $('p-order').value || undefined
+      sort_order: $('p-order').value || undefined,
+      // Only an admin's choice is read; anyone else's project is personal regardless.
+      shared: isMgr() ? $('p-team').checked : false
     });
     $('p-name').value = ''; $('p-code').value = ''; $('p-order').value = '';
-    toast('Project added');
+    toast(out.project && out.project.owner_email ? 'Added to your projects' : 'Team project added');
     await loadProjects();
   } catch (e) { toast(e.message, true); }
 }

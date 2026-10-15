@@ -29,8 +29,9 @@
  *   Manager only (admin)
  *     contractors      GET   -> roster with period totals
  *     save-contractor  POST  -> { id | email, patch: { hourly_rate, currency, vendor_name, is_active, full_name, notes } }
- *     save-project     POST  -> { id?, name, code?, brand?, sort_order?, is_active?, notes? }
- *     delete-project   POST  -> { id }        (deactivates if entries reference it)
+ *     save-project     POST  -> { id?, name, code?, brand?, sort_order?, is_active?, notes?, shared? }
+ *                              (anyone: their own personal projects; admin: team projects)
+ *     delete-project   POST  -> { id }        (deactivates if entries reference it; same rule)
  *     approvals        GET   -> ?contractor_id=&limit=
  *     approve          POST  -> { contractor_id, period_start, period_end, notes? }
  *     unapprove        POST  -> { id }        (only while not yet pushed to payments)
@@ -381,6 +382,18 @@ function resolveBrandOverride(picked, projectBrand) {
   return own !== null && own.toLowerCase() === want.toLowerCase() ? null : want;
 }
 
+/**
+ * Refuse logging to another person's personal project. An admin writing an
+ * entry (for anyone) is exempt — they may need to file time where it belongs.
+ */
+async function assertProjectUsable(caller, projectId) {
+  if (projectId === null || projectId === undefined || caller.isManager) return;
+  const rows = await sql()`SELECT * FROM time_projects WHERE id = ${projectId}`;
+  if (rows.length && !canLogTo(caller, rows[0])) {
+    throw Object.assign(new Error('that is someone else\'s personal project'), { status: 403 });
+  }
+}
+
 /** The brand a project carries, for the comparison above. */
 async function projectBrandOf(projectId) {
   if (projectId === null || projectId === undefined) return null;
@@ -388,10 +401,31 @@ async function projectBrandOf(projectId) {
   return rows.length ? rows[0].brand : null;
 }
 
-async function listProjects(includeInactive) {
-  return includeInactive
-    ? await sql()`SELECT * FROM time_projects ORDER BY is_active DESC, sort_order, name`
-    : await sql()`SELECT * FROM time_projects WHERE is_active = TRUE ORDER BY sort_order, name`;
+/**
+ * Projects come in two kinds (MIGRATION-time-projects-owner.sql):
+ *
+ *   team      owner_email IS NULL — set up by an admin, everyone logs to it
+ *   personal  owner_email = someone — made by that person for their own work;
+ *             only they log to it, only they (or an admin) change it
+ *
+ * Who sees what:
+ *   - everyone: active team projects + all of their own (archived included, so
+ *     they can bring one back)
+ *   - reviewers and admins: every project, because they report across the team
+ *     and a personal project is where somebody's hours went
+ *
+ * Filtered here rather than in SQL so the page keeps working on a database that
+ * hasn't had the owner migration yet: `owner_email` is then simply undefined and
+ * every project reads as a team project.
+ */
+function isPersonal(p) { return !!(p && p.owner_email); }
+function ownsProject(caller, p) { return isPersonal(p) && String(p.owner_email).toLowerCase() === caller.email; }
+function canLogTo(caller, p) { return !isPersonal(p) || ownsProject(caller, p); }
+
+async function listProjects(caller) {
+  const rows = await sql()`SELECT * FROM time_projects ORDER BY is_active DESC, sort_order, LOWER(name)`;
+  if (caller.canReview) return rows;
+  return rows.filter((p) => (p.is_active && !isPersonal(p)) || ownsProject(caller, p));
 }
 
 async function runningFor(contractorId) {
@@ -406,7 +440,7 @@ async function runningFor(contractorId) {
 async function handleMe(caller) {
   const self = await ensureContractor(caller);
   const [projects, running] = await Promise.all([
-    listProjects(caller.isManager),
+    listProjects(caller),
     runningFor(self.id),
     refreshScheduleAccess(caller),
   ]);
@@ -465,9 +499,10 @@ async function handleStart(caller, body) {
 
   let projectBrand = null;
   if (projectId !== null) {
-    const p = await sql()`SELECT id, is_active, brand FROM time_projects WHERE id = ${projectId}`;
+    const p = await sql()`SELECT * FROM time_projects WHERE id = ${projectId}`;
     if (!p.length) return bad('project not found');
     if (!p[0].is_active) return bad('that project is no longer active');
+    if (!canLogTo(caller, p[0])) return bad('that is someone else\'s personal project', 403);
     projectBrand = p[0].brand;
   }
   // Only a divergence from the project is recorded; see resolveBrandOverride.
@@ -546,6 +581,7 @@ async function handleCreateEntry(caller, body) {
     brand       = optText(body.brand, 100);
   } catch (e) { return bad(e.message, /own time entries/.test(e.message) ? 403 : 400); }
 
+  try { await assertProjectUsable(caller, projectId); } catch (e) { return bad(e.message, e.status); }
   const brandOverride = resolveBrandOverride(brand, await projectBrandOf(projectId));
 
   // Stored exact. Rounding happens when hours are totalled, not per entry.
@@ -642,6 +678,7 @@ async function handleUpdateEntry(caller, body) {
   if (patch.project_id !== undefined && patch.project_id) {
     const p = await sql()`SELECT id FROM time_projects WHERE id = ${Number(patch.project_id)}`;
     if (!p.length) return bad('project not found');
+    try { await assertProjectUsable(caller, Number(patch.project_id)); } catch (e) { return bad(e.message, e.status); }
   }
 
   args.push(id);
@@ -706,13 +743,20 @@ async function importLookups(caller) {
   // `brand` is needed to tell an imported row that simply repeats its project's
   // brand from one that genuinely diverges — without it every row carrying a
   // Brand column would be stored as an override and stop following its project.
-  const projects = await sql()`SELECT id, name, code, brand, is_active FROM time_projects`;
+  const all = await sql()`SELECT * FROM time_projects`;
+  // A contractor resolves names against what they can log to: team projects and
+  // their own. Team projects go in first and personal ones never displace them,
+  // so a pasted name means the same thing it does in the project picker.
+  const visible = caller.isManager ? all : all.filter((p) => canLogTo(caller, p));
+  const ordered = visible.filter((p) => !isPersonal(p)).concat(visible.filter((p) => ownsProject(caller, p)),
+    visible.filter((p) => isPersonal(p) && !ownsProject(caller, p)));
   const byKey = new Map();
-  for (const p of projects) {
+  const put = (k, p) => { if (!byKey.has(k)) byKey.set(k, p); };
+  for (const p of ordered) {
     // Code first: it's the shorter, more deliberate identifier, so if a code and
     // some other project's name collide the code is what the typist meant.
-    if (p.code) byKey.set(`c:${String(p.code).trim().toLowerCase()}`, p);
-    byKey.set(`n:${String(p.name).trim().toLowerCase()}`, p);
+    if (p.code) put(`c:${String(p.code).trim().toLowerCase()}`, p);
+    put(`n:${String(p.name).trim().toLowerCase()}`, p);
   }
   const contractors = caller.isManager
     ? await sql()`SELECT id, email, full_name, is_active FROM time_contractors`
@@ -1157,8 +1201,17 @@ async function handleSaveContractor(caller, body) {
 }
 
 // ------------------------------------------------------ manager: projects
+/**
+ * Create or change a project.
+ *
+ * Anyone may create a project; a non-admin's is always PERSONAL (owned by them,
+ * only in their own picker) and only they — or an admin — can change it. Team
+ * projects stay admin-only. An admin creates team projects by default, and can
+ * turn someone's personal project into a team one with `shared: true` (e.g.
+ * when it turns out several people are working on it).
+ */
 async function handleSaveProject(caller, body) {
-  if (!caller.isManager) return bad('admin role required', 403);
+  await ensureContractor(caller);
   let id, name, code, brand, order, notes;
   try {
     id    = optId('id', body.id);
@@ -1171,13 +1224,39 @@ async function handleSaveProject(caller, body) {
     if (order !== null && !Number.isFinite(order)) throw new Error('sort_order must be a number');
   } catch (e) { return bad(e.message); }
 
+  // Same name twice in one picker is the thing to prevent: a personal project
+  // may not repeat a team project's name or one of the owner's own, and a team
+  // project may not repeat another team project.
+  async function nameClash(n, ownerEmail, exceptId) {
+    const rows = await sql()`SELECT * FROM time_projects WHERE LOWER(name) = LOWER(${n}) AND id <> ${exceptId || 0}`;
+    return rows.some((p) => !isPersonal(p)
+      || (ownerEmail && String(p.owner_email).toLowerCase() === ownerEmail));
+  }
+
   try {
     if (id) {
+      const found = await sql()`SELECT * FROM time_projects WHERE id = ${id}`;
+      if (!found.length) return bad('not found', 404);
+      const cur = found[0];
+      if (!caller.isManager && !ownsProject(caller, cur)) {
+        return bad(isPersonal(cur) ? 'that is someone else\'s personal project' : 'only an admin can change team projects', 403);
+      }
       const sets = [];
       const args = [];
+      let owner = isPersonal(cur) ? String(cur.owner_email).toLowerCase() : null;
+      if (body.shared === true && isPersonal(cur)) {
+        if (!caller.isManager) return bad('only an admin can turn a personal project into a team project', 403);
+        sets.push('owner_email = NULL');
+        owner = null;
+      }
+      const finalName = body.name !== undefined ? name : cur.name;
       if (body.name !== undefined) {
         if (!name) return bad('name cannot be empty');
         args.push(name); sets.push(`name = $${args.length}`);
+      }
+      if ((body.name !== undefined || body.shared === true) && await nameClash(finalName, owner, id)) {
+        return bad(owner ? 'you already have a project with that name, or there is a team project called that'
+          : 'there is already a team project with that name');
       }
       if (body.code       !== undefined) { args.push(code);  sets.push(`code = $${args.length}`); }
       if (body.brand      !== undefined) { args.push(brand); sets.push(`brand = $${args.length}`); }
@@ -1189,28 +1268,46 @@ async function handleSaveProject(caller, body) {
       const rows = await sql().query(
         `UPDATE time_projects SET ${sets.join(', ')} WHERE id = $${args.length} RETURNING *`, args
       );
-      if (!rows.length) return bad('not found', 404);
       return ok({ project: rows[0] });
     }
 
     if (!name) return bad('name is required');
-    const rows = await sql()`
-      INSERT INTO time_projects (name, code, brand, sort_order, notes)
-      VALUES (${name}, ${code}, ${brand}, ${order === null ? 100 : Math.round(order)}, ${notes})
-      RETURNING *
-    `;
+    // A non-admin's project is always theirs. An admin's is a team project
+    // unless they explicitly ask for a personal one.
+    const owner = caller.isManager && body.shared !== false ? null : caller.email;
+    if (await nameClash(name, owner, 0)) {
+      return bad(owner ? 'you already have a project with that name, or there is a team project called that'
+        : 'there is already a team project with that name');
+    }
+    const rows = owner
+      ? await sql()`
+          INSERT INTO time_projects (name, code, brand, sort_order, notes, owner_email)
+          VALUES (${name}, ${code}, ${brand}, ${order === null ? 100 : Math.round(order)}, ${notes}, ${owner})
+          RETURNING *`
+      : await sql()`
+          INSERT INTO time_projects (name, code, brand, sort_order, notes)
+          VALUES (${name}, ${code}, ${brand}, ${order === null ? 100 : Math.round(order)}, ${notes})
+          RETURNING *`;
     return ok({ project: rows[0] });
   } catch (e) {
-    if (/time_projects_name_uniq/i.test(e.message)) return bad('a project with that name already exists');
+    if (/time_projects_name/i.test(e.message)) return bad('a project with that name already exists');
+    if (/column "owner_email"/i.test(e.message)) {
+      return bad('Personal projects need one more column — run MIGRATION-time-projects-owner.sql against the database.', 500);
+    }
     throw e;
   }
 }
 
 async function handleDeleteProject(caller, body) {
-  if (!caller.isManager) return bad('admin role required', 403);
   let id;
   try { id = optId('id', body.id); } catch (e) { return bad(e.message); }
   if (!id) return bad('id required');
+
+  const found = await sql()`SELECT * FROM time_projects WHERE id = ${id}`;
+  if (!found.length) return bad('not found', 404);
+  if (!caller.isManager && !ownsProject(caller, found[0])) {
+    return bad(isPersonal(found[0]) ? 'that is someone else\'s personal project' : 'only an admin can remove team projects', 403);
+  }
 
   const used = await sql()`SELECT COUNT(*)::int AS n FROM time_entries WHERE project_id = ${id}`;
   if (used[0].n > 0) {
@@ -1709,8 +1806,8 @@ const ACTION_ACCESS = {
   unapprove: 'review',
 
   'save-contractor': 'manage',
-  'save-project': 'manage',
-  'delete-project': 'manage',
+  'save-project': 'self',      // own personal projects; team projects need manage, inside
+  'delete-project': 'self',    // same
   'push-payment': 'manage',
   'restore-exact': 'manage',
 
@@ -1758,7 +1855,7 @@ exports.handler = async (event, context) => {
       if (action === 'me')          return await handleMe(caller);
       if (action === 'entries')     return await handleEntries(caller, qs);
       if (action === 'contractors') return await handleContractors(caller, qs);
-      if (action === 'projects')    return ok({ projects: await listProjects(caller.isManager) });
+      if (action === 'projects')    return ok({ projects: await listProjects(caller) });
       if (action === 'approvals')   return await handleApprovals(caller, qs);
       if (action === 'report-schedules') { await MAIL.connectBlobs(event); return await handleReportSchedules(caller); }
     }
