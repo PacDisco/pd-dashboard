@@ -107,21 +107,34 @@ const APPLICATION_BLANK_LABEL = "(Application left blank)";
 // Evaluated in order; first match wins. `test` receives lowercased dd3/dd4.
 const OFFLINE_RULES = [
   {
+    // Checked first: an explicit organic medium means organic, whatever the
+    // source says. The quiz and application write "google" / "organic" for an
+    // unpaid Google visit, which the Paid Search rule below would otherwise claim.
+    channel: "Organic Search",
+    test: (d3, d4) => d4 === "organic" || d4 === "seo",
+  },
+  {
     channel: "Paid Search",
     test: (d3, d4) =>
       ["adwords", "google", "googleads", "google-ads", "google_ads", "paid search", "paidsearch"].includes(d3) ||
-      (d3 === "landing page" && /search|cpc|ppc|paid/.test(d4)),
+      (d3 === "landing page" && /search|cpc|ppc|paid/.test(d4)) ||
+      // Bing / Microsoft Ads and the like: a search engine with a paid medium.
+      (/^(bing|microsoft|yahoo|duckduckgo|google)/.test(d3) && /^(cpc|ppc|paid|sem|paid_search|paidsearch|paid-search)$/.test(d4)),
   },
   {
     channel: "Paid Social",
     test: (d3, d4) =>
-      /^(facebook|fb|ig|instagram|meta|facebook\.com|instagram\.com|paid social|paidsocial)$/.test(d3) &&
-      /paid|cpc|ppc|social/.test(d4),
+      /^(facebook|fb|ig|instagram|meta|facebook\.com|instagram\.com|tiktok|tiktok\.com|linkedin|paid social|paidsocial)$/.test(d3) &&
+      // "social" on its own is organic (Instagram link-in-bio arrives as
+      // ig / social / linkinbio); paid needs a paid medium.
+      /paid|cpc|ppc|cpm/.test(d4),
   },
   {
     channel: "Organic Social",
-    test: (d3) =>
-      /^(facebook|fb|ig|instagram|meta|facebook\.com|instagram\.com|tiktok|linkedin|youtube|pinterest|reddit)$/.test(d3),
+    test: (d3, d4) =>
+      /^(facebook|fb|ig|instagram|meta|tiktok|linkedin|youtube|pinterest|reddit|threads|x|twitter)$/.test(d3) ||
+      /^(facebook\.com|instagram\.com|t\.co|x\.com|twitter\.com|linkedin\.com|lnkd\.in|tiktok\.com|youtube\.com|youtu\.be|pinterest\.[a-z.]+|reddit\.com|threads\.net|snapchat\.com)$/.test(d3) ||
+      d4 === "social",
   },
   {
     channel: "Email Marketing",
@@ -131,11 +144,12 @@ const OFFLINE_RULES = [
   {
     channel: "AI Referrals",
     test: (d3) =>
-      /^(chatgpt\.com|chat\.openai\.com|perplexity\.ai|gemini\.google\.com|copilot\.microsoft\.com|claude\.ai|you\.com|bard\.google\.com)$/.test(d3),
+      /^(chatgpt\.com|chat\.openai\.com|openai\.com|perplexity\.ai|gemini\.google\.com|copilot\.microsoft\.com|copilot\.com|claude\.ai|you\.com|bard\.google\.com|meta\.ai|deepseek\.com)$/.test(d3) ||
+      /^(chatgpt|perplexity|claude|gemini|copilot)/.test(d3),
   },
   {
     channel: "Organic Search",
-    test: (d3) => /^(bing|bing\.com|duckduckgo|duckduckgo\.com|yahoo|ecosia\.org|organic)$/.test(d3),
+    test: (d3) => /^(bing|bing\.com|duckduckgo|duckduckgo\.com|yahoo|yahoo\.com|ecosia\.org|organic|google\.[a-z.]+|search\.brave\.com|startpage\.com)$/.test(d3),
   },
   {
     channel: "Referrals",

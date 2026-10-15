@@ -6,6 +6,8 @@
 //   attributionContactProps(attr, existing, { conversion })
 //                                     → HubSpot contact properties (first-touch
 //                                       props only when the contact has none yet)
+//   drillDownProps(touch)             one touch → HubSpot's Original Source
+//                                       Drill-Down 3 / 4 / 5 (source / medium / campaign)
 //   ATTRIBUTION_PROPERTIES            the custom contact properties (for setup)
 //   CHANNELS                          channel labels, same wording as HubSpot's
 
@@ -129,7 +131,36 @@ export const ATTRIBUTION_PROPERTIES = [
   { name: 'pd_quiz_date', label: 'PD quiz date', type: 'date', fieldType: 'date' },
   { name: 'pd_quiz_answers', label: 'PD quiz answers', fieldType: 'textarea' },
 ];
-export const FIRST_TOUCH_PROPS = ATTRIBUTION_PROPERTIES.filter((p) => p.name.startsWith('pd_first_')).map((p) => p.name);
+/**
+ * HubSpot's Original Source Drill-Down 3 / 4 / 5. Contacts created through the
+ * API (quiz, application) get Original Source = Offline, so these three are
+ * where the real source has always been kept — the same layout the Jotform /
+ * Zapier flows use and the dashboard's offline recovery reads:
+ *   3 = source (utm_source, or the referring site)   e.g. adwords · goabroad.com
+ *   4 = medium (utm_medium)                          e.g. ppc · referral · social
+ *   5 = campaign (utm_campaign)                      e.g. Performance Max - Europe
+ */
+export const DRILL_DOWN_PROPS = ['original_source_drill_down_3', 'original_source_drill_down_4', 'original_source_drill_down_5'];
+
+// Read these from the contact before writing (first-touch values are never
+// overwritten, and neither are drill-downs HubSpot or an older flow already set).
+export const FIRST_TOUCH_PROPS = [
+  ...ATTRIBUTION_PROPERTIES.filter((p) => p.name.startsWith('pd_first_')).map((p) => p.name),
+  ...DRILL_DOWN_PROPS,
+];
+
+/** One touch → drill-down 3 / 4 / 5, or {} when there's nothing true to say (direct visit). */
+export function drillDownProps(touch) {
+  if (!touch) return {};
+  const c = classify(touch);
+  if (c.channel === 'Direct Traffic') return {};
+  const props = {
+    original_source_drill_down_3: str(c.source, 200),
+    original_source_drill_down_4: str(c.medium, 200),
+    original_source_drill_down_5: str(c.campaign, 200),
+  };
+  return Object.fromEntries(Object.entries(props).filter(([, v]) => v));
+}
 
 function touchToProps(prefix, touch) {
   if (!touch) return {};
@@ -159,6 +190,11 @@ export function attributionContactProps(attr, existing = {}, { conversion, date 
   const props = {};
   const hasFirst = !!(existing.pd_first_channel || existing.pd_first_source || existing.pd_first_landing_page);
   if (!hasFirst && a.first) Object.assign(props, touchToProps('first', a.first));
+  // Original Source drill-downs: the FIRST visit (it's the original source),
+  // written once — only while the contact has none, so a value HubSpot or the
+  // old Jotform/Zapier flow put there is never replaced.
+  const hasDrill = DRILL_DOWN_PROPS.some((k) => existing[k]);
+  if (!hasDrill) Object.assign(props, drillDownProps(a.first || a.last));
   if (a.last) Object.assign(props, touchToProps('last', a.last));
   const day = date || new Date().toISOString().slice(0, 10);
   if (conversion) {

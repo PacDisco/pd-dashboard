@@ -43,6 +43,7 @@
     "test:apply-forms": "node test/apply-forms.test.mjs",
     "test:apply-form-ui": "node test/apply-form.smoke.mjs",
     "test:quiz-leads": "node test/quiz-leads.test.mjs",
+    "test:drilldowns": "node --test test/drilldown-attribution.test.mjs",
     "test:quiz-leads-ui": "node test/quiz-editor.smoke.mjs",
     "sync:form-kit": "node scripts/sync-form-kit.mjs"
   },
