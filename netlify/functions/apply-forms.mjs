@@ -19,6 +19,7 @@
 //   GET  versions                     → { versions }
 //   POST restore   { versionId }      draft ← that version
 //   GET  hubspot                      → { pdPrograms, contactProps, dealProps }
+//   GET  quiz-programs                → { programs: [{ slug, name, status, url }] }  (program pages for the quiz result picker)
 //   POST jotform-add { step, field }  create the question in the Jotform form → { qid, name }
 //   GET  applications ?status=&q=&limit=
 //   GET  application  ?id=            → full record (answers, sync)
@@ -34,6 +35,7 @@ import { neon } from "@neondatabase/serverless";
 import { requireEditor, json } from "./_shared/apply-form-access.mjs";
 import { lintSchema, allFields, FIELD_TYPES } from "../../apply-form/form-kit.mjs";
 import { lintQuiz, QUIZ_FORM_ID } from "../../apply-form/quiz-kit.mjs";
+import { checkResultPrograms, programUrl } from "../../apply-form/quiz-programs.mjs";
 
 export const FORM_ID = "pd-application";
 // ?form=quiz (GET) or { form: "quiz" } (POST) edits the gap-year quiz instead.
@@ -84,6 +86,8 @@ export function checkQuiz(s) {
     for (const k of ["html", "help", "label"]) if (/<\s*script|javascript:/i.test(String(field[k] || ""))) return `"${field.label || field.key}" contains a script — remove it.`;
   }
   for (const a of s.archetypes) if (/<\s*script|javascript:/i.test(String(a.html || ""))) return `"${a.name}" contains a script — remove it.`;
+  const progErr = checkResultPrograms(s.archetypes);
+  if (progErr) return progErr;
   if (s.settings?.hubspotFormGuid && !/^[0-9a-f-]{36}$/i.test(s.settings.hubspotFormGuid)) return "The HubSpot form ID should look like 1a2b3c4d-…-… (36 characters).";
   return null;
 }
@@ -141,6 +145,7 @@ export default async (req, context, deps = {}) => {
       if (action === "application") return json(await getApplication(url.searchParams.get("id")));
       if (action === "file") return await proxyFile(url.searchParams.get("id"));
       if (action === "quiz-responses") return json(await listQuizResponses(url));
+      if (action === "quiz-programs") return json(await listQuizPrograms());
       return json({ error: "Unknown action" }, 400);
     }
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -346,6 +351,29 @@ async function proxyFile(id) {
   const r = await fetch(`${site}/api/file/${id}`, { headers: { "x-apply-key": process.env.APPLY_SERVICE_KEY } });
   if (!r.ok) return json({ error: `File unavailable (${r.status})` }, r.status);
   return new Response(r.body, { headers: { "Content-Type": r.headers.get("content-type") || "application/octet-stream", "Content-Disposition": r.headers.get("content-disposition") || "inline", "Cache-Control": "private, max-age=300" } });
+}
+
+// ── programs for quiz results ──────────────────────────────────────────────
+// The program pages (program-pages.mjs, same Neon DB) the quiz editor offers
+// in each result's program picker. Read-only, names + slugs + status only, so
+// Apply Form editors don't need access to the Program Pages dashboard.
+
+export async function listQuizPrograms() {
+  let rows;
+  try {
+    rows = await db()`SELECT slug, name, draft_rev, published_rev, archived_at FROM program_pages WHERE archived_at IS NULL ORDER BY name`;
+  } catch (err) {
+    if (/program_pages/.test(err.message)) return { programs: [], warning: "Program Pages isn't set up yet (no program_pages table)." };
+    throw err;
+  }
+  return {
+    programs: rows.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      status: !r.published_rev ? "draft" : r.draft_rev > r.published_rev ? "changes" : "live",
+      url: programUrl(r.slug),
+    })),
+  };
 }
 
 // ── quiz responses ─────────────────────────────────────────────────────────

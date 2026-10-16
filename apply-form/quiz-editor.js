@@ -8,6 +8,7 @@
 import { esc } from '/apply-form/form-kit.mjs';
 import { lintQuiz, scoreQuiz } from '/apply-form/quiz-kit.mjs';
 import { classify } from '/apply-form/attribution-kit.mjs';
+import { stripProgramsBlock, composeResultHtml, convertLegacyPrograms, hasLegacyPrograms, lintResultPrograms, programUrl, DEFAULT_PROGRAMS_HEADING } from '/apply-form/quiz-programs.mjs';
 
 const API = '/api/apply-forms';
 const SAVE_DELAY = 1200;
@@ -15,7 +16,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const S = { user: null, form: null, draft: null, rev: 0, lint: [], applySite: null, tab: 'questions', open: new Set(), hubspot: null,
-  saveTimer: null, saving: false, dirty: false, saveError: null, resp: { q: '', list: [] } };
+  saveTimer: null, saving: false, dirty: false, saveError: null, resp: { q: '', list: [] },
+  programs: null, programsWarning: null, programsLoading: null, legacyNote: null };
 
 async function api(method, params = {}, body) {
   const qs = new URLSearchParams({ form: 'quiz', ...params }).toString();
@@ -139,6 +141,7 @@ function renderInit() {
 function renderLint() {
   const el = $('#lint'); if (!el) return;
   const errs = S.lint.filter((l) => l.level === 'error'); const warns = S.lint.filter((l) => l.level !== 'error');
+  if (S.draft) warns.push(...lintResultPrograms(S.draft.archetypes, S.programs));
   el.innerHTML = `${errs.length ? `<div class="lint lint--error"><strong>Fix before publishing</strong><ul>${errs.map((l) => `<li>${esc(l.message)}</li>`).join('')}</ul></div>` : ''}${warns.length ? `<div class="lint lint--warn"><strong>Check</strong><ul>${warns.map((l) => `<li>${esc(l.message)}</li>`).join('')}</ul></div>` : ''}`;
 }
 
@@ -253,23 +256,99 @@ function bindQuestions() {
 
 // ── results ─────────────────────────────────────────────────────────────────
 const textToHtml = (t) => (/<[a-z][\s\S]*>/i.test(t) ? t : t.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join(''));
+const programsHeading = () => S.draft.settings?.programsHeading ?? DEFAULT_PROGRAMS_HEADING;
+/** Rewrite a result's html from its text + picked programs. */
+function syncResultHtml(a, body = stripProgramsBlock(a.html)) {
+  if (!a.programs?.length) delete a.programs;
+  a.html = composeResultHtml(body, a.programs, programsHeading());
+}
+const STATUS_LABEL = { live: 'Live', changes: 'Live', draft: 'Not published yet', none: 'No program page yet' };
+
+// Program pages offered in the picker: everything in Program Pages, plus the
+// starter list for programs nobody has built a page for yet.
+async function loadPrograms() {
+  if (S.programs || S.programsLoading) return S.programsLoading;
+  S.programsLoading = (async () => {
+    let list = []; let warning = null;
+    try { const out = await api('GET', { action: 'quiz-programs' }); list = out.programs || []; warning = out.warning || null; }
+    catch (err) { warning = `Couldn't load program pages: ${err.message}`; }
+    try {
+      const r = await fetch('/program-pages/starters/index.json', { credentials: 'include' });
+      if (r.ok) {
+        const starters = await r.json();
+        const have = new Set(list.map((p) => p.slug));
+        for (const st of Array.isArray(starters) ? starters : []) if (st?.slug && !have.has(st.slug)) list.push({ slug: st.slug, name: st.name, status: 'none', url: programUrl(st.slug) });
+      }
+    } catch { /* starters are optional */ }
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    S.programs = list; S.programsWarning = warning; S.programsLoading = null;
+    if (S.tab === 'results') renderResults(); else renderLint();
+  })();
+  return S.programsLoading;
+}
+
+function programPicker(a) {
+  const picked = a.programs || [];
+  const cat = S.programs;
+  const byslug = new Map((cat || []).map((p) => [p.slug, p]));
+  const left = (cat || []).filter((p) => !picked.some((x) => x.slug === p.slug));
+  const opt = (p) => `<option value="${esc(p.slug)}">${esc(p.name)}</option>`;
+  const groups = [['Live on the website', left.filter((p) => p.status === 'live' || p.status === 'changes')], ['Not published yet', left.filter((p) => p.status === 'draft')], ['No program page yet', left.filter((p) => p.status === 'none')]].filter(([, l]) => l.length);
+  return `<div class="field"><span class="lbl">Programs shown with this result</span>
+    <div class="picks">${picked.length ? picked.map((p, k) => {
+      const c = byslug.get(p.slug); const st = c ? c.status : cat ? 'gone' : null;
+      return `<div class="pick" data-pk="${k}"><span class="pick__n">${k + 1}</span><a href="${esc(programUrl(p.slug))}" target="_blank" rel="noopener" title="Open the program page">${esc(c?.name || p.name)} ↗</a>
+        ${st && st !== 'live' && st !== 'changes' ? `<span class="chip ${st === 'gone' ? 'chip--bad' : 'chip--changes'}">${st === 'gone' ? 'Page removed' : esc(STATUS_LABEL[st] || st)}</span>` : ''}
+        <span class="spacer"></span><button class="btn btn--icon btn--sm" type="button" data-pup title="Move up"${k === 0 ? ' disabled' : ''}>↑</button><button class="btn btn--icon btn--sm" type="button" data-pdown title="Move down"${k === picked.length - 1 ? ' disabled' : ''}>↓</button><button class="btn btn--icon btn--sm btn--danger" type="button" data-prm title="Remove">✕</button></div>`;
+    }).join('') : '<div class="picks__empty">No programs picked — only the result text is shown.</div>'}</div>
+    ${cat ? `<select class="inp" data-padd style="max-width:420px"${left.length ? '' : ' disabled'}><option value="">${left.length ? '+ Add a program…' : 'Every program is already picked'}</option>${groups.map(([g, l]) => `<optgroup label="${esc(g)}">${l.map(opt).join('')}</optgroup>`).join('')}</select>` : '<span class="help">Loading program pages…</span>'}
+    <span class="help">Shown under the result text, in this order, each linking to its page on pacificdiscovery.org/programs/.</span></div>`;
+}
 
 function renderResults() {
   const mp = maxPoints();
+  if (!S.programs) loadPrograms();
+  const legacy = S.programs && archs().some((a) => hasLegacyPrograms(a.html));
   $('#app').innerHTML = `<div class="page"><div id="lint"></div>
-    <div class="panel"><h2 class="serif">Results</h2><p class="sub">What visitors see after the quiz. Paste each result's text into its box — plain text is fine (a blank line starts a new paragraph); simple HTML like &lt;strong&gt; and links also work. <strong>Order matters:</strong> when two results tie, the one higher in this list wins.</p></div>
+    <div class="panel"><h2 class="serif">Results</h2><p class="sub">What visitors see after the quiz. Paste each result's text into its box — plain text is fine (a blank line starts a new paragraph); simple HTML like &lt;strong&gt; and links also work. Then pick the programs to recommend — they're listed under the text as links to their program pages. <strong>Order matters:</strong> when two results tie, the one higher in this list wins.</p>
+      ${S.programsWarning ? `<div class="lint lint--warn">${esc(S.programsWarning)}</div>` : ''}
+      ${legacy ? `<div class="lint lint--warn" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:240px">Some results still name their programs in a “Programs to look at:” sentence. Turn those into picked programs with links?</span><button class="btn btn--sm btn--primary" type="button" id="convert-legacy">Link those programs</button></div>` : ''}
+      ${S.legacyNote ? `<div class="lint lint--warn">${S.legacyNote}</div>` : ''}</div>
     ${archs().map((a, i) => `<div class="qcard" data-ai="${i}"><div class="qcard__head"><span class="n">${i + 1}</span><span class="t">${esc(a.name)}</span><span class="reach">up to ${mp[a.key] || 0} pts · key <code>${esc(a.key)}</code></span>
       <button class="btn btn--icon btn--sm" data-up${i === 0 ? ' disabled' : ''}>↑</button><button class="btn btn--icon btn--sm" data-down>↓</button><button class="btn btn--icon btn--sm btn--danger" data-del>✕</button></div>
       <div class="qcard__body"><div class="row2"><div class="field"><label>Name</label><input type="text" data-k="name" value="${esc(a.name)}"></div><div class="field"><label>Heading on the result page</label><input type="text" data-k="headline" value="${esc(a.headline || '')}"></div></div>
-      <div class="field"><label>Result text</label><textarea rows="7" data-k="html">${esc(a.html || '')}</textarea></div>
+      <div class="field"><label>Result text</label><textarea rows="7" data-k="html">${esc(stripProgramsBlock(a.html))}</textarea></div>
+      ${programPicker(a)}
       <div class="row2"><div class="field"><label>Button label</label><input type="text" data-k="ctaLabel" value="${esc(a.ctaLabel || '')}" placeholder="Start your application"></div><div class="field"><label>Button link</label><input type="text" data-k="ctaUrl" value="${esc(a.ctaUrl || '/')}"><span class="help"><code>/</code> = the application, prefilled with their name, email and phone.</span></div></div>
       <div class="field" style="max-width:360px"><label>Value saved to HubSpot (“PD quiz result”)</label><input type="text" data-k="hubspotValue" value="${esc(a.hubspotValue || a.name)}"></div></div></div>`).join('')}
     <div class="acts"><button class="btn" id="adda">+ Add a result</button></div></div>`;
   renderLint();
   $$('[data-ai]').forEach((card) => {
     const i = Number(card.dataset.ai); const list = S.draft.archetypes; const a = list[i];
-    $$('[data-k]', card).forEach((el) => el.addEventListener('input', () => { a[el.dataset.k] = el.value; if (el.dataset.k === 'name') card.querySelector('.t').textContent = el.value; changed(); }));
-    card.querySelector('[data-k=html]').addEventListener('blur', (e) => { const h = textToHtml(e.target.value); if (h !== a.html) { a.html = h; e.target.value = h; changed(); } });
+    $$('[data-k]', card).forEach((el) => el.addEventListener('input', () => {
+      if (el.dataset.k === 'html') syncResultHtml(a, el.value);
+      else a[el.dataset.k] = el.value;
+      if (el.dataset.k === 'name') card.querySelector('.t').textContent = el.value;
+      changed();
+    }));
+    card.querySelector('[data-k=html]').addEventListener('blur', (e) => {
+      const body = textToHtml(e.target.value); const before = a.html;
+      syncResultHtml(a, body);
+      if (a.html !== before) { e.target.value = stripProgramsBlock(a.html); changed(); }
+    });
+    // program picker
+    const progs = () => (a.programs = a.programs || []);
+    card.querySelector('[data-padd]')?.addEventListener('change', (e) => {
+      const p = S.programs.find((x) => x.slug === e.target.value); if (!p) return;
+      progs().push({ slug: p.slug, name: p.name, url: programUrl(p.slug) });
+      syncResultHtml(a); changed({ rerender: true });
+    });
+    $$('[data-pk]', card).forEach((row) => {
+      const k = Number(row.dataset.pk);
+      row.querySelector('[data-prm]').onclick = () => { progs().splice(k, 1); syncResultHtml(a); changed({ rerender: true }); };
+      row.querySelector('[data-pup]').onclick = () => { const l = progs(); if (k > 0) { [l[k - 1], l[k]] = [l[k], l[k - 1]]; syncResultHtml(a); changed({ rerender: true }); } };
+      row.querySelector('[data-pdown]').onclick = () => { const l = progs(); if (k < l.length - 1) { [l[k + 1], l[k]] = [l[k], l[k + 1]]; syncResultHtml(a); changed({ rerender: true }); } };
+    });
     card.querySelector('[data-up]').onclick = () => { if (i > 0) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; changed({ rerender: true }); } };
     card.querySelector('[data-down]').onclick = () => { if (i < list.length - 1) { [list[i + 1], list[i]] = [list[i], list[i + 1]]; changed({ rerender: true }); } };
     card.querySelector('[data-del]').onclick = async () => {
@@ -278,6 +357,20 @@ function renderResults() {
       for (const sec of quizSections()) for (const f of sec.fields) for (const [o, ks] of Object.entries(f.scores || {})) { const left = ks.filter((k) => k !== a.key); if (left.length) f.scores[o] = left; else delete f.scores[o]; }
       changed({ rerender: true });
     };
+  });
+  $('#convert-legacy')?.addEventListener('click', () => {
+    const missed = [];
+    for (const a of archs()) {
+      const r = convertLegacyPrograms(stripProgramsBlock(a.html), S.programs);
+      if (!r.found) continue;
+      const l = a.programs = a.programs || [];
+      for (const p of r.matched) if (!l.some((x) => x.slug === p.slug)) l.push({ slug: p.slug, name: p.name, url: programUrl(p.slug) });
+      if (r.unmatched.length) missed.push(`<strong>${esc(a.name)}</strong>: ${r.unmatched.map(esc).join(', ')}`);
+      syncResultHtml(a, r.html);
+    }
+    S.legacyNote = missed.length ? `These programs didn't match a program page, so they weren't added — pick them by hand if they exist:<br>${missed.join('<br>')}` : null;
+    changed({ rerender: true });
+    toast(missed.length ? 'Programs linked — a few names need picking by hand.' : 'Programs linked.');
   });
   $('#adda').onclick = () => {
     let n = archs().length + 1; while (archs().some((a) => a.key === `result${n}`)) n += 1;
@@ -292,7 +385,7 @@ function renderSettings() {
   const inp = (k, label, help = '', ph = '') => `<div class="field"><label for="st-${k}">${label}</label><input type="text" id="st-${k}" data-s="${k}" value="${esc(st[k] ?? '')}" placeholder="${esc(ph)}">${help ? `<span class="help">${help}</span>` : ''}</div>`;
   $('#app').innerHTML = `<div class="page"><div id="lint"></div>
     <div class="panel"><h2 class="serif">Wording</h2><div class="cols"><div>${inp('introTitle', 'Intro heading')}<div class="field"><label for="st-introBody">Intro text</label><textarea id="st-introBody" data-s="introBody" rows="3">${esc(st.introBody || '')}</textarea></div>${inp('startLabel', 'Start button', '', 'Start the quiz')}</div>
-      <div>${inp('contactIntro', 'Text on the details page', '', 'We’ll show your result on the next screen…')}${inp('submitLabel', 'Submit button', '', 'See my result')}${inp('secondaryCtaLabel', 'Second button on the result', '', 'Talk to an advisor')}${inp('secondaryCtaUrl', 'Second button link', 'Leave empty to hide it.')}
+      <div>${inp('contactIntro', 'Text on the details page', '', 'We’ll show your result on the next screen…')}${inp('submitLabel', 'Submit button', '', 'See my result')}${inp('secondaryCtaLabel', 'Second button on the result', '', 'Talk to an advisor')}${inp('secondaryCtaUrl', 'Second button link', 'Leave empty to hide it.')}${inp('programsHeading', 'Heading above the recommended programs', `Shown on every result that has programs picked. Empty = “${DEFAULT_PROGRAMS_HEADING}”.`, DEFAULT_PROGRAMS_HEADING)}
       <label class="check"><input type="checkbox" id="st-scores"${st.showScores ? ' checked' : ''}><span>Show the points for every result under the result</span></label></div></div></div>
     <div class="panel"><h2 class="serif">HubSpot</h2><p class="sub">The quiz is submitted to this HubSpot form with the visitor's HubSpot cookie first, so HubSpot's Original Source is the real channel (not “Offline Sources”). Then the result, every answer, and the source details (UTMs, ad click, landing page, referring site) are written to the contact.</p>
       <div class="field" style="max-width:560px"><label for="st-hubspotFormGuid">HubSpot form ID</label><div style="display:flex;gap:8px"><input type="text" id="st-hubspotFormGuid" data-s="hubspotFormGuid" value="${esc(st.hubspotFormGuid || '')}" placeholder="e.g. 1a2b3c4d-5e6f-…"><button class="btn btn--sm" type="button" id="mkform">Create in HubSpot</button></div><span class="help">Turn off HubSpot's own notification emails for this form if you don't want one per quiz.</span></div>
@@ -301,7 +394,11 @@ function renderSettings() {
       <p class="sub">Create these properties (and the source ones) with <a href="/lead-sources/">Lead Sources → Set up HubSpot properties</a>.</p></div>
   </div>`;
   renderLint();
-  $$('[data-s]').forEach((el) => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => { const v = el.value.trim(); if (v || el.dataset.s === 'leadStatus') st[el.dataset.s] = v; else delete st[el.dataset.s]; changed(); }));
+  $$('[data-s]').forEach((el) => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+    const v = el.value.trim();
+    if (el.dataset.s === 'programsHeading') { if (v) st.programsHeading = v; else delete st.programsHeading; for (const a of archs()) if (a.programs?.length) syncResultHtml(a); changed(); return; }
+    if (v || el.dataset.s === 'leadStatus') st[el.dataset.s] = v; else delete st[el.dataset.s]; changed();
+  }));
   $('#st-scores').addEventListener('change', (e) => { st.showScores = e.target.checked; changed(); });
   $('#mkform').onclick = async (e) => {
     if (st.hubspotFormGuid && !(await confirmDialog('Create another HubSpot form?', 'A form ID is already set. Create a new one and use it instead?', 'Create', false))) return;
