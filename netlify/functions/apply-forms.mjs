@@ -19,6 +19,9 @@
 //   GET  versions                     → { versions }
 //   POST restore   { versionId }      draft ← that version
 //   GET  hubspot                      → { pdPrograms, contactProps, dealProps }
+//   GET  referrals ?q=&type=          → { referrals, counts }   (?form=referral is the editor)
+//   POST referral-resync { id }        re-run the HubSpot sync via pd-apply
+//   POST referral-hubspot-setup        create the pd_referral* properties + "Referred by" association
 //   GET  quiz-programs                → { programs: [{ slug, name, status, url }] }  (program pages for the quiz result picker)
 //   POST jotform-add { step, field }  create the question in the Jotform form → { qid, name }
 //   GET  applications ?status=&q=&limit=
@@ -36,10 +39,12 @@ import { requireEditor, json } from "./_shared/apply-form-access.mjs";
 import { lintSchema, allFields, FIELD_TYPES } from "../../apply-form/form-kit.mjs";
 import { lintQuiz, QUIZ_FORM_ID } from "../../apply-form/quiz-kit.mjs";
 import { checkResultPrograms, programUrl } from "../../apply-form/quiz-programs.mjs";
+import { lintReferral, REFERRAL_FORM_ID, REFERRAL_PROPERTIES, DEFAULT_ASSOCIATION_LABEL } from "../../apply-form/referral-kit.mjs";
 
 export const FORM_ID = "pd-application";
-// ?form=quiz (GET) or { form: "quiz" } (POST) edits the gap-year quiz instead.
-const formIdOf = (v) => (v === "quiz" ? QUIZ_FORM_ID : FORM_ID);
+// ?form=quiz / ?form=referral (GET) or { form: "quiz" | "referral" } (POST)
+// edits the gap-year quiz or the referral form instead of the application.
+const formIdOf = (v) => (v === "quiz" ? QUIZ_FORM_ID : v === "referral" ? REFERRAL_FORM_ID : FORM_ID);
 export const MAX_SCHEMA_BYTES = 768 * 1024;
 
 let _sql;
@@ -92,9 +97,24 @@ export function checkQuiz(s) {
   return null;
 }
 
-const lintFor = (id, s) => (id === QUIZ_FORM_ID ? lintQuiz(s) : lintSchema(s));
+export function checkReferral(s) {
+  if (!s || typeof s !== "object" || Array.isArray(s) || s.kind !== "referral") return "The referral form must be an object with kind \"referral\".";
+  const size = Buffer.byteLength(JSON.stringify(s), "utf8");
+  if (size > MAX_SCHEMA_BYTES) return `The form is too large (${Math.round(size / 1024)} KB).`;
+  if (!Array.isArray(s.steps) || !s.steps.find((x) => x.key === "referrer") || !s.steps.find((x) => x.key === "friend")) return "The referral form needs both of its pages.";
+  for (const { field } of allFields(s)) {
+    if (!FIELD_TYPES[field.type]) return `Unknown field type "${field.type}".`;
+    for (const k of ["html", "help", "label"]) if (/<\s*script|javascript:/i.test(String(field[k] || ""))) return `"${field.label || field.key}" contains a script — remove it.`;
+  }
+  for (const k of ["introBody", "thanksBody"]) if (/<\s*script|javascript:/i.test(String(s.settings?.[k] || ""))) return "The intro or thank-you text contains a script — remove it.";
+  if (s.settings?.hubspotFormGuid && !/^[0-9a-f-]{36}$/i.test(s.settings.hubspotFormGuid)) return "The HubSpot form ID should look like 1a2b3c4d-…-… (36 characters).";
+  return null;
+}
+
+const lintFor = (id, s) => (id === QUIZ_FORM_ID ? lintQuiz(s) : id === REFERRAL_FORM_ID ? lintReferral(s) : lintSchema(s));
 const checkFor = (id, s) => {
   if (id === QUIZ_FORM_ID) return checkQuiz(s);
+  if (id === REFERRAL_FORM_ID) return checkReferral(s);
   const err = checkSchema(s);
   if (err) return err;
   if (s.settings?.hubspotFormGuid && !/^[0-9a-f-]{36}$/i.test(s.settings.hubspotFormGuid)) return "The HubSpot form ID should look like 1a2b3c4d-…-… (36 characters).";
@@ -146,6 +166,7 @@ export default async (req, context, deps = {}) => {
       if (action === "file") return await proxyFile(url.searchParams.get("id"));
       if (action === "quiz-responses") return json(await listQuizResponses(url));
       if (action === "quiz-programs") return json(await listQuizPrograms());
+      if (action === "referrals") return json(await listReferrals(url));
       return json({ error: "Unknown action" }, 400);
     }
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -159,6 +180,8 @@ export default async (req, context, deps = {}) => {
       case "discard": return await discard(user, fid);
       case "restore": return await restore(body, user, fid);
       case "quiz-resync": return await quizResync(body);
+      case "referral-resync": return await referralResync(body);
+      case "referral-hubspot-setup": return await referralHubspotSetup(user);
       case "hubspot-form-create": return await hubspotFormCreate(body);
       case "jotform-add": return await jotformAdd(body);
       case "resync": return await resync(body);
@@ -407,6 +430,78 @@ async function quizResync({ id }) {
   return json({ ok: true, result: data.result, response: row || null });
 }
 
+// ── referrals ──────────────────────────────────────────────────────────────
+
+export async function listReferrals(url) {
+  const q = String(url.searchParams.get("q") || "").trim().toLowerCase();
+  const like = `%${q.replace(/[%_]/g, "")}%`;
+  const type = String(url.searchParams.get("type") || "");
+  const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get("limit") || "200", 10)));
+  let rows;
+  try {
+    rows = await db().query(
+      `SELECT id, referrer_type, referrer_email, referrer_first_name, referrer_last_name,
+              referred_email, referred_first_name, referred_last_name, answers, attribution,
+              referrer_contact_id, referred_contact_id, referred_existed, sync, created_at
+         FROM referrals
+        WHERE ($1 = '%%' OR lower(referrer_email) LIKE $1 OR lower(referred_email) LIKE $1
+               OR lower(coalesce(referrer_first_name,'') || ' ' || coalesce(referrer_last_name,'')) LIKE $1
+               OR lower(coalesce(referred_first_name,'') || ' ' || coalesce(referred_last_name,'')) LIKE $1)
+          AND ($2 = '' OR referrer_type = $2)
+        ORDER BY created_at DESC LIMIT $3`, [like, type, limit]);
+  } catch (err) {
+    if (/referrals/.test(err.message)) return { referrals: [], counts: {}, warning: "Run MIGRATION-referral.sql in Neon to create the referrals table." };
+    throw err;
+  }
+  const counts = await db()`SELECT coalesce(referrer_type, '') AS t, count(*)::int AS n FROM referrals GROUP BY 1`;
+  return { referrals: rows, counts: Object.fromEntries(counts.map((c) => [c.t, c.n])) };
+}
+
+async function referralResync({ id }) {
+  const site = applySite();
+  if (!site || !process.env.APPLY_SERVICE_KEY) return json({ error: "Set APPLY_SITE_URL and APPLY_SERVICE_KEY on the dashboard site." }, 500);
+  const r = await fetch(`${site}/api/referral/resync`, { method: "POST", headers: { "Content-Type": "application/json", "x-apply-key": process.env.APPLY_SERVICE_KEY }, body: JSON.stringify({ id, force: true }) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return json({ error: data.error || `pd-apply returned ${r.status}` }, 502);
+  const [row] = await db().query(`SELECT id, referrer_contact_id, referred_contact_id, sync FROM referrals WHERE id = $1`, [id]);
+  return json({ ok: true, result: data.result, referral: row || null });
+}
+
+let _hsFetch = (...a) => fetch(...a);
+export function __setHubspotFetch(fn) { _hsFetch = fn; }
+
+/** Creates the pd_referral* contact properties and the contact↔contact "Referred by" label. */
+export async function referralHubspotSetup(user, label = DEFAULT_ASSOCIATION_LABEL) {
+  if (!user?.canPublish) return json({ error: "Only a publisher (admin or admissions lead) can change HubSpot settings." }, 403);
+  const token = process.env.HUBSPOT_TOKEN || process.env.HUBSPOT_PRIVATE_APP_TOKEN;
+  if (!token) return json({ error: "HUBSPOT_TOKEN is not set" }, 500);
+  const hs = async (path, method = "GET", body) => {
+    const r = await _hsFetch(`https://api.hubapi.com${path}`, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(`HubSpot ${path} → ${r.status}: ${data.message || ""}`), { status: r.status });
+    return data;
+  };
+  const created = []; const existing = []; const failed = [];
+  try { await hs("/crm/v3/properties/contacts/groups", "POST", { name: "pd_referrals", label: "Pacific Discovery referrals", displayOrder: -1 }); }
+  catch (err) { if (err.status !== 409) failed.push({ name: "pd_referrals (group)", error: err.message }); }
+  let have = new Set();
+  try { have = new Set(((await hs("/crm/v3/properties/contacts")).results || []).map((p) => p.name)); } catch { /* try anyway */ }
+  for (const p of REFERRAL_PROPERTIES) {
+    if (have.has(p.name)) { existing.push(p.name); continue; }
+    const type = p.type || "string";
+    try {
+      await hs("/crm/v3/properties/contacts", "POST", { name: p.name, label: p.label, groupName: "pd_referrals", type, fieldType: p.fieldType || "text", description: "Written by the referral form on apply.pacificdiscovery.org/refer." });
+      created.push(p.name);
+    } catch (err) { if (err.status === 409) existing.push(p.name); else failed.push({ name: p.name, error: err.message }); }
+  }
+  try {
+    const labels = (await hs("/crm/v4/associations/contact/contact/labels")).results || [];
+    if (labels.some((l) => l.label === label)) existing.push(`association “${label}”`);
+    else { await hs("/crm/v4/associations/contact/contact/labels", "POST", { label, inverseLabel: "Referred", name: label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") }); created.push(`association “${label}”`); }
+  } catch (err) { failed.push({ name: `association “${label}”`, error: err.message }); }
+  return json({ created, existing, failed });
+}
+
 // ── HubSpot: create the form a page submits to (for Original Source) ───────
 // Needs the `forms` scope on HUBSPOT_TOKEN. The form only needs the fields the
 // site sends with the submission; everything else is written via the CRM API.
@@ -436,7 +531,7 @@ export function hubspotFormPayload(name) {
 async function hubspotFormCreate(body) {
   const token = process.env.HUBSPOT_TOKEN || process.env.HUBSPOT_PRIVATE_APP_TOKEN;
   if (!token) return json({ error: "HUBSPOT_TOKEN is not set" }, 500);
-  const name = String(body.name || (body.form === "quiz" ? "Gap year quiz (apply.pacificdiscovery.org/quiz)" : "Application step 1 (apply.pacificdiscovery.org)")).slice(0, 120);
+  const name = String(body.name || (body.form === "quiz" ? "Gap year quiz (apply.pacificdiscovery.org/quiz)" : body.form === "referral" ? "Referral — the referrer (apply.pacificdiscovery.org/refer)" : "Application step 1 (apply.pacificdiscovery.org)")).slice(0, 120);
   const r = await fetch("https://api.hubapi.com/marketing/v3/forms/", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(hubspotFormPayload(name)) });
   const data = await r.json().catch(() => ({}));
   if (!r.ok || !data.id) {

@@ -4,6 +4,7 @@
 //   public/form-kit.mjs        → apply-form/form-kit.mjs      (application + quiz forms)
 //   public/quiz-kit.mjs        → apply-form/quiz-kit.mjs      (quiz scoring / lint)
 //   public/attribution-kit.mjs → apply-form/ and lead-sources/attribution-kit.mjs (channel rules)
+//   public/referral-kit.mjs    → apply-form/referral-kit.mjs  (referral form; skipped until pd-apply has it)
 //   node scripts/sync-form-kit.mjs ../pd-apply
 // With --check, exits 1 if a pinned copy has drifted.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -17,10 +18,12 @@ const FILES = [
   ['public/quiz-kit.mjs', '../apply-form/quiz-kit.mjs'],
   ['public/attribution-kit.mjs', '../apply-form/attribution-kit.mjs'],
   ['public/attribution-kit.mjs', '../lead-sources/attribution-kit.mjs'],
+  ['public/referral-kit.mjs', '../apply-form/referral-kit.mjs', { optional: true }],
 ];
 let drift = false;
-for (const [from, to] of FILES) {
+for (const [from, to, opts = {}] of FILES) {
   const src = resolve(root, from);
+  if (opts.optional && !existsSync(src)) { console.log(`${to.slice(3)}: pd-apply has no ${from} yet — copy it there (see REFERRALS.md).`); continue; }
   const dest = new URL(to, import.meta.url);
   const a = readFileSync(src, 'utf8');
   const b = existsSync(dest) ? readFileSync(dest, 'utf8') : '';

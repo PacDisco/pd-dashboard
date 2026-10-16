@@ -1,0 +1,175 @@
+{
+ "kind": "referral",
+ "title": "Refer a friend to Pacific Discovery",
+ "settings": {
+  "introTitle": "Know someone who’d love a gap year?",
+  "introBody": "Tell us who they are and we’ll reach out personally — no spam, just a friendly hello from one of our advisors. It takes about a minute.",
+  "submitLabel": "Send referral",
+  "thanksTitle": "Thank you!",
+  "thanksBody": "We’ve got it. One of our advisors will get in touch with your friend soon and let them know you sent them our way.",
+  "anotherLabel": "Refer someone else",
+  "hubspotFormGuid": "",
+  "leadStatus": "NEW",
+  "associationLabel": "Referred by",
+  "howFoundProperty": "",
+  "howFoundValue": "",
+  "notifyEmails": ""
+ },
+ "programs": [],
+ "terms": [],
+ "lists": {},
+ "steps": [
+  {
+   "key": "referrer",
+   "title": "About you",
+   "sections": [
+    {
+     "key": "you",
+     "title": "About you",
+     "fields": [
+      {
+       "key": "referrerType",
+       "type": "radio",
+       "label": "I am…",
+       "required": true,
+       "options": [
+        "A past or current student",
+        "A parent of a past or current student",
+        "A school counselor or partner organisation",
+        "Pacific Discovery staff or instructor"
+       ]
+      },
+      {
+       "key": "referrerName",
+       "type": "fullname",
+       "label": "Your name",
+       "required": true
+      },
+      {
+       "key": "referrerEmail",
+       "type": "email",
+       "label": "Your email",
+       "required": true
+      },
+      {
+       "key": "referrerPhone",
+       "type": "phone",
+       "label": "Your phone number",
+       "required": false
+      },
+      {
+       "key": "referrerProgram",
+       "type": "text",
+       "label": "Which program were you (or your child) on, and when?",
+       "required": false,
+       "help": "e.g. South America, Fall 2025",
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "referrerType",
+          "op": "equals",
+          "value": "A past or current student"
+         },
+         {
+          "field": "referrerType",
+          "op": "equals",
+          "value": "A parent of a past or current student"
+         }
+        ]
+       }
+      },
+      {
+       "key": "referrerOrg",
+       "type": "text",
+       "label": "School or organisation",
+       "required": true,
+       "showIf": {
+        "match": "any",
+        "rules": [
+         {
+          "field": "referrerType",
+          "op": "equals",
+          "value": "A school counselor or partner organisation"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "key": "friend",
+   "title": "Who you’re referring",
+   "sections": [
+    {
+     "key": "them",
+     "title": "Who are you referring?",
+     "fields": [
+      {
+       "key": "friendName",
+       "type": "fullname",
+       "label": "Their name",
+       "required": true
+      },
+      {
+       "key": "friendEmail",
+       "type": "email",
+       "label": "Their email",
+       "required": true
+      },
+      {
+       "key": "friendPhone",
+       "type": "phone",
+       "label": "Their phone number",
+       "required": false
+      },
+      {
+       "key": "relationship",
+       "type": "select",
+       "label": "How do you know them?",
+       "required": false,
+       "options": [
+        "Friend",
+        "Sibling or family member",
+        "Classmate",
+        "My child",
+        "Student I advise",
+        "Other"
+       ]
+      },
+      {
+       "key": "interests",
+       "type": "checkbox",
+       "label": "What might they be interested in?",
+       "required": false,
+       "options": [
+        "Gap semester (around 3 months)",
+        "Mini semester (3–6 weeks)",
+        "Summer program",
+        "Not sure yet"
+       ]
+      },
+      {
+       "key": "friendNotes",
+       "type": "textarea",
+       "label": "Anything that would help us? (optional)",
+       "required": false,
+       "help": "What they’re looking for, timing, the best way to reach them…"
+      },
+      {
+       "key": "consent",
+       "type": "checkbox",
+       "label": "Permission",
+       "required": true,
+       "options": [
+        "They know I’m passing on their details and are happy for Pacific Discovery to contact them."
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -47,6 +47,7 @@
     "test:drilldowns": "node --test test/drilldown-attribution.test.mjs",
     "test:quiz-leads-ui": "node test/quiz-editor.smoke.mjs",
     "test:quiz-programs": "node test/quiz-programs.test.mjs",
+    "test:referrals": "node test/referral-kit.test.mjs",
     "sync:form-kit": "node scripts/sync-form-kit.mjs"
   },
   "dependencies": {
