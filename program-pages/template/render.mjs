@@ -1348,7 +1348,9 @@ const L = {
       (hint ? `<p class="pdl-swipe">${hint}<svg viewBox="0 0 28 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h25M21 1l5 5-5 5"/></svg></p>` : '') +
       `</div></div>` +
       `<div class="pdl-week" tabindex="0" aria-label="${attr(`${p.week.heading || 'A week in the life'} ${p.week.headingAccent || ''}`.trim())}, scrollable">` +
-      c.list('week.days', 'ol', 'pdl-week__track', (it, ip) =>
+      c.list('week.days', 'ol', 'pdl-week__track', (it, ip, i) =>
+        // Dotted route to the next pin: down from a high pin, up from a low one (hidden on the last day by CSS).
+        `<svg class="pdl-week__link" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="${i % 2 ? 'M0,36 C50,36 50,0 100,0' : 'M0,0 C50,0 50,36 100,36'}" vector-effect="non-scaling-stroke"/></svg>` +
         `<span class="pdl-week__pin" aria-hidden="true"></span>` +
         `<figure class="pdl-week__fig">${c.img(`${ip}.image`, `${ip}.imageAlt`, 'pdl-week__img', 'Add a photo')}` +
         `<figcaption>${c.t(`${ip}.day`, 'span', 'pdl-week__day')}${c.t(`${ip}.title`, 'span', 'pdl-week__title')}</figcaption></figure>`,
@@ -1589,12 +1591,14 @@ export const LANDING_CSS = `
 .pdl-week{overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-left:max(24px,calc((100% - 1192px) / 2));padding-bottom:112px;-webkit-overflow-scrolling:touch}
 .pdl-week:focus-visible{outline:3px solid var(--pdl-topaz);outline-offset:-3px}
 .pdl-week__track{position:relative;display:flex;gap:28px;width:max-content;min-width:100%;padding:0 max(24px,calc((100% - 1192px) / 2))}
-.pdl-week__track::before{content:"";position:absolute;left:0;right:0;top:10px;border-top:3px dotted var(--pdl-topaz)}
-.pdl-week__item{flex:none;width:clamp(230px,24vw,270px);scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:16px}
+.pdl-week__item{position:relative;flex:none;width:clamp(230px,24vw,270px);scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:16px}
 .pdl-week__pin{position:relative;z-index:1;width:22px;height:22px;border-radius:50%;background:#fff;border:5px solid var(--pdl-topaz)}
 .pdl-week__item:last-child .pdl-week__pin{background:var(--pdl-green);border-color:var(--pdl-green)}
 .pdl-week__fig{width:100%;display:flex;flex-direction:column;gap:14px}
-.pdl-week__item:nth-child(even) .pdl-week__fig{margin-top:36px}
+.pdl-week__item:nth-child(even){padding-top:36px}
+.pdl-week__link{position:absolute;left:50%;top:11px;width:calc(100% + 28px);height:36px;overflow:visible}
+.pdl-week__link path{fill:none;stroke:var(--pdl-topaz);stroke-width:3;stroke-linecap:round;stroke-dasharray:0 9}
+.pdl-week__item:last-child .pdl-week__link{display:none}
 .pdl .pdl-week__img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:16px;box-shadow:0 16px 34px rgba(33,33,33,.14);display:block}
 .pdl-week__fig figcaption{display:flex;flex-direction:column;gap:2px}
 .pdl .pdl-week__day{color:var(--pdl-topaz-dk);font-weight:600;font-size:13px;letter-spacing:.1em;text-transform:uppercase}
