@@ -1245,7 +1245,6 @@ export const LANDING_SCHEMA = {
       { k: 'cta.tertiaryText', label: 'Third button (advisor link)', type: 'text' }] },
   },
   lists: {
-    'hero.prints':     { label: 'Photo print', add: 'Add a photo print', fields: [{ k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }, { k: 'caption', label: 'Caption', type: 'text' }], blank: { image: '', imageAlt: '', caption: 'Caption' } },
     'stats.items':     { label: 'Stat', add: 'Add a stat', fields: [{ k: 'value', label: 'Number', type: 'text' }, { k: 'label', label: 'Label', type: 'text' }], blank: { value: '0', label: 'label' } },
     'reasons.items':   { label: 'Reason', add: 'Add a reason', fields: [{ k: 'icon', label: 'Icon', type: 'select', options: LANDING_ICONS }, { k: 'title', label: 'Title', type: 'text' }, { k: 'body', label: 'Text', type: 'multiline' }], blank: { icon: 'Compass', title: 'New reason', body: 'Describe it in a sentence or two.' } },
     'compare.rows':    { label: 'Comparison row', add: 'Add a row', fields: [{ k: 'label', label: 'What’s compared', type: 'text' }, { k: 'us', label: 'Pacific Discovery', type: 'text' }, { k: 'c1', label: 'Column 2', type: 'text' }, { k: 'c2', label: 'Column 3', type: 'text' }, { k: 'c3', label: 'Column 4', type: 'text' }], blank: { label: 'Topic', us: 'Our answer', c1: '', c2: '', c3: '' } },
@@ -1271,7 +1270,7 @@ export function blankLanding(name = 'New landing page') {
       applyUrl: 'https://www.pacificdiscovery.org/apply',
     },
     layout: LANDING_SECTIONS.map((s) => ({ key: s.key, show: true })),
-    hero: { eyebrow: '', headline: name, headlineAccent: '', intro: '[One or two sentences]', primaryText: 'Take the 3-minute quiz', secondaryText: 'Request a program booklet', image: '', imageAlt: '', imageFocus: '', imageFocusMobile: '', stampNumber: '25+', stampLabel: 'YEARS', stampRing: 'SINCE 2001 · 25+ YEARS OF GAP YEARS ·', prints: [] },
+    hero: { eyebrow: '', headline: name, headlineAccent: '', intro: '[One or two sentences]', primaryText: 'Take the 3-minute quiz', secondaryText: 'Request a program booklet', image: '', imageAlt: '', imageFocus: '', imageFocusMobile: '', stampNumber: '25+', stampLabel: 'YEARS', stampRing: 'SINCE 2001 · 25+ YEARS OF GAP YEARS ·' },
     stats: { items: [] },
     reasons: { eyebrow: '', heading: 'Why families choose us', headingAccent: '', items: [] },
     compare: { eyebrow: '', heading: 'How we compare', headingAccent: '', usTag: 'Our way', usLabel: 'Pacific Discovery', col1: '', col2: '', col3: '', note: '', rows: [] },
@@ -1416,8 +1415,6 @@ function renderLandingHero(p, c, nextBg) {
   const h = p.hero;
   const fd = parseFocus(h.imageFocus), fm = parseFocus(h.imageFocusMobile);
   const focus = fd || fm ? ` style="${fd ? `--pdl-pos:${fd};` : ''}${fm ? `--pdl-pos-m:${fm};` : ''}"` : '';
-  const printsHtml = c.list('hero.prints', 'div', 'pdl-hero__prints', (it, ip) =>
-    `${c.img(`${ip}.image`, `${ip}.imageAlt`, 'pdl-print__img', 'Add a photo')}${c.t(`${ip}.caption`, 'figcaption', 'pdl-print__cap')}`, 'figure', 'pdl-print');
   const stamp = h.stampNumber || c.ed
     ? `<div class="pdl-stamp"${c.ed ? ' data-v="hero.stampNumber"' : ''}><svg viewBox="0 0 200 200" role="img" aria-label="${attr([h.stampNumber, h.stampLabel].filter(Boolean).join(' '))}" focusable="false">` +
       `<defs><path id="pdl-ring" d="M100,100 m-72,0 a72,72 0 1,1 144,0 a72,72 0 1,1 -144,0"/></defs>` +
@@ -1434,7 +1431,7 @@ function renderLandingHero(p, c, nextBg) {
     `<h1 class="pdl-h1">${c.t('hero.headline', 'span', '', { multiline: true, keep: true })} ${h.headlineAccent || c.ed ? `<span class="pdl-under">${c.t('hero.headlineAccent', 'em', '')}<svg viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 14 C 60 4, 120 4, 170 10 S 260 16, 296 6" fill="none" stroke="#81c243" stroke-width="5" stroke-linecap="round"/></svg></span>` : ''}</h1>` +
     `${c.t('hero.intro', 'p', 'pdl-hero__intro', { multiline: true })}` +
     `<div class="pdl-btns">${c.link('hero.primaryText', p.settings.quizUrl, 'pdl-btn pdl-btn--shadow', 'settings.quizUrl')}${c.link('hero.secondaryText', p.settings.bookletUrl, 'pdl-btn pdl-btn--light', 'settings.bookletUrl')}</div>` +
-    `</div><div class="pdl-hero__art">${printsHtml}${stamp}</div></div>` +
+    `</div>${stamp ? `<div class="pdl-hero__art">${stamp}</div>` : ''}</div>` +
     wave(nextBg, 'M0,60 C220,10 420,90 720,50 C1000,12 1220,80 1440,40 L1440,90 L0,90 Z').replace('viewBox="0 0 1440 60"', 'viewBox="0 0 1440 90"').replace('class="pdl-wave"', 'class="pdl-wave pdl-wave--bottom"') +
     `</header>`;
 }
@@ -1544,25 +1541,22 @@ export const LANDING_CSS = `
 @media (max-width:700px){.pdl .pdl-bg--hero .pdl-bg__img{object-position:var(--pdl-pos-m,var(--pdl-pos,center 45%))}}
 /* hero */
 .pdl-hero{position:relative;overflow:hidden}
-.pdl-hero__inner{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:56px;padding-top:88px;padding-bottom:150px}
+.pdl-hero__inner{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:56px;padding-top:88px;padding-bottom:140px}
 .pdl-hero__text{flex:1 1 520px;min-width:0;display:flex;flex-direction:column;gap:24px}
 .pdl .pdl-hero__intro{color:#f1f1f1;font-size:20px;max-width:560px}
 .pdl-under{position:relative;display:inline-block}
 .pdl-under svg{position:absolute;left:0;bottom:-10px;width:100%;height:18px}
-.pdl-hero__art{flex:1 1 380px;min-width:0;max-width:520px;position:relative;min-height:560px}
-.pdl-hero__prints{position:relative;height:100%}
-.pdl-print{position:absolute;width:48%;background:#fff;padding:10px 10px 0;display:flex;flex-direction:column;box-shadow:0 24px 48px rgba(0,0,0,.35)}
-.pdl-hero__prints>.pdl-print:nth-child(1){left:0;top:0;transform:rotate(-5deg);z-index:1}
-.pdl-hero__prints>.pdl-print:nth-child(2){right:0;top:190px;transform:rotate(4deg);z-index:2}
-.pdl-hero__prints>.pdl-print:nth-child(n+3){position:relative;margin-top:12px}
-.pdl .pdl-print__img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block}
-.pdl .pdl-print__cap{padding:10px 6px 14px;text-align:center;font-family:'DM Serif Display',Georgia,serif;font-style:italic;color:var(--pdl-body);font-size:17px;line-height:1.25}
-.pdl-stamp{position:absolute;left:4%;bottom:10px;width:clamp(104px,28%,150px);transform:rotate(-12deg);z-index:3}
+.pdl-hero__art{flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.pdl .pdl-print{position:absolute;background:#fff;display:flex;flex-direction:column;box-shadow:0 24px 48px rgba(0,0,0,.35)}
+.pdl .pdl-print__img{width:100%;object-fit:cover;display:block}
+.pdl .pdl-print__cap{text-align:center;font-family:'DM Serif Display',Georgia,serif;font-style:italic;color:var(--pdl-body);line-height:1.25}
+.pdl-stamp{width:clamp(130px,16vw,210px);transform:rotate(-12deg);filter:drop-shadow(0 16px 28px rgba(0,0,0,.35))}
 .pdl-stamp svg{display:block;width:100%;height:auto}
-@media (max-width:900px){.pdl-hero__art{min-height:0;aspect-ratio:1/1.08;width:100%}.pdl-hero__prints>.pdl-print:nth-child(2){top:34%}.pdl-hero__inner{padding-top:56px}}
+@media (max-width:900px){.pdl-hero__inner{padding-top:56px;gap:32px}.pdl-hero__art{justify-content:flex-start}}
 /* stats */
-.pdl-sec--stats{background-color:var(--pdl-topaz);background-image:radial-gradient(ellipse at 80% 0%,rgba(255,255,255,.18),transparent 60%),${GRAIN_DARK};color:#fff;padding:28px 0 44px}
-.pdl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:20px;text-align:center}
+.pdl-sec--stats{background-color:var(--pdl-topaz);color:#fff;padding:28px 0 44px}
+.pdl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;text-align:center}
+@media (max-width:860px){.pdl-stats{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:28px}}
 .pdl-stat{display:flex;flex-direction:column;gap:2px}
 .pdl .pdl-stat__v{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-size:clamp(32px,7vw,44px);line-height:1.1;color:#fff}
 .pdl .pdl-stat__l{font-size:14px;font-weight:500;color:#fff}

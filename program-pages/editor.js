@@ -356,8 +356,6 @@ const EDIT_CSS = `
 .pdp--edit [data-empty]:empty::before{content:attr(data-empty);color:#8d969a;font-style:italic}
 .pdp--edit .pdp-hero [data-empty]:empty::before{color:#d9eef3}
 .pdl.pdp--edit :is(.pdl-dark,.pdl-sec--stats,.pdl-sec--voices,.pdl-sec--cta) [data-empty]:empty::before{color:#d9eef3}
-.pdl.pdp--edit .pdl-hero__art{min-height:560px}
-.pdl.pdp--edit .pdl-hero__prints>.pde-add{position:absolute;left:0;right:0;bottom:-56px;z-index:4}
 .pdl.pdp--edit .pdl-sec--ribbon .pdl-ribbon__item{min-height:120px}
 .pdl.pdp--edit .pdl-img--empty,.pdl.pdp--edit .pdp-img--empty{display:flex;align-items:center;justify-content:center;min-height:160px;background:#e9f2f4;border:2px dashed #b2d6df;color:#1f6b7c;font:600 14px Poppins,sans-serif;border-radius:12px}
 .pdp--edit [data-sec]{position:relative}

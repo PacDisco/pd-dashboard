@@ -68,19 +68,7 @@
     "imageFocusMobile": "",
     "stampNumber": "25+",
     "stampLabel": "YEARS",
-    "stampRing": "SINCE 2001 · 25+ YEARS OF GAP YEARS ·",
-    "prints": [
-      {
-        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/print1.jpg",
-        "imageAlt": "Student with an elephant in a river",
-        "caption": "Elephant sanctuary, Thailand"
-      },
-      {
-        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/print2.jpg",
-        "imageAlt": "Students winnowing rice in traditional shirts",
-        "caption": "Winnowing rice with local farmers"
-      }
-    ]
+    "stampRing": "SINCE 2001 · 25+ YEARS OF GAP YEARS ·"
   },
   "stats": {
     "items": [
