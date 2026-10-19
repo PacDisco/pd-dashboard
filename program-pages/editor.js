@@ -14,16 +14,37 @@
 //     to /api/program-pages; nothing is public until someone presses Publish.
 //   - The side panel forms are generated from SCHEMA in the template, so a new
 //     field added there shows up here without touching this file.
+//   - The template file holds more than one page template (TEMPLATES): program
+//     pages and landing pages. A page's JSON says which (`template`), and
+//     normalizeProgram() switches SCHEMA / SECTIONS / rendering to match.
 
-import {
-  renderProgram, PROGRAM_CSS, SCHEMA, SECTIONS, blankProgram, normalizeProgram,
-  getPath, setPath, slugify, esc, findPlaceholders, dateRange, parseWidget, parseFocus,
-} from '/program-pages/template/render.mjs';
+import * as TPL from '/program-pages/template/render.mjs';
+
+const { getPath, setPath, slugify, esc, findPlaceholders, dateRange, parseWidget, parseFocus, templateOf, TEMPLATES } = TPL;
+
+// The template of the page being edited. Swapped by normalizeProgram().
+let T = TEMPLATES.program;
+let SCHEMA = T.SCHEMA;
+let SECTIONS = T.SECTIONS;
+function useTemplate(key) {
+  T = TEMPLATES[key] || TEMPLATES.program;
+  SCHEMA = T.SCHEMA;
+  SECTIONS = T.SECTIONS;
+}
+const renderProgram = (doc, opts) => T.render(doc, opts);
+function normalizeProgram(doc) {
+  useTemplate(templateOf(doc));
+  return T.normalize(doc);
+}
+const blankProgram = (name, key = 'program') => (TEMPLATES[key] || TEMPLATES.program).blank(name);
+const ALL_CSS = Object.values(TEMPLATES).map((t) => t.css).join('');
+/** Public address of a page, e.g. /programs/<slug> or /lp/<slug>. */
+const pathFor = (slug, key = 'program') => `${(TEMPLATES[key] || TEMPLATES.program).base}${slug}`;
 
 // The public program site (pd-program-pages). Used for "View live" previews of
 // the static build and for the template drift check. Never executed here.
 const PROGRAM_SITE = 'https://pd-program-pages.netlify.app';
-const LIVE_BASE = 'https://www.pacificdiscovery.org/programs/';
+const LIVE_ORIGIN = 'https://www.pacificdiscovery.org';
 const API = '/api/program-pages';
 const MEDIA = '/api/program-media';
 const SAVE_DELAY = 1200;
@@ -153,7 +174,7 @@ async function showList() {
   const todo = starters.filter((st) => !used.has(st.slug));
   const starterBox = todo.length ? `<div class="starters"><h3>Ready-made starters</h3>
       <p class="sl">Pre-filled from the latest itineraries. Create one, then review it before publishing.</p>
-      <div class="acts">${todo.map((st) => `<button class="btn btn--sm" type="button" data-starter="${esc(st.id)}">+ ${esc(st.name)}</button>`).join('')}</div></div>` : '';
+      <div class="acts">${todo.map((st) => `<button class="btn btn--sm" type="button" data-starter="${esc(st.id)}">+ ${esc(st.name)}${st.template === 'landing' ? ' (landing page)' : ''}</button>`).join('')}</div></div>` : '';
   if (!S.programs.length) {
     body.innerHTML = `<div class="empty"><h2 class="serif" style="font-size:24px">No program pages yet</h2>
       <p style="margin:0;max-width:46ch">Start from one of the ready-made starters below, or create a blank page.</p></div>${starterBox}`;
@@ -162,14 +183,14 @@ async function showList() {
   }
   body.innerHTML = starterBox + `<table class="pages"><thead><tr><th scope="col">Page</th><th scope="col">Status</th><th scope="col">Last edited</th><th scope="col"><span class="hidden">Actions</span></th></tr></thead><tbody>${
     S.programs.map((p) => `<tr>
-      <td><a class="nm" href="#/edit/${esc(p.slug)}">${esc(p.name)}</a><div class="sl">/programs/${esc(p.slug)}</div></td>
+      <td><a class="nm" href="#/edit/${esc(p.slug)}">${esc(p.name)}</a><div class="sl">${esc(pathFor(p.slug, p.template))}${p.template === 'landing' ? ' · <span class="tpl-tag">Landing page</span>' : ''}</div></td>
       <td>${chip(p.status)}${p.publishedAt ? `<div class="sl">Published ${esc(ago(p.publishedAt))}${p.publishedBy ? ` by ${esc(p.publishedBy)}` : ''}</div>` : ''}</td>
       <td>${esc(ago(p.updatedAt))}${p.updatedBy ? `<div class="sl">by ${esc(p.updatedBy)}</div>` : ''}</td>
       <td><div class="acts">
         ${p.status === 'archived'
           ? (S.user?.canPublish ? `<button class="btn btn--sm" type="button" data-unarchive="${esc(p.slug)}">Unarchive</button>` : '')
           : `<a class="btn btn--sm btn--primary" href="#/edit/${esc(p.slug)}">Edit</a>`}
-        ${p.status === 'live' || p.status === 'changes' ? `<a class="btn btn--sm" href="${esc(LIVE_BASE + p.slug)}" target="_blank" rel="noopener">View live ↗</a>` : ''}
+        ${p.status === 'live' || p.status === 'changes' ? `<a class="btn btn--sm" href="${esc(LIVE_ORIGIN + pathFor(p.slug, p.template))}" target="_blank" rel="noopener">View live ↗</a>` : ''}
       </div></td></tr>`).join('')
   }</tbody></table>`;
   wireStarters(starters);
@@ -206,20 +227,32 @@ let slugTouched = false;
 function openNew(pre = {}) {
   const dlg = $('#dlg-new');
   const sel = $('#new-from');
-  sel.innerHTML = `<option value="blank">Blank template</option>` +
-    (STARTERS || []).map((st) => `<option value="starter:${esc(st.id)}">${esc(st.name)} starter</option>`).join('') +
+  sel.innerHTML = `<option value="blank">Blank program page</option><option value="blank:landing">Blank landing page</option>` +
+    (STARTERS || []).map((st) => `<option value="starter:${esc(st.id)}">${esc(st.name)}${st.template === 'landing' ? ' landing page' : ''} starter</option>`).join('') +
     S.programs.filter((p) => p.status !== 'archived').map((p) => `<option value="copy:${esc(p.slug)}">Copy of ${esc(p.name)}</option>`).join('');
   $('#new-name').value = pre.name || '';
   $('#new-slug').value = pre.slug || '';
   sel.value = pre.from || 'blank';
   slugTouched = !!pre.slug;
   $('#new-err').classList.add('hidden');
+  newPrefix();
   dlg.showModal();
   $('#new-name').focus();
+}
+// The web address prefix follows the chosen template (/programs/ or /lp/).
+function newPrefix() {
+  const from = $('#new-from').value;
+  let key = from === 'blank:landing' ? 'landing' : 'program';
+  const st = (STARTERS || []).find((x) => `starter:${x.id}` === from);
+  if (st?.template === 'landing') key = 'landing';
+  if (from.startsWith('copy:')) key = S.programs.find((p) => `copy:${p.slug}` === from)?.template || 'program';
+  const el = $('#new-prefix');
+  if (el) el.textContent = TEMPLATES[key]?.base || '/programs/';
 }
 $('#new-name').oninput = (e) => { if (!slugTouched) $('#new-slug').value = slugify(e.target.value); };
 // Picking a starter fills in its name and web address when they're still empty.
 $('#new-from').onchange = (e) => {
+  newPrefix();
   const st = (STARTERS || []).find((x) => `starter:${x.id}` === e.target.value);
   if (!st) return;
   if (!$('#new-name').value.trim()) $('#new-name').value = st.name;
@@ -243,6 +276,7 @@ $('#form-new').addEventListener('submit', async (e) => {
   try {
     let data;
     if (from === 'blank') data = blankProgram(name);
+    else if (from === 'blank:landing') data = blankProgram(name, 'landing');
     else if (from.startsWith('starter:')) {
       const res = await fetch(`/program-pages/starters/${from.slice(8)}.json`, { credentials: 'include' });
       if (!res.ok) throw new Error('Could not load the starter content.');
@@ -289,7 +323,7 @@ async function openEditor(slug) {
     return;
   }
   document.title = `${S.data.name} — Program Pages`;
-  $('#btn-live').href = LIVE_BASE + slug;
+  $('#btn-live').href = LIVE_ORIGIN + pathFor(slug, T.key);
   updateBar();
   setTab('edit');
   mountFrame();
@@ -306,8 +340,8 @@ function mountFrame() {
   };
   frame.srcdoc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>body{margin:0;background:#fff}${PROGRAM_CSS}${EDIT_CSS}</style></head><body><div id="pdp-root"></div></body></html>`;
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>body{margin:0;background:#fff}${ALL_CSS}${EDIT_CSS}</style></head><body><div id="pdp-root"></div></body></html>`;
 }
 
 const EDIT_CSS = `
@@ -321,6 +355,11 @@ const EDIT_CSS = `
 .pdp--edit [contenteditable]{outline:2px solid #288195!important;background:rgba(85,187,210,.10);cursor:text}
 .pdp--edit [data-empty]:empty::before{content:attr(data-empty);color:#8d969a;font-style:italic}
 .pdp--edit .pdp-hero [data-empty]:empty::before{color:#d9eef3}
+.pdl.pdp--edit :is(.pdl-dark,.pdl-sec--stats,.pdl-sec--voices,.pdl-sec--cta) [data-empty]:empty::before{color:#d9eef3}
+.pdl.pdp--edit .pdl-hero__art{min-height:560px}
+.pdl.pdp--edit .pdl-hero__prints>.pde-add{position:absolute;left:0;right:0;bottom:-56px;z-index:4}
+.pdl.pdp--edit .pdl-sec--ribbon .pdl-ribbon__item{min-height:120px}
+.pdl.pdp--edit .pdl-img--empty,.pdl.pdp--edit .pdp-img--empty{display:flex;align-items:center;justify-content:center;min-height:160px;background:#e9f2f4;border:2px dashed #b2d6df;color:#1f6b7c;font:600 14px Poppins,sans-serif;border-radius:12px}
 .pdp--edit [data-sec]{position:relative}
 .pdp--edit [data-sec]:hover::after{content:attr(data-label);position:absolute;top:10px;left:10px;font:600 11px Poppins,sans-serif;background:#288195;color:#fff;padding:3px 8px;border-radius:6px;letter-spacing:.05em;text-transform:uppercase;pointer-events:none;z-index:4}
 .pdp--edit .pde-hidden>.pdp-wrap{opacity:.4}
@@ -361,7 +400,7 @@ function selElement() {
   if (s.kind === 'section') return q(`[data-sec="${CSS.escape(s.key)}"]`);
   if (s.kind === 'image') return q(`[data-img="${CSS.escape(s.path)}"]`);
   if (s.kind === 'group' && s.key === 'facts') return q('[data-group="facts"]');
-  if (s.kind === 'group' && s.key === 'hero') return q('.pdp-hero');
+  if (s.kind === 'group' && s.key === 'hero') return q('.pdp-hero, [data-group="hero"]');
   return null;
 }
 
@@ -394,7 +433,7 @@ function ctxFor(el) {
   const item = el.closest('[data-item]');
   if (item) return { kind: 'item', path: item.dataset.item };
   if (el.closest('[data-group="facts"]')) return { kind: 'group', key: 'facts' };
-  if (el.closest('.pdp-hero')) return { kind: 'group', key: 'hero' };
+  if (el.closest('.pdp-hero, [data-group="hero"]')) return { kind: 'group', key: 'hero' };
   const sec = el.closest('[data-sec]');
   if (sec) return { kind: 'section', key: sec.dataset.sec };
   return { kind: 'page' };
@@ -734,7 +773,7 @@ function renderPanel() {
   } else if (S.tab === 'page') {
     head = 'Page settings';
     body = SCHEMA.page.fields.map((f) => fieldHtml(f, f.k)).join('') +
-      `<div class="field"><span class="lbl">Web address</span><span>/programs/${esc(S.slug)}</span><span class="help">The address can't be changed after a page is created. To move a page, copy it to a new page.</span></div>` +
+      `<div class="field"><span class="lbl">Web address</span><span>${esc(pathFor(S.slug, T.key))}</span><span class="help">The address can't be changed after a page is created. To move a page, copy it to a new page.</span></div>` +
       (S.user?.canPublish ? `<div class="item-acts" style="margin-top:20px">${
         S.status === 'live' || S.status === 'changes'
           ? '<button class="btn btn--sm btn--danger" type="button" id="pg-unpublish">Take page offline</button>'
@@ -786,9 +825,13 @@ function renderPanel() {
       head = meta.label;
       body = `<div class="field"><label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" data-sec-toggle="${s.key}"${show ? ' checked' : ''}> Show this section on the live page</label></div>
         <div class="item-acts"><button class="btn btn--sm" type="button" data-sec-move="${s.key}" data-dir="-1">↑ Move section up</button><button class="btn btn--sm" type="button" data-sec-move="${s.key}" data-dir="1">↓ Move section down</button></div>` +
-        (SCHEMA.sections[s.key]?.fields || []).map((f) => f.type === 'image'
-          ? `<div class="field"><span class="lbl">${esc(f.label)}</span>${imageBox(f.k, f.k === 'route.mapImage' ? 'route.mapAlt' : null)}</div>`
-          : (f.k === 'route.mapAlt' ? '' : fieldHtml(f, f.k))).join('') +
+        (SCHEMA.sections[s.key]?.fields || []).map((f, _i, all) => {
+          // A photo's description field sits under the photo: route.mapImage → route.mapAlt, x.image → x.imageAlt.
+          const altOf = (k) => (k === 'route.mapImage' ? 'route.mapAlt' : all.some((x) => x.k === `${k}Alt`) ? `${k}Alt` : null);
+          if (f.type === 'image') return `<div class="field"><span class="lbl">${esc(f.label)}</span>${imageBox(f.k, altOf(f.k))}</div>`;
+          if (all.some((x) => x.type === 'image' && altOf(x.k) === f.k)) return '';
+          return fieldHtml(f, f.k);
+        }).join('') +
         (s.key === 'cta' || s.key === 'dates' ? `<p class="help" style="font-size:12px;color:var(--muted)">Button links come from Page settings.</p>` : '');
     } else if (s.kind === 'image') {
       head = 'Photo';
@@ -1146,9 +1189,10 @@ export function publishChecks(p) {
     return !SECTIONS.some((s) => s.key === top) || visible(top);
   }).filter((x) => !/^seo\./.test(x.path));
   if (ph.length) out.push({ level: 'bad', text: `${ph.length} placeholder${ph.length === 1 ? '' : 's'} in [square brackets] still showing. Fill them in or hide the section.`, items: ph.slice(0, 6) });
-  if (!(Number(p.facts?.tuition) > 0)) out.push({ level: 'bad', text: 'Tuition is not set.', items: [{ path: 'facts.tuition', text: 'Tuition' }] });
+  const isProgram = templateOf(p) === 'program';
+  if (isProgram && !(Number(p.facts?.tuition) > 0)) out.push({ level: 'bad', text: 'Tuition is not set.', items: [{ path: 'facts.tuition', text: 'Tuition' }] });
   const sessions = p.dates?.sessions || [];
-  if (visible('dates') && !sessions.length) out.push({ level: 'warn', text: 'No start dates listed.' });
+  if (isProgram && visible('dates') && !sessions.length) out.push({ level: 'warn', text: 'No start dates listed.' });
   sessions.forEach((s, i) => { if (!s.start || !s.end) out.push({ level: 'bad', text: `Start date ${i + 1} is missing a start or end date.`, items: [{ path: `dates.sessions.${i}.start`, text: 'Dates' }] }); });
   [['hero.widgets', p.hero?.widgets, 'Hero review widget'], ['reviews.widgets', p.reviews?.widgets, 'Reviews section widget']].forEach(([base, list, label]) => (list || []).forEach((w, i) => {
     if (!parseWidget(w)) out.push({ level: 'bad', text: `${label} ${i + 1} (${w.type || 'unknown'}) has no valid embed code. Paste it again or delete the widget.`, items: [{ path: `${base}.${i}.code`, text: `${w.type || 'Widget'} embed code` }] });
@@ -1201,7 +1245,7 @@ $('#form-pub').addEventListener('submit', async (e) => {
     S.publishedRev = r.publishedRev;
     updateBar();
     $('#dlg-pub').close();
-    if (r.build?.triggered) toast(`Published. The live page updates in about a minute. <a href="${esc(LIVE_BASE + S.slug)}" target="_blank" rel="noopener">View live ↗</a>`, 8000);
+    if (r.build?.triggered) toast(`Published. The live page updates in about a minute. <a href="${esc(LIVE_ORIGIN + pathFor(S.slug, T.key))}" target="_blank" rel="noopener">View live ↗</a>`, 8000);
     else notice('warn', `Published, but the public site wasn't rebuilt: ${esc(r.build?.message || 'unknown reason')} Tell Jake.`);
   } catch (e2) {
     $('#pub-err').textContent = e2.message;

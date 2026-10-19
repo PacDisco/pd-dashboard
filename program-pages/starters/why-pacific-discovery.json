@@ -1,0 +1,394 @@
+{
+  "v": 1,
+  "template": "landing",
+  "name": "Why Pacific Discovery",
+  "seo": {
+    "title": "Why Pacific Discovery | Gap Semesters Since 2001",
+    "description": "See how Pacific Discovery compares: multi-country gap semesters, 1 instructor for every 7 students, 25+ years of local partnerships and a 4.75 rating from 3,500+ alumni.",
+    "ogImage": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/hero.jpg"
+  },
+  "settings": {
+    "quizUrl": "https://apply.pacificdiscovery.org/quiz",
+    "bookletUrl": "https://www.pacificdiscovery.org/admissions/request-program-booklet",
+    "advisorUrl": "https://www.pacificdiscovery.org/contact",
+    "applyUrl": "https://www.pacificdiscovery.org/apply"
+  },
+  "layout": [
+    {
+      "key": "stats",
+      "show": true
+    },
+    {
+      "key": "reasons",
+      "show": true
+    },
+    {
+      "key": "compare",
+      "show": true
+    },
+    {
+      "key": "week",
+      "show": true
+    },
+    {
+      "key": "voices",
+      "show": true
+    },
+    {
+      "key": "ribbon",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "offer",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    }
+  ],
+  "hero": {
+    "eyebrow": "Why Pacific Discovery",
+    "headline": "Not all gap years are",
+    "headlineAccent": "created equal.",
+    "intro": "Experience more, explore further, and get closer to the places you visit. Here’s what makes a Pacific Discovery semester different from the rest.",
+    "primaryText": "Take the 3-minute quiz",
+    "secondaryText": "Request a program booklet",
+    "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/hero.jpg",
+    "imageAlt": "Students bathing elephants in a jungle river in Thailand",
+    "imageFocus": "",
+    "imageFocusMobile": "",
+    "stampNumber": "25+",
+    "stampLabel": "YEARS",
+    "stampRing": "SINCE 2001 · 25+ YEARS OF GAP YEARS ·",
+    "prints": [
+      {
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/print1.jpg",
+        "imageAlt": "Student with an elephant in a river",
+        "caption": "Elephant sanctuary, Thailand"
+      },
+      {
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/print2.jpg",
+        "imageAlt": "Students winnowing rice in traditional shirts",
+        "caption": "Winnowing rice with local farmers"
+      }
+    ]
+  },
+  "stats": {
+    "items": [
+      {
+        "value": "25+ years",
+        "label": "running gap programs"
+      },
+      {
+        "value": "3,500+",
+        "label": "alumni since 2001"
+      },
+      {
+        "value": "4.75 ★",
+        "label": "on GoAbroad & Go Overseas"
+      },
+      {
+        "value": "1 : 7",
+        "label": "instructor-to-student ratio"
+      }
+    ]
+  },
+  "reasons": {
+    "eyebrow": "What sets us apart",
+    "heading": "Six reasons families say",
+    "headingAccent": "made the difference",
+    "items": [
+      {
+        "icon": "Globe",
+        "title": "Places others don’t go",
+        "body": "Polynesia, New Zealand, Australia & Bali, Southeast Asia, South America. Multi-country semesters that move you through cultures, not just past them."
+      },
+      {
+        "icon": "Calendar",
+        "title": "A length that fits you",
+        "body": "Go all in with a 10-week gap semester, or start with a 4–6 week mini semester or summer program. Spring, summer and fall departures."
+      },
+      {
+        "icon": "People",
+        "title": "Learn alongside locals",
+        "body": "Harvest rice with village families, weave with master artisans, stay in homestays and give back on service projects led by local partners."
+      },
+      {
+        "icon": "Shield",
+        "title": "Supported every step",
+        "body": "Small groups with one trained field instructor for every 7 students, a 24/7 emergency line, and one advisor from your first question to your flight home."
+      },
+      {
+        "icon": "Award",
+        "title": "25+ years building relationships",
+        "body": "The homestay families, village elders, artisans and guides you’ll meet aren’t booked through an agency. They’re partners we’ve known for years, so you’re welcomed as a guest, not a tourist, and get access no off-the-shelf tour can offer."
+      },
+      {
+        "icon": "Mountain",
+        "title": "Come home with direction",
+        "body": "Built-in time to unplug, reflect and set goals, so you return clearer on what’s next, whether that’s college, a career or [COLLEGE CREDIT / NEXT-STEP SUPPORT]."
+      }
+    ]
+  },
+  "compare": {
+    "eyebrow": "How we compare",
+    "heading": "The questions worth asking",
+    "headingAccent": "any gap year provider",
+    "usTag": "Our way",
+    "usLabel": "Pacific Discovery",
+    "col1": "Typical gap year company",
+    "col2": "Volunteer-travel agency",
+    "col3": "Backpacking solo",
+    "note": "General comparison of program types, not of specific companies.",
+    "rows": [
+      {
+        "label": "Group size & leadership",
+        "us": "1 field instructor for every 7 students",
+        "c1": "Varies widely",
+        "c2": "Often placed on your own",
+        "c3": "On your own"
+      },
+      {
+        "label": "Multi-country itineraries",
+        "us": "Yes – e.g. Thailand & Laos, Australia & Bali",
+        "c1": "Usually one country",
+        "c2": "One placement",
+        "c3": "You plan it"
+      },
+      {
+        "label": "Program lengths",
+        "us": "10 weeks, or 4–6 week minis",
+        "c1": "Often one fixed length",
+        "c2": "Flexible, by the week",
+        "c3": "Open-ended"
+      },
+      {
+        "label": "Cultural immersion",
+        "us": "Homestays, service, local experts",
+        "c1": "Mix of tours & activities",
+        "c2": "Project-based",
+        "c3": "Hostels & tourist trail"
+      },
+      {
+        "label": "24/7 support on the ground",
+        "us": "Emergency line & on-site instructors",
+        "c1": "Varies",
+        "c2": "Local coordinator",
+        "c3": "None"
+      },
+      {
+        "label": "What’s included",
+        "us": "[INCLUSIONS – e.g. lodging, meals, activities, in-country travel]",
+        "c1": "Check the fine print",
+        "c2": "Placement fee + extras",
+        "c3": "Pay as you go"
+      },
+      {
+        "label": "College credit",
+        "us": "[CREDIT DETAILS]",
+        "c1": "Sometimes",
+        "c2": "Rarely",
+        "c3": "No"
+      }
+    ]
+  },
+  "week": {
+    "eyebrow": "A week in the life",
+    "heading": "Seven days on the",
+    "headingAccent": "Southeast Asia semester",
+    "hint": "Swipe to follow the route",
+    "days": [
+      {
+        "day": "Mon – Tue",
+        "title": "Down the Mekong by slow boat",
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/mekong.jpg",
+        "imageAlt": "View of limestone cliffs from a slow boat on the Mekong"
+      },
+      {
+        "day": "Wednesday",
+        "title": "Rice harvest with a village family",
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/rice.jpg",
+        "imageAlt": "Student harvesting rice in a golden field"
+      },
+      {
+        "day": "Thursday",
+        "title": "Weaving with local artisans",
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/weave.jpg",
+        "imageAlt": "Local weaver guiding a student at a loom"
+      },
+      {
+        "day": "Friday",
+        "title": "Jungle trek & waterfall swim",
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/falls.jpg",
+        "imageAlt": "Students swimming beneath a jungle waterfall"
+      },
+      {
+        "day": "Saturday",
+        "title": "Bamboo rafting with our local guides",
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/raft.jpg",
+        "imageAlt": "Students laughing on a bamboo raft"
+      },
+      {
+        "day": "Sunday",
+        "title": "Temple blessing & group reflection",
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/blessing.jpg",
+        "imageAlt": "Monk tying a blessing string on a student’s wrist"
+      }
+    ]
+  },
+  "voices": {
+    "eyebrow": "In their words",
+    "heading": "Why they chose us, and what",
+    "headingAccent": "they’d tell you",
+    "rating": "4.75",
+    "ratingText": "on GoAbroad & Go Overseas",
+    "ratingUrl": "",
+    "quotes": [
+      {
+        "quote": "[Student quote about what was different – a real review, used with permission.]",
+        "name": "[Student name]",
+        "detail": "[Program, Season Year]"
+      },
+      {
+        "quote": "[Parent quote about safety, communication or how their child came home changed.]",
+        "name": "[Parent name]",
+        "detail": "Parent of a [Program] student"
+      },
+      {
+        "quote": "[Student quote comparing us to another program they considered.]",
+        "name": "[Student name]",
+        "detail": "[Program, Season Year]"
+      }
+    ]
+  },
+  "ribbon": {
+    "label": "Photos from the Fall 2026 Southeast Asia semester",
+    "images": [
+      {
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/rib-cook.jpg",
+        "imageAlt": "Cooking over the fire in a village home"
+      },
+      {
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/rib-kuangsi.jpg",
+        "imageAlt": "Turquoise cascades at Kuang Si"
+      },
+      {
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/rib-monks.jpg",
+        "imageAlt": "Meditation with monks at a temple"
+      },
+      {
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/rib-market.jpg",
+        "imageAlt": "Fruit at a morning market"
+      },
+      {
+        "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/rib-valley.jpg",
+        "imageAlt": "Rice terraces in a jungle valley at golden hour"
+      }
+    ]
+  },
+  "safety": {
+    "eyebrow": "For parents",
+    "heading": "Safety you can",
+    "headingAccent": "actually see",
+    "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/safety.jpg",
+    "imageAlt": "Students trekking single file through the jungle",
+    "printImage": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/safety-print.jpg",
+    "printImageAlt": "Group of students with their instructors",
+    "printCaption": "1 instructor : 7 students",
+    "points": [
+      {
+        "title": "24/7 emergency line.",
+        "body": "A real person answers, day or night, with a clear escalation plan."
+      },
+      {
+        "title": "Trained field instructors.",
+        "body": "One for every 7 students, with [WILDERNESS FIRST AID / CERTIFICATIONS] and [X]+ seasons leading groups."
+      },
+      {
+        "title": "Vetted local partners.",
+        "body": "[HOW PARTNERS, HOMESTAYS AND TRANSPORT ARE CHECKED]."
+      },
+      {
+        "title": "Regular updates home.",
+        "body": "[HOW AND HOW OFTEN FAMILIES HEAR FROM THE GROUP]."
+      }
+    ]
+  },
+  "offer": {
+    "eyebrow": "Clear pricing",
+    "heading": "One price.",
+    "headingAccent": "No surprises.",
+    "included": [
+      {
+        "text": "[Accommodation]"
+      },
+      {
+        "text": "[All meals / most meals]"
+      },
+      {
+        "text": "[In-country transport]"
+      },
+      {
+        "text": "[Activities & entry fees]"
+      },
+      {
+        "text": "Field instructors (1 : 7)"
+      },
+      {
+        "text": "[Travel insurance?]"
+      }
+    ],
+    "note": "Not included: [international flights, visas, personal spending].",
+    "tag": "Spring 2027 early bird",
+    "title": "$1,000 off\nsemesters",
+    "body": "$500 off mini semesters. First 15 deposits only.",
+    "buttonText": "Start your application",
+    "stubLabel": "Closes",
+    "stubBig": "31",
+    "stubSmall": "October",
+    "stubLabel2": "Departs",
+    "stubText": "Feb 2027"
+  },
+  "faq": {
+    "heading": "Questions",
+    "headingAccent": "families ask",
+    "items": [
+      {
+        "q": "How is Pacific Discovery different from other gap year programs?",
+        "a": "25+ years running multi-country itineraries in places like Polynesia and Southeast Asia, one trained field instructor for every 7 students, and a choice of 10-week semesters or shorter minis. Rated 4.75 by 3,500+ alumni on GoAbroad and Go Overseas."
+      },
+      {
+        "q": "Is a gap semester worth it before college?",
+        "a": "[Answer with outcomes: confidence, clarity on study path, college deferral support.]"
+      },
+      {
+        "q": "Who travels with Pacific Discovery?",
+        "a": "Students aged 17–22 from [COUNTRIES], with one field instructor for every 7 students."
+      },
+      {
+        "q": "How do I know which program is right for me?",
+        "a": "Take our 3-minute quiz for a personal match, or talk to an advisor who can walk you through the options."
+      }
+    ]
+  },
+  "cta": {
+    "eyebrow": "Find your path",
+    "heading": "Which gap year traveler",
+    "headingAccent": "are you?",
+    "body": "Answer a few quick questions and we’ll match you with the program – and places – that fit you best.",
+    "image": "https://pd-program-pages.netlify.app/_pd/static/why-pacific-discovery/cta.jpg",
+    "imageAlt": "Mountains along the Mekong",
+    "primaryText": "Take the 3-minute quiz",
+    "secondaryText": "Request a booklet",
+    "tertiaryText": "Talk to an advisor"
+  }
+}

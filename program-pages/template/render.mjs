@@ -360,7 +360,7 @@ export function normalizeProgram(p) {
 
 // ─── rendering ──────────────────────────────────────────────────────────────
 
-function ctx(p, opts) {
+function ctx(p, opts, schema = SCHEMA) {
   const ed = !!opts.editable;
   const cur = p.settings?.currency || 'USD';
 
@@ -403,7 +403,7 @@ function ctx(p, opts) {
       const html = each(it, ip, i);
       return html == null ? '' : `<${itemTag} class="${itemCls}"${ed ? ` data-item="${attr(ip)}"` : ''}>${html}</${itemTag}>`;
     }).join('');
-    const add = ed ? `<button type="button" class="pde-add" data-add="${attr(path)}">+ ${esc(SCHEMA.lists[path]?.add || 'Add')}</button>` : '';
+    const add = ed ? `<button type="button" class="pde-add" data-add="${attr(path)}">+ ${esc(schema.lists[path]?.add || 'Add')}</button>` : '';
     return `<${tag} class="${cls}"${ed ? ` data-list="${attr(path)}"` : ''}>${inner}</${tag}>${add}`;
   };
   return { ed, cur, t, v, img, link, list };
@@ -838,7 +838,8 @@ export function jsonLd(program, { slug = '', canonicalBase = 'https://www.pacifi
 }
 
 /** A complete HTML document: the direct /p/<slug> view and the editor preview. */
-export function renderStandalone(program, { slug = '', editable = false, extraHead = '', noindex = true } = {}) {
+export function renderStandalone(program, { slug = '', editable = false, extraHead = '', noindex = true, canonicalBase } = {}) {
+  if (templateOf(program) === 'landing') return renderLandingStandalone(program, { slug, editable, extraHead, noindex, canonicalBase });
   const s = seoFor(program, { slug });
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
@@ -1035,7 +1036,9 @@ details[open]>summary .pdp-chev{transform:rotate(-135deg)}
 .pdp-rev{display:flex;gap:12px;padding:26px 24px 22px 18px;margin:0}
 .pdp-rev__mark{flex:none;font-family:'DM Serif Display',Georgia,serif;font-size:58px;line-height:.9;height:40px;color:var(--pdp-orange)}
 .pdp-rev__main{flex:1;min-width:0;display:flex;flex-direction:column}
-.pdp-rev__q{flex:1;margin:0}
+.pdp .pdp-rev__q{flex:1;margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;max-width:none;width:auto;text-align:left;font-style:normal;font-size:inherit;quotes:none}
+.pdp .pdp-rev__q::before,.pdp .pdp-rev__q::after{content:none;display:none}
+.pdp .pdp-rev__q .pdp-rev__text{margin:0;padding:0;border:0;text-align:left;font-style:normal;max-width:none}
 .pdp-rev__text{font-size:15px;line-height:1.6;color:var(--pdp-body)}
 .pdp-rev__text.is-clamped{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden}
 .pdp-rev__t:checked~.pdp-rev__q .pdp-rev__text{display:block;-webkit-line-clamp:unset}
@@ -1113,3 +1116,608 @@ a.pdp-rev__src:hover{text-decoration:underline}
   .pdp-bar .pdp-btn{min-height:44px;padding:0 16px;font-size:14px}
 }
 `;
+
+// ════════════════════════════════════════════════════════════════════════════
+// LANDING PAGE TEMPLATE — "Why Pacific Discovery" style campaign pages
+// ════════════════════════════════════════════════════════════════════════════
+//
+// A second template, edited in the same Program Pages editor. A page uses it
+// when its JSON has `template: "landing"`. Landing pages are served at
+// www.pacificdiscovery.org/lp/<slug> (the Cloudflare Worker swaps them into
+// the site's <main>, keeping the real header and footer).
+//
+// Same rules as the program template: every value is escaped, every URL goes
+// through safeUrl(), and all CSS is scoped under .pdl.
+
+export const LANDING_BASE = '/lp/';
+
+export const LANDING_SECTIONS = [
+  { key: 'stats',   label: 'Stats strip',            anchor: 'stats',   bg: '#55bbd2' },
+  { key: 'reasons', label: 'Reasons',                anchor: 'reasons', bg: '#ffffff' },
+  { key: 'compare', label: 'Comparison table',       anchor: 'compare', bg: '#f1f1f1', wave: true },
+  { key: 'week',    label: 'A week in the life',     anchor: 'week',    bg: '#fbfaf7' },
+  { key: 'voices',  label: 'Quotes',                 anchor: 'voices',  bg: '#344f8d' },
+  { key: 'ribbon',  label: 'Photo ribbon',           anchor: 'photos',  bg: '#212121' },
+  { key: 'safety',  label: 'Safety',                 anchor: 'safety',  bg: '#ffffff' },
+  { key: 'offer',   label: 'Pricing & offer',        anchor: 'offer',   bg: '#f1f1f1', wave: true },
+  { key: 'faq',     label: 'FAQ',                    anchor: 'faq',     bg: '#ffffff' },
+  { key: 'cta',     label: 'Closing call to action', anchor: 'get-started', bg: '#212121' },
+];
+const LSEC = Object.fromEntries(LANDING_SECTIONS.map((s) => [s.key, s]));
+
+// Line icons for the reason cards (24×24, stroked). Names are what editors pick.
+const ICONS = {
+  Globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"/>',
+  Calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  People: '<path d="M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M21 20v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  Shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/>',
+  Award: '<circle cx="12" cy="8" r="5"/><path d="M8.5 12.5L7 21l5-3 5 3-1.5-8.5"/><path d="M10 8l1.5 1.5L14 7"/>',
+  Mountain: '<path d="M3 20l6-12 4 7 3-4 5 9z"/><circle cx="17" cy="6" r="2"/>',
+  Compass: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+  Heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  Leaf: '<path d="M5 19c0-8 5-14 15-14 0 10-6 15-14 15"/><path d="M5 19c3-4 6-7 10-9"/>',
+  Home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  Book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7"/>',
+  Plane: '<path d="M10 14l-6-2 1-2 7 0 4-6h2l-2 6h4l1.5-2H23l-1 4-1 4h-1.5L18 14h-4l2 6h-2z"/>',
+};
+export const LANDING_ICONS = Object.keys(ICONS);
+const icon = (name) => `<svg class="pdl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name] || ICONS.Globe}</svg>`;
+const TICK = '<svg class="pdl-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12l5 5L20 7"/></svg>';
+
+const heading = (key) => [
+  { k: `${key}.eyebrow`, label: 'Small label above heading', type: 'text' },
+  { k: `${key}.heading`, label: 'Heading', type: 'text' },
+  { k: `${key}.headingAccent`, label: 'Heading, highlighted end (italic)', type: 'text', help: 'Shown in italics after the heading. Leave empty for none.' },
+];
+
+export const LANDING_SCHEMA = {
+  page: {
+    label: 'Page settings',
+    fields: [
+      { k: 'name', label: 'Page name', type: 'text', help: 'Used in the browser tab and the page list.' },
+      { k: 'seo.title', label: 'Search result title', type: 'text', help: 'Aim for under 60 characters.' },
+      { k: 'seo.description', label: 'Search result description', type: 'multiline', help: 'Aim for 140–160 characters.' },
+      { k: 'seo.ogImage', label: 'Social share image', type: 'image' },
+      { k: 'settings.quizUrl', label: 'Quiz link', type: 'url' },
+      { k: 'settings.bookletUrl', label: 'Request booklet link', type: 'url' },
+      { k: 'settings.advisorUrl', label: 'Talk to an advisor link', type: 'url' },
+      { k: 'settings.applyUrl', label: 'Apply link', type: 'url' },
+    ],
+  },
+  hero: {
+    label: 'Hero',
+    fields: [
+      { k: 'hero.eyebrow', label: 'Small label above title', type: 'text' },
+      { k: 'hero.headline', label: 'Headline', type: 'multiline' },
+      { k: 'hero.headlineAccent', label: 'Headline, underlined end (italic)', type: 'text' },
+      { k: 'hero.intro', label: 'Intro', type: 'multiline' },
+      { k: 'hero.primaryText', label: 'Main button text (goes to the quiz link)', type: 'text' },
+      { k: 'hero.secondaryText', label: 'Second button text (goes to the booklet link)', type: 'text' },
+      { k: 'hero.image', label: 'Background photo', type: 'image' },
+      { k: 'hero.imageAlt', label: 'Background photo description', type: 'text' },
+      { k: 'hero.imageFocus', label: 'Photo focus on computers', type: 'focus', image: 'hero.image', help: 'Click the part of the photo that should stay in view.' },
+      { k: 'hero.imageFocusMobile', label: 'Photo focus on phones', type: 'focus', image: 'hero.image', mobile: true, help: 'Phones show a narrow slice. Click the part that must stay in view.' },
+      { k: 'hero.stampNumber', label: 'Stamp: big number', type: 'text', help: 'e.g. 25+. Leave empty to hide the stamp.' },
+      { k: 'hero.stampLabel', label: 'Stamp: word under the number', type: 'text' },
+      { k: 'hero.stampRing', label: 'Stamp: text around the edge', type: 'text', help: 'About 35 characters fits. End with " ·" so it joins up.' },
+    ],
+  },
+  sections: {
+    stats:   { fields: [] },
+    reasons: { fields: heading('reasons') },
+    compare: { fields: [...heading('compare'),
+      { k: 'compare.usTag', label: 'Our column: small label', type: 'text' },
+      { k: 'compare.usLabel', label: 'Our column: name', type: 'text' },
+      { k: 'compare.col1', label: 'Column 2 heading', type: 'text', help: 'Leave a column heading empty to hide that column.' },
+      { k: 'compare.col2', label: 'Column 3 heading', type: 'text' },
+      { k: 'compare.col3', label: 'Column 4 heading', type: 'text' },
+      { k: 'compare.note', label: 'Small print under the table', type: 'text' }] },
+    week:    { fields: [...heading('week'), { k: 'week.hint', label: 'Swipe hint', type: 'text' }] },
+    voices:  { fields: [...heading('voices'),
+      { k: 'voices.rating', label: 'Rating badge: score', type: 'text', help: 'e.g. 4.75. Leave empty to hide the badge.' },
+      { k: 'voices.ratingText', label: 'Rating badge: text', type: 'text' },
+      { k: 'voices.ratingUrl', label: 'Rating badge: link (optional)', type: 'url' }] },
+    ribbon:  { fields: [{ k: 'ribbon.label', label: 'Description of the photo strip (for screen readers)', type: 'text' }] },
+    safety:  { fields: [...heading('safety'),
+      { k: 'safety.image', label: 'Main photo', type: 'image' },
+      { k: 'safety.imageAlt', label: 'Main photo description', type: 'text' },
+      { k: 'safety.printImage', label: 'Small print photo', type: 'image' },
+      { k: 'safety.printImageAlt', label: 'Small print photo description', type: 'text' },
+      { k: 'safety.printCaption', label: 'Small print caption', type: 'text' }] },
+    offer:   { fields: [...heading('offer'),
+      { k: 'offer.note', label: 'Line under the list', type: 'text' },
+      { k: 'offer.tag', label: 'Offer card: tag', type: 'text', help: 'Leave the offer title empty to hide the card.' },
+      { k: 'offer.title', label: 'Offer card: title', type: 'multiline' },
+      { k: 'offer.body', label: 'Offer card: details', type: 'text' },
+      { k: 'offer.buttonText', label: 'Offer card: button text (goes to the apply link)', type: 'text' },
+      { k: 'offer.stubLabel', label: 'Ticket stub: first label', type: 'text' },
+      { k: 'offer.stubBig', label: 'Ticket stub: big text', type: 'text' },
+      { k: 'offer.stubSmall', label: 'Ticket stub: text under it', type: 'text' },
+      { k: 'offer.stubLabel2', label: 'Ticket stub: second label', type: 'text' },
+      { k: 'offer.stubText', label: 'Ticket stub: second text', type: 'text' }] },
+    faq:     { fields: [{ k: 'faq.heading', label: 'Heading', type: 'text' }, { k: 'faq.headingAccent', label: 'Heading, highlighted end (italic)', type: 'text' }] },
+    cta:     { fields: [...heading('cta'),
+      { k: 'cta.body', label: 'Supporting line', type: 'multiline' },
+      { k: 'cta.image', label: 'Background photo', type: 'image' },
+      { k: 'cta.imageAlt', label: 'Background photo description', type: 'text' },
+      { k: 'cta.primaryText', label: 'Main button (quiz link)', type: 'text' },
+      { k: 'cta.secondaryText', label: 'Second button (booklet link)', type: 'text' },
+      { k: 'cta.tertiaryText', label: 'Third button (advisor link)', type: 'text' }] },
+  },
+  lists: {
+    'hero.prints':     { label: 'Photo print', add: 'Add a photo print', fields: [{ k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }, { k: 'caption', label: 'Caption', type: 'text' }], blank: { image: '', imageAlt: '', caption: 'Caption' } },
+    'stats.items':     { label: 'Stat', add: 'Add a stat', fields: [{ k: 'value', label: 'Number', type: 'text' }, { k: 'label', label: 'Label', type: 'text' }], blank: { value: '0', label: 'label' } },
+    'reasons.items':   { label: 'Reason', add: 'Add a reason', fields: [{ k: 'icon', label: 'Icon', type: 'select', options: LANDING_ICONS }, { k: 'title', label: 'Title', type: 'text' }, { k: 'body', label: 'Text', type: 'multiline' }], blank: { icon: 'Compass', title: 'New reason', body: 'Describe it in a sentence or two.' } },
+    'compare.rows':    { label: 'Comparison row', add: 'Add a row', fields: [{ k: 'label', label: 'What’s compared', type: 'text' }, { k: 'us', label: 'Pacific Discovery', type: 'text' }, { k: 'c1', label: 'Column 2', type: 'text' }, { k: 'c2', label: 'Column 3', type: 'text' }, { k: 'c3', label: 'Column 4', type: 'text' }], blank: { label: 'Topic', us: 'Our answer', c1: '', c2: '', c3: '' } },
+    'week.days':       { label: 'Day', add: 'Add a day', fields: [{ k: 'day', label: 'Day', type: 'text' }, { k: 'title', label: 'What happens', type: 'text' }, { k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }], blank: { day: 'Day', title: 'What happens', image: '', imageAlt: '' } },
+    'voices.quotes':   { label: 'Quote', add: 'Add a quote', fields: [{ k: 'quote', label: 'Quote', type: 'multiline', help: 'No need to type quote marks.' }, { k: 'name', label: 'Who said it', type: 'text' }, { k: 'detail', label: 'Program or role', type: 'text' }], blank: { quote: 'Quote', name: 'Name', detail: '' } },
+    'ribbon.images':   { label: 'Photo', add: 'Add a photo', fields: [{ k: 'image', label: 'Photo', type: 'image' }, { k: 'imageAlt', label: 'Photo description', type: 'text' }], blank: { image: '', imageAlt: '' } },
+    'safety.points':   { label: 'Safety point', add: 'Add a point', fields: [{ k: 'title', label: 'Title', type: 'text' }, { k: 'body', label: 'Text', type: 'multiline' }], blank: { title: 'Title.', body: 'Text.' } },
+    'offer.included':  { label: 'Included item', add: 'Add an item', fields: [{ k: 'text', label: 'Text', type: 'text' }], blank: { text: 'Included item' } },
+    'faq.items':       { label: 'Question', add: 'Add a question', fields: [{ k: 'q', label: 'Question', type: 'text' }, { k: 'a', label: 'Answer', type: 'multiline' }], blank: { q: 'New question?', a: 'Answer.' } },
+  },
+};
+
+export function blankLanding(name = 'New landing page') {
+  return {
+    v: 1,
+    template: 'landing',
+    name,
+    seo: { title: `${name} | Pacific Discovery`, description: '', ogImage: '' },
+    settings: {
+      quizUrl: 'https://apply.pacificdiscovery.org/quiz',
+      bookletUrl: 'https://www.pacificdiscovery.org/admissions/request-program-booklet',
+      advisorUrl: 'https://www.pacificdiscovery.org/contact',
+      applyUrl: 'https://www.pacificdiscovery.org/apply',
+    },
+    layout: LANDING_SECTIONS.map((s) => ({ key: s.key, show: true })),
+    hero: { eyebrow: '', headline: name, headlineAccent: '', intro: '[One or two sentences]', primaryText: 'Take the 3-minute quiz', secondaryText: 'Request a program booklet', image: '', imageAlt: '', imageFocus: '', imageFocusMobile: '', stampNumber: '25+', stampLabel: 'YEARS', stampRing: 'SINCE 2001 · 25+ YEARS OF GAP YEARS ·', prints: [] },
+    stats: { items: [] },
+    reasons: { eyebrow: '', heading: 'Why families choose us', headingAccent: '', items: [] },
+    compare: { eyebrow: '', heading: 'How we compare', headingAccent: '', usTag: 'Our way', usLabel: 'Pacific Discovery', col1: '', col2: '', col3: '', note: '', rows: [] },
+    week: { eyebrow: '', heading: 'A week in the life', headingAccent: '', hint: 'Swipe to follow the route', days: [] },
+    voices: { eyebrow: '', heading: 'In their words', headingAccent: '', rating: '', ratingText: '', ratingUrl: '', quotes: [] },
+    ribbon: { label: 'Photos from our programs', images: [] },
+    safety: { eyebrow: '', heading: 'Safety', headingAccent: '', image: '', imageAlt: '', printImage: '', printImageAlt: '', printCaption: '', points: [] },
+    offer: { eyebrow: '', heading: 'Pricing', headingAccent: '', included: [], note: '', tag: '', title: '', body: '', buttonText: 'Start your application', stubLabel: '', stubBig: '', stubSmall: '', stubLabel2: '', stubText: '' },
+    faq: { heading: 'Questions', headingAccent: '', items: [] },
+    cta: { eyebrow: '', heading: 'Ready to go?', headingAccent: '', body: '', image: '', imageAlt: '', primaryText: 'Take the 3-minute quiz', secondaryText: 'Request a booklet', tertiaryText: 'Talk to an advisor' },
+  };
+}
+
+export function normalizeLanding(p) {
+  const base = blankLanding(p?.name || 'Landing page');
+  const out = { ...base, ...(p || {}), template: 'landing' };
+  for (const k of Object.keys(base)) {
+    if (base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) out[k] = { ...base[k], ...((p && p[k]) || {}) };
+  }
+  for (const lp of Object.keys(LANDING_SCHEMA.lists)) {
+    const [a, b] = lp.split('.');
+    if (!Array.isArray(out[a][b])) out[a][b] = [];
+  }
+  const known = new Set(LANDING_SECTIONS.map((s) => s.key));
+  const seen = new Set();
+  const layout = [];
+  for (const l of Array.isArray(p?.layout) ? p.layout : []) {
+    if (l && known.has(l.key) && !seen.has(l.key)) { layout.push({ key: l.key, show: l.show !== false }); seen.add(l.key); }
+  }
+  for (const s of LANDING_SECTIONS) if (!seen.has(s.key)) layout.push({ key: s.key, show: true });
+  out.layout = layout;
+  return out;
+}
+
+// Section heading: eyebrow, then heading with an italic highlighted end.
+function lHead(c, key, o = {}) {
+  const eb = c.t(`${key}.eyebrow`, 'span', 'pdl-eyebrow__t');
+  return `<div class="pdl-head${o.cls ? ` ${o.cls}` : ''}">` +
+    (eb ? `<p class="pdl-eyebrow"><span class="pdl-eyebrow__line" aria-hidden="true"></span>${eb}</p>` : '') +
+    `<h2 class="pdl-h2">${c.t(`${key}.heading`, 'span', '')} ${c.t(`${key}.headingAccent`, 'em', 'pdl-accent')}</h2></div>`;
+}
+
+const wave = (fill, d = 'M0,0 L1440,0 L1440,20 C1180,60 900,10 720,30 C480,58 240,8 0,36 Z') =>
+  `<svg class="pdl-wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="${d}" fill="${attr(fill)}"/></svg>`;
+
+const L = {
+  stats(p, c) {
+    return c.list('stats.items', 'div', 'pdl-stats', (it, ip) =>
+      `${c.t(`${ip}.value`, 'strong', 'pdl-stat__v')}${c.t(`${ip}.label`, 'span', 'pdl-stat__l')}`, 'div', 'pdl-stat');
+  },
+  reasons(p, c) {
+    return lHead(c, 'reasons') +
+      c.list('reasons.items', 'div', 'pdl-reasons', (it, ip, i) =>
+        `<div class="pdl-reason__top"><span class="pdl-reason__ico"${c.ed ? ` data-v="${attr(`${ip}.icon`)}"` : ''}>${icon(it.icon)}</span><span class="pdl-reason__n" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span></div>` +
+        `${c.t(`${ip}.title`, 'h3', 'pdl-h3')}${c.t(`${ip}.body`, 'p', '', { multiline: true })}`, 'article', 'pdl-reason');
+  },
+  compare(p, c) {
+    const cols = ['col1', 'col2', 'col3'].filter((k) => c.ed || String(p.compare[k] || '').trim());
+    const grid = ` style="--pdl-cols:${cols.length}"`;
+    const head = `<div class="pdl-cmp__row pdl-cmp__row--head" role="row"><span role="columnheader" class="pdl-cmp__corner"></span>` +
+      `<span role="columnheader" class="pdl-cmp__us pdl-cmp__us--head">${c.t('compare.usTag', 'small', 'pdl-cmp__tag')}${c.t('compare.usLabel', 'span', '')}</span>` +
+      cols.map((k) => `<span role="columnheader" class="pdl-cmp__th">${c.t(`compare.${k}`, 'span', '', { ph: 'Column heading (empty hides it)' })}</span>`).join('') + `</div>`;
+    const rows = c.list('compare.rows', 'div', 'pdl-cmp__body', (it, ip) =>
+      `<span role="rowheader" class="pdl-cmp__label">${c.t(`${ip}.label`, 'span', '')}</span>` +
+      `<span role="cell" class="pdl-cmp__us">${TICK}${c.t(`${ip}.us`, 'span', '')}</span>` +
+      cols.map((k) => `<span role="cell" class="pdl-cmp__td">${c.t(`${ip}.${k.replace('col', 'c')}`, 'span', '', { ph: '—' })}</span>`).join(''),
+      'div', 'pdl-cmp__row');
+    return lHead(c, 'compare') +
+      `<div class="pdl-cmp"><div class="pdl-cmp__scroll" role="table" aria-label="${attr(p.compare.heading || 'Comparison')}"${grid}>${head}${rows}</div></div>` +
+      c.t('compare.note', 'p', 'pdl-small');
+  },
+  week(p, c) {
+    const hint = c.t('week.hint', 'span', '');
+    return `<div class="pdl-wrap"><div class="pdl-head-row">${lHead(c, 'week')}` +
+      (hint ? `<p class="pdl-swipe">${hint}<svg viewBox="0 0 28 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h25M21 1l5 5-5 5"/></svg></p>` : '') +
+      `</div></div>` +
+      `<div class="pdl-week" tabindex="0" aria-label="${attr(`${p.week.heading || 'A week in the life'} ${p.week.headingAccent || ''}`.trim())}, scrollable">` +
+      c.list('week.days', 'ol', 'pdl-week__track', (it, ip) =>
+        `<span class="pdl-week__pin" aria-hidden="true"></span>` +
+        `<figure class="pdl-week__fig">${c.img(`${ip}.image`, `${ip}.imageAlt`, 'pdl-week__img', 'Add a photo')}` +
+        `<figcaption>${c.t(`${ip}.day`, 'span', 'pdl-week__day')}${c.t(`${ip}.title`, 'span', 'pdl-week__title')}</figcaption></figure>`,
+        'li', 'pdl-week__item') +
+      `</div>`;
+  },
+  voices(p, c) {
+    const v = p.voices;
+    const rating = v.rating || c.ed
+      ? `<div class="pdl-rating"${c.ed ? ' data-v="voices.rating"' : ''}><strong class="pdl-rating__n">${esc(v.rating || 'Score')}</strong><span class="pdl-rating__stars" aria-hidden="true">★★★★★</span>` +
+        (v.ratingUrl && !c.ed ? `<a class="pdl-rating__t" href="${attr(safeUrl(v.ratingUrl))}">${esc(v.ratingText)}</a>` : `<span class="pdl-rating__t">${esc(v.ratingText)}</span>`) + `</div>`
+      : '';
+    return `<div class="pdl-head-row">${lHead(c, 'voices', { cls: 'pdl-head--inv' })}${rating}</div>` +
+      c.list('voices.quotes', 'div', 'pdl-quotes', (it, ip) =>
+        `<span class="pdl-quote__mark" aria-hidden="true">“</span>${c.t(`${ip}.quote`, 'p', 'pdl-quote__text', { multiline: true })}` +
+        `<footer class="pdl-quote__by">${c.t(`${ip}.name`, 'span', '')}${it.detail || c.ed ? ` · ${c.t(`${ip}.detail`, 'span', '', { ph: 'Program or role' })}` : ''}</footer>`,
+        'blockquote', 'pdl-quote');
+  },
+  ribbon(p, c) {
+    return c.list('ribbon.images', 'div', 'pdl-ribbon', (it, ip) => c.img(`${ip}.image`, `${ip}.imageAlt`, 'pdl-ribbon__img', 'Add a photo'), 'figure', 'pdl-ribbon__item');
+  },
+  safety(p, c) {
+    const s = p.safety;
+    const print = s.printImage || c.ed
+      ? `<figure class="pdl-print pdl-print--sm">${c.img('safety.printImage', 'safety.printImageAlt', 'pdl-print__img', 'Add a photo')}${c.t('safety.printCaption', 'figcaption', 'pdl-print__cap')}</figure>` : '';
+    return `<div class="pdl-safety"><div class="pdl-safety__media">${s.image || c.ed ? `<span class="pdl-safety__block" aria-hidden="true"></span>${c.img('safety.image', 'safety.imageAlt', 'pdl-safety__img', 'Add a photo')}` : ''}${print}</div>` +
+      `<div class="pdl-safety__text">${lHead(c, 'safety')}` +
+      c.list('safety.points', 'ol', 'pdl-points', (it, ip, i) =>
+        `<span class="pdl-points__n" aria-hidden="true">${i + 1}</span><div>${c.t(`${ip}.title`, 'strong', '')} ${c.t(`${ip}.body`, 'span', '', { multiline: true })}</div>`, 'li', 'pdl-points__item') +
+      `</div></div>`;
+  },
+  offer(p, c) {
+    const o = p.offer;
+    const card = o.title || c.ed
+      ? `<div class="pdl-pass"><div class="pdl-pass__main">${c.t('offer.tag', 'span', 'pdl-pass__tag')}${c.t('offer.title', 'p', 'pdl-pass__title', { multiline: true, ph: 'Offer title (empty hides the card)' })}${c.t('offer.body', 'p', '')}` +
+        `${c.link('offer.buttonText', p.settings.applyUrl, 'pdl-btn', 'settings.applyUrl')}</div>` +
+        (o.stubBig || o.stubText || c.ed ? `<div class="pdl-pass__stub">${c.t('offer.stubLabel', 'span', 'pdl-pass__lbl')}${c.t('offer.stubBig', 'span', 'pdl-pass__big')}${c.t('offer.stubSmall', 'span', 'pdl-pass__sm')}` +
+          `${c.t('offer.stubLabel2', 'span', 'pdl-pass__lbl pdl-pass__lbl--gap')}${c.t('offer.stubText', 'span', 'pdl-pass__sm')}</div>` : '') +
+        `</div>` : '';
+    return `<div class="pdl-offer"><div class="pdl-offer__text">${lHead(c, 'offer')}` +
+      c.list('offer.included', 'ul', 'pdl-incl', (it, ip) => `${TICK}${c.t(`${ip}.text`, 'span', '')}`, 'li', '') +
+      c.t('offer.note', 'p', 'pdl-small') + `</div>${card}</div>`;
+  },
+  faq(p, c) {
+    return `<div class="pdl-narrow"><h2 class="pdl-h2">${c.t('faq.heading', 'span', '')} ${c.t('faq.headingAccent', 'em', 'pdl-accent')}</h2>` +
+      c.list('faq.items', 'div', 'pdl-faq', (it, ip, i) => c.ed
+        ? `<div class="pdl-faq__q">${c.t(`${ip}.q`, 'span', '')}</div>${c.t(`${ip}.a`, 'p', 'pdl-faq__a', { multiline: true })}`
+        : `<details${i === 0 ? ' open' : ''}><summary class="pdl-faq__q"><span>${esc(it.q)}</span><span class="pdl-chev" aria-hidden="true"></span></summary><p class="pdl-faq__a pdp-ml">${esc(it.a)}</p></details>`,
+      'div', 'pdl-faq__item') + `</div>`;
+  },
+  cta(p, c) {
+    const eb = c.t('cta.eyebrow', 'span', '');
+    return `${p.cta.image || c.ed ? `<div class="pdl-bg">${c.img('cta.image', 'cta.imageAlt', 'pdl-bg__img', 'Add a background photo')}</div>` : ''}` +
+      `<div class="pdl-cta">` +
+      (eb ? `<p class="pdl-eyebrow pdl-eyebrow--center"><span class="pdl-eyebrow__line" aria-hidden="true"></span>${eb}<span class="pdl-eyebrow__line" aria-hidden="true"></span></p>` : '') +
+      `<h2 class="pdl-h2 pdl-h2--xl">${c.t('cta.heading', 'span', '')} ${c.t('cta.headingAccent', 'em', '')}</h2>${c.t('cta.body', 'p', 'pdl-cta__body', { multiline: true })}` +
+      `<div class="pdl-btns pdl-btns--center">${c.link('cta.primaryText', p.settings.quizUrl, 'pdl-btn pdl-btn--shadow', 'settings.quizUrl')}` +
+      `${c.link('cta.secondaryText', p.settings.bookletUrl, 'pdl-btn pdl-btn--light', 'settings.bookletUrl')}` +
+      `${c.link('cta.tertiaryText', p.settings.advisorUrl, 'pdl-btn pdl-btn--ghost', 'settings.advisorUrl')}</div></div>`;
+  },
+};
+
+function renderLandingHero(p, c, nextBg) {
+  const h = p.hero;
+  const fd = parseFocus(h.imageFocus), fm = parseFocus(h.imageFocusMobile);
+  const focus = fd || fm ? ` style="${fd ? `--pdl-pos:${fd};` : ''}${fm ? `--pdl-pos-m:${fm};` : ''}"` : '';
+  const printsHtml = c.list('hero.prints', 'div', 'pdl-hero__prints', (it, ip) =>
+    `${c.img(`${ip}.image`, `${ip}.imageAlt`, 'pdl-print__img', 'Add a photo')}${c.t(`${ip}.caption`, 'figcaption', 'pdl-print__cap')}`, 'figure', 'pdl-print');
+  const stamp = h.stampNumber || c.ed
+    ? `<div class="pdl-stamp"${c.ed ? ' data-v="hero.stampNumber"' : ''}><svg viewBox="0 0 200 200" role="img" aria-label="${attr([h.stampNumber, h.stampLabel].filter(Boolean).join(' '))}" focusable="false">` +
+      `<defs><path id="pdl-ring" d="M100,100 m-72,0 a72,72 0 1,1 144,0 a72,72 0 1,1 -144,0"/></defs>` +
+      `<circle cx="100" cy="100" r="96" fill="#81c243"/><circle cx="100" cy="100" r="88" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="3 5"/>` +
+      `<text fill="#fff" font-family="Poppins, sans-serif" font-size="15" font-weight="600" letter-spacing="3"><textPath href="#pdl-ring">${esc(h.stampRing)}</textPath></text>` +
+      `<text x="100" y="96" text-anchor="middle" fill="#fff" font-family="'DM Serif Display', Georgia, serif" font-size="40">${esc(h.stampNumber || '25+')}</text>` +
+      `<text x="100" y="120" text-anchor="middle" fill="#fff" font-family="Poppins, sans-serif" font-size="13" font-weight="600" letter-spacing="2">${esc(h.stampLabel)}</text></svg></div>`
+    : '';
+  const eb = c.t('hero.eyebrow', 'span', '');
+  return `<header class="pdl-hero pdl-dark" data-group="hero">` +
+    (h.image || c.ed ? `<div class="pdl-bg pdl-bg--hero"${focus}>${c.img('hero.image', 'hero.imageAlt', 'pdl-bg__img', 'Add a background photo')}</div>` : '') +
+    `<div class="pdl-wrap pdl-hero__inner"><div class="pdl-hero__text">` +
+    (eb ? `<p class="pdl-eyebrow pdl-eyebrow--topaz"><span class="pdl-eyebrow__line" aria-hidden="true"></span>${eb}</p>` : '') +
+    `<h1 class="pdl-h1">${c.t('hero.headline', 'span', '', { multiline: true, keep: true })} ${h.headlineAccent || c.ed ? `<span class="pdl-under">${c.t('hero.headlineAccent', 'em', '')}<svg viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 14 C 60 4, 120 4, 170 10 S 260 16, 296 6" fill="none" stroke="#81c243" stroke-width="5" stroke-linecap="round"/></svg></span>` : ''}</h1>` +
+    `${c.t('hero.intro', 'p', 'pdl-hero__intro', { multiline: true })}` +
+    `<div class="pdl-btns">${c.link('hero.primaryText', p.settings.quizUrl, 'pdl-btn pdl-btn--shadow', 'settings.quizUrl')}${c.link('hero.secondaryText', p.settings.bookletUrl, 'pdl-btn pdl-btn--light', 'settings.bookletUrl')}</div>` +
+    `</div><div class="pdl-hero__art">${printsHtml}${stamp}</div></div>` +
+    wave(nextBg, 'M0,60 C220,10 420,90 720,50 C1000,12 1220,80 1440,40 L1440,90 L0,90 Z').replace('viewBox="0 0 1440 60"', 'viewBox="0 0 1440 90"').replace('class="pdl-wave"', 'class="pdl-wave pdl-wave--bottom"') +
+    `</header>`;
+}
+
+/** The landing page body: what replaces <main> on pacificdiscovery.org. */
+export function renderLanding(page, opts = {}) {
+  const p = normalizeLanding(page);
+  const c = ctx(p, opts, LANDING_SCHEMA);
+  const shownKeys = p.layout.filter((l) => l.show).map((l) => l.key);
+  const order = c.ed ? p.layout.map((l) => l.key) : shownKeys;
+  const bgBefore = (key) => {
+    const i = shownKeys.indexOf(key);
+    return i > 0 ? LSEC[shownKeys[i - 1]].bg : '#212121';
+  };
+  const secs = order.map((key) => {
+    const meta = LSEC[key];
+    const hidden = !p.layout.find((l) => l.key === key)?.show;
+    const inner = L[key](p, c);
+    const full = key === 'week' || key === 'ribbon' || key === 'cta';
+    const prev = bgBefore(key);
+    const waveTop = meta.wave && prev !== meta.bg ? wave(prev) : '';
+    const attrs = key === 'ribbon' && p.ribbon.label ? ` aria-label="${attr(p.ribbon.label)}"` : '';
+    return `<section id="${meta.anchor}" class="pdl-sec pdl-sec--${key}${hidden ? ' pde-hidden' : ''}${waveTop ? ' pdl-sec--wave' : ''}"${attrs}${c.ed ? ` data-sec="${key}" data-label="${attr(meta.label)}"` : ''}>` +
+      waveTop + (full ? inner : `<div class="pdl-wrap">${inner}</div>`) + `</section>`;
+  }).join('');
+  const first = shownKeys[0];
+  return `<div class="pdl${c.ed ? ' pdp--edit' : ''}">${renderLandingHero(p, c, first ? LSEC[first].bg : '#ffffff')}${secs}</div>`;
+}
+
+export function landingSeo(page, { canonicalBase = `https://www.pacificdiscovery.org${LANDING_BASE}`, slug = '' } = {}) {
+  const p = normalizeLanding(page);
+  return {
+    title: p.seo.title || `${p.name} | Pacific Discovery`,
+    description: p.seo.description || String(p.hero.intro || '').slice(0, 160),
+    canonical: slug ? `${canonicalBase}${slug}` : '',
+    ogImage: p.seo.ogImage || p.hero.image || '',
+  };
+}
+
+/** FAQPage structured data from the FAQ section (only when it's shown). */
+export function landingJsonLd(page) {
+  const p = normalizeLanding(page);
+  const faqOn = p.layout.find((l) => l.key === 'faq')?.show;
+  const items = faqOn ? p.faq.items.filter((x) => x.q && x.a) : [];
+  if (!items.length) return '';
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((x) => ({ '@type': 'Question', name: x.q, acceptedAnswer: { '@type': 'Answer', text: x.a } })),
+  }).replace(/</g, '\\u003c');
+}
+
+const GRAIN_DARK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.13 0 0 0 0 0.13 0 0 0 0 0.13 0 0 0 1.6 -0.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.09'/%3E%3C/svg%3E\")";
+const GRAIN_LIGHT = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.6 -0.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.09'/%3E%3C/svg%3E\")";
+
+export const LANDING_CSS = `
+.pdl{--pdl-topaz:#55bbd2;--pdl-topaz-dk:#1f7f95;--pdl-green:#81c243;--pdl-navy:#344f8d;--pdl-ink:#212121;--pdl-body:#4a4a4a;--pdl-muted:#5f666b;--pdl-grey:#f1f1f1;
+  font-family:Poppins,system-ui,sans-serif;color:var(--pdl-body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;text-align:left;overflow-x:hidden}
+.pdl *,.pdl *::before,.pdl *::after{box-sizing:border-box}
+.pdl :where(h1,h2,h3,p,ul,ol,li,figure,blockquote,figcaption){margin:0;padding:0}
+.pdl :where(ul,ol){list-style:none}
+.pdl :where(h1,h2,h3,h4,p,li,a,span,strong,em,small,blockquote,summary,footer,figcaption){font-family:inherit;font-size:inherit;line-height:inherit;letter-spacing:normal;text-transform:none}
+.pdl img{max-width:100%}
+.pdl .pdp-ml{white-space:pre-line}
+.pdl-wrap{max-width:1240px;margin:0 auto;padding:0 24px}
+.pdl-narrow{max-width:852px;margin:0 auto}
+.pdl-sec{position:relative;padding:112px 0 104px}
+.pdl-sec--wave{padding-top:128px}
+.pdl-wave{position:absolute;left:0;top:-1px;width:100%;height:60px;display:block}
+.pdl-wave--bottom{top:auto;bottom:-1px;height:90px}
+.pdl-small{font-size:14px;color:var(--pdl-muted);margin-top:16px}
+/* headings */
+.pdl .pdl-h1{font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:#fff;font-size:clamp(44px,6vw,82px);line-height:1.02}
+.pdl .pdl-h2{font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:var(--pdl-body);font-size:clamp(34px,4.4vw,54px);line-height:1.08}
+.pdl .pdl-h2--xl{font-size:clamp(40px,5.4vw,68px);line-height:1.04;color:#fff}
+.pdl .pdl-h3{color:var(--pdl-body);font-size:21px;font-weight:600;line-height:1.3}
+.pdl em{font-style:italic}
+.pdl .pdl-accent{color:var(--pdl-topaz-dk)}
+.pdl-head{max-width:700px;display:flex;flex-direction:column;gap:14px;margin-bottom:48px}
+.pdl-head-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:20px 24px;margin-bottom:40px}
+.pdl-head-row .pdl-head{margin-bottom:0}
+.pdl .pdl-eyebrow{display:inline-flex;align-items:center;gap:12px;color:var(--pdl-topaz-dk);font-weight:600;letter-spacing:.16em;font-size:14px;text-transform:uppercase}
+.pdl .pdl-eyebrow span{letter-spacing:.16em;text-transform:uppercase}
+.pdl-eyebrow__line{width:36px;height:2px;background:var(--pdl-topaz);flex:none}
+.pdl .pdl-eyebrow--topaz{color:var(--pdl-topaz)}
+.pdl .pdl-eyebrow--center{justify-content:center;color:var(--pdl-topaz)}
+.pdl .pdl-head--inv .pdl-h2{color:#fff}
+.pdl .pdl-head--inv .pdl-eyebrow{color:#9fdcec}
+.pdl-head--inv .pdl-eyebrow__line{background:#9fdcec}
+.pdl .pdl-head--inv .pdl-accent{color:#fff}
+/* buttons */
+.pdl-btns{display:flex;gap:14px;flex-wrap:wrap;padding-top:8px}
+.pdl-btns--center{justify-content:center}
+.pdl .pdl-btn{display:inline-flex;align-items:center;min-height:52px;padding:14px 30px;border-radius:999px;background:var(--pdl-topaz);color:#fff;text-decoration:none;font-weight:600;font-size:16px;line-height:1.2;transition:background .15s}
+.pdl .pdl-btn:hover{background:#23a3c0;color:#fff}
+.pdl .pdl-btn--shadow{box-shadow:0 10px 24px rgba(0,0,0,.25)}
+.pdl .pdl-btn--light{background:#fff;color:var(--pdl-body)}
+.pdl .pdl-btn--light:hover{background:var(--pdl-grey);color:var(--pdl-ink)}
+.pdl .pdl-btn--ghost{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.75)}
+.pdl .pdl-btn--ghost:hover{background:rgba(255,255,255,.12);color:#fff}
+.pdl .pdl-btn:focus-visible{outline:3px solid #fff;outline-offset:3px}
+/* photo backgrounds */
+.pdl-dark{background:var(--pdl-ink);color:#fff}
+.pdl-bg{position:absolute;inset:0}
+.pdl .pdl-bg__img{width:100%;height:100%;object-fit:cover;object-position:var(--pdl-pos,center 45%);display:block;opacity:.45}
+.pdl-sec--cta .pdl-bg__img{opacity:.38}
+@media (max-width:700px){.pdl .pdl-bg--hero .pdl-bg__img{object-position:var(--pdl-pos-m,var(--pdl-pos,center 45%))}}
+/* hero */
+.pdl-hero{position:relative;overflow:hidden}
+.pdl-hero__inner{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:56px;padding-top:88px;padding-bottom:150px}
+.pdl-hero__text{flex:1 1 520px;min-width:0;display:flex;flex-direction:column;gap:24px}
+.pdl .pdl-hero__intro{color:#f1f1f1;font-size:20px;max-width:560px}
+.pdl-under{position:relative;display:inline-block}
+.pdl-under svg{position:absolute;left:0;bottom:-10px;width:100%;height:18px}
+.pdl-hero__art{flex:1 1 380px;min-width:0;max-width:520px;position:relative;min-height:560px}
+.pdl-hero__prints{position:relative;height:100%}
+.pdl-print{position:absolute;width:48%;background:#fff;padding:10px 10px 0;display:flex;flex-direction:column;box-shadow:0 24px 48px rgba(0,0,0,.35)}
+.pdl-hero__prints>.pdl-print:nth-child(1){left:0;top:0;transform:rotate(-5deg);z-index:1}
+.pdl-hero__prints>.pdl-print:nth-child(2){right:0;top:190px;transform:rotate(4deg);z-index:2}
+.pdl-hero__prints>.pdl-print:nth-child(n+3){position:relative;margin-top:12px}
+.pdl .pdl-print__img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block}
+.pdl .pdl-print__cap{padding:10px 6px 14px;text-align:center;font-family:'DM Serif Display',Georgia,serif;font-style:italic;color:var(--pdl-body);font-size:17px;line-height:1.25}
+.pdl-stamp{position:absolute;left:4%;bottom:10px;width:clamp(104px,28%,150px);transform:rotate(-12deg);z-index:3}
+.pdl-stamp svg{display:block;width:100%;height:auto}
+@media (max-width:900px){.pdl-hero__art{min-height:0;aspect-ratio:1/1.08;width:100%}.pdl-hero__prints>.pdl-print:nth-child(2){top:34%}.pdl-hero__inner{padding-top:56px}}
+/* stats */
+.pdl-sec--stats{background-color:var(--pdl-topaz);background-image:radial-gradient(ellipse at 80% 0%,rgba(255,255,255,.18),transparent 60%),${GRAIN_DARK};color:#fff;padding:28px 0 44px}
+.pdl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:20px;text-align:center}
+.pdl-stat{display:flex;flex-direction:column;gap:2px}
+.pdl .pdl-stat__v{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-size:clamp(32px,7vw,44px);line-height:1.1;color:#fff}
+.pdl .pdl-stat__l{font-size:14px;font-weight:500;color:#fff}
+/* reasons */
+.pdl-sec--reasons{background-color:#fff;background-image:radial-gradient(rgba(74,74,74,.10) 1px,transparent 1.6px);background-size:22px 22px}
+.pdl-reasons{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.pdl-reason{background:#fff;border-radius:20px;padding:32px 28px;box-shadow:0 18px 40px rgba(33,33,33,.08);display:flex;flex-direction:column;gap:14px}
+.pdl-reason__top{display:flex;justify-content:space-between;align-items:flex-start}
+.pdl-reason__ico{color:var(--pdl-topaz);display:inline-flex}
+.pdl-ico{width:44px;height:44px}
+.pdl-reason__n{font-family:'DM Serif Display',Georgia,serif;font-size:52px;line-height:1;color:#e3f3f8}
+@media (max-width:420px){.pdl-reasons{grid-template-columns:1fr}}
+/* comparison */
+.pdl-sec--compare{background-color:var(--pdl-grey);background-image:${GRAIN_DARK}}
+.pdl-cmp{overflow-x:auto;background:#fff;border-radius:22px;box-shadow:0 24px 60px rgba(33,33,33,.10);padding:8px;-webkit-overflow-scrolling:touch}
+.pdl-cmp__scroll{min-width:calc(380px + var(--pdl-cols,3) * 170px);font-size:16px}
+.pdl-cmp__row{display:grid;grid-template-columns:minmax(180px,1.3fr) minmax(200px,1.1fr) repeat(var(--pdl-cols,3),minmax(150px,1fr))}
+.pdl-cmp__row>span{padding:20px 24px;border-top:1px solid #e1e6e8}
+.pdl-cmp__row--head>span{border-top:0;padding:24px;font-weight:600;color:var(--pdl-body)}
+.pdl .pdl-cmp__us{background:#eef8fb;color:var(--pdl-ink);font-weight:500;border-top-color:#d6eef5;display:flex;gap:10px;align-items:flex-start}
+.pdl .pdl-cmp__us--head{background:var(--pdl-topaz);color:#fff;border-radius:16px 16px 0 0;flex-direction:column;gap:0}
+.pdl .pdl-cmp__tag{display:block;font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
+.pdl-cmp__body>.pdl-cmp__row:last-child .pdl-cmp__us{border-radius:0 0 16px 16px}
+.pdl .pdl-cmp__label{font-weight:600;color:var(--pdl-body)}
+.pdl-tick{width:20px;height:20px;flex:none;margin-top:3px;color:var(--pdl-green)}
+/* week */
+.pdl-sec--week{background-color:#fbfaf7;background-image:${GRAIN_DARK};padding-bottom:0}
+.pdl .pdl-swipe{display:inline-flex;align-items:center;gap:10px;color:var(--pdl-muted);font-size:14px;font-weight:500}
+.pdl-swipe svg{width:28px;height:12px;color:var(--pdl-topaz)}
+.pdl-week{overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-left:max(24px,calc((100% - 1192px) / 2));padding-bottom:112px;-webkit-overflow-scrolling:touch}
+.pdl-week:focus-visible{outline:3px solid var(--pdl-topaz);outline-offset:-3px}
+.pdl-week__track{position:relative;display:flex;gap:28px;width:max-content;min-width:100%;padding:0 max(24px,calc((100% - 1192px) / 2))}
+.pdl-week__track::before{content:"";position:absolute;left:0;right:0;top:10px;border-top:3px dotted var(--pdl-topaz)}
+.pdl-week__item{flex:none;width:clamp(230px,24vw,270px);scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:16px}
+.pdl-week__pin{position:relative;z-index:1;width:22px;height:22px;border-radius:50%;background:#fff;border:5px solid var(--pdl-topaz)}
+.pdl-week__item:last-child .pdl-week__pin{background:var(--pdl-green);border-color:var(--pdl-green)}
+.pdl-week__fig{width:100%;display:flex;flex-direction:column;gap:14px}
+.pdl-week__item:nth-child(even) .pdl-week__fig{margin-top:36px}
+.pdl .pdl-week__img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:16px;box-shadow:0 16px 34px rgba(33,33,33,.14);display:block}
+.pdl-week__fig figcaption{display:flex;flex-direction:column;gap:2px}
+.pdl .pdl-week__day{color:var(--pdl-topaz-dk);font-weight:600;font-size:13px;letter-spacing:.1em;text-transform:uppercase}
+.pdl .pdl-week__title{color:var(--pdl-body);font-weight:600}
+.pdl-week + .pde-add{margin:-80px auto 40px;max-width:1192px}
+/* quotes */
+.pdl-sec--voices{background-color:var(--pdl-navy);background-image:radial-gradient(ellipse at 10% 0%,rgba(85,187,210,.28),transparent 55%),radial-gradient(ellipse at 95% 100%,rgba(129,194,67,.14),transparent 50%),${GRAIN_LIGHT};color:#fff}
+.pdl-rating{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.10);border-radius:999px;padding:12px 22px;flex-wrap:wrap}
+.pdl .pdl-rating__n{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-size:34px;line-height:1;color:#fff}
+.pdl-rating__stars{color:#ffd166;letter-spacing:2px;font-size:18px}
+.pdl .pdl-rating__t{font-size:14px;color:#e3e9f6}
+.pdl a.pdl-rating__t{color:#fff}
+.pdl-quotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;align-items:start}
+.pdl .pdl-quote{margin:0;padding:36px 32px 32px;border:0;border-radius:20px;background:#415d9e;display:flex;flex-direction:column;gap:18px;position:relative;quotes:none;font-style:normal;max-width:none}
+.pdl .pdl-quote::before,.pdl .pdl-quote::after{content:none;display:none}
+.pdl .pdl-quote:nth-child(3n+2){background:#fff;margin-top:32px}
+.pdl-quote__mark{font-family:'DM Serif Display',Georgia,serif;font-size:96px;line-height:.6;color:var(--pdl-topaz);height:40px}
+.pdl-quote:nth-child(3n+2) .pdl-quote__mark{color:var(--pdl-green)}
+.pdl .pdl-quote__text{font-family:'DM Serif Display',Georgia,serif;font-size:24px;line-height:1.35;color:#fff}
+.pdl .pdl-quote:nth-child(3n+2) .pdl-quote__text{color:var(--pdl-ink)}
+.pdl .pdl-quote__by{font-size:15px;color:#e3e9f6}
+.pdl .pdl-quote:nth-child(3n+2) .pdl-quote__by{color:var(--pdl-body)}
+@media (max-width:620px){.pdl .pdl-quote:nth-child(3n+2){margin-top:0}}
+/* ribbon */
+.pdl-sec--ribbon{background:var(--pdl-ink);padding:12px 0}
+.pdl-ribbon{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:0 12px}
+.pdl .pdl-ribbon__img{width:100%;height:280px;object-fit:cover;display:block}
+.pdl-sec--ribbon .pde-add{max-width:600px;margin:12px auto 0}
+/* safety */
+.pdl-sec--safety{background:#fff;padding:120px 0 112px}
+.pdl-safety{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:72px;align-items:center}
+.pdl-safety__media{position:relative;padding:0 28px 28px 0}
+.pdl-safety__block{position:absolute;right:0;bottom:0;width:82%;height:82%;background:var(--pdl-topaz);border-radius:22px}
+.pdl .pdl-safety__img{position:relative;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:22px;display:block}
+.pdl .pdl-print--sm{left:-18px;bottom:-10px;width:42%;padding:8px 8px 0;transform:rotate(-5deg);z-index:2}
+.pdl .pdl-print--sm .pdl-print__img{aspect-ratio:1/1}
+.pdl .pdl-print--sm .pdl-print__cap{font-size:15px;padding:8px 4px 10px}
+.pdl-safety__text{display:flex;flex-direction:column;gap:10px}
+.pdl-points{display:flex;flex-direction:column;gap:22px}
+.pdl-points__item{display:flex;gap:18px;align-items:flex-start}
+.pdl-points__n{flex:none;width:44px;height:44px;border-radius:50%;background:#eef8fb;color:var(--pdl-topaz-dk);display:inline-flex;align-items:center;justify-content:center;font-weight:700}
+.pdl .pdl-points strong{color:var(--pdl-ink)}
+@media (max-width:620px){.pdl .pdl-print--sm{left:-6px}.pdl-safety{gap:48px}}
+/* offer */
+.pdl-sec--offer{background-color:var(--pdl-grey);background-image:${GRAIN_DARK}}
+.pdl-offer{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:48px;align-items:center}
+.pdl-offer__text{display:flex;flex-direction:column;gap:6px}
+.pdl-offer__text .pdl-head{margin-bottom:16px}
+.pdl-incl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}
+.pdl-incl li{display:flex;gap:10px;align-items:flex-start}
+.pdl-incl .pdl-tick{margin-top:4px}
+@media (max-width:480px){.pdl-incl{grid-template-columns:1fr}}
+.pdl-pass{position:relative;background:#fff;border-radius:22px;box-shadow:0 24px 60px rgba(33,33,33,.12);display:flex;flex-wrap:wrap;overflow:hidden}
+.pdl-pass__main{flex:1 1 300px;padding:36px;display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.pdl .pdl-pass__tag{background:var(--pdl-green);color:#fff;font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;border-radius:999px;padding:6px 14px}
+.pdl .pdl-pass__title{font-family:'DM Serif Display',Georgia,serif;color:var(--pdl-body);font-size:clamp(38px,4vw,50px);line-height:1.02}
+.pdl-pass__stub{flex:0 1 170px;min-width:150px;background:var(--pdl-topaz);color:#fff;padding:36px 24px;display:flex;flex-direction:column;justify-content:center;gap:4px;border-left:3px dashed #fff}
+.pdl .pdl-pass__lbl{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.pdl .pdl-pass__lbl--gap{margin-top:16px}
+.pdl .pdl-pass__big{font-family:'DM Serif Display',Georgia,serif;font-size:40px;line-height:1}
+.pdl .pdl-pass__sm{font-size:16px;font-weight:600}
+@media (max-width:520px){.pdl-pass__stub{flex-basis:100%;border-left:0;border-top:3px dashed #fff}}
+/* faq */
+.pdl-sec--faq{background:#fff}
+.pdl-faq{display:flex;flex-direction:column;gap:12px;margin-top:36px}
+.pdl-faq__item{background:var(--pdl-grey);border-radius:16px;padding:22px 26px}
+.pdl .pdl-faq__q{color:var(--pdl-ink);font-weight:600;font-size:19px;display:flex;justify-content:space-between;gap:16px;align-items:center;cursor:pointer;list-style:none}
+.pdl .pdl-faq__q::-webkit-details-marker{display:none}
+.pdl .pdl-faq__a{margin-top:12px}
+.pdl-chev{flex:none;width:12px;height:12px;border-right:2px solid var(--pdl-topaz-dk);border-bottom:2px solid var(--pdl-topaz-dk);transform:rotate(45deg) translateY(-3px);transition:transform .2s}
+.pdl details[open] .pdl-chev{transform:rotate(-135deg)}
+/* closing cta */
+.pdl-sec--cta{background:var(--pdl-ink);overflow:hidden;padding:128px 24px}
+.pdl-cta{position:relative;max-width:900px;margin:0 auto;text-align:center;display:flex;flex-direction:column;align-items:center;gap:22px}
+.pdl .pdl-cta__body{color:#f1f1f1;font-size:19px;max-width:620px}
+@media (max-width:620px){.pdl-sec{padding:80px 0 72px}.pdl-sec--wave{padding-top:96px}.pdl-sec--stats{padding:24px 0 36px}.pdl-sec--week{padding-bottom:0}.pdl-week{padding-bottom:80px}.pdl-sec--cta{padding:96px 20px}.pdl-sec--ribbon{padding:12px 0}.pdl .pdl-ribbon__img{height:200px}}
+@media (prefers-reduced-motion:reduce){.pdl *{transition:none!important;scroll-behavior:auto!important}}
+`;
+
+// ─── template registry ──────────────────────────────────────────────────────
+// Which template a stored page uses, and everything the editor and the build
+// need for it. Pages without a `template` field are program pages.
+
+export function templateOf(doc) {
+  return doc && doc.template === 'landing' ? 'landing' : 'program';
+}
+
+export const TEMPLATES = {
+  program: {
+    key: 'program', label: 'Program page', base: '/programs/',
+    SCHEMA, SECTIONS, blank: blankProgram, normalize: normalizeProgram, render: renderProgram, css: PROGRAM_CSS,
+  },
+  landing: {
+    key: 'landing', label: 'Landing page', base: LANDING_BASE,
+    SCHEMA: LANDING_SCHEMA, SECTIONS: LANDING_SECTIONS, blank: blankLanding, normalize: normalizeLanding, render: renderLanding, css: LANDING_CSS,
+  },
+};
+
+/** Render any stored page with its own template. */
+export function renderPage(doc, opts = {}) {
+  return TEMPLATES[templateOf(doc)].render(doc, opts);
+}
+
+function renderLandingStandalone(page, { slug = '', editable = false, extraHead = '', noindex = true, canonicalBase } = {}) {
+  const s = landingSeo(page, canonicalBase ? { slug, canonicalBase } : { slug });
+  const ld = editable ? '' : landingJsonLd(page);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<title>${esc(s.title)}</title><meta name="description" content="${attr(s.description)}">` +
+    (s.canonical ? `<link rel="canonical" href="${attr(s.canonical)}">` : '') +
+    (noindex ? `<meta name="robots" content="noindex">` : '') +
+    (s.ogImage ? `<meta property="og:image" content="${attr(safeUrl(s.ogImage))}">` : '') +
+    `<meta property="og:title" content="${attr(s.title)}">` +
+    `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
+    `<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">` +
+    `<style>body{margin:0;background:#fff}${LANDING_CSS}</style>${extraHead}</head><body>` +
+    `<div id="pdp-root">${renderLanding(page, { editable })}</div>` +
+    (ld ? `<script type="application/ld+json">${ld}</script>` : '') +
+    `</body></html>`;
+}

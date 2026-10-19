@@ -58,6 +58,7 @@ table.pages{width:100%;border-collapse:collapse;background:#fff;border:1px solid
 .pages tr:last-child td{border-bottom:0}
 .pages .nm{font-weight:600;color:var(--ink)}
 .pages .sl{font-size:12px;color:var(--muted)}
+.tpl-tag{display:inline-block;background:#eaf6e0;color:#3f6e14;font-weight:600;font-size:11px;border-radius:999px;padding:1px 8px;letter-spacing:.02em}
 .pages .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .empty{background:#fff;border:1px dashed #c8d2d6;border-radius:12px;padding:40px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
 
@@ -187,7 +188,7 @@ dialog::backdrop{background:rgba(20,30,35,.45)}
     <div class="dlg-body">
       <div class="field"><label for="new-name">Program name</label><input type="text" id="new-name" required placeholder="e.g. Southeast Asia"></div>
       <div class="field"><label for="new-slug">Web address</label>
-        <div class="money"><span>/programs/</span><input type="text" id="new-slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="southeast-asia-gap-semester"></div>
+        <div class="money"><span id="new-prefix">/programs/</span><input type="text" id="new-slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="southeast-asia-gap-semester"></div>
         <span class="help">Use the same address as the current page on the site, so it replaces it when you publish.</span></div>
       <div class="field"><label for="new-from">Start from</label><select id="new-from"></select></div>
       <p id="new-err" class="notice notice--bad hidden" role="alert"></p>

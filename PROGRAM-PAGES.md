@@ -39,6 +39,17 @@ sees drafts and has no database or login.
 `netlify.toml` gains one header block, so the browser can import `template/render.mjs`.
 Nothing else in the repo changed.
 
+## Landing pages
+
+The same editor also builds **landing pages** (e.g. "Why Pacific Discovery"), served
+at `www.pacificdiscovery.org/lp/<slug>`. **New page → Start from → Blank landing page**,
+or the **+ Why Pacific Discovery (landing page)** starter on the list. Landing pages
+are tagged in the list, use their own sections (hero, stats, reasons, comparison, a week
+in the life, quotes, photo ribbon, safety, pricing/offer, FAQ, closing CTA) and skip the
+tuition and dates checks when publishing. Placeholders in [square brackets] still block
+publishing. The template lives in the same `template/render.mjs` (`TEMPLATES.landing`),
+so `npm run sync:template` covers it. Details in the pd-program-pages README.
+
 ## Who can do what
 
 - **Edit drafts:** anyone who can open the Program Pages dashboard. This is the same rule as the edge gate (admin, or the person's dashboard grants, or the dashboard's roles if they have no grants yet). `/api/*` is outside the gate, so the functions check it themselves.

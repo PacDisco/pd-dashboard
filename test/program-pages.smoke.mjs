@@ -21,7 +21,7 @@ const user = { email: "jake@pd.org", name: "Jake", canPublish: true };
 
 function apiResponse(method, url, body) {
   const action = url.searchParams.get("action") || body?.action;
-  const summary = (p) => ({ slug: p.slug, name: p.draft.name, status: p.published ? (p.rev > p.pubRev ? "changes" : "live") : "draft", draftRev: p.rev, publishedRev: p.pubRev || null, updatedAt: new Date().toISOString(), updatedBy: "Jake" });
+  const summary = (p) => ({ slug: p.slug, name: p.draft.name, template: p.draft.template === "landing" ? "landing" : "program", status: p.published ? (p.rev > p.pubRev ? "changes" : "live") : "draft", draftRev: p.rev, publishedRev: p.pubRev || null, updatedAt: new Date().toISOString(), updatedBy: "Jake" });
   if (method === "GET" && action === "list") return [200, { programs: Object.values(db.pages).map(summary), user }];
   if (method === "GET" && action === "get") {
     const p = db.pages[url.searchParams.get("slug")];
@@ -88,7 +88,7 @@ const S = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__pdp.S.dat
 const frame = () => page.frameLocator("#frame");
 
 await page.goto(`${ORIGIN}/program-pages/`);
-ok(await page.locator("[data-starter]").count() === 19, "a ready-made starter for every program");
+ok(await page.locator("[data-starter]").count() === 20, "a ready-made starter for every program, plus the landing page");
 await page.getByRole("button", { name: "+ South America Semester Abroad" }).click();
 ok(await page.locator("#new-slug").inputValue() === "south-america-gap-semester", "starter prefills the address");
 await page.getByRole("button", { name: "Create page" }).click();
@@ -216,6 +216,48 @@ await page.waitForTimeout(500);
 ok((await S()).hero.headline !== "Changed headline" && (await S()).itinerary.weeks.length === 10, "starter content loaded into the draft");
 await page.locator("#btn-undo").click();
 ok((await S()).hero.headline === "Changed headline", "undo brings the old draft back");
+
+// ── Landing page template ──────────────────────────────────────────────────
+await page.evaluate(() => { location.hash = "#/"; });
+await page.getByRole("button", { name: "+ Why Pacific Discovery (landing page)" }).click();
+ok((await page.locator("#new-prefix").textContent()) === "/lp/", "landing starter shows the /lp/ address");
+ok(await page.locator("#new-slug").inputValue() === "why-pacific-discovery", "landing starter prefills the address");
+await page.getByRole("button", { name: "Create page" }).click();
+await frame().locator(".pdl.pdp--edit").waitFor();
+ok(page.url().endsWith("#/edit/why-pacific-discovery"), "opens the landing page in the editor");
+ok(await frame().locator("[data-sec]").count() === 10, "all ten landing sections render");
+ok(await frame().locator('[data-item^="reasons.items."]').count() === 6, "six reason cards");
+await shot("20-landing");
+// Hero text edits inline
+await frame().locator('[data-f="hero.headline"]').click();
+await page.keyboard.press("End");
+await page.keyboard.type(" really");
+await page.keyboard.press("Escape");
+ok((await S()).hero.headline.endsWith(" really") && (await S()).name === "Why Pacific Discovery", "hero headline edits inline");
+ok((await page.locator(".insp-head h2").textContent()) === "Hero", "hero panel opens");
+// A reason card: icon picker in the panel
+await frame().locator('[data-item="reasons.items.0"] .pdl-reason__ico').click();
+await page.locator('select[data-path="reasons.items.0.icon"]').selectOption("Heart");
+await page.waitForTimeout(400);
+ok((await S()).reasons.items[0].icon === "Heart", "reason icon changes from the panel");
+// Add a day to the week
+await frame().locator('[data-add="week.days"]').click();
+ok((await S()).week.days.length === 7, "+ Add a day");
+// Section panel pairs photos with their descriptions
+await frame().locator('[data-sec="safety"] .pdl-points').click({ position: { x: 5, y: 5 } }).catch(() => {});
+await page.evaluate(() => { const el = document.getElementById("frame").contentDocument.querySelector('[data-sec="safety"]'); el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+await page.waitForTimeout(200);
+ok(await page.locator('.field[data-path="safety.imageAlt"]').count() === 1 && await page.locator('.field[data-path="safety.printImageAlt"]').count() === 1, "section photos show their description fields");
+// Sections tab lists the landing sections
+await page.locator('[data-tab="sections"]').click();
+ok(await page.locator("[data-sec-toggle]").count() === 10, "sections tab lists the landing sections");
+await page.locator('[data-tab="edit"]').click();
+// Publish checks: placeholders block, but no tuition/dates checks
+const checks = await page.evaluate(() => window.__pdp.publishChecks(window.__pdp.S.data));
+ok(!checks.some((c) => /Tuition|start dates/.test(c.text)), "no program-only checks on landing pages");
+ok(checks.some((c) => c.level === "bad" && /placeholder/.test(c.text)), "bracketed placeholders still block publishing");
+ok((await page.locator("#btn-live").getAttribute("href")) === "https://www.pacificdiscovery.org/lp/why-pacific-discovery", "View live points at /lp/");
+await shot("21-landing-edited");
 
 ok(errors.length === 0, `no page errors: ${errors.join(" | ")}`);
 await browser.close();

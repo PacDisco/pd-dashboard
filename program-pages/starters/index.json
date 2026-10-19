@@ -76,7 +76,7 @@
   },
   {
     "id": "ecuador-galapagos-summer",
-    "name": "Ecuador & Gal\u00e1pagos Summer Program",
+    "name": "Ecuador & Galápagos Summer Program",
     "slug": "ecuador-and-galapagos-summer-program"
   },
   {
@@ -93,5 +93,11 @@
     "id": "australia-summer",
     "name": "Australia Summer Program",
     "slug": "australia-summer"
+  },
+  {
+    "id": "why-pacific-discovery",
+    "name": "Why Pacific Discovery",
+    "slug": "why-pacific-discovery",
+    "template": "landing"
   }
 ]

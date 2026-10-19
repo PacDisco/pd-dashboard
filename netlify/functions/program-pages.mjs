@@ -1,7 +1,8 @@
 // netlify/functions/program-pages.mjs
 //
 // Drafts, publishing and version history for public program pages
-// (www.pacificdiscovery.org/programs/<slug>). The editor UI is
+// (www.pacificdiscovery.org/programs/<slug>) and landing pages
+// (www.pacificdiscovery.org/lp/<slug>, pages whose draft has template "landing"). The editor UI is
 // /program-pages/; the public site is the separate pd-program-pages repo,
 // which only ever sees PUBLISHED content via program-pages-export.mjs.
 //
@@ -33,7 +34,7 @@ import { requireEditor, json } from "./_shared/program-pages-access.mjs";
 
 export const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const MAX_DOC_BYTES = 512 * 1024;
-const RESERVED = new Set(["new", "admin", "api", "programs", "index"]);
+const RESERVED = new Set(["new", "admin", "api", "programs", "index", "lp"]);
 
 let _sql;
 function db() {
@@ -84,6 +85,7 @@ function summary(row) {
   return {
     slug: row.slug,
     name: row.name,
+    template: row.template === "landing" ? "landing" : "program",
     status: statusOf(row),
     draftRev: row.draft_rev,
     publishedRev: row.published_rev,
@@ -116,8 +118,8 @@ async function list(url, user) {
   const sql = db();
   const archived = url.searchParams.get("archived") === "1";
   const rows = archived
-    ? await sql`SELECT slug, name, draft_rev, published_rev, published_at, published_by, updated_at, updated_by, created_at, archived_at FROM program_pages ORDER BY name`
-    : await sql`SELECT slug, name, draft_rev, published_rev, published_at, published_by, updated_at, updated_by, created_at, archived_at FROM program_pages WHERE archived_at IS NULL ORDER BY name`;
+    ? await sql`SELECT slug, name, draft->>'template' AS template, draft_rev, published_rev, published_at, published_by, updated_at, updated_by, created_at, archived_at FROM program_pages ORDER BY name`
+    : await sql`SELECT slug, name, draft->>'template' AS template, draft_rev, published_rev, published_at, published_by, updated_at, updated_by, created_at, archived_at FROM program_pages WHERE archived_at IS NULL ORDER BY name`;
   return json({
     programs: rows.map(summary),
     user: { email: user.email, name: user.actor, canPublish: user.canPublish },
