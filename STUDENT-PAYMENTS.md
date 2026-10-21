@@ -19,7 +19,7 @@ All environment variables go on the **pd-dashboard** Netlify site.
 | `STRIPE_SECRET_KEY` | already set | Used when `STUDENT_PAYMENTS_STRIPE_KEYS` isn't set. |
 | `STUDENT_PAYMENTS_STRIPE_KEYS` | optional | `pd:rk_live_…,pe:rk_live_…` to watch more than one Stripe account. A restricted key with read access to Charges, PaymentIntents and Customers is enough. |
 | `WISE_API_TOKEN` | for Wise | Wise → Settings → API tokens → **Read only**. |
-| `WISE_PROFILE_ID` | for Wise | The business profile id (`GET https://api.wise.com/v2/profiles` with the token). |
+| `WISE_PROFILE_ID` | optional | Found automatically from the token. Only set it if the token can see more than one business profile (the dashboard error lists their ids). |
 | `STUDENT_PAYMENTS_START` | recommended | Go-live date, e.g. `2026-10-23`. Payments before it are never picked up. |
 | `STRIPE_CARD_FEE_RATE` | optional, default `0.035` | The card surcharge to strip off (explained below). Set to `0` to credit charges as charged. |
 | `WISE_ADD_BACK_FEES` | optional, default on | Wise reports deposits net of its receiving fee. By default the fee is added back, so the deal is credited what the family sent. `false` credits the net amount. |

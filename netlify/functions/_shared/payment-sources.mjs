@@ -10,7 +10,9 @@
 //                                 restricted key with Charges + PaymentIntents
 //                                 + Customers READ is enough.
 //   WISE_API_TOKEN                Wise personal/business API token (read only)
-//   WISE_PROFILE_ID               the business profile id
+//   WISE_PROFILE_ID               optional — the business profile id. Found
+//                                 automatically from the token when the token
+//                                 can see exactly one business profile.
 //   WISE_API_BASE                 optional, default https://api.wise.com
 
 import { formatAmount } from "./deal-payments.mjs";
@@ -69,13 +71,27 @@ async function wiseGet(path, env, fetchImpl) {
   return body;
 }
 
+let _profileId = null;
+/**
+ * The business profile the token belongs to. Wise lists every profile the
+ * token can see (personal + business); exactly one business one is expected.
+ */
+export async function wiseBusinessProfileId(env = process.env, fetchImpl = fetch) {
+  if (_profileId) return _profileId;
+  const profiles = await wiseGet(`/v2/profiles`, env, fetchImpl);
+  const biz = (profiles || []).filter((p) => String(p.type || "").toLowerCase() === "business");
+  if (biz.length === 1) return (_profileId = String(biz[0].id));
+  if (!biz.length) throw new Error("This Wise token can't see a business profile — create the token while signed in to the business account.");
+  throw new Error(`This Wise token can see ${biz.length} business profiles (${biz.map((p) => `${p.id} ${p.businessName || p.details?.name || ""}`.trim()).join(", ")}) — set WISE_PROFILE_ID to the right one.`);
+}
+
 /**
  * Credits on every Wise balance between `since` and now. Returns
  * [{ balance: { id, currency }, transactions: [...] }].
  */
 export async function listWiseCredits({ since, env = process.env, fetchImpl = fetch }) {
-  if (!env.WISE_API_TOKEN || !env.WISE_PROFILE_ID) return [];
-  const profile = encodeURIComponent(env.WISE_PROFILE_ID);
+  if (!env.WISE_API_TOKEN) return [];
+  const profile = encodeURIComponent(env.WISE_PROFILE_ID || await wiseBusinessProfileId(env, fetchImpl));
   const balances = await wiseGet(`/v4/profiles/${profile}/balances?types=STANDARD`, env, fetchImpl);
   const end = new Date().toISOString();
   const start = new Date(since).toISOString();

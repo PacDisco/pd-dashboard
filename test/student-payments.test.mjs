@@ -96,6 +96,13 @@ await t('matcher order: metadata → reference id → email → student name →
   const r = await matchPayment({ metadata: {}, payer_email: 'a@b.c' }, { ...base, dealsForEmail: async () => [D('7', 'A A - X'), D('8', 'B B - Y')] });
   assert.equal(r.candidates.length, 2); assert.match(r.review, /More than one/);
 });
+await t('Wise profile found from the token when WISE_PROFILE_ID is unset', async () => {
+  const { wiseBusinessProfileId } = await import('../netlify/functions/_shared/payment-sources.mjs');
+  const fake = (profiles) => async () => ({ ok: true, status: 200, headers: new Headers(), json: async () => profiles });
+  await assert.rejects(wiseBusinessProfileId({ WISE_API_TOKEN: 't' }, fake([{ id: 1, type: 'PERSONAL' }])), /can't see a business profile/);
+  await assert.rejects(wiseBusinessProfileId({ WISE_API_TOKEN: 't' }, fake([{ id: 2, type: 'BUSINESS' }, { id: 3, type: 'BUSINESS' }])), /set WISE_PROFILE_ID/);
+  assert.equal(await wiseBusinessProfileId({ WISE_API_TOKEN: 't' }, fake([{ id: 1, type: 'PERSONAL' }, { id: 4242, type: 'BUSINESS' }])), '4242');
+});
 await t('Stripe keys config', () => {
   assert.deepEqual(stripeAccounts({ STRIPE_SECRET_KEY: 'sk_1' }), [{ label: 'stripe', key: 'sk_1' }]);
   assert.deepEqual(stripeAccounts({ STUDENT_PAYMENTS_STRIPE_KEYS: 'pd:rk_a, pe:rk_b' }), [{ label: 'pd', key: 'rk_a' }, { label: 'pe', key: 'rk_b' }]);
