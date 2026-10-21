@@ -49,6 +49,17 @@
 [functions."time-report-emails"]
   schedule = "0 19 * * *"
 
+# Student payments: every 10 minutes, pull new Stripe + Wise payments, log them
+# against HubSpot student deals, and attach application PDFs. See
+# STUDENT-PAYMENTS.md.
+[functions."student-payments-sync"]
+  schedule = "*/10 * * * *"
+
+# "Sync now" on the Student Payments dashboard runs the same pass (Stripe +
+# Wise + HubSpot writes + PDF uploads) — needs more than the default 10s.
+[functions."student-payments"]
+  timeout = 26
+
 # Route /api/config → config function, /api/users[/*] → users function.
 [[redirects]]
   from = "/api/config"

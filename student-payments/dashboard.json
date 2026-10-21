@@ -1,0 +1,8 @@
+{
+  "title": "Student Payments",
+  "description": "Stripe and Wise payments logged against HubSpot student deals in USD — plus the queue for payments that couldn't be matched, and application PDFs attached to student records.",
+  "category": "Finance",
+  "icon": "🧾",
+  "colors": ["#288195", "#81c243"],
+  "allowedRoles": ["admin", "operations", "admissions"]
+}
