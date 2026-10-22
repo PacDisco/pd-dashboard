@@ -1162,6 +1162,12 @@ const ICONS = {
 };
 export const LANDING_ICONS = Object.keys(ICONS);
 const icon = (name) => `<svg class="pdl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name] || ICONS.Globe}</svg>`;
+// Wires the week section's arrow buttons. No values from the page JSON go in here.
+const WEEK_JS = "(function(){var me=document.currentScript,sec=me&&me.closest('.pdl-sec--week');if(!sec)return;var sc=sec.querySelector('.pdl-week'),box=sec.querySelector('.pdl-week__btns');if(!sc||!box)return;var b=box.querySelectorAll('.pdl-week__btn');box.hidden=false;" +
+  "function card(){var it=sc.querySelector('.pdl-week__item');return it?it.getBoundingClientRect().width+28:300}" +
+  "function upd(){b[0].disabled=sc.scrollLeft<=4;b[1].disabled=sc.scrollLeft+sc.clientWidth>=sc.scrollWidth-4}" +
+  "for(var i=0;i<b.length;i++){b[i].addEventListener('click',function(){var w=card(),n=Math.max(1,Math.floor(sc.clientWidth/w)-1);sc.scrollBy({left:w*n*Number(this.getAttribute('data-dir')),behavior:'smooth'})})}" +
+  "sc.addEventListener('scroll',upd,{passive:true});window.addEventListener('resize',upd);upd()})();";
 const TICK = '<svg class="pdl-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12l5 5L20 7"/></svg>';
 
 const heading = (key) => [
@@ -1342,7 +1348,13 @@ const L = {
   week(p, c) {
     const hint = c.t('week.hint', 'span', '');
     return `<div class="pdl-wrap"><div class="pdl-head-row">${lHead(c, 'week')}` +
+      `<div class="pdl-week__nav">` +
       (hint ? `<p class="pdl-swipe">${hint}<svg viewBox="0 0 28 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h25M21 1l5 5-5 5"/></svg></p>` : '') +
+      // Arrow buttons for mouse users. Hidden until the script below wires them up (live page only).
+      `<div class="pdl-week__btns"${c.ed ? '' : ' hidden'}>` +
+      `<button type="button" class="pdl-week__btn" data-dir="-1" aria-label="Previous days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></button>` +
+      `<button type="button" class="pdl-week__btn" data-dir="1" aria-label="Next days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7"/></svg></button>` +
+      `</div></div>` +
       `</div></div>` +
       `<div class="pdl-week" tabindex="0" aria-label="${attr(`${p.week.heading || 'A week in the life'} ${p.week.headingAccent || ''}`.trim())}, scrollable">` +
       c.list('week.days', 'ol', 'pdl-week__track', (it, ip, i) =>
@@ -1352,7 +1364,7 @@ const L = {
         `<figure class="pdl-week__fig">${c.img(`${ip}.image`, `${ip}.imageAlt`, 'pdl-week__img', 'Add a photo')}` +
         `<figcaption>${c.t(`${ip}.day`, 'span', 'pdl-week__day')}${c.t(`${ip}.title`, 'span', 'pdl-week__title')}</figcaption></figure>`,
         'li', 'pdl-week__item') +
-      `</div>`;
+      `</div>` + (c.ed ? '' : `<script>${WEEK_JS}</script>`);
   },
   voices(p, c) {
     const v = p.voices;
@@ -1496,10 +1508,10 @@ export const LANDING_CSS = `
 .pdl-wave--bottom{top:auto;bottom:-1px;height:90px}
 .pdl-small{font-size:14px;color:var(--pdl-muted);margin-top:16px}
 /* headings */
-.pdl .pdl-h1{font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:#fff;font-size:clamp(44px,6vw,82px);line-height:1.02}
-.pdl .pdl-h2{font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:var(--pdl-body);font-size:clamp(34px,4.4vw,54px);line-height:1.08}
+.pdl .pdl-h1{text-transform:none;font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:#fff;font-size:clamp(44px,6vw,82px);line-height:1.02}
+.pdl .pdl-h2{text-transform:none;font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:var(--pdl-body);font-size:clamp(34px,4.4vw,54px);line-height:1.08}
 .pdl .pdl-h2--xl{font-size:clamp(40px,5.4vw,68px);line-height:1.04;color:#fff}
-.pdl .pdl-h3{color:var(--pdl-body);font-size:21px;font-weight:600;line-height:1.3}
+.pdl .pdl-h3{text-transform:none;color:var(--pdl-body);font-size:21px;font-weight:600;line-height:1.3}
 .pdl em{font-style:italic}
 .pdl .pdl-accent{color:var(--pdl-topaz-dk)}
 .pdl-head{max-width:700px;display:flex;flex-direction:column;gap:14px;margin-bottom:48px}
@@ -1576,6 +1588,16 @@ export const LANDING_CSS = `
 .pdl-tick{width:20px;height:20px;flex:none;margin-top:3px;color:var(--pdl-green)}
 /* week */
 .pdl-sec--week{background-color:#fbfaf7;background-image:${GRAIN_DARK};padding-bottom:0}
+.pdl-week__nav{display:flex;align-items:center;gap:20px}
+.pdl-week__btns{display:flex;gap:10px}
+.pdl-week__btns[hidden]{display:none}
+.pdl .pdl-week__btn{width:52px;height:52px;border-radius:50%;border:2px solid var(--pdl-topaz);background:#fff;color:var(--pdl-topaz-dk);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s,color .15s,opacity .15s;box-shadow:0 6px 16px rgba(33,33,33,.08)}
+.pdl .pdl-week__btn svg{width:22px;height:22px}
+.pdl .pdl-week__btn:hover:not(:disabled){background:var(--pdl-topaz);color:#fff}
+.pdl .pdl-week__btn:focus-visible{outline:3px solid var(--pdl-topaz-dk);outline-offset:3px}
+.pdl .pdl-week__btn:disabled{opacity:.35;cursor:default;box-shadow:none}
+@media (hover:hover) and (min-width:701px){.pdl-week__btns:not([hidden])~.pdl-swipe,.pdl-week__nav:has(.pdl-week__btns:not([hidden])) .pdl-swipe{display:none}}
+@media (hover:none),(max-width:700px){.pdl-week__btns{display:none!important}}
 .pdl .pdl-swipe{display:inline-flex;align-items:center;gap:10px;color:var(--pdl-muted);font-size:14px;font-weight:500}
 .pdl-swipe svg{width:28px;height:12px;color:var(--pdl-topaz)}
 .pdl-week{overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-left:max(24px,calc((100% - 1192px) / 2));padding-bottom:112px;-webkit-overflow-scrolling:touch}
