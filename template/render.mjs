@@ -1197,9 +1197,6 @@ export const LANDING_SCHEMA = {
       { k: 'hero.imageAlt', label: 'Background photo description', type: 'text' },
       { k: 'hero.imageFocus', label: 'Photo focus on computers', type: 'focus', image: 'hero.image', help: 'Click the part of the photo that should stay in view.' },
       { k: 'hero.imageFocusMobile', label: 'Photo focus on phones', type: 'focus', image: 'hero.image', mobile: true, help: 'Phones show a narrow slice. Click the part that must stay in view.' },
-      { k: 'hero.stampNumber', label: 'Stamp: big number', type: 'text', help: 'e.g. 25+. Leave empty to hide the stamp.' },
-      { k: 'hero.stampLabel', label: 'Stamp: word under the number', type: 'text' },
-      { k: 'hero.stampRing', label: 'Stamp: text around the edge', type: 'text', help: 'About 35 characters fits. End with " ·" so it joins up.' },
     ],
   },
   sections: {
@@ -1417,14 +1414,7 @@ function renderLandingHero(p, c, nextBg) {
   const h = p.hero;
   const fd = parseFocus(h.imageFocus), fm = parseFocus(h.imageFocusMobile);
   const focus = fd || fm ? ` style="${fd ? `--pdl-pos:${fd};` : ''}${fm ? `--pdl-pos-m:${fm};` : ''}"` : '';
-  const stamp = h.stampNumber || c.ed
-    ? `<div class="pdl-stamp"${c.ed ? ' data-v="hero.stampNumber"' : ''}><svg viewBox="0 0 200 200" role="img" aria-label="${attr([h.stampNumber, h.stampLabel].filter(Boolean).join(' '))}" focusable="false">` +
-      `<defs><path id="pdl-ring" d="M100,100 m-72,0 a72,72 0 1,1 144,0 a72,72 0 1,1 -144,0"/></defs>` +
-      `<circle cx="100" cy="100" r="96" fill="#81c243"/><circle cx="100" cy="100" r="88" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="3 5"/>` +
-      `<text fill="#fff" font-family="Poppins, sans-serif" font-size="15" font-weight="600" letter-spacing="3"><textPath href="#pdl-ring">${esc(h.stampRing)}</textPath></text>` +
-      `<text x="100" y="96" text-anchor="middle" fill="#fff" font-family="'DM Serif Display', Georgia, serif" font-size="40">${esc(h.stampNumber || '25+')}</text>` +
-      `<text x="100" y="120" text-anchor="middle" fill="#fff" font-family="Poppins, sans-serif" font-size="13" font-weight="600" letter-spacing="2">${esc(h.stampLabel)}</text></svg></div>`
-    : '';
+  // The green stamp was removed from the design; old stamp fields in stored pages are ignored.
   const eb = c.t('hero.eyebrow', 'span', '');
   return `<header class="pdl-hero pdl-dark" data-group="hero">` +
     (h.image || c.ed ? `<div class="pdl-bg pdl-bg--hero"${focus}>${c.img('hero.image', 'hero.imageAlt', 'pdl-bg__img', 'Add a background photo')}</div>` : '') +
@@ -1433,7 +1423,7 @@ function renderLandingHero(p, c, nextBg) {
     `<h1 class="pdl-h1">${c.t('hero.headline', 'span', '', { multiline: true, keep: true })} ${h.headlineAccent || c.ed ? `<span class="pdl-under">${c.t('hero.headlineAccent', 'em', '')}<svg viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 14 C 60 4, 120 4, 170 10 S 260 16, 296 6" fill="none" stroke="#81c243" stroke-width="5" stroke-linecap="round"/></svg></span>` : ''}</h1>` +
     `${c.t('hero.intro', 'p', 'pdl-hero__intro', { multiline: true })}` +
     `<div class="pdl-btns">${c.link('hero.primaryText', p.settings.quizUrl, 'pdl-btn pdl-btn--shadow', 'settings.quizUrl')}${c.link('hero.secondaryText', p.settings.bookletUrl, 'pdl-btn pdl-btn--light', 'settings.bookletUrl')}</div>` +
-    `</div>${stamp ? `<div class="pdl-hero__art">${stamp}</div>` : ''}</div>` +
+    `</div></div>` +
     wave(nextBg, 'M0,60 C220,10 420,90 720,50 C1000,12 1220,80 1440,40 L1440,90 L0,90 Z').replace('viewBox="0 0 1440 60"', 'viewBox="0 0 1440 90"').replace('class="pdl-wave"', 'class="pdl-wave pdl-wave--bottom"') +
     `</header>`;
 }
@@ -1515,9 +1505,9 @@ export const LANDING_CSS = `
 .pdl-head{max-width:700px;display:flex;flex-direction:column;gap:14px;margin-bottom:48px}
 .pdl-head-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:20px 24px;margin-bottom:40px}
 .pdl-head-row .pdl-head{margin-bottom:0}
-.pdl .pdl-eyebrow{display:inline-flex;align-items:center;gap:14px;color:var(--pdl-topaz-dk);font-weight:600;letter-spacing:.16em;font-size:17.5px;text-transform:uppercase}
-.pdl .pdl-eyebrow span{letter-spacing:.16em;text-transform:uppercase}
-.pdl-eyebrow__line{width:44px;height:2px;background:var(--pdl-topaz);flex:none}
+.pdl .pdl-eyebrow{display:inline-flex;align-items:center;gap:14px;color:var(--pdl-topaz-dk);font-weight:600;letter-spacing:.14em;font-size:clamp(17px,1.6vw,22px);text-transform:uppercase}
+.pdl .pdl-eyebrow span{letter-spacing:.14em;text-transform:uppercase}
+.pdl-eyebrow__line{width:52px;height:3px;background:var(--pdl-topaz);flex:none}
 .pdl .pdl-eyebrow--topaz{color:var(--pdl-topaz)}
 .pdl .pdl-eyebrow--center{justify-content:center;color:var(--pdl-topaz)}
 .pdl .pdl-head--inv .pdl-h2{color:#fff}
