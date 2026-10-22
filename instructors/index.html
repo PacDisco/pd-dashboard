@@ -36,6 +36,11 @@
   #toast.error { background: #b91c1c; }
   .btn-p { background:#7c3aed; color:#fff; font-weight:600; }
   .btn-p:hover { background:#6d28d9; }
+  th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+  th.sortable:hover { color:#5b21b6; }
+  th.sortable .arr { display:inline-block; width:10px; margin-left:3px; color:#c4b5fd; }
+  th.sortable.active { color:#5b21b6; }
+  th.sortable.active .arr { color:#7c3aed; }
 </style>
 </head>
 <body class="text-gray-800">
@@ -77,6 +82,10 @@
       <div id="fw-qual"><label class="lbl">Qualification</label><select id="f-qual" class="fld"><option value="">Any</option></select></div>
       <div id="fw-lang"><label class="lbl">Language</label><select id="f-lang" class="fld"><option value="">Any</option></select></div>
       <div id="fw-region"><label class="lbl">Region</label><select id="f-region" class="fld"><option value="">Any</option></select></div>
+      <div><label class="lbl">Applied</label><select id="f-applied" class="fld">
+        <option value="">Any time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="ytd">This year</option><option value="custom">Custom range…</option><option value="none">No application date</option></select></div>
+      <div id="fw-applied-from" style="display:none"><label class="lbl">Applied from</label><input id="f-applied-from" type="date" class="fld"></div>
+      <div id="fw-applied-to" style="display:none"><label class="lbl">Applied to</label><input id="f-applied-to" type="date" class="fld"></div>
       <div class="flex items-end gap-3 col-span-2 md:col-span-6">
         <label id="fw-returning" class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-returning"> Returning</label>
         <label id="fw-missing" class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-missing"> Missing paperwork</label>
@@ -87,22 +96,36 @@
 
   <div class="flex items-center justify-between px-1 mt-6 mb-2">
     <h2 class="text-sm font-semibold text-gray-700"><span id="count">0</span> instructors</h2>
+    <div class="flex items-center gap-2 text-xs text-gray-500">
+      <label for="sort-sel">Sort</label>
+      <select id="sort-sel" class="fld" style="width:auto;padding:4px 8px;font-size:12px">
+        <option value="">Default (status, name)</option>
+        <option value="applied_at:desc">Applied — newest first</option>
+        <option value="applied_at:asc">Applied — oldest first</option>
+        <option value="full_name:asc">Name A–Z</option>
+        <option value="full_name:desc">Name Z–A</option>
+        <option value="weeks_led:desc">Most weeks led</option>
+        <option value="document_count:desc">Most docs</option>
+        <option value="onboarding_done:desc">Most onboarding done</option>
+      </select>
+    </div>
   </div>
   <div id="loading" class="flex justify-center py-16"><div class="spinner"></div></div>
   <div id="table-wrap" class="bg-white border border-gray-200 rounded-xl overflow-hidden hidden">
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-          <tr>
-            <th class="text-left font-semibold px-4 py-2.5">Name</th>
-            <th class="text-left font-semibold px-3 py-2.5">Status</th>
-            <th class="text-left font-semibold px-3 py-2.5">Location</th>
-            <th class="text-left font-semibold px-3 py-2.5">Gender</th>
-            <th class="text-right font-semibold px-3 py-2.5">Wks led</th>
+          <tr id="thead-row">
+            <th class="sortable text-left font-semibold px-4 py-2.5" data-sort="full_name">Name<span class="arr"></span></th>
+            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="status">Status<span class="arr"></span></th>
+            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="applied_at">Applied<span class="arr"></span></th>
+            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="location">Location<span class="arr"></span></th>
+            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="gender">Gender<span class="arr"></span></th>
+            <th class="sortable text-right font-semibold px-3 py-2.5" data-sort="weeks_led">Wks led<span class="arr"></span></th>
             <th class="text-left font-semibold px-3 py-2.5">Programs led</th>
             <th class="text-left font-semibold px-3 py-2.5">Quals</th>
-            <th class="text-center font-semibold px-3 py-2.5">Docs</th>
-            <th class="text-center font-semibold px-3 py-2.5">Onboard</th>
+            <th class="sortable text-center font-semibold px-3 py-2.5" data-sort="document_count">Docs<span class="arr"></span></th>
+            <th class="sortable text-center font-semibold px-3 py-2.5" data-sort="onboarding_done">Onboard<span class="arr"></span></th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -159,6 +182,10 @@ var STATUS_META = {
 };
 var STATUS_ORDER = ['current','potential','new_applicant','blacklisted'];
 var all = [], facets = {}, onboardingItems = [], anyReturning = false;
+// Current sort. key=null keeps the server order (status, then name).
+var sortState = { key: null, dir: 'asc' };
+// First click on these columns sorts descending (newest / biggest first).
+var DESC_FIRST = { applied_at:1, weeks_led:1, document_count:1, onboarding_done:1 };
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
@@ -257,6 +284,7 @@ function apply(){
   var minW=parseInt($('f-weeks').value,10); var program=$('f-program').value, qual=$('f-qual').value, lang=$('f-lang').value, region=$('f-region').value;
   var returning=$('f-returning').checked, missing=$('f-missing').checked;
   var totalOnboard=onboardingItems.length;
+  var range=appliedRange();
 
   var rows = all.filter(function(i){
     if(q){ var hay=((i.full_name||'')+' '+(i.email||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
@@ -271,9 +299,72 @@ function apply(){
     if(region && arr(i.regions_experience).indexOf(region)<0 && arr(i.regions_applying).indexOf(region)<0) return false;
     if(returning && !i.is_returning) return false;
     if(missing && totalOnboard>0 && (i.onboarding_done||0)>=totalOnboard) return false;
+    if(range){
+      var t=i.applied_at?new Date(i.applied_at).getTime():NaN;
+      if(range.none){ if(!isNaN(t)) return false; }
+      else{
+        if(isNaN(t)) return false;
+        if(range.from!=null && t<range.from) return false;
+        if(range.to!=null && t>range.to) return false;
+      }
+    }
     return true;
   });
-  render(rows);
+  render(sortRows(rows));
+}
+
+// Applied-date filter → {from,to} in ms (local time), {none:true}, or null.
+function appliedRange(){
+  var v=$('f-applied').value; if(!v) return null;
+  if(v==='none') return {none:true};
+  var now=new Date();
+  if(v==='ytd') return {from:new Date(now.getFullYear(),0,1).getTime(), to:null};
+  if(v==='custom'){
+    var f=$('f-applied-from').value, t=$('f-applied-to').value;
+    if(!f && !t) return null;
+    return {
+      from: f ? new Date(f+'T00:00:00').getTime() : null,
+      to:   t ? new Date(t+'T23:59:59.999').getTime() : null
+    };
+  }
+  var days=parseInt(v,10);
+  var start=new Date(now.getFullYear(),now.getMonth(),now.getDate()-days+1);
+  return {from:start.getTime(), to:null};
+}
+
+function sortVal(i,key){
+  switch(key){
+    case 'applied_at': return i.applied_at?new Date(i.applied_at).getTime():null;
+    case 'status': var ix=STATUS_ORDER.indexOf(i.status); return ix<0?null:ix;
+    case 'weeks_led': case 'document_count': case 'onboarding_done': return Number(i[key]||0);
+    default: var s=(i[key]||'').toString().trim().toLowerCase(); return s||null;
+  }
+}
+function sortRows(rows){
+  var key=sortState.key; if(!key) return rows;
+  var mul=sortState.dir==='desc'?-1:1;
+  return rows.slice().sort(function(a,b){
+    var x=sortVal(a,key), y=sortVal(b,key);
+    // Blanks (e.g. no application date) always sink to the bottom.
+    if(x==null && y==null) return 0;
+    if(x==null) return 1;
+    if(y==null) return -1;
+    var c = (typeof x==='number') ? x-y : String(x).localeCompare(String(y));
+    if(c===0) c=String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''));
+    return c*mul;
+  });
+}
+function setSort(key,dir){
+  sortState={key:key||null, dir:dir||'asc'};
+  var sel=$('sort-sel'), v=key?key+':'+sortState.dir:'';
+  sel.value = Array.prototype.some.call(sel.options,function(o){return o.value===v;}) ? v : '';
+  Array.prototype.forEach.call(document.querySelectorAll('th.sortable'), function(th){
+    var on=th.dataset.sort===sortState.key;
+    th.classList.toggle('active',on);
+    th.querySelector('.arr').textContent = on ? (sortState.dir==='desc'?'▼':'▲') : '';
+  });
+  try{ localStorage.setItem('instructors.sort', v); }catch(e){}
+  apply();
 }
 
 function render(rows){
@@ -290,6 +381,7 @@ function render(rows){
     return '<tr data-id="'+i.id+'" class="border-t border-gray-100">'+
       '<td class="px-4 py-2.5"><div class="font-medium text-gray-900">'+esc(i.full_name||'—')+'</div><div class="text-xs text-gray-400">'+esc(i.email)+'</div></td>'+
       '<td class="px-3 py-2.5"><span class="badge '+sm.cls+'">'+esc(sm.label)+'</span></td>'+
+      '<td class="px-3 py-2.5 text-gray-600 whitespace-nowrap">'+(i.applied_at?esc(fmtDate(i.applied_at)):'<span class="text-gray-300">—</span>')+'</td>'+
       '<td class="px-3 py-2.5 text-gray-600">'+esc(i.location||'—')+'</td>'+
       '<td class="px-3 py-2.5 text-gray-600">'+esc(i.gender||'—')+'</td>'+
       '<td class="px-3 py-2.5 text-right font-medium text-gray-800">'+(i.weeks_led||0)+'</td>'+
@@ -632,11 +724,39 @@ $('resetall-go').addEventListener('click', async function(){
 ['f-q','f-location','f-weeks'].forEach(function(id){ $(id).addEventListener('input', apply); });
 ['f-status','f-gender','f-nat','f-program','f-qual','f-lang','f-region'].forEach(function(id){ $(id).addEventListener('change', apply); });
 ['f-returning','f-missing'].forEach(function(id){ $(id).addEventListener('change', apply); });
+function syncAppliedInputs(){
+  var custom=$('f-applied').value==='custom';
+  show('fw-applied-from',custom); show('fw-applied-to',custom);
+}
+$('f-applied').addEventListener('change', function(){ syncAppliedInputs(); apply(); });
+['f-applied-from','f-applied-to'].forEach(function(id){ $(id).addEventListener('change', apply); });
 $('f-clear').addEventListener('click', function(){
-  ['f-q','f-location','f-weeks'].forEach(function(id){$(id).value='';});
-  ['f-status','f-gender','f-nat','f-program','f-qual','f-lang','f-region'].forEach(function(id){$(id).value='';});
-  $('f-returning').checked=false; $('f-missing').checked=false; apply();
+  ['f-q','f-location','f-weeks','f-applied-from','f-applied-to'].forEach(function(id){$(id).value='';});
+  ['f-status','f-gender','f-nat','f-program','f-qual','f-lang','f-region','f-applied'].forEach(function(id){$(id).value='';});
+  $('f-returning').checked=false; $('f-missing').checked=false; syncAppliedInputs(); apply();
 });
+
+// ---- Sorting ------------------------------------------------------------
+$('thead-row').addEventListener('click', function(e){
+  var th=e.target.closest('th.sortable'); if(!th) return;
+  var key=th.dataset.sort, dir;
+  if(sortState.key===key) dir = sortState.dir==='asc'?'desc':'asc';
+  else dir = DESC_FIRST[key]?'desc':'asc';
+  setSort(key,dir);
+});
+$('sort-sel').addEventListener('change', function(){
+  var p=this.value.split(':'); setSort(p[0]||null, p[1]);
+});
+(function restoreSort(){
+  var v=''; try{ v=localStorage.getItem('instructors.sort')||''; }catch(e){}
+  if(v){ var p=v.split(':'); sortState={key:p[0],dir:p[1]||'asc'}; }
+  // Paint header arrows / dropdown without re-filtering before data loads.
+  var sel=$('sort-sel'); if(v) sel.value=v;
+  Array.prototype.forEach.call(document.querySelectorAll('th.sortable'), function(th){
+    var on=th.dataset.sort===sortState.key; th.classList.toggle('active',on);
+    th.querySelector('.arr').textContent = on ? (sortState.dir==='desc'?'▼':'▲') : '';
+  });
+})();
 
 load();
 </script>
