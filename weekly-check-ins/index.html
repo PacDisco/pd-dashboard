@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Check-Ins</title>
+<meta name="description" content="Instructor weekly check-ins from the field, by program — wellbeing and group-dynamic scores, flags that need HQ support, check-in history, and shared notes to raise at next week's check-in.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f3f4f6; }
+  .spinner { border:3px solid #e5e7eb; border-top:3px solid #059669; border-radius:50%; width:34px; height:34px; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fld { width:100%; padding:7px 10px; font-size:13px; border:1px solid #d1d5db; border-radius:8px; background:#fff; color:#111827; }
+  .fld:focus { outline:none; border-color:#059669; box-shadow:0 0 0 3px rgba(5,150,105,.15); }
+  .lbl { display:block; font-size:11px; font-weight:600; color:#6b7280; margin-bottom:3px; text-transform:uppercase; letter-spacing:.03em; }
+  .stat { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px 14px; }
+  .stat .n { font-size:22px; font-weight:700; line-height:1; }
+  .stat .l { font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:.03em; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; }
+  .card.attn { border-color:#fca5a5; box-shadow:0 0 0 1px #fecaca; }
+  .score { border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; min-width:0; }
+  .score .v { font-size:20px; font-weight:700; line-height:1.1; }
+  .score .k { font-size:10px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.03em; }
+  .s-good { color:#047857; } .s-mid { color:#b45309; } .s-bad { color:#b91c1c; } .s-none { color:#9ca3af; }
+  .delta { font-size:11px; font-weight:600; margin-left:4px; }
+  .flag { font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; display:inline-block; margin:2px 4px 2px 0; }
+  .f-red { background:#fee2e2; color:#b91c1c; }
+  .f-amber { background:#fef3c7; color:#92400e; }
+  .f-green { background:#dcfce7; color:#166534; }
+  .f-gray { background:#f3f4f6; color:#4b5563; }
+  .quote { font-size:13px; color:#374151; background:#f9fafb; border-left:3px solid #d1d5db; padding:6px 10px; border-radius:0 6px 6px 0; white-space:pre-wrap; }
+  .quote .q { font-size:10px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.03em; display:block; margin-bottom:2px; }
+  .notes { background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:12px; display:flex; flex-direction:column; }
+  .notes textarea { width:100%; min-height:150px; flex:1; resize:vertical; font-size:13px; line-height:1.45; border:1px solid #fcd34d; border-radius:8px; padding:8px 10px; background:#fff; color:#111827; }
+  .notes textarea:focus { outline:none; border-color:#d97706; box-shadow:0 0 0 3px rgba(217,119,6,.15); }
+  .hist-row { cursor:pointer; }
+  .hist-row:hover { background:#f0fdf4; }
+  #toast { position:fixed; bottom:24px; right:24px; z-index:70; padding:10px 16px; border-radius:8px; font-size:13px; background:#1f2937; color:#fff; box-shadow:0 8px 24px rgba(0,0,0,.25); opacity:0; transform:translateY(8px); transition:all .2s; pointer-events:none; }
+  #toast.show { opacity:1; transform:translateY(0); }
+  #toast.error { background:#b91c1c; }
+  #modal-wrap { position:fixed; inset:0; z-index:50; display:none; }
+  #modal-wrap.open { display:block; }
+  #modal-bg { position:absolute; inset:0; background:rgba(17,24,39,.45); }
+  #modal { position:absolute; top:0; right:0; height:100%; width:100%; max-width:680px; background:#f9fafb; box-shadow:-8px 0 30px rgba(0,0,0,.18); overflow-y:auto; }
+  .ans { padding:8px 0; border-bottom:1px solid #f3f4f6; }
+  .ans:last-child { border-bottom:0; }
+  .ans .q { font-size:11px; font-weight:600; color:#6b7280; margin-bottom:2px; }
+  .ans .a { font-size:14px; color:#1f2937; white-space:pre-wrap; word-break:break-word; }
+  .ans a { color:#047857; text-decoration:underline; }
+</style>
+<script src="/assets/lightbox.js" defer></script>
+</head>
+<body class="text-gray-800">
+<div class="max-w-7xl mx-auto px-4 py-7">
+
+  <div class="flex items-center justify-between mb-1 flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">📋 Weekly Check-Ins</h1>
+      <p class="text-sm text-gray-500 mt-1">Weekly Check-In entries from the <em>Instructor In The Field</em> Jotform, grouped by program. Notes are shared with the team and saved automatically.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="status" class="text-xs text-gray-400"></span>
+      <button id="refresh-btn" class="text-sm border border-green-300 text-green-700 hover:bg-green-50 font-semibold px-3 py-2 rounded-lg">↻ Refresh</button>
+      <a href="/" class="text-sm text-green-700 hover:underline ml-1">← Dashboards</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5">
+    <div class="stat"><div class="n text-gray-900" id="s-active">—</div><div class="l">Active programs</div></div>
+    <div class="stat"><div class="n text-green-700" id="s-week">—</div><div class="l">Check-ins, last 7 days</div></div>
+    <div class="stat"><div class="n text-amber-700" id="s-due">—</div><div class="l">Overdue (8+ days)</div></div>
+    <div class="stat"><div class="n text-red-700" id="s-attn">—</div><div class="l">Need attention</div></div>
+    <div class="stat"><div class="n text-gray-900" id="s-wellbeing">—</div><div class="l">Avg instructor score (latest)</div></div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl p-4 mt-5 shadow-sm">
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+      <div class="col-span-2"><label class="lbl">Search program</label><input id="f-q" class="fld" placeholder="e.g. Southeast Asia"></div>
+      <div><label class="lbl">Season</label><select id="f-season" class="fld"><option value="">All seasons</option></select></div>
+      <div><label class="lbl">Show</label><select id="f-show" class="fld">
+        <option value="active">Active programs</option><option value="attn">Needs attention</option><option value="all">All programs</option></select></div>
+      <div><label class="lbl">Sort</label><select id="f-sort" class="fld">
+        <option value="attn">Needs attention first</option><option value="recent">Latest check-in</option><option value="name">Program name</option><option value="oldest">Longest since check-in</option></select></div>
+      <div class="text-xs text-gray-500 pb-2" title="A program is active when it has a check-in in the last 21 days.">Active = check-in in the last 21 days</div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between px-1 mt-6 mb-2">
+    <h2 class="text-sm font-semibold text-gray-700"><span id="count">0</span> programs</h2>
+  </div>
+  <div id="loading" class="flex flex-col items-center py-16 text-sm text-gray-500"><div class="spinner mb-3"></div><div id="loading-text">Loading check-ins…</div></div>
+  <div id="cards" class="space-y-4"></div>
+  <div id="empty" class="hidden text-center text-gray-400 py-12 text-sm bg-white border border-gray-200 rounded-xl">No programs match. Try “All programs” or clear the search.</div>
+</div>
+
+<div id="modal-wrap"><div id="modal-bg"></div><div id="modal"><div class="p-5" id="modal-body"></div></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  var FORM_ID = '250887973978080';                 // Instructor In The Field
+  var PROXY = '/.netlify/functions/jotform';
+  var NOTES_API = '/api/weekly-checkin-notes';
+  var FILE_PROXY = '/.netlify/functions/jotform-file';
+  var ACTIVE_DAYS = 21, OVERDUE_DAYS = 8;
+
+  var checkins = [];          // parsed Weekly Check-In submissions
+  var programs = [];          // grouped
+  var notes = {};             // program -> { text, updated_at, updated_by, history }
+  var expanded = {};          // program -> history open?
+  var saveTimers = {}, dirty = {}, drafts = {};   // drafts: unsaved text, survives re-renders
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function toast(msg,isErr){ var t=$('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); clearTimeout(toast._t); toast._t=setTimeout(function(){t.className='';},3200); }
+  var _dec=document.createElement('textarea');
+  function decodeEntities(s){ _dec.innerHTML=s; return _dec.value; }
+  function stripHtml(s){ return decodeEntities(String(s||'').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim(); }
+  function parseDate(s){ if(!s) return null; var d=new Date(String(s).replace(' ','T')); return isNaN(d)?null:d; }
+  function fmtDate(d){ return d ? d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) : '—'; }
+  function fmtDateTime(iso){ var d=iso?new Date(iso):null; return d&&!isNaN(d)?d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''; }
+  function daysSince(d){ return d ? Math.floor((Date.now()-d.getTime())/86400000) : Infinity; }
+  function agoText(n){ return n===Infinity?'never':n<=0?'today':n===1?'yesterday':n+' days ago'; }
+
+  // ---- answer helpers -----------------------------------------------------
+  function answerText(v){
+    if(v==null) return '';
+    if(typeof v==='string') return v;
+    if(Array.isArray(v)) return v.filter(Boolean).join(', ');
+    if(typeof v==='object'){
+      if(v.datetime) return v.datetime;
+      if(v.first||v.last) return [v.first,v.last].filter(Boolean).join(' ');
+      return Object.keys(v).map(function(k){ var x=v[k]; return x==null||x===''?'':(/^\d+$/.test(k)?answerText(x):k+': '+answerText(x)); }).filter(Boolean).join('\n');
+    }
+    return String(v);
+  }
+  // Answers ordered as on the form, with clean labels.
+  function orderedAnswers(sub){
+    var a=sub.answers||{};
+    return Object.keys(a).map(function(k){ var q=a[k]; return {name:q.name,type:q.type,label:stripHtml(q.text),order:Number(q.order)||0,answer:q.answer}; })
+      .sort(function(x,y){ return x.order-y.order; });
+  }
+  // Find by label text (robust to Jotform renaming field ids). `after` limits
+  // the search to questions after another one — used for the two identical
+  // "Tell us why you put the number above." follow-ups.
+  function find(list, needle, after){
+    needle=needle.toLowerCase();
+    for(var i=0;i<list.length;i++){
+      if(after!=null && list[i].order<=after) continue;
+      if(list[i].label.toLowerCase().indexOf(needle)>=0) return list[i];
+    }
+    return null;
+  }
+  function txt(list,needle,after){ var q=find(list,needle,after); return q?answerText(q.answer).trim():''; }
+  function num(list,needle){
+    var q=find(list,needle); if(!q) return null;
+    var m=String(answerText(q.answer)).match(/\d+(\.\d+)?/); return m?Number(m[0]):null;
+  }
+  function yesNo(s){ s=String(s||'').trim().toLowerCase(); return s.indexOf('yes')===0?true:s.indexOf('no')===0?false:null; }
+  function fileUrls(q){
+    if(!q) return [];
+    var v=q.answer, out=[];
+    (Array.isArray(v)?v:[v]).forEach(function(x){
+      String(answerText(x)).split(/[\s,]+/).forEach(function(u){ if(/^https?:\/\//i.test(u)) out.push(u); });
+    });
+    return out;
+  }
+  function viaProxy(u){ try{ var h=new URL(u).hostname; return /(^|\.)jotform\.com$/i.test(h)?FILE_PROXY+'?url='+encodeURIComponent(u):u; }catch(e){ return u; } }
+  function fileName(u){ try{ return decodeURIComponent(String(u).split('/').pop().split('?')[0]); }catch(e){ return 'file'; } }
+
+  function parseCheckin(sub){
+    var L=orderedAnswers(sub);
+    var type=txt(L,'what type of form');
+    if(!/weekly/i.test(type)) return null;            // Weekly Check-In only
+    var program=txt(L,'what program are you leading')||'(No program selected)';
+    var i1=find(L,'instructor 1 - how are you doing'), i2=find(L,'instructor 2 - how are you doing');
+    var weekLabel=txt(L,'week of program');
+    var wm=weekLabel.match(/\d+/);
+    var core=txt(L,'core/wellness facilitation');
+    return {
+      id: sub.id, created: parseDate(sub.created_at), program: program,
+      week: wm?Number(wm[0]):null, weekLabel: weekLabel,
+      who: txt(L,"who's filling out the report"),
+      i1: num(L,'instructor 1 - how are you doing'), i1Why: i1?txt(L,'tell us why you put the number above',i1.order):'',
+      i2: num(L,'instructor 2 - how are you doing'), i2Why: i2?txt(L,'tell us why you put the number above',i2.order):'',
+      group: num(L,'how is the group dynamic'),
+      conflicts: txt(L,'are there any conflicts or group dynamic issues'),
+      coDyn: txt(L,'co-instructor dynamics'),
+      core: core,
+      coreDone: core ? !/not\s*complete/i.test(core) && /complete/i.test(core) : null,
+      need: txt(L,'let us know what you need'),
+      hqHelp: yesNo(txt(L,'do you need pdhq support')),
+      budgets: yesNo(txt(L,'are your budgets up to date')),
+      vehicleNote: txt(L,'anything to note with the vehicle'),
+      hazards: txt(L,'please list any hazards'),
+      incidents: yesNo(txt(L,'any incidents/accidents/behavioral issues')),
+      support: txt(L,'how can we support you'),
+      wellbeing: txt(L,'individual student wellbeing'),
+      familyUpdate: txt(L,'weekly update to families'),
+      hqNotes: txt(L,'hq notes/comments'),
+      photos: fileUrls(find(L,'attach a group photo')),
+      raw: L
+    };
+  }
+
+  // ---- grouping & attention ----------------------------------------------
+  function seasonOf(p){ var m=String(p).match(/^(Spring|Summer|Fall|Autumn|Winter)\s+(\d{4})/i); return m?m[1][0].toUpperCase()+m[1].slice(1).toLowerCase()+' '+m[2]:''; }
+  function band(v){ return v==null?'s-none':v>=8?'s-good':v>=6?'s-mid':'s-bad'; }
+
+  function group(){
+    var by={};
+    checkins.forEach(function(c){ (by[c.program]=by[c.program]||[]).push(c); });
+    programs=Object.keys(by).map(function(name){
+      var list=by[name].sort(function(a,b){ return (b.created||0)-(a.created||0); });
+      var latest=list[0], prev=list[1]||null;
+      var since=daysSince(latest.created);
+      var flags=[];
+      if(latest.incidents===true) flags.push({t:'Incident / behaviour support',c:'f-red'});
+      if(latest.hqHelp===true) flags.push({t:'Needs HQ support',c:'f-red'});
+      if([latest.i1,latest.i2,latest.group].some(function(v){return v!=null&&v<=5;})) flags.push({t:'Low score',c:'f-red'});
+      if(latest.budgets===false) flags.push({t:'Budget off track',c:'f-amber'});
+      if(latest.coreDone===false) flags.push({t:'CORE not completed',c:'f-amber'});
+      var active=since<=ACTIVE_DAYS;
+      if(active && since>=OVERDUE_DAYS) flags.push({t:'Check-in overdue',c:'f-amber'});
+      var attn=flags.some(function(f){return f.c==='f-red';})?2:flags.length?1:0;
+      return { name:name, season:seasonOf(name), list:list, latest:latest, prev:prev, since:since, active:active, flags:flags, attn:attn };
+    });
+  }
+
+  // ---- rendering ----------------------------------------------------------
+  function scoreBox(label, v, pv, why){
+    var d='';
+    if(v!=null && pv!=null && v!==pv){
+      var diff=v-pv; d='<span class="delta '+(diff>0?'s-good':'s-bad')+'">'+(diff>0?'▲':'▼')+Math.abs(diff)+'</span>';
+    }
+    return '<div class="score"'+(why?' title="'+esc(why)+'"':'')+'><div class="k">'+esc(label)+'</div>'+
+      '<div class="v '+band(v)+'">'+(v==null?'—':v)+'<span class="text-xs text-gray-400 font-normal">'+(v==null?'':'/10')+'</span>'+d+'</div></div>';
+  }
+  function quote(label, text){
+    if(!text) return '';
+    var t=text.length>400?text.slice(0,397)+'…':text;
+    return '<div class="quote"><span class="q">'+esc(label)+'</span>'+esc(t)+'</div>';
+  }
+
+  function cardHtml(p){
+    var l=p.latest, pv=p.prev, key=encodeURIComponent(p.name);
+    var n=notes[p.name]||{text:'',history:[]};
+    var noteText=dirty[p.name] && drafts[p.name]!=null ? drafts[p.name] : n.text;
+    var flags=p.flags.length ? p.flags.map(function(f){return '<span class="flag '+f.c+'">'+esc(f.t)+'</span>';}).join('')
+                             : '<span class="flag f-green">No flags</span>';
+    var dueCls=p.active&&p.since>=OVERDUE_DAYS?'text-amber-700 font-semibold':'text-gray-500';
+    var hist=p.list.map(function(c){
+      return '<tr class="hist-row border-t border-gray-100" data-sid="'+esc(c.id)+'">'+
+        '<td class="px-3 py-1.5 whitespace-nowrap">'+fmtDate(c.created)+'</td>'+
+        '<td class="px-3 py-1.5 whitespace-nowrap">'+esc(c.weekLabel||'—')+'</td>'+
+        '<td class="px-3 py-1.5 text-center '+band(c.i1)+'">'+(c.i1==null?'—':c.i1)+'</td>'+
+        '<td class="px-3 py-1.5 text-center '+band(c.i2)+'">'+(c.i2==null?'—':c.i2)+'</td>'+
+        '<td class="px-3 py-1.5 text-center '+band(c.group)+'">'+(c.group==null?'—':c.group)+'</td>'+
+        '<td class="px-3 py-1.5">'+[c.incidents===true?'<span class="flag f-red">Incident</span>':'',c.hqHelp===true?'<span class="flag f-red">HQ help</span>':'',c.budgets===false?'<span class="flag f-amber">Budget</span>':'',c.coreDone===false?'<span class="flag f-amber">CORE</span>':''].join('')+'</td>'+
+        '<td class="px-3 py-1.5 text-gray-500 truncate" style="max-width:160px">'+esc(c.who)+'</td>'+
+      '</tr>';
+    }).join('');
+    var histItems=(n.history||[]).map(function(h){
+      return '<div class="border-t border-amber-200 pt-2 mt-2"><div class="text-xs text-amber-800 mb-1">Discussed '+esc(fmtDateTime(h.cleared_at))+(h.cleared_by?' · '+esc(h.cleared_by):'')+'</div>'+
+             '<div class="text-xs text-gray-700 whitespace-pre-wrap">'+esc(h.text)+'</div></div>';
+    }).join('');
+    var photos=l.photos.slice(0,4).map(function(u){ return '<a href="'+esc(viaProxy(u))+'" target="_blank" rel="noopener" class="text-xs text-green-700 hover:underline mr-2">📷 '+esc(fileName(u))+'</a>'; }).join('');
+
+    return '<div class="card p-4 '+(p.attn===2?'attn':'')+'" data-program="'+esc(p.name)+'">'+
+      '<div class="flex items-start justify-between gap-3 flex-wrap">'+
+        '<div class="min-w-0"><h3 class="text-lg font-bold text-gray-900">'+esc(p.name)+'</h3>'+
+          '<div class="text-sm '+dueCls+'">'+esc(l.weekLabel||'Week ?')+' · last check-in '+fmtDate(l.created)+' ('+agoText(p.since)+') · '+p.list.length+' check-in'+(p.list.length===1?'':'s')+(l.who?' · by '+esc(l.who):'')+'</div></div>'+
+        '<div class="text-right">'+flags+'</div>'+
+      '</div>'+
+
+      '<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-3">'+
+        '<div class="lg:col-span-2 space-y-3">'+
+          '<div class="grid grid-cols-3 gap-2">'+
+            scoreBox('Instructor 1',l.i1,pv&&pv.i1,l.i1Why)+scoreBox('Instructor 2',l.i2,pv&&pv.i2,l.i2Why)+scoreBox('Group dynamic',l.group,pv&&pv.group,'')+
+          '</div>'+
+          '<div class="text-xs text-gray-500">'+
+            'HQ support: <b>'+(l.hqHelp==null?'—':l.hqHelp?'Yes':'No')+'</b> · Budgets on track: <b>'+(l.budgets==null?'—':l.budgets?'Yes':'No')+'</b> · '+
+            'Incidents needing support: <b>'+(l.incidents==null?'—':l.incidents?'Yes':'No')+'</b> · CORE: <b>'+esc(l.core||'—')+'</b>'+
+          '</div>'+
+          '<div class="space-y-2">'+
+            quote('How can we support you?',l.support)+quote('Let us know what you need',l.need)+
+            quote('Conflicts / things to watch',l.conflicts)+quote('Hazards',l.hazards)+quote('Vehicle',l.vehicleNote)+
+          '</div>'+
+          (photos?'<div>'+photos+'</div>':'')+
+          '<div class="flex items-center gap-3 text-sm">'+
+            '<button class="open-latest text-green-700 hover:underline" data-sid="'+esc(l.id)+'">View full latest check-in →</button>'+
+            '<button class="toggle-hist text-gray-600 hover:underline" data-p="'+key+'">'+(expanded[p.name]?'Hide':'Show')+' all '+p.list.length+' check-ins</button>'+
+          '</div>'+
+          (expanded[p.name]?'<div class="border border-gray-200 rounded-lg overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50 text-gray-500 text-xs uppercase"><tr>'+
+            '<th class="text-left px-3 py-1.5">Date</th><th class="text-left px-3 py-1.5">Week</th><th class="px-3 py-1.5">Instr 1</th><th class="px-3 py-1.5">Instr 2</th><th class="px-3 py-1.5">Group</th><th class="text-left px-3 py-1.5">Flags</th><th class="text-left px-3 py-1.5">By</th>'+
+            '</tr></thead><tbody>'+hist+'</tbody></table></div>':'')+
+        '</div>'+
+
+        '<div class="notes">'+
+          '<div class="flex items-center justify-between mb-1"><span class="text-xs font-bold text-amber-900 uppercase tracking-wide">📝 For next week’s check-in</span>'+
+            '<span class="note-state text-amber-700 text-right ml-2" style="font-size:11px" data-p="'+key+'">'+esc(n.updated_at?('Saved '+fmtDateTime(n.updated_at)+(n.updated_by?' · '+n.updated_by:'')):'')+'</span></div>'+
+          '<textarea class="note-ta" data-p="'+key+'" placeholder="Things to raise or follow up on next week…">'+esc(noteText)+'</textarea>'+
+          '<div class="flex items-center justify-between mt-2">'+
+            '<button class="note-clear text-xs font-semibold text-amber-800 hover:underline" data-p="'+key+'" title="Moves this note into the history below and empties the box for next week">✓ Discussed — clear for next week</button>'+
+          '</div>'+
+          (histItems?'<details class="mt-2"><summary class="text-xs text-amber-800 cursor-pointer">Past notes ('+n.history.length+')</summary>'+histItems+'</details>':'')+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function render(){
+    var q=$('f-q').value.trim().toLowerCase(), season=$('f-season').value, show=$('f-show').value, sort=$('f-sort').value;
+    var list=programs.filter(function(p){
+      if(q && p.name.toLowerCase().indexOf(q)<0) return false;
+      if(season && p.season!==season) return false;
+      if(show==='active' && !p.active) return false;
+      if(show==='attn' && !p.attn) return false;
+      return true;
+    });
+    list.sort(function(a,b){
+      if(sort==='name') return a.name.localeCompare(b.name);
+      if(sort==='recent') return a.since-b.since;
+      if(sort==='oldest') return b.since-a.since;
+      return (b.attn-a.attn) || (a.since-b.since) || a.name.localeCompare(b.name);
+    });
+    // Don't blow away a note someone is typing in.
+    var focused=document.activeElement && document.activeElement.classList.contains('note-ta') ? document.activeElement.dataset.p : null;
+    var caret=focused?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;
+    $('count').textContent=list.length;
+    $('empty').classList.toggle('hidden', list.length>0);
+    $('cards').innerHTML=list.map(cardHtml).join('');
+    if(focused){ var ta=document.querySelector('.note-ta[data-p="'+focused+'"]'); if(ta){ ta.focus(); try{ ta.setSelectionRange(caret[0],caret[1]); }catch(e){} } }
+  }
+
+  function renderStats(){
+    var active=programs.filter(function(p){return p.active;});
+    $('s-active').textContent=active.length;
+    $('s-week').textContent=checkins.filter(function(c){return daysSince(c.created)<=6;}).length;
+    $('s-due').textContent=active.filter(function(p){return p.since>=OVERDUE_DAYS;}).length;
+    $('s-attn').textContent=active.filter(function(p){return p.attn;}).length;
+    var vals=[]; active.forEach(function(p){ [p.latest.i1,p.latest.i2].forEach(function(v){ if(v!=null) vals.push(v); }); });
+    $('s-wellbeing').textContent=vals.length?(vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(1):'—';
+    var seasons={}; programs.forEach(function(p){ if(p.season) seasons[p.season]=1; });
+    var sel=$('f-season'), cur=sel.value;
+    var order=Object.keys(seasons).sort(function(a,b){ var ya=a.slice(-4), yb=b.slice(-4); if(ya!==yb) return yb-ya; return b.localeCompare(a); });
+    sel.innerHTML='<option value="">All seasons</option>'+order.map(function(s){return '<option>'+esc(s)+'</option>';}).join('');
+    sel.value=cur;
+  }
+
+  // ---- detail drawer --------------------------------------------------------
+  function renderAnswer(a){
+    var urls=[];
+    if(a.type==='control_fileupload' || /<a\s/i.test(answerText(a.answer))){
+      var s=answerText(a.answer), re=/https?:\/\/[^\s"'<>,]+/g, m;
+      while((m=re.exec(s))) urls.push(m[0]);
+    }
+    if(urls.length) return urls.map(function(u){ return '<a href="'+esc(viaProxy(u))+'" target="_blank" rel="noopener">'+esc(fileName(u))+'</a>'; }).join('<br>');
+    var t=answerText(a.answer).replace(/<\s*br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'');
+    return esc(t);
+  }
+  function openDetail(sid){
+    var c=checkins.filter(function(x){return String(x.id)===String(sid);})[0]; if(!c) return;
+    var skip={'what type of form are you submitting?':1};
+    var rows=c.raw.filter(function(a){ return a.label && !skip[a.label.toLowerCase()] && a.type!=='control_head' && a.type!=='control_text' && answerText(a.answer).trim(); })
+      .map(function(a){ return '<div class="ans"><div class="q">'+esc(a.label)+'</div><div class="a">'+renderAnswer(a)+'</div></div>'; }).join('');
+    $('modal-body').innerHTML=
+      '<div class="flex items-start justify-between mb-4"><div><h2 class="text-xl font-bold text-gray-900">'+esc(c.program)+'</h2>'+
+      '<div class="text-sm text-gray-500">'+esc(c.weekLabel||'')+' · '+fmtDate(c.created)+(c.who?' · '+esc(c.who):'')+'</div></div>'+
+      '<button id="m-close" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button></div>'+
+      '<div class="bg-white border border-gray-200 rounded-xl px-4">'+(rows||'<p class="py-4 text-sm text-gray-400">No answers.</p>')+'</div>';
+    $('modal-wrap').classList.add('open');
+    $('m-close').addEventListener('click', closeDetail);
+  }
+  function closeDetail(){ $('modal-wrap').classList.remove('open'); }
+  $('modal-bg').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDetail(); });
+
+  // ---- notes ----------------------------------------------------------------
+  async function notesApi(method, body){
+    var r=await fetch(NOTES_API,{method:method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin'});
+    var d=await r.json().catch(function(){return {};});
+    if(!r.ok){ var e=new Error(d.error||('HTTP '+r.status)); e.status=r.status; e.data=d; throw e; }
+    return d;
+  }
+  function setNoteState(program, text){
+    var el=document.querySelector('.note-state[data-p="'+encodeURIComponent(program)+'"]'); if(el) el.textContent=text;
+  }
+  async function saveNote(program, text){
+    var cur=notes[program]||{};
+    setNoteState(program,'Saving…');
+    try{
+      var d=await notesApi('POST',{action:'save',program:program,text:text,base_updated_at:cur.updated_at||null});
+      notes[program]=d.note;
+      // Only mark clean if nothing new was typed while this save was in flight.
+      if(drafts[program]===text){ dirty[program]=false; delete drafts[program]; }
+      setNoteState(program,'Saved '+fmtDateTime(d.note.updated_at)+(d.note.updated_by?' · '+d.note.updated_by:''));
+    }catch(e){
+      if(e.status===409 && e.data && e.data.note){
+        var theirs=e.data.note;
+        var merged=theirs.text && text && theirs.text!==text
+          ? theirs.text+'\n\n--- your edit ---\n'+text : (text||theirs.text);
+        notes[program]=theirs;
+        var ta=document.querySelector('.note-ta[data-p="'+encodeURIComponent(program)+'"]');
+        if(ta) ta.value=merged;
+        toast((theirs.updated_by||'Someone')+' edited this note too — both versions are in the box. Tidy it up and it will save.',true);
+        setNoteState(program,'Edited by '+(theirs.updated_by||'someone else')+' — review');
+        dirty[program]=true;
+        scheduleSave(program, merged);
+      }else{
+        setNoteState(program,'Not saved — '+e.message);
+        toast('Note not saved: '+e.message,true);
+      }
+    }
+  }
+  function scheduleSave(program, text){
+    dirty[program]=true; drafts[program]=text; setNoteState(program,'Editing…');
+    clearTimeout(saveTimers[program]);
+    saveTimers[program]=setTimeout(function(){ saveNote(program, text); }, 900);
+  }
+  async function clearNote(program){
+    var ta=document.querySelector('.note-ta[data-p="'+encodeURIComponent(program)+'"]');
+    if(ta && !ta.value.trim()){ toast('Nothing to clear.'); return; }
+    if(!confirm('Mark these notes as discussed for '+program+'?\n\nThey move to “Past notes” and the box is emptied for next week.')) return;
+    clearTimeout(saveTimers[program]);
+    try{
+      if(ta && dirty[program]) await saveNote(program, ta.value);
+      var d=await notesApi('POST',{action:'clear',program:program});
+      notes[program]=d.note; dirty[program]=false; delete drafts[program]; render(); toast('Notes moved to history');
+    }catch(e){ toast('Couldn’t clear: '+e.message,true); }
+  }
+  window.addEventListener('beforeunload', function(e){
+    if(Object.keys(dirty).some(function(k){return dirty[k];})){ e.preventDefault(); e.returnValue=''; }
+  });
+
+  // ---- events ---------------------------------------------------------------
+  $('cards').addEventListener('input', function(e){
+    if(e.target.classList.contains('note-ta')) scheduleSave(decodeURIComponent(e.target.dataset.p), e.target.value);
+  });
+  $('cards').addEventListener('click', function(e){
+    var t=e.target;
+    if(t.classList.contains('note-clear')) return clearNote(decodeURIComponent(t.dataset.p));
+    if(t.classList.contains('toggle-hist')){ var p=decodeURIComponent(t.dataset.p); expanded[p]=!expanded[p]; return render(); }
+    if(t.classList.contains('open-latest')) return openDetail(t.dataset.sid);
+    var row=t.closest('.hist-row'); if(row) openDetail(row.dataset.sid);
+  });
+  ['f-q'].forEach(function(id){ $(id).addEventListener('input', render); });
+  ['f-season','f-show','f-sort'].forEach(function(id){ $(id).addEventListener('change', render); });
+  $('refresh-btn').addEventListener('click', load);
+
+  // ---- load -----------------------------------------------------------------
+  async function fetchJSON(url){
+    var r=await fetch(url,{credentials:'same-origin'}); var t=await r.text(), j;
+    try{ j=JSON.parse(t); }catch(e){ throw new Error('Non-JSON response (HTTP '+r.status+')'); }
+    if(!r.ok || j.error) throw new Error((j.error||('HTTP '+r.status))+(j.detail?' — '+j.detail:''));
+    if(j.responseCode && j.responseCode!==200) throw new Error(j.message||('Jotform error '+j.responseCode));
+    return j;
+  }
+  async function fetchSubmissions(){
+    var all=[], limit=500, offset=0;
+    while(true){
+      $('loading-text').textContent='Loading check-ins… '+all.length+' submissions scanned';
+      var q=new URLSearchParams({path:'/form/'+FORM_ID+'/submissions',limit:limit,offset:offset,orderby:'created_at'});
+      var j=await fetchJSON(PROXY+'?'+q.toString());
+      var batch=(j.content||[]).filter(function(s){ return s.status!=='DELETED'; });
+      all.push.apply(all,batch);
+      if((j.content||[]).length<limit) break;
+      offset+=limit;
+    }
+    return all;
+  }
+  async function load(){
+    if(Object.keys(dirty).some(function(k){return dirty[k];})){ toast('Saving notes first…'); return; }
+    $('loading').classList.remove('hidden'); $('cards').innerHTML=''; $('status').textContent='';
+    try{
+      var res=await Promise.all([
+        fetchSubmissions(),
+        notesApi('GET').catch(function(e){ toast('Notes unavailable: '+e.message,true); return {notes:{}}; })
+      ]);
+      notes=res[1].notes||{};
+      checkins=res[0].map(parseCheckin).filter(Boolean);
+      group(); renderStats(); render();
+      $('status').textContent=checkins.length+' weekly check-ins · updated '+new Date().toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+    }catch(e){
+      toast('Load failed: '+e.message,true);
+      $('cards').innerHTML='<div class="text-center text-red-600 py-12 text-sm bg-white border border-red-200 rounded-xl">Couldn’t load check-ins: '+esc(e.message)+'</div>';
+    }finally{ $('loading').classList.add('hidden'); }
+  }
+  load();
+})();
+</script>
+</body>
+</html>

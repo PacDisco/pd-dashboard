@@ -1,0 +1,8 @@
+{
+  "title": "Weekly Check-Ins",
+  "description": "Instructor weekly check-ins from the field, by program — wellbeing and group-dynamic scores, flags that need HQ support, check-in history, and shared notes to raise at next week's check-in.",
+  "category": "Programs",
+  "icon": "📋",
+  "colors": ["#059669", "#6ee7b7"],
+  "allowedRoles": ["admin", "programs", "operations"]
+}
