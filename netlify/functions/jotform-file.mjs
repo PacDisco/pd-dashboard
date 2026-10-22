@@ -121,6 +121,32 @@ function pdfFallbackFor(upstream) {
   );
 }
 
+// Jotform often serves uploads as application/octet-stream, which makes the
+// browser download a photo instead of showing it (and is what the dashboard
+// popup viewer relies on not happening). Fill in the real type from the
+// filename when upstream is vague.
+const EXT_TYPES = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
+  webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml",
+  heic: "image/heic", heif: "image/heif", tif: "image/tiff", tiff: "image/tiff",
+  pdf: "application/pdf",
+};
+function contentTypeFor(upstreamType, fileName) {
+  const t = String(upstreamType || "").toLowerCase();
+  if (t && !t.startsWith("application/octet-stream") && !t.startsWith("binary/")) return upstreamType;
+  const ext = String(fileName || "").split(".").pop().toLowerCase();
+  return EXT_TYPES[ext] || upstreamType || "application/octet-stream";
+}
+
+// Header values must be Latin-1, so a name like "Passaporte João.jpg" would
+// throw. Send an ASCII fallback plus the RFC 5987 UTF-8 form.
+function disposition(kind, name) {
+  const clean = String(name || "").replace(/[/\\"\r\n]/g, "").trim();
+  if (!clean) return kind;
+  const ascii = clean.normalize("NFKD").replace(/[^\x20-\x7e]/g, "").trim() || "file";
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(clean)}`;
+}
+
 // A stored file under /uploads/ is immutable, so it caches well. A rendered
 // submission is not — edit or re-sign the form and the PDF changes.
 function isDynamic(u) {
@@ -168,8 +194,14 @@ export default async (req) => {
   }
   if (!resp) return errJSON(502, lastErr || "Upstream fetch failed");
 
+  const fileName = reqUrl.searchParams.get("name")
+    || (() => { try { return decodeURIComponent(upstream.pathname.split("/").pop() || ""); } catch { return ""; } })();
+  const contentType = contentTypeFor(resp.headers.get("content-type"), fileName);
+  // SVG can carry script; never render it inline from our own origin.
+  const forceDownload = /^image\/svg/i.test(contentType);
+
   const headers = {
-    "content-type": resp.headers.get("content-type") || "application/octet-stream",
+    "content-type": contentType,
     // Private either way — these are personal documents and must never land in
     // a shared cache. Rendered submissions additionally must revalidate, or an
     // edited contract would serve stale for a day.
@@ -183,14 +215,16 @@ export default async (req) => {
   // (ERR_CONTENT_LENGTH_MISMATCH). Let the platform frame the body.
 
   const dl = reqUrl.searchParams.get("download");
-  if (dl === "1" || dl === "true") {
+  if (dl === "1" || dl === "true" || forceDownload) {
     // Prefer the caller-supplied name. The URL's last path segment is useless
     // for API endpoints — it would save a signed contract as "generatePDF" or
     // "server.php", with no extension.
     const raw = reqUrl.searchParams.get("name")
       || decodeURIComponent(upstream.pathname.split("/").pop() || "download");
-    const safe = raw.replace(/[/\\"\r\n]/g, "").trim() || "download";
-    headers["content-disposition"] = `attachment; filename="${safe}"`;
+    headers["content-disposition"] = disposition("attachment", raw || "download");
+  } else {
+    // Explicitly inline so photos / PDFs open in the browser (popup or tab).
+    headers["content-disposition"] = disposition("inline", fileName);
   }
 
   return new Response(resp.body, { status: 200, headers });
