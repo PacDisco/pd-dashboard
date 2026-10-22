@@ -1,764 +1,1113 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Instructors</title>
-<meta name="description" content="Instructor roster and applicant pipeline — applications, uploaded documents, program-leading history, onboarding, and lifecycle status. Filter by location, gender, weeks led, programs led, qualifications and more.">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
-  .spinner { border: 3px solid #e5e7eb; border-top: 3px solid #7c3aed; border-radius: 50%; width: 34px; height: 34px; animation: spin 0.8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .fld { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; }
-  .fld:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.15); }
-  .lbl { display:block; font-size:11px; font-weight:600; color:#6b7280; margin-bottom:3px; text-transform:uppercase; letter-spacing:.03em; }
-  .badge { font-size:11px; font-weight:600; padding:2px 9px; border-radius:999px; white-space:nowrap; cursor:pointer; }
-  .b-current   { background:#dcfce7; color:#166534; }
-  .b-potential { background:#fef3c7; color:#92400e; }
-  .b-new_applicant { background:#dbeafe; color:#1e40af; }
-  .b-blacklisted   { background:#fee2e2; color:#b91c1c; }
-  .chip { font-size:11px; padding:2px 8px; border-radius:999px; background:#ede9fe; color:#5b21b6; display:inline-block; margin:1px 2px; }
-  tbody tr { cursor:pointer; }
-  tbody tr:hover { background:#faf5ff; }
-  .stat { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px 14px; }
-  .stat .n { font-size:22px; font-weight:700; line-height:1; }
-  .stat .l { font-size:11px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:.03em; }
-  /* Slide-over */
-  #drawer-wrap { position:fixed; inset:0; z-index:50; display:none; }
-  #drawer-wrap.open { display:block; }
-  #drawer-bg { position:absolute; inset:0; background:rgba(17,24,39,.45); }
-  #drawer { position:absolute; top:0; right:0; height:100%; width:100%; max-width:640px; background:#f9fafb; box-shadow:-8px 0 30px rgba(0,0,0,.18); overflow-y:auto; }
-  .sec { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:14px; }
-  .sec h3 { font-size:12px; font-weight:700; color:#374151; text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px; }
-  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 70; padding: 10px 16px; border-radius: 8px; font-size: 13px; background: #1f2937; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.25); opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
-  #toast.show { opacity: 1; transform: translateY(0); }
-  #toast.error { background: #b91c1c; }
-  .btn-p { background:#7c3aed; color:#fff; font-weight:600; }
-  .btn-p:hover { background:#6d28d9; }
-  th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
-  th.sortable:hover { color:#5b21b6; }
-  th.sortable .arr { display:inline-block; width:10px; margin-left:3px; color:#c4b5fd; }
-  th.sortable.active { color:#5b21b6; }
-  th.sortable.active .arr { color:#7c3aed; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pacific Discovery Dashboards</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="description" content="Central hub for all Pacific Discovery reporting dashboards." />
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #121830;
+      --card: #171f3a;
+      --card-hover: #1e2748;
+      --border: #2a335a;
+      --text: #e8ecf6;
+      --text-dim: #9aa3c0;
+      --accent: #7c9bff;
+      --accent-2: #6ee7b7;
+      --danger: #fb7185;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2550 0%, transparent 60%),
+                  radial-gradient(1000px 500px at 110% 10%, #0f3b3a 0%, transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      max-width: 1200px; margin: 0 auto;
+      padding: 56px 24px 24px;
+      display: flex; justify-content: space-between; align-items: flex-end;
+      gap: 24px; flex-wrap: wrap;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 16px;
+    }
+    .brand-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 12px var(--accent);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 44px);
+      letter-spacing: -0.02em; font-weight: 700;
+    }
+    .subtitle { margin: 0; color: var(--text-dim); font-size: 16px; max-width: 620px; }
+    .user-panel {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 999px; padding: 6px 6px 6px 14px;
+    }
+    .user-panel.hidden { display: none; }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid; place-items: center;
+      color: #0b1020; font-weight: 700; font-size: 13px;
+    }
+    .user-info { font-size: 13px; line-height: 1.3; }
+    .user-info .email { color: var(--text-dim); font-size: 11px; }
+    .user-info .role { color: var(--accent-2); font-size: 11px; }
+
+    .btn {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 7px 14px; font-size: 13px; cursor: pointer;
+      transition: all .15s; font-family: inherit;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b1020; border: 0; font-weight: 600;
+    }
+    .btn-primary:hover { opacity: .92; }
+    .btn-danger { color: var(--danger); border-color: rgba(251,113,133,.3); }
+    .btn-danger:hover { border-color: var(--danger); background: rgba(251,113,133,.1); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    .toolbar {
+      max-width: 1200px; margin: 24px auto 0; padding: 0 24px;
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+    }
+    .search {
+      flex: 1 1 260px; min-width: 240px;
+      display: flex; align-items: center;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 14px;
+    }
+    .search:focus-within { border-color: var(--accent); }
+    .search svg { flex-shrink: 0; opacity: .7; margin-right: 10px; }
+    .search input {
+      background: transparent; border: 0; outline: none;
+      color: var(--text); width: 100%; font-size: 15px; font-family: inherit;
+    }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip {
+      background: var(--bg-soft); color: var(--text-dim);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 8px 14px; font-size: 13px; cursor: pointer;
+      user-select: none; transition: all .15s; font-family: inherit;
+    }
+    .chip:hover { color: var(--text); border-color: var(--accent); }
+    .chip.active {
+      color: var(--bg); background: var(--text);
+      border-color: var(--text); font-weight: 600;
+    }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      display: flex; flex-direction: column;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+      text-decoration: none; color: inherit;
+      position: relative; overflow: hidden;
+      transition: transform .18s, border-color .18s, background .18s;
+      box-shadow: var(--shadow);
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      background: var(--card-hover);
+    }
+    .card::before {
+      content: ""; position: absolute; inset: 0 0 auto 0; height: 4px;
+      background: linear-gradient(90deg, var(--c1, var(--accent)), var(--c2, var(--accent-2)));
+    }
+    .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .icon {
+      position: relative;
+      width: 44px; height: 44px; border-radius: 10px;
+      display: grid; place-items: center; font-size: 22px;
+      background: linear-gradient(135deg, rgba(124,155,255,.18), rgba(110,231,183,.14));
+      border: 1px solid var(--border);
+    }
+    .category {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--text-dim); background: var(--bg-soft);
+      border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+    }
+    .card h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    .card p { margin: 0 0 16px; color: var(--text-dim); font-size: 14px; line-height: 1.5; flex: 1; }
+    .card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-dim); }
+    .open { color: var(--accent); font-weight: 600; }
+    /* "New submissions since you last opened it" bubble — see TILE-BADGES.md */
+    .tile-badge {
+      position: absolute; top: -8px; right: -10px;
+      min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box;
+      border-radius: 999px; background: #f15b39; color: #fff;
+      font: 700 12px/22px -apple-system, "Segoe UI", Roboto, sans-serif;
+      text-align: center; letter-spacing: 0;
+      box-shadow: 0 0 0 3px var(--card), 0 2px 6px rgba(0,0,0,.35);
+      animation: badge-pop .25s ease-out;
+    }
+    .card:hover .tile-badge { box-shadow: 0 0 0 3px var(--card-hover), 0 2px 6px rgba(0,0,0,.35); }
+    @keyframes badge-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .tile-badge { animation: none; } }
+    .role-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
+
+    .empty, .loading, .gate {
+      text-align: center; color: var(--text-dim);
+      padding: 60px 20px; border: 1px dashed var(--border);
+      border-radius: var(--radius);
+    }
+    .gate h2 { color: var(--text); margin: 0 0 8px; font-size: 22px; }
+    .gate p { max-width: 440px; margin: 0 auto 20px; }
+    .gate .btn-primary { padding: 12px 22px; font-size: 15px; }
+
+    footer {
+      max-width: 1200px; margin: 0 auto; padding: 20px 24px 40px;
+      color: var(--text-dim); font-size: 13px;
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    }
+
+    /* --- Admin modal --- */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(2, 5, 20, 0.7);
+      backdrop-filter: blur(6px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 40px 20px; overflow-y: auto; z-index: 100;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0;
+      width: 100%; max-width: 960px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { margin: 0; font-size: 20px; }
+    .modal-tabs {
+      display: flex; gap: 4px; padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-tab {
+      padding: 14px 18px; cursor: pointer;
+      color: var(--text-dim); font-size: 14px; font-weight: 500;
+      border: 0; background: transparent;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      font-family: inherit;
+    }
+    .modal-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .modal-body { padding: 24px; max-height: 65vh; overflow-y: auto; }
+    .modal-footer {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+    }
+    .perm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .perm-table th, .perm-table td {
+      padding: 12px 10px; text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .perm-table th {
+      color: var(--text-dim); font-weight: 500; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .1em;
+    }
+    .perm-table .slug { color: var(--text-dim); font-size: 12px; }
+    .perm-table .role-cell { text-align: center; }
+    .perm-table input[type="checkbox"] {
+      width: 18px; height: 18px; cursor: pointer;
+      accent-color: var(--accent);
+    }
+    .role-pill {
+      display: inline-block; padding: 2px 8px; margin: 2px;
+      font-size: 11px; border-radius: 999px;
+      background: rgba(124,155,255,.15); color: var(--accent);
+      border: 1px solid rgba(124,155,255,.3);
+    }
+    .role-pill.admin { background: rgba(110,231,183,.15); color: var(--accent-2); border-color: rgba(110,231,183,.3); }
+
+    .users-toolbar {
+      display: flex; gap: 8px; margin-bottom: 16px; align-items: center;
+    }
+    .users-toolbar input[type="email"] {
+      flex: 1; background: var(--bg-soft); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 10px 14px;
+      font-size: 14px; font-family: inherit;
+    }
+    .users-toolbar input[type="email"]:focus { outline: none; border-color: var(--accent); }
+
+    .role-editor {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 8px; padding: 6px; min-width: 220px;
+    }
+    .role-editor label {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 999px; cursor: pointer;
+      font-size: 11px; border: 1px solid transparent;
+    }
+    .role-editor label:hover { background: var(--card); }
+    .role-editor label.checked { background: rgba(124,155,255,.15); color: var(--accent); border-color: rgba(124,155,255,.3); }
+    .role-editor input { display: none; }
+
+    /* --- Access matrix: dashboards down the side, people across the top --- */
+    .access-toolbar {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .access-toolbar input[type="search"] {
+      flex: 1 1 220px; min-width: 180px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 8px 12px;
+      font-size: 13px; font-family: inherit;
+    }
+    .access-toolbar input[type="search"]:focus { outline: none; border-color: var(--accent); }
+    .access-toolbar .hint { color: var(--text-dim); font-size: 12px; }
+
+    /* Horizontal scroll, because the column count grows with the team. The
+       dashboard column is sticky so you never lose track of which row you're
+       ticking once you've scrolled past a few people. */
+    .matrix-scroll {
+      overflow: auto; max-height: 52vh;
+      border: 1px solid var(--border); border-radius: 10px;
+    }
+    .matrix { border-collapse: separate; border-spacing: 0; font-size: 13px; width: max-content; min-width: 100%; }
+    .matrix th, .matrix td { border-bottom: 1px solid var(--border); }
+    .matrix thead th {
+      position: sticky; top: 0; z-index: 3;
+      background: var(--bg-soft);
+      vertical-align: bottom; padding: 10px 6px;
+      font-weight: 500; text-align: center;
+    }
+    .matrix .col-dash {
+      position: sticky; left: 0; z-index: 4;
+      background: var(--bg-soft); text-align: left;
+      min-width: 210px; max-width: 260px; padding: 10px 12px;
+    }
+    .matrix tbody .col-dash { z-index: 2; background: var(--card); }
+    .matrix tbody tr:hover .col-dash { background: var(--card-hover); }
+    .matrix tbody tr:hover td { background: rgba(124,155,255,.05); }
+    .matrix .d-title { font-weight: 600; display: block; }
+    .matrix .d-slug { color: var(--text-dim); font-size: 11px; }
+    .matrix td.cell { text-align: center; padding: 8px 6px; min-width: 92px; }
+    /* Amber, matching the "roles" badge in the header, so a provisional column
+       reads as one thing top to bottom rather than as faint noise. */
+    .matrix td.cell.inherited { background: rgba(216,166,87,.11); }
+    .matrix input[type="checkbox"] { width: 17px; height: 17px; cursor: pointer; accent-color: var(--accent); }
+    .matrix input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .55; }
+
+    .col-person { cursor: pointer; }
+    .col-person .pname {
+      display: block; font-size: 12px; font-weight: 600; color: var(--text);
+      max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      margin: 0 auto;
+    }
+    .col-person .pmeta {
+      display: block; font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--text-dim); margin-top: 3px;
+    }
+    .col-person .pmeta.admin { color: var(--accent-2); }
+    .col-person .pmeta.roles { color: #d8a657; }
+    .col-person:hover .pname { color: var(--accent); }
+    .row-toggle {
+      background: transparent; border: 0; padding: 0; margin: 0; cursor: pointer;
+      color: inherit; font: inherit; text-align: left; width: 100%;
+    }
+    .row-toggle:hover .d-title { color: var(--accent); }
+
+    .banner {
+      border: 1px solid var(--border); background: var(--bg-soft);
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+      color: var(--text-dim); font-size: 13px; line-height: 1.5;
+    }
+    .banner strong { color: var(--text); }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; color: var(--text-dim); font-size: 12px; }
+    .legend .swatch {
+      display: inline-block; width: 11px; height: 11px; border-radius: 3px;
+      background: rgba(216,166,87,.3); border: 1px solid rgba(216,166,87,.45);
+      margin-right: 6px; vertical-align: -1px;
+    }
+
+    .toast {
+      position: fixed; bottom: 30px; right: 30px; z-index: 200;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px;
+      box-shadow: var(--shadow); font-size: 14px;
+      opacity: 0; transform: translateY(10px); pointer-events: none;
+      transition: all .25s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { border-color: var(--danger); color: var(--danger); }
+    .toast.success { border-color: var(--accent-2); }
+
+    @media (max-width: 540px) {
+      header { padding-top: 32px; }
+      .perm-table th, .perm-table td { padding: 8px 4px; font-size: 12px; }
+    }
+  </style>
 </head>
-<body class="text-gray-800">
-<div class="max-w-7xl mx-auto px-4 py-7">
-
-  <div class="flex items-center justify-between mb-1 flex-wrap gap-3">
+<body>
+  <header>
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">🧑‍🏫 Instructors</h1>
-      <p class="text-sm text-gray-500 mt-1">Roster &amp; applicant pipeline. Applications, uploads and onboarding sync from Jotform by email; status &amp; program history are managed here.</p>
+      <div class="brand"><span class="brand-dot"></span> Pacific Discovery</div>
+      <h1>Dashboards</h1>
+      <p class="subtitle">A central hub for reporting. Access is restricted to invited team members.</p>
     </div>
-    <div class="flex items-center gap-2">
-      <button id="sync-btn" class="text-sm border border-purple-300 text-purple-700 hover:bg-purple-50 font-semibold px-3 py-2 rounded-lg">⟳ Sync from Jotform</button>
-      <button id="resetall-btn" class="text-sm border border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold px-3 py-2 rounded-lg" title="Clear a checklist item for every instructor — e.g. a policy document that changed and everyone must re-do">↺ Reset for all</button>
-      <button id="add-btn" class="btn-p text-sm px-3 py-2 rounded-lg">+ Add instructor</button>
-      <a href="/" class="text-sm text-purple-600 hover:underline ml-1">← Dashboards</a>
+    <div id="userPanel" class="user-panel hidden">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div class="user-info">
+        <div id="userName"></div>
+        <div class="email" id="userEmail"></div>
+        <div class="role" id="userRole"></div>
+      </div>
+      <button class="btn" id="adminBtn" style="display:none">Manage access</button>
+      <button class="btn" id="logoutBtn" title="Sign out">Sign out</button>
     </div>
+  </header>
+
+  <div class="toolbar" id="toolbar" style="display:none">
+    <label class="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" type="search" placeholder="Search dashboards..." autocomplete="off" />
+    </label>
+    <div class="chips" id="categoryChips"></div>
   </div>
 
-  <!-- Stat cards -->
-  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5" id="stats">
-    <div class="stat"><div class="n" id="s-total">—</div><div class="l">Total</div></div>
-    <div class="stat"><div class="n text-green-700" id="s-current">—</div><div class="l">Current</div></div>
-    <div class="stat"><div class="n text-amber-700" id="s-potential">—</div><div class="l">Potential</div></div>
-    <div class="stat"><div class="n text-blue-700" id="s-new">—</div><div class="l">New applicants</div></div>
-    <div class="stat"><div class="n text-red-700" id="s-black">—</div><div class="l">Blacklisted</div></div>
-  </div>
+  <main>
+    <div id="grid" class="grid" aria-live="polite">
+      <div class="loading">Starting up…</div>
+    </div>
+  </main>
 
-  <!-- Filters -->
-  <div class="bg-white border border-gray-200 rounded-xl p-4 mt-5 shadow-sm">
-    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
-      <div class="col-span-2 md:col-span-2"><label class="lbl">Search name / email</label><input id="f-q" class="fld" placeholder="Type a name…"></div>
-      <div><label class="lbl">Status</label><select id="f-status" class="fld">
-        <option value="">All</option><option value="current">Current</option><option value="potential">Potential</option><option value="new_applicant">New applicant</option><option value="blacklisted">Blacklisted</option></select></div>
-      <div id="fw-gender"><label class="lbl">Gender</label><select id="f-gender" class="fld"><option value="">All</option></select></div>
-      <div id="fw-nat"><label class="lbl">Nationality</label><select id="f-nat" class="fld"><option value="">All</option></select></div>
-      <div id="fw-location"><label class="lbl">Location</label><input id="f-location" class="fld" placeholder="e.g. NZ"></div>
-      <div id="fw-weeks"><label class="lbl">Min weeks led</label><input id="f-weeks" type="number" min="0" class="fld" placeholder="0"></div>
-      <div id="fw-program"><label class="lbl">Program led</label><select id="f-program" class="fld"><option value="">Any</option></select></div>
-      <div id="fw-qual"><label class="lbl">Qualification</label><select id="f-qual" class="fld"><option value="">Any</option></select></div>
-      <div id="fw-lang"><label class="lbl">Language</label><select id="f-lang" class="fld"><option value="">Any</option></select></div>
-      <div id="fw-region"><label class="lbl">Region</label><select id="f-region" class="fld"><option value="">Any</option></select></div>
-      <div><label class="lbl">Applied</label><select id="f-applied" class="fld">
-        <option value="">Any time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="ytd">This year</option><option value="custom">Custom range…</option><option value="none">No application date</option></select></div>
-      <div id="fw-applied-from" style="display:none"><label class="lbl">Applied from</label><input id="f-applied-from" type="date" class="fld"></div>
-      <div id="fw-applied-to" style="display:none"><label class="lbl">Applied to</label><input id="f-applied-to" type="date" class="fld"></div>
-      <div class="flex items-end gap-3 col-span-2 md:col-span-6">
-        <label id="fw-returning" class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-returning"> Returning</label>
-        <label id="fw-missing" class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" id="f-missing"> Missing paperwork</label>
-        <button id="f-clear" class="text-xs text-purple-600 hover:underline ml-auto">Clear</button>
+  <footer>
+    <div id="count">—</div>
+    <div id="updated">—</div>
+  </footer>
+
+  <!-- Admin modal -->
+  <div class="modal-backdrop" id="adminModal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>Manage access</h2>
+        <button class="btn" id="closeModalBtn">Close</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="access">Dashboard access</button>
+        <button class="modal-tab" data-tab="users">People &amp; powers</button>
+      </div>
+      <div class="modal-body">
+        <div id="tabAccess">
+          <div class="banner">
+            Tick who gets which dashboard. <strong>Admins always see everything.</strong>
+            A shaded column means that person has no saved list yet and is still running on their
+            old role — ticking anything in it writes down exactly what you can see and switches
+            them across for good.
+          </div>
+          <div id="accessContent"><div class="loading">Loading…</div></div>
+        </div>
+        <div id="tabUsers" style="display:none">
+          <div class="banner">
+            Roles no longer decide which dashboards someone sees — that's the
+            <strong>Dashboard access</strong> tab. They now only gate what a person can
+            <em>do</em> inside a dashboard: approve a timesheet, edit marketing spend,
+            mark a student dropped, order shirts, open the cash forecast.
+          </div>
+          <div class="users-toolbar">
+            <input id="inviteEmail" type="email" placeholder="person@pacificdiscovery.org" />
+            <button class="btn btn-primary" id="inviteBtn">Invite</button>
+          </div>
+          <div id="usersContent"><div class="loading">Loading…</div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div id="modalStatus" style="color:var(--text-dim); font-size:12px">—</div>
+        <div>
+          <button class="btn" id="seedBtn" title="Fill every person's list from the access their current roles give them. Nothing is saved until you press Save.">Seed from roles</button>
+          <button class="btn" id="refreshBtn">Refresh</button>
+          <button class="btn btn-primary" id="savePermsBtn">Save access</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="flex items-center justify-between px-1 mt-6 mb-2">
-    <h2 class="text-sm font-semibold text-gray-700"><span id="count">0</span> instructors</h2>
-    <div class="flex items-center gap-2 text-xs text-gray-500">
-      <label for="sort-sel">Sort</label>
-      <select id="sort-sel" class="fld" style="width:auto;padding:4px 8px;font-size:12px">
-        <option value="">Default (status, name)</option>
-        <option value="applied_at:desc">Applied — newest first</option>
-        <option value="applied_at:asc">Applied — oldest first</option>
-        <option value="full_name:asc">Name A–Z</option>
-        <option value="full_name:desc">Name Z–A</option>
-        <option value="weeks_led:desc">Most weeks led</option>
-        <option value="document_count:desc">Most docs</option>
-        <option value="onboarding_done:desc">Most onboarding done</option>
-      </select>
-    </div>
-  </div>
-  <div id="loading" class="flex justify-center py-16"><div class="spinner"></div></div>
-  <div id="table-wrap" class="bg-white border border-gray-200 rounded-xl overflow-hidden hidden">
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-          <tr id="thead-row">
-            <th class="sortable text-left font-semibold px-4 py-2.5" data-sort="full_name">Name<span class="arr"></span></th>
-            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="status">Status<span class="arr"></span></th>
-            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="applied_at">Applied<span class="arr"></span></th>
-            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="location">Location<span class="arr"></span></th>
-            <th class="sortable text-left font-semibold px-3 py-2.5" data-sort="gender">Gender<span class="arr"></span></th>
-            <th class="sortable text-right font-semibold px-3 py-2.5" data-sort="weeks_led">Wks led<span class="arr"></span></th>
-            <th class="text-left font-semibold px-3 py-2.5">Programs led</th>
-            <th class="text-left font-semibold px-3 py-2.5">Quals</th>
-            <th class="sortable text-center font-semibold px-3 py-2.5" data-sort="document_count">Docs<span class="arr"></span></th>
-            <th class="sortable text-center font-semibold px-3 py-2.5" data-sort="onboarding_done">Onboard<span class="arr"></span></th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </div>
-  <div id="empty" class="hidden text-center text-gray-400 py-12 text-sm bg-white border border-gray-200 rounded-xl">No instructors match. Try clearing filters, adding one, or syncing from Jotform.</div>
-</div>
+  <div class="toast" id="toast"></div>
 
-<!-- Slide-over detail -->
-<div id="drawer-wrap"><div id="drawer-bg"></div><div id="drawer"><div class="p-5" id="drawer-body"></div></div></div>
+  <script>
+    const PALETTES = [
+      ["#7c9bff", "#6ee7b7"], ["#f0abfc", "#fca5a5"], ["#fcd34d", "#f59e0b"],
+      ["#34d399", "#06b6d4"], ["#a78bfa", "#60a5fa"], ["#fb7185", "#f97316"]
+    ];
+    // Roles no longer decide which dashboards a person sees — that's per-person
+    // now (see netlify/edge-functions/lib/dashboard-access.js). They survive as
+    // capability flags for what someone may DO inside a dashboard.
+    const FUNCTIONAL_ROLES = ["admissions", "outreach", "programs", "operations", "flights", "unearthed", "contractor", "timesheet-reviewer"];
+    const BASELINE_ROLE = "member";   // "a known person, no particular job function"
+    const ALL_ROLES = ["admin", BASELINE_ROLE, ...FUNCTIONAL_ROLES];
 
-<!-- Add modal -->
-<div id="add-wrap" class="fixed inset-0 z-50 hidden">
-  <div class="absolute inset-0 bg-gray-900/45" id="add-bg"></div>
-  <div class="absolute left-1/2 top-24 -translate-x-1/2 w-full max-w-md bg-white rounded-xl shadow-xl p-5">
-    <h3 class="font-semibold text-gray-900 mb-3">Add an instructor</h3>
-    <div class="space-y-3">
-      <div><label class="lbl">Email *</label><input id="a-email" class="fld" placeholder="name@email.com"></div>
-      <div><label class="lbl">Full name</label><input id="a-name" class="fld" placeholder="Jane Doe"></div>
-      <div><label class="lbl">Status</label><select id="a-status" class="fld">
-        <option value="new_applicant">New applicant</option><option value="potential">Potential</option><option value="current">Current</option><option value="blacklisted">Blacklisted</option></select></div>
-    </div>
-    <div class="flex justify-end gap-2 mt-4">
-      <button id="a-cancel" class="text-sm px-3 py-2 rounded-lg border border-gray-300">Cancel</button>
-      <button id="a-save" class="btn-p text-sm px-4 py-2 rounded-lg">Add</button>
-    </div>
-    <p id="a-err" class="text-sm text-red-600 mt-2"></p>
-  </div>
-</div>
+    let STATE = {
+      dashboards: [], query: "", category: "All",
+      user: null, roles: [], isAdmin: false,
+      grants: {},              // saved server state: { email: [slug, …] }
+      draftGrants: null,       // in-flight edits in admin modal
+      peopleFilter: "",
+      users: [],               // loaded on admin modal open
+      badges: {}               // { slug: { count, capped, label } } from /api/tile-badges
+    };
 
-<!-- Reset-for-all modal -->
-<div id="resetall-wrap" class="fixed inset-0 z-50 hidden">
-  <div class="absolute inset-0 bg-gray-900/45" id="resetall-bg"></div>
-  <div class="absolute left-1/2 top-16 -translate-x-1/2 w-full max-w-md bg-white rounded-xl shadow-xl p-5 max-h-[85vh] overflow-y-auto">
-    <h3 class="font-semibold text-gray-900 mb-1">Reset checklist items for all instructors</h3>
-    <p class="text-xs text-gray-500 mb-3">Use this when a document or policy has changed and everyone must provide it again. Ticked items are cleared for <strong>every</strong> instructor — here and in their portal — and stay cleared until each person submits the item again this season. This does not delete any files already on record.</p>
-    <div id="resetall-items" class="space-y-1 border border-gray-100 rounded-lg p-3 bg-gray-50"></div>
-    <div class="flex justify-end gap-2 mt-4">
-      <button id="resetall-cancel" class="text-sm px-3 py-2 rounded-lg border border-gray-300">Cancel</button>
-      <button id="resetall-go" class="text-sm px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">Reset selected</button>
-    </div>
-    <p id="resetall-err" class="text-sm text-red-600 mt-2"></p>
-  </div>
-</div>
+    // --- Auth lifecycle ---
+    window.addEventListener("DOMContentLoaded", () => {
+      if (!window.netlifyIdentity) { showGate("Netlify Identity didn't load."); return; }
+      netlifyIdentity.on("init", u => u ? onLogin(u) : showGate());
+      netlifyIdentity.on("login", u => { netlifyIdentity.close(); onLogin(u); });
+      netlifyIdentity.on("logout", () => { STATE.user = null; STATE.roles = []; STATE.badges = {}; showGate(); });
+      netlifyIdentity.init();
+    });
 
-<div id="toast" role="status" aria-live="polite"></div>
+    $("logoutBtn").addEventListener("click", () => netlifyIdentity.logout());
+    $("adminBtn").addEventListener("click", openAdmin);
+    $("closeModalBtn").addEventListener("click", closeAdmin);
+    $("refreshBtn").addEventListener("click", async () => { await loadDashboards(); await loadUsers(); renderAccess(); });
+    $("savePermsBtn").addEventListener("click", saveAccess);
+    $("seedBtn").addEventListener("click", seedFromRoles);
+    $("inviteBtn").addEventListener("click", inviteUser);
+    $("inviteEmail").addEventListener("keydown", e => { if (e.key === "Enter") inviteUser(); });
+    document.querySelectorAll(".modal-tab").forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
 
-<script>
-var API = '/api/instructors';
-var STATUS_META = {
-  current:{label:'Current',cls:'b-current'}, potential:{label:'Potential',cls:'b-potential'},
-  new_applicant:{label:'New applicant',cls:'b-new_applicant'}, blacklisted:{label:'Blacklisted',cls:'b-blacklisted'}
-};
-var STATUS_ORDER = ['current','potential','new_applicant','blacklisted'];
-var all = [], facets = {}, onboardingItems = [], anyReturning = false;
-// Current sort. key=null keeps the server order (status, then name).
-var sortState = { key: null, dir: 'asc' };
-// First click on these columns sorts descending (newest / biggest first).
-var DESC_FIRST = { applied_at:1, weeks_led:1, document_count:1, onboarding_done:1 };
-
-function $(id){ return document.getElementById(id); }
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
-function toast(msg,isErr){ var t=$('toast'); t.textContent=msg; t.className='show'+(isErr?' error':''); setTimeout(function(){t.className='';},2800); }
-function arr(v){ return Array.isArray(v)?v.filter(Boolean):[]; }
-function fmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return isNaN(d)?'':d.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
-function fileNameUrl(u){ try{ return decodeURIComponent(String(u).split('/').pop().split('?')[0]); }catch(e){ return String(u).split('/').pop(); } }
-// Jotform-hosted files sit behind a Jotform login. Route them through
-// /jotform-file, which injects the API key server-side, so the team opens them
-// with their dashboard session alone. Non-Jotform URLs pass through untouched —
-// the proxy rejects them by design and must not become an open relay.
-var JF_FILE_PROXY = '/.netlify/functions/jotform-file';
-function isJotformUrl(u){
-  try{ var h=new URL(u,location.origin).hostname.toLowerCase();
-       return h==='jotform.com' || /\.jotform\.com$/.test(h); }catch(e){ return false; }
-}
-function jfProxy(u){
-  return isJotformUrl(u) ? JF_FILE_PROXY+'?url='+encodeURIComponent(u) : u;
-}
-// Some Jotform answers (file uploads, signatures) arrive as raw HTML anchor
-// markup or bare upload URLs. Render those as safe clickable links; strip any
-// stray tags from everything else so nothing shows as literal HTML.
-function renderAnswer(a){
-  var v = (a && a.answer==null) ? '' : String(a.answer);
-  if(/<a\s/i.test(v) || (a && a.type==='control_fileupload')){
-    var links=[], re=/href\s*=\s*"([^"]+)"([^>]*)>/gi, m;
-    while((m=re.exec(v))){
-      var url=m[1], titleM=/title\s*=\s*"([^"]+)"/i.exec(m[2]||'');
-      var name=titleM?titleM[1]:fileNameUrl(url);
-      links.push('<a href="'+esc(jfProxy(url))+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(name)+'</a>');
+    function showGate(message) {
+      $("userPanel").classList.add("hidden");
+      $("toolbar").style.display = "none";
+      $("grid").innerHTML = `<div class="gate" style="grid-column:1/-1">
+        <h2>Sign in to view dashboards</h2>
+        <p>${message || "Access is restricted to Pacific Discovery team members. Sign in with your Google account to continue."}</p>
+        <button class="btn btn-primary" id="loginBtn">Sign in</button>
+      </div>`;
+      $("loginBtn").onclick = () => netlifyIdentity.open();
     }
-    if(links.length) return links.join('<br>');
-  }
-  if(/^https?:\/\/\S+$/i.test(v.trim())){
-    var u=v.trim();
-    return '<a href="'+esc(jfProxy(u))+'" target="_blank" rel="noopener" class="text-purple-600 hover:underline">'+esc(fileNameUrl(u))+'</a>';
-  }
-  // Convert Jotform's <br> / block tags to line breaks (readable), strip the
-  // rest, then re-emit as safe <br> so nothing shows as literal HTML.
-  var clean = v.replace(/<\s*br\s*\/?>/gi,'\n').replace(/<\/(p|div|li)\s*>/gi,'\n').replace(/<[^>]+>/g,'');
-  return esc(clean).replace(/\n{2,}/g,'\n').replace(/\n/g,'<br>');
-}
 
-async function api(method,payload,query){
-  var opts={method:method}; if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
-  var r=await fetch(API+(query||''),opts); var d=await r.json().catch(function(){return {};});
-  if(!r.ok) throw new Error(d.error||('HTTP '+r.status)); return d;
-}
+    async function onLogin(user) {
+      STATE.user = user;
+      STATE.roles = rolesFromUser(user);
 
-async function load(){
-  $('loading').classList.remove('hidden'); $('table-wrap').classList.add('hidden');
-  try{
-    var data = await api('GET',null,'?action=list');
-    all = data.instructors||[]; facets = data.facets||{}; onboardingItems = data.onboarding_items||[];
-    anyReturning = !!data.any_returning;
-    buildFacetOptions(); computeStats(); apply();
-  }catch(e){ toast('Load failed: '+e.message,true); }
-  finally{ $('loading').classList.add('hidden'); }
-}
+      // The login event sometimes fires before app_metadata is fully synced.
+      // Force-refresh the JWT, re-pick the widget's updated currentUser(), and
+      // decode the raw JWT as a last resort so roles always land on first render.
+      try {
+        const token = await user.jwt(true);
+        const fresh = netlifyIdentity.currentUser();
+        if (fresh) { STATE.user = fresh; user = fresh; }
+        const refreshed = rolesFromUser(user);
+        if (refreshed.length) {
+          STATE.roles = refreshed;
+        } else if (token) {
+          // Decode JWT payload manually — the widget's user object can lag.
+          const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+          const padded = b64 + "===".slice((b64.length + 3) % 4);
+          const payload = JSON.parse(decodeURIComponent(
+            atob(padded).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+          ));
+          STATE.roles = payload.app_metadata?.roles || [];
+        }
+      } catch (err) {
+        console.warn("JWT refresh failed:", err);
+      }
 
-// Each filter is data-driven: its options are the real synced values, and the
-// whole control is hidden when the forms produced no data for it.
-function buildFacetOptions(){
-  setFacet('fw-gender','f-gender', facets.genders, 'All');
-  setFacet('fw-nat','f-nat', facets.nationalities, 'All');
-  setFacet('fw-program','f-program', facets.programs, 'Any');
-  setFacet('fw-qual','f-qual', facets.qualifications, 'Any');
-  setFacet('fw-lang','f-lang', facets.languages, 'Any');
-  setFacet('fw-region','f-region', facets.regions, 'Any');
-  show('fw-location', (facets.locations||[]).length>0);
-  show('fw-weeks', (facets.programs||[]).length>0);
-  show('fw-returning', !!anyReturning);
-  show('fw-missing', onboardingItems.length>0);
-}
-function setFacet(wrapId, selId, values, allLabel){
-  values = values||[];
-  show(wrapId, values.length>0);
-  fillSelect(selId, values, allLabel);
-}
-function show(id, on){ var el=$(id); if(el) el.style.display = on ? '' : 'none'; }
-function fillSelect(id, values, allLabel){
-  var el=$(id); if(!el) return; var cur=el.value;
-  el.innerHTML='<option value="">'+allLabel+'</option>'+(values||[]).map(function(v){return '<option>'+esc(v)+'</option>';}).join('');
-  if(cur) el.value=cur;
-}
-function computeStats(){
-  var c={current:0,potential:0,new_applicant:0,blacklisted:0};
-  all.forEach(function(i){ if(c[i.status]!=null) c[i.status]++; });
-  $('s-total').textContent=all.length; $('s-current').textContent=c.current;
-  $('s-potential').textContent=c.potential; $('s-new').textContent=c.new_applicant; $('s-black').textContent=c.blacklisted;
-}
+      paintUser(user);
+      $("adminBtn").style.display = STATE.roles.includes("admin") ? "" : "none";
+      loadDashboards();
+    }
 
-function apply(){
-  var q=$('f-q').value.trim().toLowerCase();
-  var status=$('f-status').value, gender=$('f-gender').value, nat=$('f-nat').value, loc=$('f-location').value.trim().toLowerCase();
-  var minW=parseInt($('f-weeks').value,10); var program=$('f-program').value, qual=$('f-qual').value, lang=$('f-lang').value, region=$('f-region').value;
-  var returning=$('f-returning').checked, missing=$('f-missing').checked;
-  var totalOnboard=onboardingItems.length;
-  var range=appliedRange();
+    function rolesFromUser(user) {
+      return (user && user.app_metadata && user.app_metadata.roles) || [];
+    }
 
-  var rows = all.filter(function(i){
-    if(q){ var hay=((i.full_name||'')+' '+(i.email||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
-    if(status && i.status!==status) return false;
-    if(gender && i.gender!==gender) return false;
-    if(nat && i.nationality!==nat) return false;
-    if(loc && (i.location||'').toLowerCase().indexOf(loc)<0) return false;
-    if(!isNaN(minW) && (i.weeks_led||0)<minW) return false;
-    if(program && arr(i.programs_led).indexOf(program)<0) return false;
-    if(qual && arr(i.qualifications).indexOf(qual)<0) return false;
-    if(lang && arr(i.languages).indexOf(lang)<0) return false;
-    if(region && arr(i.regions_experience).indexOf(region)<0 && arr(i.regions_applying).indexOf(region)<0) return false;
-    if(returning && !i.is_returning) return false;
-    if(missing && totalOnboard>0 && (i.onboarding_done||0)>=totalOnboard) return false;
-    if(range){
-      var t=i.applied_at?new Date(i.applied_at).getTime():NaN;
-      if(range.none){ if(!isNaN(t)) return false; }
-      else{
-        if(isNaN(t)) return false;
-        if(range.from!=null && t<range.from) return false;
-        if(range.to!=null && t>range.to) return false;
+    function paintUser(user) {
+      const email = user.email || "";
+      const name = user.user_metadata?.full_name || email.split("@")[0];
+      const initials = (name || "?").split(/\s+/).map(s => s[0]).slice(0, 2).join("").toUpperCase();
+      $("userAvatar").textContent = initials || "?";
+      $("userName").textContent = name;
+      $("userEmail").textContent = email;
+      // Roles are in-app powers now, not "what you can see", so `member` (which
+      // just means "a known person") isn't worth showing to anyone.
+      const shown = STATE.roles.filter(r => r !== BASELINE_ROLE);
+      $("userRole").textContent = shown.length ? shown.join(" · ") : "team member";
+      $("userPanel").classList.remove("hidden");
+    }
+
+    // --- Dashboard listing ---
+    async function loadDashboards() {
+      const grid = $("grid");
+      grid.innerHTML = `<div class="loading" style="grid-column:1/-1">Loading dashboards…</div>`;
+      try {
+        const res = await api("GET", "/.netlify/functions/config");
+        if (res.status === 401 || res.status === 403) { showGate("Your session expired."); return; }
+        const data = await res.json();
+        render(data);
+      } catch (err) {
+        grid.innerHTML = `<div class="empty" style="grid-column:1/-1">Couldn't load config<br><small>${err.message}</small></div>`;
       }
     }
-    return true;
-  });
-  render(sortRows(rows));
-}
 
-// Applied-date filter → {from,to} in ms (local time), {none:true}, or null.
-function appliedRange(){
-  var v=$('f-applied').value; if(!v) return null;
-  if(v==='none') return {none:true};
-  var now=new Date();
-  if(v==='ytd') return {from:new Date(now.getFullYear(),0,1).getTime(), to:null};
-  if(v==='custom'){
-    var f=$('f-applied-from').value, t=$('f-applied-to').value;
-    if(!f && !t) return null;
-    return {
-      from: f ? new Date(f+'T00:00:00').getTime() : null,
-      to:   t ? new Date(t+'T23:59:59.999').getTime() : null
-    };
-  }
-  var days=parseInt(v,10);
-  var start=new Date(now.getFullYear(),now.getMonth(),now.getDate()-days+1);
-  return {from:start.getTime(), to:null};
-}
+    function render(data) {
+      // The server sends non-admins only the dashboards they may open, and
+      // admins the full manifest plus the grants map for the admin screen.
+      STATE.isAdmin = !!data.isAdmin || STATE.roles.includes("admin");
+      STATE.grants = (data.grants && data.grants.users) || {};
+      STATE.dashboards = (data.dashboards || []).slice().sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (b.pinned && !a.pinned) return 1;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+      $("updated").textContent = data.generatedAt ? `Last updated ${new Date(data.generatedAt).toLocaleString()}` : "";
+      buildChips();
+      $("toolbar").style.display = "";
+      draw();
+      loadBadges();
+    }
 
-function sortVal(i,key){
-  switch(key){
-    case 'applied_at': return i.applied_at?new Date(i.applied_at).getTime():null;
-    case 'status': var ix=STATUS_ORDER.indexOf(i.status); return ix<0?null:ix;
-    case 'weeks_led': case 'document_count': case 'onboarding_done': return Number(i[key]||0);
-    default: var s=(i[key]||'').toString().trim().toLowerCase(); return s||null;
-  }
-}
-function sortRows(rows){
-  var key=sortState.key; if(!key) return rows;
-  var mul=sortState.dir==='desc'?-1:1;
-  return rows.slice().sort(function(a,b){
-    var x=sortVal(a,key), y=sortVal(b,key);
-    // Blanks (e.g. no application date) always sink to the bottom.
-    if(x==null && y==null) return 0;
-    if(x==null) return 1;
-    if(y==null) return -1;
-    var c = (typeof x==='number') ? x-y : String(x).localeCompare(String(y));
-    if(c===0) c=String(a.full_name||a.email||'').localeCompare(String(b.full_name||b.email||''));
-    return c*mul;
-  });
-}
-function setSort(key,dir){
-  sortState={key:key||null, dir:dir||'asc'};
-  var sel=$('sort-sel'), v=key?key+':'+sortState.dir:'';
-  sel.value = Array.prototype.some.call(sel.options,function(o){return o.value===v;}) ? v : '';
-  Array.prototype.forEach.call(document.querySelectorAll('th.sortable'), function(th){
-    var on=th.dataset.sort===sortState.key;
-    th.classList.toggle('active',on);
-    th.querySelector('.arr').textContent = on ? (sortState.dir==='desc'?'▼':'▲') : '';
-  });
-  try{ localStorage.setItem('instructors.sort', v); }catch(e){}
-  apply();
-}
+    // --- New-submission bubbles ---
+    // Counts come from /api/tile-badges; they clear when the dashboard is
+    // opened (the edge gate records the visit, and the click below does too in
+    // case the gate's background call is dropped).
+    let badgesLoadedAt = 0;
+    async function loadBadges() {
+      if (!STATE.user) return;
+      badgesLoadedAt = Date.now();
+      try {
+        const res = await api("GET", "/api/tile-badges");
+        if (!res.ok) return;
+        const data = await safeJson(res);
+        STATE.badges = data.badges || {};
+        draw();
+      } catch (err) {
+        console.warn("tile badges:", err);
+      }
+    }
+    async function markSeen(slug) {
+      const b = STATE.badges[slug];
+      if (b) STATE.badges[slug] = { ...b, count: 0, label: "" };
+      try {
+        const headers = { "Content-Type": "application/json" };
+        try { headers.Authorization = `Bearer ${await STATE.user.jwt()}`; } catch {}
+        fetch("/api/tile-badges", {
+          method: "POST", headers, credentials: "include", keepalive: true,
+          body: JSON.stringify({ slug }),
+        }).catch(() => {});
+      } catch {}
+    }
+    $("grid").addEventListener("click", e => {
+      const card = e.target.closest("a.card[data-slug]");
+      if (card && STATE.badges[card.dataset.slug]?.count) markSeen(card.dataset.slug);
+    });
+    // Coming back with the browser's Back button restores the old page from
+    // cache — refresh so the bubble for the dashboard just visited is gone.
+    window.addEventListener("pageshow", e => { if (e.persisted) loadBadges(); });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && Date.now() - badgesLoadedAt > 30000) loadBadges();
+    });
+    setInterval(() => { if (document.visibilityState === "visible") loadBadges(); }, 2 * 60 * 1000);
 
-function render(rows){
-  $('count').textContent=rows.length;
-  $('empty').classList.toggle('hidden', rows.length>0);
-  $('table-wrap').classList.toggle('hidden', rows.length===0);
-  var totalOnboard=onboardingItems.length;
-  $('rows').innerHTML = rows.map(function(i){
-    var sm=STATUS_META[i.status]||{label:i.status,cls:''};
-    var progs=arr(i.programs_led).slice(0,3).map(function(p){return '<span class="chip">'+esc(p)+'</span>';}).join('')+(arr(i.programs_led).length>3?' +'+(arr(i.programs_led).length-3):'');
-    var quals=arr(i.qualifications).slice(0,2).map(function(p){return '<span class="chip">'+esc(p)+'</span>';}).join('')+(arr(i.qualifications).length>2?' +'+(arr(i.qualifications).length-2):'');
-    var ob=totalOnboard?((i.onboarding_done||0)+'/'+totalOnboard):'—';
-    var obCls=(totalOnboard&&(i.onboarding_done||0)>=totalOnboard)?'text-green-700':'text-gray-500';
-    return '<tr data-id="'+i.id+'" class="border-t border-gray-100">'+
-      '<td class="px-4 py-2.5"><div class="font-medium text-gray-900">'+esc(i.full_name||'—')+'</div><div class="text-xs text-gray-400">'+esc(i.email)+'</div></td>'+
-      '<td class="px-3 py-2.5"><span class="badge '+sm.cls+'">'+esc(sm.label)+'</span></td>'+
-      '<td class="px-3 py-2.5 text-gray-600 whitespace-nowrap">'+(i.applied_at?esc(fmtDate(i.applied_at)):'<span class="text-gray-300">—</span>')+'</td>'+
-      '<td class="px-3 py-2.5 text-gray-600">'+esc(i.location||'—')+'</td>'+
-      '<td class="px-3 py-2.5 text-gray-600">'+esc(i.gender||'—')+'</td>'+
-      '<td class="px-3 py-2.5 text-right font-medium text-gray-800">'+(i.weeks_led||0)+'</td>'+
-      '<td class="px-3 py-2.5">'+(progs||'<span class="text-gray-300">—</span>')+'</td>'+
-      '<td class="px-3 py-2.5">'+(quals||'<span class="text-gray-300">—</span>')+'</td>'+
-      '<td class="px-3 py-2.5 text-center text-gray-600">'+(i.document_count||0)+'</td>'+
-      '<td class="px-3 py-2.5 text-center '+obCls+'">'+ob+'</td>'+
-    '</tr>';
-  }).join('');
-}
+    // /api/config already returns only what this person may open (and the edge
+    // gate enforces it on the way in), so there's nothing left to filter here.
+    function visibleDashboards() {
+      return STATE.dashboards;
+    }
 
-$('rows').addEventListener('click', function(e){
-  var tr=e.target.closest('tr[data-id]'); if(!tr) return; openDrawer(Number(tr.dataset.id));
-});
+    function buildChips() {
+      const cats = ["All", ...new Set(visibleDashboards().map(d => d.category).filter(Boolean))];
+      const wrap = $("categoryChips"); wrap.innerHTML = "";
+      cats.forEach(c => {
+        const el = document.createElement("button");
+        el.className = "chip" + (c === STATE.category ? " active" : "");
+        el.textContent = c;
+        el.onclick = () => { STATE.category = c; buildChips(); draw(); };
+        wrap.appendChild(el);
+      });
+    }
 
-// ---- Drawer -------------------------------------------------------------
-function openDrawer(id){
-  $('drawer-wrap').classList.add('open');
-  $('drawer-body').innerHTML='<div class="flex justify-center py-16"><div class="spinner"></div></div>';
-  api('GET',null,'?action=get&id='+id).then(function(d){ renderDrawer(d); }).catch(function(e){ toast(e.message,true); });
-}
-function closeDrawer(){ $('drawer-wrap').classList.remove('open'); }
-$('drawer-bg').addEventListener('click', closeDrawer);
-document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ closeDrawer(); $('add-wrap').classList.add('hidden'); $('resetall-wrap').classList.add('hidden'); } });
+    function draw() {
+      const grid = $("grid");
+      const q = STATE.query.trim().toLowerCase();
+      const filtered = visibleDashboards().filter(d => {
+        const matchesCat = STATE.category === "All" || d.category === STATE.category;
+        const hay = `${d.title||""} ${d.description||""} ${d.category||""}`.toLowerCase();
+        return matchesCat && (!q || hay.includes(q));
+      });
+      $("count").textContent = `${filtered.length} dashboard${filtered.length===1?"":"s"} visible`;
+      if (!filtered.length) { grid.innerHTML = `<div class="empty" style="grid-column:1/-1">No dashboards match your access or filters.</div>`; return; }
 
-function txtField(label,name,val,type){
-  return '<div><label class="lbl">'+label+'</label><input data-p="'+name+'" class="fld" '+(type==='number'?'type="number"':'')+' value="'+esc(val==null?'':val)+'"></div>';
-}
-function arrField(label,name,val){
-  return '<div class="col-span-2"><label class="lbl">'+label+' <span class="text-gray-400 normal-case">(comma-separated)</span></label><input data-p="'+name+'" data-arr="1" class="fld" value="'+esc(arr(val).join(', '))+'"></div>';
-}
-function boolField(label,name,val){
-  return '<label class="text-xs text-gray-600 flex items-center gap-2 mt-1"><input type="checkbox" data-p="'+name+'" data-bool="1" '+(val?'checked':'')+'> '+label+'</label>';
-}
+      grid.innerHTML = filtered.map((d, i) => {
+        const palette = PALETTES[Math.abs(hash(d.slug||d.title||String(i))) % PALETTES.length];
+        const [c1, c2] = d.colors || palette;
+        const icon = d.icon || "📊";
+        const href = d.url || `/${d.slug}/`;
+        const cat = d.category ? `<span class="category">${esc(d.category)}</span>` : "";
+        // Admins get a people count so the grid doubles as an at-a-glance
+        // audit; everyone else sees nothing — who else has access isn't
+        // their business and the old role list no longer means anything.
+        const tag = STATE.isAdmin
+          ? `<span class="role-tag">${peopleWithAccess(d.slug)}</span>`
+          : "";
+        const b = STATE.badges[d.slug];
+        const newText = b && b.count ? `${b.label || b.count} new since you last opened it` : "";
+        const bubble = newText ? `<span class="tile-badge" aria-hidden="true">${esc(b.label || b.count)}</span>` : "";
+        return `<a class="card" href="${esc(href)}" data-slug="${esc(d.slug||"")}" style="--c1:${c1};--c2:${c2}"${newText ? ` title="${esc(newText)}" aria-label="${esc((d.title||d.slug||"") + " — " + newText)}"` : ""}>
+          <div class="card-top"><div class="icon" style="background:linear-gradient(135deg, ${c1}33, ${c2}22)">${icon}${bubble}</div>${cat}</div>
+          <h3>${esc(d.title||d.slug||"Untitled")}</h3>
+          <p>${esc(d.description||"")}</p>
+          <div class="card-footer">${tag}<span class="open">Open →</span></div>
+        </a>`;
+      }).join("");
+    }
 
-function renderDrawer(d){
-  var i=d.instructor, sm=STATUS_META[i.status]||{label:i.status,cls:''};
-  var statusSel='<select id="d-status" class="fld" style="max-width:180px">'+STATUS_ORDER.map(function(s){return '<option value="'+s+'" '+(i.status===s?'selected':'')+'>'+STATUS_META[s].label+'</option>';}).join('')+'</select>';
+    $("search").addEventListener("input", e => { STATE.query = e.target.value; draw(); });
 
-  var answers = arr(i.application_answers);
-  var appHtml = answers.length
-    ? answers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+renderAnswer(a)+'</div></div>';}).join('')
-    : '<p class="text-sm text-gray-400">No application on file. If they onboarded without applying, their details show under Personal Information below.</p>';
+    // --- Admin modal (person-first access editor) ---
+    //
+    // The unit of access is a PERSON, not a role: pick someone, tick the
+    // dashboards they should see. Roles are still editable on the second tab
+    // because a handful of dashboards use them to gate in-app powers.
 
-  var piAnswers = arr(i.personal_info_answers);
-  var piHtml = piAnswers.length
-    ? piAnswers.map(function(a){return '<div class="py-1.5 border-b border-gray-100 last:border-0"><div class="text-xs font-semibold text-gray-500">'+esc(a.label)+'</div><div class="text-sm text-gray-800 whitespace-pre-wrap">'+renderAnswer(a)+'</div></div>';}).join('')
-    : '';
+    function peopleWithAccess(slug) {
+      const grants = STATE.grants || {};
+      const emails = Object.keys(grants);
+      if (!emails.length) return "role-based";
+      const s = String(slug).toLowerCase();
+      const n = emails.filter(e => (grants[e] || []).includes(s)).length;
+      return n ? `${n} ${n === 1 ? "person" : "people"}` : "admins only";
+    }
 
-  // Documents. Every link streams through /jotform-file, which injects the
-  // Jotform API key server-side — so the team opens a passport scan or a signed
-  // contract without needing a Jotform login. Linking file_url directly (as
-  // this used to) sends them to a Jotform sign-in wall.
-  var FILE_PROXY = JF_FILE_PROXY;
-  function docLink(x, download){
-    var u = FILE_PROXY+'?url='+encodeURIComponent(x.file_url||'');
-    // Pass the real filename: a generatePDF URL's last path segment is
-    // "generatePDF", so without this a signed contract saves as an
-    // extensionless blob the OS can't open.
-    if(download) u += '&download=1&name='+encodeURIComponent(x.filename||'document.pdf');
-    return u;
-  }
-  function docRow(x){
-    // Submission PDFs are generated on demand and some browsers won't inline
-    // them, so those download; uploads open in a tab for a quick look.
-    var isPdf = x.kind === 'submission_pdf';
-    return '<div class="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">'+
-      '<div class="min-w-0"><div class="text-sm text-gray-800 truncate">'+esc(x.doc_type||'Document')+'</div>'+
-      '<div class="text-xs text-gray-400 truncate">'+esc(x.filename||'')+
-        (x.uploaded_at?' · '+fmtDate(x.uploaded_at):'')+
-        (x.source_form?' · '+esc(x.source_form):'')+'</div></div>'+
-      '<a href="'+esc(docLink(x, isPdf))+'" target="_blank" rel="noopener" '+
-      'class="text-purple-600 text-sm hover:underline whitespace-nowrap ml-3">'+
-      (isPdf?'Open PDF ↗':'Open ↗')+'</a></div>';
-  }
-  function docGroup(title, list){
-    if(!list.length) return '';
-    return '<div class="mb-3"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">'+
-           esc(title)+' ('+list.length+')</div>'+list.map(docRow).join('')+'</div>';
-  }
-  var docs = arr(d.documents);
-  var docForms   = docs.filter(function(x){ return x.kind === 'submission_pdf'; });
-  var docUploads = docs.filter(function(x){ return x.kind !== 'submission_pdf'; });
-  var docHtml = docs.length
-    ? docGroup('Signed forms & policies', docForms)+docGroup('Uploaded files', docUploads)
-    : '<p class="text-sm text-gray-400">No documents yet. Run “Sync from Jotform”.</p>';
+    function cloneGrants(g) {
+      const out = {};
+      for (const [k, v] of Object.entries(g || {})) {
+        out[String(k).toLowerCase()] = Array.isArray(v) ? [...v] : [];
+      }
+      return out;
+    }
 
-  var assigns = arr(d.assignments);
-  var assignHtml = assigns.map(function(a){ return assignRow(a); }).join('');
+    async function openAdmin() {
+      $("adminModal").classList.add("show");
+      switchTab("access");
+      STATE.draftGrants = cloneGrants(STATE.grants);
+      $("accessContent").innerHTML = `<div class="loading">Loading people…</div>`;
+      await loadUsers();
+      renderAccess();
+    }
+    function closeAdmin() { $("adminModal").classList.remove("show"); }
+    function switchTab(name) {
+      document.querySelectorAll(".modal-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+      $("tabAccess").style.display = name === "access" ? "" : "none";
+      $("tabUsers").style.display = name === "users" ? "" : "none";
+      $("savePermsBtn").style.display = name === "access" ? "" : "none";
+      $("seedBtn").style.display = name === "access" ? "" : "none";
+    }
 
-  // Onboarding — the same 14-item list the instructor sees in their portal.
-  // Split into forms vs documents so the two kinds read distinctly. A row
-  // ticked by hand shows "pinned": the Jotform sync leaves it alone from then
-  // on, which is what makes un-ticking (a rejected police check, an expired
-  // WFR cert) actually stick.
-  var obMap={}; arr(d.onboarding).forEach(function(o){ obMap[o.item]=o; });
-  function obRow(it){
-    var row = obMap[it.item];
-    var done = row && row.completed;
-    var pinned = row && row.source === 'manual';
-    // Reset but not yet re-provided this season — the box is red awaiting a
-    // fresh submission. (Once re-provided, done is true and this clears.)
-    var wasReset = row && row.reset_at && !done;
-    return '<div class="flex items-center gap-2 py-1 text-sm group">'+
-      '<label class="flex items-center gap-2 flex-1 cursor-pointer">'+
-        '<input type="checkbox" class="ob-chk" data-item="'+esc(it.item)+'" '+(done?'checked':'')+'> '+
-        '<span class="'+(done?'text-gray-800':'text-gray-500')+'">'+esc(it.label)+'</span>'+
-        (pinned?'<span class="text-[10px] uppercase tracking-wide text-amber-600 border border-amber-200 bg-amber-50 rounded px-1" title="Set by hand — the Jotform sync won’t change it">pinned</span>':'')+
-        (wasReset?'<span class="text-[10px] uppercase tracking-wide text-blue-600 border border-blue-200 bg-blue-50 rounded px-1" title="Reset for the new season — awaiting a fresh submission">reset '+esc(fmtDate(row.reset_at))+'</span>':'')+
-      '</label>'+
-      '<button type="button" class="ob-reset text-[11px] text-gray-400 hover:text-blue-600 px-1" data-item="'+esc(it.item)+'" title="Reset this item for this instructor — clears it here and in their portal until they submit it again">↺ reset</button>'+
-      '</div>';
-  }
-  function obGroup(title, list){
-    if(!list.length) return '';
-    return '<div class="mb-2"><div class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">'+esc(title)+'</div>'+
-           list.map(obRow).join('')+'</div>';
-  }
-  var obForms = onboardingItems.filter(function(x){ return x.kind !== 'document'; });
-  var obDocs  = onboardingItems.filter(function(x){ return x.kind === 'document'; });
-  var obDone  = onboardingItems.filter(function(x){ return obMap[x.item] && obMap[x.item].completed; }).length;
-  var obHtml = onboardingItems.length
-    ? '<div class="text-sm '+(obDone>=onboardingItems.length?'text-green-700':'text-gray-500')+' mb-2">'+
-        obDone+' of '+onboardingItems.length+' complete</div>'+
-      obGroup('Forms & policies', obForms)+obGroup('Documents', obDocs)
-    : '<p class="text-sm text-gray-400">—</p>';
+    /**
+     * Everyone who can appear in the access list: Identity users, plus any
+     * email that has a saved grant but no matching user (someone removed, or a
+     * typo in an earlier save) so those entries can be found and cleared.
+     */
+    function peopleForAccess() {
+      const seen = new Map();
+      for (const u of STATE.users) {
+        const email = (u.email || "").toLowerCase();
+        if (!email) continue;
+        seen.set(email, {
+          email,
+          name: u.full_name || email.split("@")[0],
+          roles: u.roles || [],
+          invited: !!u.invited,
+          known: true,
+        });
+      }
+      for (const email of Object.keys(STATE.draftGrants || {})) {
+        if (!seen.has(email)) {
+          seen.set(email, { email, name: email.split("@")[0], roles: [], invited: false, known: false });
+        }
+      }
+      return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+    }
 
-  $('drawer-body').innerHTML =
-    '<div class="flex items-start justify-between mb-4">'+
-      '<div><h2 class="text-xl font-bold text-gray-900">'+esc(i.full_name||i.email)+'</h2>'+
-      '<div class="text-sm text-gray-500">'+esc(i.email)+(i.phone?' · '+esc(i.phone):'')+'</div>'+
-      (i.applied_at?'<div class="text-xs text-gray-400 mt-0.5">Applied '+fmtDate(i.applied_at)+'</div>':'')+'</div>'+
-      '<button id="d-close" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>'+
-    '</div>'+
+    /**
+     * Dashboards down the side, people across the top — same shape as the old
+     * role grid, with a column per person instead of a column per role.
+     *
+     * A person who has never been assigned anything shows their role-derived
+     * access in a shaded column marked "roles". Touching any cell in that
+     * column first materialises exactly what's on screen into their own list,
+     * then applies the change — so switching someone across can only ever do
+     * what you can see it doing.
+     */
+    function roleDerivedList(p) {
+      return STATE.dashboards
+        .filter(d => (d.allowedRoles || []).some(r => p.roles.includes(r)))
+        .map(d => d.slug);
+    }
+    function isInherited(p) {
+      return !p.roles.includes("admin") && !Array.isArray(STATE.draftGrants[p.email]);
+    }
+    function displayList(p) {
+      if (p.roles.includes("admin")) return STATE.dashboards.map(d => d.slug);
+      const explicit = STATE.draftGrants[p.email];
+      return Array.isArray(explicit) ? explicit : roleDerivedList(p);
+    }
+    /** Turn an inherited column into a real list without changing what it shows. */
+    function materialize(p) {
+      if (isInherited(p)) STATE.draftGrants[p.email] = roleDerivedList(p);
+      return STATE.draftGrants[p.email];
+    }
 
-    '<div class="sec"><h3>Status &amp; summary</h3>'+
-      '<div class="flex items-center gap-3 flex-wrap">'+statusSel+
-      '<span class="text-sm text-gray-500">'+(i.weeks_led||0)+' weeks led · '+(arr(i.programs_led).length)+' programs</span></div>'+
-      '<div class="mt-3 grid grid-cols-12 gap-2 items-end">'+
-        '<div class="col-span-4"><label class="lbl">Flight budget</label><input data-p="flight_budget" type="number" min="0" step="1" class="fld" value="'+esc(i.flight_budget==null?'':i.flight_budget)+'" placeholder="1800"></div>'+
-        '<div class="col-span-3"><label class="lbl">Currency</label><select data-p="flight_budget_currency" class="fld">'+
-          ['USD','GBP','EUR','CAD','AUD','NZD'].map(function(c){return '<option '+(String(i.flight_budget_currency||'USD')===c?'selected':'')+'>'+c+'</option>';}).join('')+
-        '</select></div>'+
-        '<div class="col-span-5"><button id="d-save-top" class="btn-p text-sm px-4 py-2 rounded-lg w-full md:w-auto">Save</button></div>'+
-      '</div>'+
-      '<div id="d-blacklist" class="mt-3 '+(i.status==='blacklisted'?'':'hidden')+'"><label class="lbl">Blacklist reason</label><input data-p="blacklist_reason" class="fld" value="'+esc(i.blacklist_reason||'')+'"></div>'+
-    '</div>'+
+    function renderAccess() {
+      const everyone = peopleForAccess();
+      if (!everyone.length) {
+        $("accessContent").innerHTML = `<div class="empty">No people yet — invite someone from the People &amp; powers tab.</div>`;
+        return;
+      }
+      const q = STATE.peopleFilter.trim().toLowerCase();
+      const people = everyone.filter(p => !q || p.email.includes(q) || p.name.toLowerCase().includes(q));
 
-    '<div class="sec"><h3>Profile</h3>'+
-      '<div class="grid grid-cols-2 gap-3">'+
-        '<div class="col-span-2"><label class="lbl">Additional emails <span class="text-gray-400 normal-case">(comma-separated — sync matches Jotform on any of these; primary is '+esc(i.email)+')</span></label><input data-p="alt_emails" data-arr="1" class="fld" value="'+esc(arr(i.alt_emails).join(', '))+'" placeholder="another@email.com"></div>'+
-        txtField('Full name','full_name',i.full_name)+
-        txtField('Phone','phone',i.phone)+
-        txtField('Location / home base','location',i.location)+
-        txtField('Gender','gender',i.gender)+
-        txtField('Country of birth','country_of_birth',i.country_of_birth)+
-        txtField('Nationality (passport)','nationality',i.nationality)+
-        txtField('Rating','rating',i.rating,'number')+
-        '<div><label class="lbl">&nbsp;</label><div class="flex flex-col">'+boolField('WFR / equivalent','wfr',i.wfr)+boolField("Driver's licence",'drivers_licence',i.drivers_licence)+'</div></div>'+
-        arrField('Languages','languages',i.languages)+
-        arrField('Qualifications','qualifications',i.qualifications)+
-        arrField('Regions — experience','regions_experience',i.regions_experience)+
-        arrField('Regions — applying to lead','regions_applying',i.regions_applying)+
-        arrField('Availability','availability',i.availability)+
-        arrField('Tags','tags',i.tags)+
-        '<div class="col-span-2 flex gap-4 mt-1">'+boolField('Returning instructor','is_returning',i.is_returning)+boolField('Was a PD/PE participant','prior_participant',i.prior_participant)+'</div>'+
-        '<div class="col-span-2"><label class="lbl">Notes</label><textarea data-p="notes" class="fld" rows="2">'+esc(i.notes||'')+'</textarea></div>'+
-      '</div>'+
-      '<div class="mt-3 flex items-center gap-3"><button id="d-save" class="btn-p text-sm px-4 py-2 rounded-lg">Save profile</button>'+
-      '<button id="d-delete" class="text-red-500 hover:underline text-sm ml-auto">Delete instructor</button></div>'+
-    '</div>'+
+      // Keep the reading position across re-renders — the table is wide and
+      // re-rendering from the top on every tick would be maddening.
+      const prev = document.querySelector(".matrix-scroll");
+      const keep = prev ? { x: prev.scrollLeft, y: prev.scrollTop } : null;
 
-    '<div class="sec"><h3>Program-leading history</h3>'+
-      '<div id="assign-list">'+(assignHtml||'<p class="text-sm text-gray-400 mb-2">No programs recorded yet.</p>')+'</div>'+
-      '<div class="grid grid-cols-12 gap-2 mt-2 items-end border-t border-gray-100 pt-3">'+
-        '<div class="col-span-4"><label class="lbl">Program</label><input id="na-program" class="fld" placeholder="Bali"></div>'+
-        '<div class="col-span-3"><label class="lbl">Season</label><input id="na-season" class="fld" placeholder="Spring"></div>'+
-        '<div class="col-span-2"><label class="lbl">Year</label><input id="na-year" type="number" class="fld" placeholder="2026"></div>'+
-        '<div class="col-span-2"><label class="lbl">Weeks</label><input id="na-weeks" type="number" class="fld" placeholder="6"></div>'+
-        '<div class="col-span-1"><button id="na-add" class="btn-p text-sm px-2 py-2 rounded-lg w-full">+</button></div>'+
-        '<div class="col-span-6"><label class="lbl">Role</label><input id="na-role" class="fld" placeholder="Lead / Co-Instructor"></div>'+
-      '</div>'+
-    '</div>'+
+      const head = people.map(p => {
+        const badge = p.roles.includes("admin")
+          ? `<span class="pmeta admin">admin</span>`
+          : !p.known
+            ? `<span class="pmeta">removed</span>`
+            : isInherited(p)
+              ? `<span class="pmeta roles">roles</span>`
+              : `<span class="pmeta">${displayList(p).length}</span>`;
+        const title = `${p.name} · ${p.email}${p.invited ? " · invited, pending" : ""}\nClick to give them everything / nothing`;
+        return `<th class="col-person" data-email="${esc(p.email)}" title="${esc(title)}">
+          <span class="pname">${esc(p.name)}</span>${badge}
+        </th>`;
+      }).join("");
 
-    '<div class="sec"><h3>Onboarding &amp; policies</h3>'+obHtml+'</div>'+
+      const rows = STATE.dashboards.map(d => `
+        <tr data-slug="${esc(d.slug)}">
+          <td class="col-dash">
+            <button class="row-toggle" data-slug="${esc(d.slug)}" title="Give this dashboard to everyone shown / no one">
+              <span class="d-title">${d.icon || "📊"} ${esc(d.title || d.slug)}</span>
+              <span class="d-slug">${esc(d.slug)}</span>
+            </button>
+          </td>
+          ${people.map(p => {
+            const personIsAdmin = p.roles.includes("admin");
+            const on = displayList(p).includes(d.slug);
+            return `<td class="cell${isInherited(p) ? " inherited" : ""}">
+              <input type="checkbox" data-email="${esc(p.email)}" data-slug="${esc(d.slug)}"
+                     ${on ? "checked" : ""} ${personIsAdmin ? "disabled" : ""}
+                     aria-label="${esc(d.title || d.slug)} — ${esc(p.name)}" />
+            </td>`;
+          }).join("")}
+        </tr>`).join("");
 
-    '<div class="sec"><h3>Documents ('+docs.length+')</h3>'+docHtml+'</div>'+
+      $("accessContent").innerHTML = `
+        <div class="access-toolbar">
+          <input id="peopleFilter" type="search" placeholder="Filter people…" value="${esc(STATE.peopleFilter)}" />
+          <span class="hint">${people.length} of ${everyone.length} ${everyone.length === 1 ? "person" : "people"} · click a name or a dashboard to fill that whole column or row</span>
+        </div>
+        <div class="matrix-scroll">
+          <table class="matrix">
+            <thead><tr><th class="col-dash">Dashboard</th>${head}</tr></thead>
+            <tbody>${rows || `<tr><td class="col-dash" colspan="${people.length + 1}" style="color:var(--text-dim)">No dashboards found.</td></tr>`}</tbody>
+          </table>
+        </div>
+        <div class="legend">
+          <span><span class="swatch"></span>Shaded column = no list saved yet; still running on this person's roles.</span>
+          <span><strong style="color:var(--accent-2)">admin</strong> = sees everything, present and future.</span>
+        </div>`;
 
-    (piHtml ? '<div class="sec"><h3>Personal Information</h3><div>'+piHtml+'</div></div>' : '')+
+      const scroll = document.querySelector(".matrix-scroll");
+      if (scroll && keep) { scroll.scrollLeft = keep.x; scroll.scrollTop = keep.y; }
 
-    '<div class="sec"><h3>Application</h3><div>'+appHtml+'</div></div>';
+      $("peopleFilter").addEventListener("input", e => {
+        STATE.peopleFilter = e.target.value;
+        renderAccess();
+        $("peopleFilter").focus();
+      });
 
-  // wire drawer events
-  $('d-close').addEventListener('click', closeDrawer);
-  $('d-status').addEventListener('change', function(){ $('d-blacklist').classList.toggle('hidden', this.value!=='blacklisted'); });
-  $('d-save').addEventListener('click', function(){ saveProfile(i.id); });
-  $('d-save-top').addEventListener('click', function(){ saveProfile(i.id); });
-  $('d-delete').addEventListener('click', function(){ delInstructor(i.id, i.full_name||i.email); });
-  $('na-add').addEventListener('click', function(){ addAssignment(i.id); });
-  $('assign-list').addEventListener('click', function(e){
-    var row=e.target.closest('[data-aid]'); if(!row) return; var aid=Number(row.dataset.aid);
-    if(e.target.classList.contains('a-save')) saveAssignment(aid,row);
-    if(e.target.classList.contains('a-del')) delAssignment(aid,i.id);
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('.ob-chk'), function(chk){
-    chk.addEventListener('change', function(){ setOnboarding(i.id, chk.dataset.item, chk.checked); });
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('.ob-reset'), function(btn){
-    btn.addEventListener('click', function(){ resetOnboardingItem(i.id, i.full_name||i.email, btn.dataset.item); });
-  });
-}
+      $("accessContent").querySelectorAll(".matrix input[type=checkbox]").forEach(cb => {
+        if (cb.disabled) return;
+        cb.addEventListener("change", () => {
+          const person = everyone.find(x => x.email === cb.dataset.email);
+          if (!person) return;
+          const cur = materialize(person);
+          STATE.draftGrants[person.email] = cb.checked
+            ? [...new Set([...cur, cb.dataset.slug])]
+            : cur.filter(s => s !== cb.dataset.slug);
+          renderAccess();
+          markDirty();
+        });
+      });
 
-function assignRow(a){
-  return '<div class="grid grid-cols-12 gap-2 items-end mb-2" data-aid="'+a.id+'">'+
-    '<div class="col-span-4"><input data-af="program" class="fld" value="'+esc(a.program||'')+'"></div>'+
-    '<div class="col-span-2"><input data-af="season" class="fld" value="'+esc(a.season||'')+'" placeholder="Season"></div>'+
-    '<div class="col-span-2"><input data-af="year" type="number" class="fld" value="'+esc(a.year||'')+'" placeholder="Year"></div>'+
-    '<div class="col-span-1"><input data-af="weeks" type="number" class="fld" value="'+esc(a.weeks||0)+'"></div>'+
-    '<div class="col-span-2"><input data-af="role" class="fld" value="'+esc(a.role||'')+'" placeholder="Role"></div>'+
-    '<div class="col-span-1 flex gap-1"><button class="a-save text-xs btn-p rounded px-2 py-2">✓</button><button class="a-del text-xs text-red-500 px-1">✕</button></div>'+
-  '</div>';
-}
+      // Column header → all / nothing for that person.
+      $("accessContent").querySelectorAll(".col-person").forEach(th => {
+        th.addEventListener("click", () => {
+          const person = everyone.find(x => x.email === th.dataset.email);
+          if (!person || person.roles.includes("admin")) return;
+          const full = displayList(person).length === STATE.dashboards.length;
+          STATE.draftGrants[person.email] = full ? [] : STATE.dashboards.map(d => d.slug);
+          renderAccess();
+          markDirty();
+        });
+      });
 
-function collectPatch(){
-  var patch={};
-  document.querySelectorAll('#drawer-body [data-p]').forEach(function(el){
-    var k=el.dataset.p, v;
-    if(el.dataset.bool) v=el.checked;
-    else if(el.dataset.arr) v=el.value;
-    else v=el.value;
-    patch[k]=v;
-  });
-  patch.status=$('d-status').value;
-  return patch;
-}
-async function saveProfile(id){
-  try{ await api('POST',{action:'update',id:id,patch:collectPatch()}); toast('Saved'); await load(); openDrawer(id); }
-  catch(e){ toast('Save failed: '+e.message,true); }
-}
-async function changeStatus(id,status){
-  try{ await api('POST',{action:'update',id:id,patch:{status:status}}); toast('Status updated'); await load(); }
-  catch(e){ toast(e.message,true); }
-}
-async function delInstructor(id,name){
-  if(!confirm('Delete "'+name+'" and all their history? This cannot be undone.')) return;
-  try{ await api('POST',{action:'delete',id:id}); closeDrawer(); toast('Deleted'); load(); }
-  catch(e){ toast(e.message,true); }
-}
-async function addAssignment(instructorId){
-  var program=$('na-program').value.trim(); if(!program){ toast('Enter a program name',true); return; }
-  try{
-    await api('POST',{action:'add-assignment',instructor_id:instructorId,program:program,
-      season:$('na-season').value.trim(),year:$('na-year').value,weeks:$('na-weeks').value,role:$('na-role').value.trim()});
-    toast('Program added'); await load(); openDrawer(instructorId);
-  }catch(e){ toast(e.message,true); }
-}
-async function saveAssignment(aid,row){
-  var patch={}; row.querySelectorAll('[data-af]').forEach(function(el){ patch[el.dataset.af]=el.value; });
-  try{ await api('POST',{action:'update-assignment',id:aid,patch:patch}); toast('Saved'); load(); }
-  catch(e){ toast(e.message,true); }
-}
-async function delAssignment(aid,instructorId){
-  try{ await api('POST',{action:'delete-assignment',id:aid}); toast('Removed'); await load(); openDrawer(instructorId); }
-  catch(e){ toast(e.message,true); }
-}
-async function setOnboarding(instructorId,item,completed){
-  try{ await api('POST',{action:'set-onboarding',instructor_id:instructorId,item:item,completed:completed}); load(); }
-  catch(e){ toast(e.message,true); }
-}
-function itemLabel(item){ var m=onboardingItems.filter(function(x){return x.item===item;})[0]; return m?m.label:item; }
-async function resetOnboardingItem(instructorId,who,item){
-  var label=itemLabel(item);
-  if(!confirm('Reset "'+label+'" for '+who+'?\n\nIt will show as not provided — here and in their instructor portal — until they submit it again this season. No files already on record are deleted.')) return;
-  try{
-    await api('POST',{action:'reset-onboarding',scope:'instructor',instructor_id:instructorId,item:item});
-    toast('Reset "'+label+'"'); await load(); openDrawer(instructorId);
-  }catch(e){ toast('Reset failed: '+e.message,true); }
-}
+      // Row label → give this dashboard to everyone shown, or take it off them.
+      $("accessContent").querySelectorAll(".row-toggle").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const slug = btn.dataset.slug;
+          const targets = people.filter(x => !x.roles.includes("admin"));
+          const everyoneHasIt = targets.length > 0 && targets.every(x => displayList(x).includes(slug));
+          for (const person of targets) {
+            const cur = materialize(person);
+            STATE.draftGrants[person.email] = everyoneHasIt
+              ? cur.filter(s => s !== slug)
+              : [...new Set([...cur, slug])];
+          }
+          renderAccess();
+          markDirty();
+        });
+      });
+    }
 
-// ---- Add modal ----------------------------------------------------------
-$('add-btn').addEventListener('click', function(){ $('add-wrap').classList.remove('hidden'); $('a-err').textContent=''; $('a-email').focus(); });
-$('add-bg').addEventListener('click', function(){ $('add-wrap').classList.add('hidden'); });
-$('a-cancel').addEventListener('click', function(){ $('add-wrap').classList.add('hidden'); });
-$('a-save').addEventListener('click', async function(){
-  var email=$('a-email').value.trim(); if(!email){ $('a-err').textContent='Email is required.'; return; }
-  try{
-    await api('POST',{action:'create',email:email,full_name:$('a-name').value.trim(),status:$('a-status').value});
-    $('add-wrap').classList.add('hidden'); $('a-email').value=''; $('a-name').value='';
-    toast('Instructor added'); load();
-  }catch(e){ $('a-err').textContent=e.message; }
-});
+    function markDirty() { setStatus("Unsaved changes"); }
 
-// ---- Sync ---------------------------------------------------------------
-$('sync-btn').addEventListener('click', async function(){
-  var btn=this; btn.disabled=true; var old=btn.textContent; btn.textContent='Syncing…';
-  try{
-    var r=await api('POST',{action:'sync'});
-    toast('Synced: '+r.created+' new, '+r.updated+' updated, '+r.documents+' docs');
-    await load();
-  }catch(e){ toast('Sync failed: '+e.message,true); }
-  finally{ btn.disabled=false; btn.textContent=old; }
-});
+    /**
+     * One-time migration aid: fill every person's list with exactly what their
+     * roles give them today, so switching everyone across changes nobody's
+     * access. Staged in the draft only — nothing is written until Save.
+     */
+    function seedFromRoles() {
+      if (!confirm("Fill every person's dashboard list from the access their roles give them today?\n\nThis only stages the lists — nothing is saved until you press Save access.")) return;
+      const draft = {};
+      for (const p of peopleForAccess()) {
+        draft[p.email] = p.roles.includes("admin")
+          ? STATE.dashboards.map(d => d.slug)
+          : STATE.dashboards
+              .filter(d => (d.allowedRoles || []).some(r => p.roles.includes(r)))
+              .map(d => d.slug);
+      }
+      STATE.draftGrants = draft;
+      renderAccess();
+      markDirty();
+      toast("Seeded from roles — review, then Save access", "success");
+    }
 
-// ---- Reset for all ------------------------------------------------------
-function openResetAll(){
-  var forms = onboardingItems.filter(function(x){ return x.kind!=='document'; });
-  var docs  = onboardingItems.filter(function(x){ return x.kind==='document'; });
-  function grp(title,list){
-    if(!list.length) return '';
-    return '<div class="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mt-1 mb-1">'+esc(title)+'</div>'+
-      list.map(function(x){
-        return '<label class="flex items-center gap-2 py-0.5 text-sm cursor-pointer">'+
-          '<input type="checkbox" class="ra-chk" value="'+esc(x.item)+'"> '+
-          '<span class="text-gray-700">'+esc(x.label)+'</span></label>';
-      }).join('');
-  }
-  $('resetall-items').innerHTML = grp('Forms & policies',forms)+grp('Documents',docs);
-  $('resetall-err').textContent='';
-  $('resetall-wrap').classList.remove('hidden');
-}
-$('resetall-btn').addEventListener('click', openResetAll);
-$('resetall-bg').addEventListener('click', function(){ $('resetall-wrap').classList.add('hidden'); });
-$('resetall-cancel').addEventListener('click', function(){ $('resetall-wrap').classList.add('hidden'); });
-$('resetall-go').addEventListener('click', async function(){
-  var items = Array.prototype.map.call(document.querySelectorAll('.ra-chk:checked'), function(c){ return c.value; });
-  if(!items.length){ $('resetall-err').textContent='Pick at least one item to reset.'; return; }
-  var labels = items.map(itemLabel).join(', ');
-  if(!confirm('Reset '+labels+' for ALL instructors?\n\nEvery instructor will see these as not provided — in the dashboard and in their portal — until they submit them again this season. This cannot be undone in bulk. No files already on record are deleted.')) return;
-  var btn=this; btn.disabled=true; var old=btn.textContent; btn.textContent='Resetting…';
-  try{
-    var r=await api('POST',{action:'reset-onboarding',scope:'all',items:items});
-    $('resetall-wrap').classList.add('hidden');
-    toast('Reset '+labels+' across '+(r.affected||0)+' record(s)');
-    await load();
-  }catch(e){ $('resetall-err').textContent=e.message; }
-  finally{ btn.disabled=false; btn.textContent=old; }
-});
+    async function saveAccess() {
+      if (!STATE.draftGrants) return;
+      setStatus("Saving…");
+      try {
+        const res = await api("PUT", "/.netlify/functions/config", { grants: STATE.draftGrants });
+        if (!res.ok) throw new Error((await safeJson(res)).error || res.statusText);
+        await ensureBaselineRoles();
+        toast("Access saved", "success");
+        setStatus("Saved · " + new Date().toLocaleTimeString());
+        await loadDashboards();
+        STATE.draftGrants = cloneGrants(STATE.grants);
+        renderAccess();
+        renderUsers();
+      } catch (err) {
+        toast("Save failed: " + err.message, "error");
+        setStatus("Error: " + err.message);
+      }
+    }
 
-// ---- Filter wiring ------------------------------------------------------
-['f-q','f-location','f-weeks'].forEach(function(id){ $(id).addEventListener('input', apply); });
-['f-status','f-gender','f-nat','f-program','f-qual','f-lang','f-region'].forEach(function(id){ $(id).addEventListener('change', apply); });
-['f-returning','f-missing'].forEach(function(id){ $(id).addEventListener('change', apply); });
-function syncAppliedInputs(){
-  var custom=$('f-applied').value==='custom';
-  show('fw-applied-from',custom); show('fw-applied-to',custom);
-}
-$('f-applied').addEventListener('change', function(){ syncAppliedInputs(); apply(); });
-['f-applied-from','f-applied-to'].forEach(function(id){ $(id).addEventListener('change', apply); });
-$('f-clear').addEventListener('click', function(){
-  ['f-q','f-location','f-weeks','f-applied-from','f-applied-to'].forEach(function(id){$(id).value='';});
-  ['f-status','f-gender','f-nat','f-program','f-qual','f-lang','f-region','f-applied'].forEach(function(id){$(id).value='';});
-  $('f-returning').checked=false; $('f-missing').checked=false; syncAppliedInputs(); apply();
-});
+    /**
+     * Someone whose access is entirely per-dashboard can legitimately hold no
+     * role at all — but the coarse `Role=` backstop in _redirects can only
+     * match on roles, so they'd be bounced before the edge gate ever ran. Give
+     * anyone in that position the `member` role. Idempotent, and it never
+     * touches a person who already has a role (which keeps the deliberate
+     * contractor carve-out in _redirects intact).
+     */
+    async function ensureBaselineRoles() {
+      const needing = STATE.users.filter(u => {
+        const email = (u.email || "").toLowerCase();
+        const list = STATE.draftGrants[email];
+        return u.id && Array.isArray(list) && list.length && !(u.roles || []).length;
+      });
+      for (const u of needing) {
+        try {
+          const res = await api("PATCH", `/.netlify/functions/users/${encodeURIComponent(u.id)}`, { roles: [BASELINE_ROLE] });
+          if (res.ok) u.roles = [BASELINE_ROLE];
+          else console.warn("baseline role not applied for", u.email, res.status);
+        } catch (err) {
+          console.warn("baseline role failed for", u.email, err);
+        }
+      }
+    }
 
-// ---- Sorting ------------------------------------------------------------
-$('thead-row').addEventListener('click', function(e){
-  var th=e.target.closest('th.sortable'); if(!th) return;
-  var key=th.dataset.sort, dir;
-  if(sortState.key===key) dir = sortState.dir==='asc'?'desc':'asc';
-  else dir = DESC_FIRST[key]?'desc':'asc';
-  setSort(key,dir);
-});
-$('sort-sel').addEventListener('change', function(){
-  var p=this.value.split(':'); setSort(p[0]||null, p[1]);
-});
-(function restoreSort(){
-  var v=''; try{ v=localStorage.getItem('instructors.sort')||''; }catch(e){}
-  if(v){ var p=v.split(':'); sortState={key:p[0],dir:p[1]||'asc'}; }
-  // Paint header arrows / dropdown without re-filtering before data loads.
-  var sel=$('sort-sel'); if(v) sel.value=v;
-  Array.prototype.forEach.call(document.querySelectorAll('th.sortable'), function(th){
-    var on=th.dataset.sort===sortState.key; th.classList.toggle('active',on);
-    th.querySelector('.arr').textContent = on ? (sortState.dir==='desc'?'▼':'▲') : '';
-  });
-})();
+    // --- User management ---
+    async function loadUsers() {
+      $("usersContent").innerHTML = `<div class="loading">Loading users…</div>`;
+      try {
+        const res = await api("GET", "/.netlify/functions/users");
+        if (!res.ok) throw await httpError(res);
+        const data = await res.json();
+        STATE.users = data.users || [];
+        renderUsers();
+      } catch (err) {
+        console.error("loadUsers failed:", err);
+        $("usersContent").innerHTML = `<div class="empty">Couldn't load users: ${esc(err.message)}</div>`;
+      }
+    }
 
-load();
-</script>
+    async function httpError(res) {
+      const body = await safeJson(res);
+      const text = body.error || body.msg || body.error_description || body.message || "";
+      const status = `HTTP ${res.status}${res.statusText ? " " + res.statusText : ""}`;
+      const detail = text || JSON.stringify(body).slice(0, 200);
+      return new Error(detail ? `${status} — ${detail}` : status);
+    }
+
+    function renderUsers() {
+      if (!STATE.users.length) {
+        $("usersContent").innerHTML = `<div class="empty">No users yet — invite someone using the form above.</div>`;
+        return;
+      }
+      const rows = STATE.users.map(u => `
+        <tr data-id="${esc(u.id)}">
+          <td>
+            <div style="font-weight:600">${esc(u.full_name || u.email.split("@")[0])}</div>
+            <div class="slug">${esc(u.email)}${u.invited ? ' <em style="color:var(--accent-2)">· invited, pending</em>' : ""}</div>
+          </td>
+          <td>
+            <div class="role-editor">
+              ${ALL_ROLES.map(r => `
+                <label class="${u.roles.includes(r) ? "checked" : ""}">
+                  <input type="checkbox" data-role="${r}" ${u.roles.includes(r) ? "checked" : ""} />${r}
+                </label>`).join("")}
+            </div>
+          </td>
+          <td style="text-align:right">
+            <button class="btn btn-danger btn-sm" data-action="delete">Remove</button>
+          </td>
+        </tr>`).join("");
+      $("usersContent").innerHTML = `
+        <table class="perm-table">
+          <thead><tr><th>User</th><th>Roles</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+
+      $("usersContent").querySelectorAll("tr[data-id]").forEach(tr => {
+        const id = tr.dataset.id;
+        tr.querySelectorAll("input[type=checkbox]").forEach(cb => {
+          cb.addEventListener("change", () => {
+            const label = cb.closest("label");
+            label.classList.toggle("checked", cb.checked);
+            saveUserRoles(id, tr);
+          });
+        });
+        tr.querySelector("button[data-action=delete]").addEventListener("click", () => deleteUser(id, tr));
+      });
+    }
+
+    async function saveUserRoles(id, tr) {
+      const roles = [...tr.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.dataset.role);
+      setStatus("Saving…");
+      try {
+        const res = await api("PATCH", `/.netlify/functions/users/${encodeURIComponent(id)}`, { roles });
+        if (!res.ok) throw await httpError(res);
+        const u = STATE.users.find(x => x.id === id);
+        if (u) u.roles = roles;
+        // Making someone an admin (or taking it away) changes what the access
+        // tab should show for them, so keep it in step.
+        renderAccess();
+        toast("Roles updated", "success");
+        setStatus("Saved · " + new Date().toLocaleTimeString());
+      } catch (err) {
+        console.error("saveUserRoles failed:", err);
+        toast("Save failed: " + err.message, "error");
+      }
+    }
+
+    async function deleteUser(id, tr) {
+      const u = STATE.users.find(x => x.id === id);
+      if (!confirm(`Remove ${u?.email || "this user"}? They'll lose all access immediately.`)) return;
+      try {
+        const res = await api("DELETE", `/.netlify/functions/users/${encodeURIComponent(id)}`);
+        if (!res.ok) throw await httpError(res);
+        STATE.users = STATE.users.filter(x => x.id !== id);
+        tr.remove();
+        toast("User removed", "success");
+      } catch (err) {
+        console.error("deleteUser failed:", err);
+        toast("Remove failed: " + err.message, "error");
+      }
+    }
+
+    async function inviteUser() {
+      const email = $("inviteEmail").value.trim();
+      if (!email) return;
+      $("inviteBtn").disabled = true;
+      try {
+        const res = await api("POST", "/.netlify/functions/users", { email });
+        if (!res.ok) throw await httpError(res);
+        toast(`Invite sent to ${email}`, "success");
+        $("inviteEmail").value = "";
+        loadUsers();
+      } catch (err) {
+        console.error("inviteUser failed:", err);
+        toast("Invite failed: " + err.message, "error");
+      } finally {
+        $("inviteBtn").disabled = false;
+      }
+    }
+
+    // --- API helpers ---
+    async function api(method, url, body) {
+      const headers = { "Content-Type": "application/json" };
+      if (STATE.user) {
+        try { headers.Authorization = `Bearer ${await STATE.user.jwt()}`; } catch {}
+      }
+      return fetch(url, {
+        method, headers, credentials: "include",
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    }
+    async function safeJson(r) { try { return await r.json(); } catch { return {}; } }
+
+    function setStatus(s) { $("modalStatus").textContent = s; }
+    function toast(msg, kind) {
+      const t = $("toast");
+      t.className = `toast show ${kind || ""}`;
+      t.textContent = msg;
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => t.classList.remove("show"), 2500);
+    }
+
+    function $(id) { return document.getElementById(id); }
+    function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+    function hash(str) { let h = 0; for (const c of str) h = (h << 5) - h + c.charCodeAt(0) | 0; return h; }
+  </script>
 </body>
 </html>
