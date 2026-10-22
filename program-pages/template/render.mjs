@@ -64,7 +64,9 @@ export function money(n, currency = 'USD') {
   const v = Number(n);
   if (!Number.isFinite(v) || v <= 0) return '';
   const s = v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-  return currency === 'USD' ? `$${s}` : `${currency} ${s}`;
+  // Always name the currency (USD, NZD and AUD all use "$"), e.g. "$15,000 USD".
+  const code = /^[A-Z]{3}$/.test(String(currency)) ? currency : 'USD';
+  return `$${s} ${code}`;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1162,6 +1164,12 @@ const ICONS = {
 };
 export const LANDING_ICONS = Object.keys(ICONS);
 const icon = (name) => `<svg class="pdl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name] || ICONS.Globe}</svg>`;
+// Wires the week section's arrow buttons. No values from the page JSON go in here.
+const WEEK_JS = "(function(){var me=document.currentScript,sec=me&&me.closest('.pdl-sec--week');if(!sec)return;var sc=sec.querySelector('.pdl-week'),box=sec.querySelector('.pdl-week__btns');if(!sc||!box)return;var b=box.querySelectorAll('.pdl-week__btn');box.hidden=false;" +
+  "function card(){var it=sc.querySelector('.pdl-week__item');return it?it.getBoundingClientRect().width+28:300}" +
+  "function upd(){b[0].disabled=sc.scrollLeft<=4;b[1].disabled=sc.scrollLeft+sc.clientWidth>=sc.scrollWidth-4}" +
+  "for(var i=0;i<b.length;i++){b[i].addEventListener('click',function(){var w=card(),n=Math.max(1,Math.floor(sc.clientWidth/w)-1);sc.scrollBy({left:w*n*Number(this.getAttribute('data-dir')),behavior:'smooth'})})}" +
+  "sc.addEventListener('scroll',upd,{passive:true});window.addEventListener('resize',upd);upd()})();";
 const TICK = '<svg class="pdl-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12l5 5L20 7"/></svg>';
 
 const heading = (key) => [
@@ -1197,9 +1205,6 @@ export const LANDING_SCHEMA = {
       { k: 'hero.imageAlt', label: 'Background photo description', type: 'text' },
       { k: 'hero.imageFocus', label: 'Photo focus on computers', type: 'focus', image: 'hero.image', help: 'Click the part of the photo that should stay in view.' },
       { k: 'hero.imageFocusMobile', label: 'Photo focus on phones', type: 'focus', image: 'hero.image', mobile: true, help: 'Phones show a narrow slice. Click the part that must stay in view.' },
-      { k: 'hero.stampNumber', label: 'Stamp: big number', type: 'text', help: 'e.g. 25+. Leave empty to hide the stamp.' },
-      { k: 'hero.stampLabel', label: 'Stamp: word under the number', type: 'text' },
-      { k: 'hero.stampRing', label: 'Stamp: text around the edge', type: 'text', help: 'About 35 characters fits. End with " ·" so it joins up.' },
     ],
   },
   sections: {
@@ -1270,7 +1275,7 @@ export function blankLanding(name = 'New landing page') {
       applyUrl: 'https://www.pacificdiscovery.org/apply',
     },
     layout: LANDING_SECTIONS.map((s) => ({ key: s.key, show: true })),
-    hero: { eyebrow: '', headline: name, headlineAccent: '', intro: '[One or two sentences]', primaryText: 'Take the 3-minute quiz', secondaryText: 'Request a program booklet', image: '', imageAlt: '', imageFocus: '', imageFocusMobile: '', stampNumber: '25+', stampLabel: 'YEARS', stampRing: 'SINCE 2001 · 25+ YEARS OF GAP YEARS ·' },
+    hero: { eyebrow: '', headline: name, headlineAccent: '', intro: '[One or two sentences]', primaryText: 'Take the 3-minute quiz', secondaryText: 'Request a program booklet', image: '', imageAlt: '', imageFocus: '', imageFocusMobile: '', stampNumber: '', stampLabel: 'YEARS', stampRing: 'SINCE 2001 · 25+ YEARS OF GAP YEARS ·' },
     stats: { items: [] },
     reasons: { eyebrow: '', heading: 'Why families choose us', headingAccent: '', items: [] },
     compare: { eyebrow: '', heading: 'How we compare', headingAccent: '', usTag: 'Our way', usLabel: 'Pacific Discovery', col1: '', col2: '', col3: '', note: '', rows: [] },
@@ -1345,7 +1350,13 @@ const L = {
   week(p, c) {
     const hint = c.t('week.hint', 'span', '');
     return `<div class="pdl-wrap"><div class="pdl-head-row">${lHead(c, 'week')}` +
+      `<div class="pdl-week__nav">` +
       (hint ? `<p class="pdl-swipe">${hint}<svg viewBox="0 0 28 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1 6h25M21 1l5 5-5 5"/></svg></p>` : '') +
+      // Arrow buttons for mouse users. Hidden until the script below wires them up (live page only).
+      `<div class="pdl-week__btns"${c.ed ? '' : ' hidden'}>` +
+      `<button type="button" class="pdl-week__btn" data-dir="-1" aria-label="Previous days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></button>` +
+      `<button type="button" class="pdl-week__btn" data-dir="1" aria-label="Next days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7"/></svg></button>` +
+      `</div></div>` +
       `</div></div>` +
       `<div class="pdl-week" tabindex="0" aria-label="${attr(`${p.week.heading || 'A week in the life'} ${p.week.headingAccent || ''}`.trim())}, scrollable">` +
       c.list('week.days', 'ol', 'pdl-week__track', (it, ip, i) =>
@@ -1355,7 +1366,7 @@ const L = {
         `<figure class="pdl-week__fig">${c.img(`${ip}.image`, `${ip}.imageAlt`, 'pdl-week__img', 'Add a photo')}` +
         `<figcaption>${c.t(`${ip}.day`, 'span', 'pdl-week__day')}${c.t(`${ip}.title`, 'span', 'pdl-week__title')}</figcaption></figure>`,
         'li', 'pdl-week__item') +
-      `</div>`;
+      `</div>` + (c.ed ? '' : `<script>${WEEK_JS}</script>`);
   },
   voices(p, c) {
     const v = p.voices;
@@ -1417,14 +1428,7 @@ function renderLandingHero(p, c, nextBg) {
   const h = p.hero;
   const fd = parseFocus(h.imageFocus), fm = parseFocus(h.imageFocusMobile);
   const focus = fd || fm ? ` style="${fd ? `--pdl-pos:${fd};` : ''}${fm ? `--pdl-pos-m:${fm};` : ''}"` : '';
-  const stamp = h.stampNumber || c.ed
-    ? `<div class="pdl-stamp"${c.ed ? ' data-v="hero.stampNumber"' : ''}><svg viewBox="0 0 200 200" role="img" aria-label="${attr([h.stampNumber, h.stampLabel].filter(Boolean).join(' '))}" focusable="false">` +
-      `<defs><path id="pdl-ring" d="M100,100 m-72,0 a72,72 0 1,1 144,0 a72,72 0 1,1 -144,0"/></defs>` +
-      `<circle cx="100" cy="100" r="96" fill="#81c243"/><circle cx="100" cy="100" r="88" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="3 5"/>` +
-      `<text fill="#fff" font-family="Poppins, sans-serif" font-size="15" font-weight="600" letter-spacing="3"><textPath href="#pdl-ring">${esc(h.stampRing)}</textPath></text>` +
-      `<text x="100" y="96" text-anchor="middle" fill="#fff" font-family="'DM Serif Display', Georgia, serif" font-size="40">${esc(h.stampNumber || '25+')}</text>` +
-      `<text x="100" y="120" text-anchor="middle" fill="#fff" font-family="Poppins, sans-serif" font-size="13" font-weight="600" letter-spacing="2">${esc(h.stampLabel)}</text></svg></div>`
-    : '';
+  // The green stamp was removed from the design; old stamp fields in stored pages are ignored.
   const eb = c.t('hero.eyebrow', 'span', '');
   return `<header class="pdl-hero pdl-dark" data-group="hero">` +
     (h.image || c.ed ? `<div class="pdl-bg pdl-bg--hero"${focus}>${c.img('hero.image', 'hero.imageAlt', 'pdl-bg__img', 'Add a background photo')}</div>` : '') +
@@ -1433,7 +1437,7 @@ function renderLandingHero(p, c, nextBg) {
     `<h1 class="pdl-h1">${c.t('hero.headline', 'span', '', { multiline: true, keep: true })} ${h.headlineAccent || c.ed ? `<span class="pdl-under">${c.t('hero.headlineAccent', 'em', '')}<svg viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 14 C 60 4, 120 4, 170 10 S 260 16, 296 6" fill="none" stroke="#81c243" stroke-width="5" stroke-linecap="round"/></svg></span>` : ''}</h1>` +
     `${c.t('hero.intro', 'p', 'pdl-hero__intro', { multiline: true })}` +
     `<div class="pdl-btns">${c.link('hero.primaryText', p.settings.quizUrl, 'pdl-btn pdl-btn--shadow', 'settings.quizUrl')}${c.link('hero.secondaryText', p.settings.bookletUrl, 'pdl-btn pdl-btn--light', 'settings.bookletUrl')}</div>` +
-    `</div>${stamp ? `<div class="pdl-hero__art">${stamp}</div>` : ''}</div>` +
+    `</div></div>` +
     wave(nextBg, 'M0,60 C220,10 420,90 720,50 C1000,12 1220,80 1440,40 L1440,90 L0,90 Z').replace('viewBox="0 0 1440 60"', 'viewBox="0 0 1440 90"').replace('class="pdl-wave"', 'class="pdl-wave pdl-wave--bottom"') +
     `</header>`;
 }
@@ -1506,18 +1510,18 @@ export const LANDING_CSS = `
 .pdl-wave--bottom{top:auto;bottom:-1px;height:90px}
 .pdl-small{font-size:14px;color:var(--pdl-muted);margin-top:16px}
 /* headings */
-.pdl .pdl-h1{font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:#fff;font-size:clamp(44px,6vw,82px);line-height:1.02}
-.pdl .pdl-h2{font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:var(--pdl-body);font-size:clamp(34px,4.4vw,54px);line-height:1.08}
+.pdl .pdl-h1{text-transform:none;font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:#fff;font-size:clamp(44px,6vw,82px);line-height:1.02}
+.pdl .pdl-h2{text-transform:none;font-family:'DM Serif Display',Georgia,serif;font-weight:400;color:var(--pdl-body);font-size:clamp(34px,4.4vw,54px);line-height:1.08}
 .pdl .pdl-h2--xl{font-size:clamp(40px,5.4vw,68px);line-height:1.04;color:#fff}
-.pdl .pdl-h3{color:var(--pdl-body);font-size:21px;font-weight:600;line-height:1.3}
+.pdl .pdl-h3{text-transform:none;color:var(--pdl-body);font-size:21px;font-weight:600;line-height:1.3}
 .pdl em{font-style:italic}
 .pdl .pdl-accent{color:var(--pdl-topaz-dk)}
 .pdl-head{max-width:700px;display:flex;flex-direction:column;gap:14px;margin-bottom:48px}
 .pdl-head-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:20px 24px;margin-bottom:40px}
 .pdl-head-row .pdl-head{margin-bottom:0}
-.pdl .pdl-eyebrow{display:inline-flex;align-items:center;gap:12px;color:var(--pdl-topaz-dk);font-weight:600;letter-spacing:.16em;font-size:14px;text-transform:uppercase}
-.pdl .pdl-eyebrow span{letter-spacing:.16em;text-transform:uppercase}
-.pdl-eyebrow__line{width:36px;height:2px;background:var(--pdl-topaz);flex:none}
+.pdl .pdl-eyebrow{display:inline-flex;align-items:center;gap:14px;color:var(--pdl-topaz-dk);font-weight:600;letter-spacing:.14em;font-size:clamp(17px,1.6vw,22px);text-transform:uppercase}
+.pdl .pdl-eyebrow span{letter-spacing:.14em;text-transform:uppercase}
+.pdl-eyebrow__line{width:52px;height:3px;background:var(--pdl-topaz);flex:none}
 .pdl .pdl-eyebrow--topaz{color:var(--pdl-topaz)}
 .pdl .pdl-eyebrow--center{justify-content:center;color:var(--pdl-topaz)}
 .pdl .pdl-head--inv .pdl-h2{color:#fff}
@@ -1586,6 +1590,16 @@ export const LANDING_CSS = `
 .pdl-tick{width:20px;height:20px;flex:none;margin-top:3px;color:var(--pdl-green)}
 /* week */
 .pdl-sec--week{background-color:#fbfaf7;background-image:${GRAIN_DARK};padding-bottom:0}
+.pdl-week__nav{display:flex;align-items:center;gap:20px}
+.pdl-week__btns{display:flex;gap:10px}
+.pdl-week__btns[hidden]{display:none}
+.pdl .pdl-week__btn{width:52px;height:52px;border-radius:50%;border:2px solid var(--pdl-topaz);background:#fff;color:var(--pdl-topaz-dk);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s,color .15s,opacity .15s;box-shadow:0 6px 16px rgba(33,33,33,.08)}
+.pdl .pdl-week__btn svg{width:22px;height:22px}
+.pdl .pdl-week__btn:hover:not(:disabled){background:var(--pdl-topaz);color:#fff}
+.pdl .pdl-week__btn:focus-visible{outline:3px solid var(--pdl-topaz-dk);outline-offset:3px}
+.pdl .pdl-week__btn:disabled{opacity:.35;cursor:default;box-shadow:none}
+@media (hover:hover) and (min-width:701px){.pdl-week__btns:not([hidden])~.pdl-swipe,.pdl-week__nav:has(.pdl-week__btns:not([hidden])) .pdl-swipe{display:none}}
+@media (hover:none),(max-width:700px){.pdl-week__btns{display:none!important}}
 .pdl .pdl-swipe{display:inline-flex;align-items:center;gap:10px;color:var(--pdl-muted);font-size:14px;font-weight:500}
 .pdl-swipe svg{width:28px;height:12px;color:var(--pdl-topaz)}
 .pdl-week{overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-left:max(24px,calc((100% - 1192px) / 2));padding-bottom:112px;-webkit-overflow-scrolling:touch}

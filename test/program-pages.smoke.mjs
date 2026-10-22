@@ -165,7 +165,7 @@ await frame().locator('[data-group="facts"] [data-v="facts.tuition"]').click();
 const tuition = page.locator('#f-facts_tuition');
 await tuition.fill("16000");
 await page.waitForTimeout(400);
-ok((await frame().locator('[data-group="facts"] [data-v="facts.tuition"]').textContent()) === "$16,000", "price updates on the page");
+ok((await frame().locator('[data-group="facts"] [data-v="facts.tuition"]').textContent()) === "$16,000 USD", "price updates on the page");
 
 // Hide a section
 await page.getByRole("button", { name: "Sections" }).click();
