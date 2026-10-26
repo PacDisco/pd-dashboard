@@ -310,6 +310,84 @@ DEFAULT_EMAILS.enrolled = {
   ].join('\n'),
 };
 
+// Accepted but the deposit isn't paid yet (before the hold passes).
+DEFAULT_EMAILS.depositReminder = {
+  subject: 'Reminder: confirm your place on {program}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Just a reminder that we\'re holding your place on **{program}** ({term}) until **{holdUntil}**. To confirm it, choose how you\'d like to pay and pay your {deposit} deposit.',
+    '',
+    '[Confirm my place]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+// 3 days before an automatic instalment.
+DEFAULT_EMAILS.paymentUpcoming = {
+  subject: 'Your next payment for {program}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'This is a heads-up that your next tuition payment of **{amount}** for {program} will be charged to your {method} on **{date}**.',
+    '',
+    '{balanceLine}',
+    '',
+    'If you\'d like to use a different card or bank account, you can change it here before then:',
+    '',
+    '[Update my payment method]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+// An instalment (automatic or paid from the page) went through.
+DEFAULT_EMAILS.paymentReceived = {
+  subject: 'Payment received — {program}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Thank you — we\'ve received your payment of **{amount}** for {program} ({term}).',
+    '',
+    '{balanceLine}',
+    '',
+    '[View my payments]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+// An automatic instalment didn't go through.
+DEFAULT_EMAILS.paymentFailed = {
+  subject: 'Action needed: your payment for {program}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Your tuition payment of **{amount}** due {date} didn\'t go through ({reason}).',
+    '',
+    '{nextStep}',
+    '',
+    '[Pay or update my payment method]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+// "Deposit now, balance later": the balance they pay themselves.
+DEFAULT_EMAILS.balanceReminder = {
+  subject: 'Your tuition balance for {program} is due {date}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Your remaining tuition of **{amount}** for {program} ({term}) is due by **{date}**. You can pay by card or bank account:',
+    '',
+    '[Pay my balance]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
 /** The placeholders each message understands, for the dashboard help text. */
 const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
 export const EMAIL_PLACEHOLDERS = {
@@ -321,6 +399,11 @@ export const EMAIL_PLACEHOLDERS = {
   declined: ['firstName', 'program', 'term', 'message', 'refund'],
   accepted: ['firstName', 'program', 'term', 'startDate', 'holdUntil', 'howToPay', 'deposit', 'tuition', 'message', 'link'],
   enrolled: ['firstName', 'program', 'term', 'paidToday', 'planName', 'schedule', 'scheduleNote', 'email', 'portalUrl'],
+  depositReminder: ['firstName', 'program', 'term', 'holdUntil', 'deposit', 'link'],
+  paymentUpcoming: ['firstName', 'program', 'term', 'amount', 'method', 'date', 'balanceLine', 'link'],
+  paymentReceived: ['firstName', 'program', 'term', 'amount', 'balanceLine', 'link'],
+  paymentFailed: ['firstName', 'program', 'term', 'amount', 'date', 'reason', 'nextStep', 'link'],
+  balanceReminder: ['firstName', 'program', 'term', 'amount', 'date', 'link'],
 };
 
 /** How long an accepted applicant's place is held for the deposit (days). */

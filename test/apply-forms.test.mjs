@@ -214,5 +214,30 @@ await t('deposit paid: listed under Deposit paid with plan + schedule; extend ho
   } finally { globalThis.fetch = real; delete process.env.APPLY_SITE_URL; delete process.env.APPLY_SERVICE_KEY; }
 });
 
+await t('after the deposit: withdraw / retry / pause go to pd-apply (admissions only); a plain withdraw stays local', async () => {
+  const [r] = (await pool.query(`INSERT INTO applications (token_hash, email, first_name, last_name, program, term, status, step1_at, step2_at, paid_at, decision, enrolment)
+    VALUES ('wd1','wd@x.org','Wen','Dee','South America Gap Semester','Fall 2027','paid', now(), now(), now(), '{"outcome":"accepted"}', '{"deposit":{"status":"paid"},"schedule":[]}') RETURNING id`)).rows;
+  const admissions = { email: 'meg@pd.org', name: 'Megan', roles: ['admissions'] };
+  assert.equal((await call(editor, { action: 'withdraw', id: r.id, withdrawn: true })).status, 403, 'needs admissions once a deposit is paid');
+  assert.equal((await call(editor, { action: 'payment-retry', id: r.id, item: 1 })).status, 403);
+  process.env.APPLY_SITE_URL = 'https://apply.test'; process.env.APPLY_SERVICE_KEY = 'svc';
+  const real = globalThis.fetch; const sent = [];
+  globalThis.fetch = async (u, init) => {
+    const body = JSON.parse(init.body); sent.push({ url: String(u), body });
+    if (String(u).endsWith('/withdraw')) await pool.query(`UPDATE applications SET status = 'withdrawn' WHERE id = $1`, [r.id]);
+    return new Response(JSON.stringify({ ok: true, kept: 2500, cancelled: 3 }), { status: 200 });
+  };
+  try {
+    const w = await call(admissions, { action: 'withdraw', id: r.id, withdrawn: true, reason: 'Gap year job' });
+    assert.equal(w.status, 200, JSON.stringify(w.body));
+    assert.deepEqual(sent[0], { url: 'https://apply.test/api/service/withdraw', body: { id: r.id, reason: 'Gap year job', by: 'Megan' } });
+    assert.equal(w.body.application.status, 'withdrawn'); assert.equal(w.body.withdraw.kept, 2500);
+    await call(admissions, { action: 'payment-retry', id: r.id, item: 2 });
+    assert.deepEqual(sent[1], { url: 'https://apply.test/api/service/payment-retry', body: { id: r.id, item: 2, by: 'Megan' } });
+    await call(admissions, { action: 'payments-pause', id: r.id, paused: true });
+    assert.deepEqual(sent[2].body, { id: r.id, paused: true, by: 'Megan' });
+  } finally { globalThis.fetch = real; delete process.env.APPLY_SITE_URL; delete process.env.APPLY_SERVICE_KEY; }
+});
+
 await pool.end();
 console.log(`\n${n} passed`);

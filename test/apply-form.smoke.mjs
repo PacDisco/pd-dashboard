@@ -167,19 +167,24 @@ try {
     [JSON.stringify({ outcome: 'accepted', at: new Date().toISOString(), by: 'Megan', holdUntil: new Date(Date.now() + 5 * 864e5).toISOString(), email: { to: ['dep@x.org', 'mum@x.org'] } }),
       JSON.stringify({ offer: { tuition: 15500, start: '2027-09-09' }, choice: { plan: 'monthly', method: 'card', termsVersion: 1 },
         deposit: { total: 2328.75, status: 'paid', method: 'card', reference: 'pi_dep', paidAt: new Date().toISOString() },
-        schedule: [{ due: '2026-10-27', amount: 2250, kind: 'deposit', status: 'paid' }, { due: '2026-11-27', amount: 1625, kind: 'instalment', status: 'scheduled' }, { due: '2026-12-27', amount: 1625, kind: 'instalment', status: 'scheduled' }],
+        schedule: [{ due: '2026-10-27', amount: 2250, kind: 'deposit', status: 'paid' }, { due: '2026-11-27', amount: 1625, kind: 'instalment', status: 'scheduled' }, { due: '2026-12-27', amount: 1625, kind: 'instalment', status: 'needs_admissions', attempts: 3, lastError: { reason: 'insufficient_funds' } }],
         emails: { enrolled: { to: ['dep@x.org', 'mum@x.org'] } } })]);
   await page.click('[data-tab=settings]');
   await page.waitForSelector('#ac-hold');
   assert.equal(await page.locator('[data-email=accepted]').count(), 1);
   assert.equal(await page.locator('[data-email=enrolled]').count(), 1);
+  assert.ok(await page.isChecked('#pay-auto'));
+  assert.equal(await page.locator('[data-email=paymentFailed]').count(), 1);
   await page.click('[data-tab=apps]');
-  await page.waitForSelector('text=Deposit paid · Monthly');
+  await page.waitForSelector('text=Payment failed — contact family');
   await page.click('.apps tr[data-id]:has-text("Sam Lee")');
   await page.waitForSelector('dl.ans');
   const dtext = await page.locator('.dlg-body').textContent();
   assert.match(dtext, /Deposit paid — \$2,328\.75 by card/);
   assert.match(dtext, /2026-11-27\s*\$1,625\s*automatic/);
+  assert.match(dtext, /failed ×3 — contact the family/);
+  assert.equal(await page.locator('[data-retry="2"]').count(), 1);
+  assert.equal(await page.locator('#pay-pause').count(), 1);
   assert.equal(await page.locator('#dec-extend').count(), 0, 'no hold to extend once paid');
   assert.equal(await page.locator('#dec-decline').count(), 0, 'no decline once the deposit is in');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-9-deposit.png` });

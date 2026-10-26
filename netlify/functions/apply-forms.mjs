@@ -196,7 +196,9 @@ export default async (req, context, deps = {}) => {
       case "hubspot-form-create": return await hubspotFormCreate(body);
       case "jotform-add": return await jotformAdd(body);
       case "resync": return await resync(body);
-      case "withdraw": return await withdraw(body);
+      case "withdraw": return await withdraw(body, user);
+      case "payment-retry": return await applyService("payment-retry", { id: body.id, item: body.item }, user);
+      case "payments-pause": return await applyService("payments-pause", { id: body.id, paused: !!body.paused }, user);
       case "reminders": return await setReminders(body, user);
       case "decide": return await decideApplication(body, user);
       case "extend-hold": return await extendHold(body, user);
@@ -384,6 +386,9 @@ export function enrolmentSummary(e) {
     started: !e.deposit && e.pending ? { plan: e.pending.plan, method: e.pending.method, at: e.pending.at } : null,
     emails: e.emails || {},
     hubspot: e.hubspot || null,
+    paused: e.paused || null,
+    withdrawn: e.withdrawn || null,
+    holdExpired: e.holdExpired || null,
   };
 }
 
@@ -444,6 +449,21 @@ async function decideApplication({ id, outcome, message, refund }, user) {
   return json({ ok: true, decision: data.decision });
 }
 
+/** Proxy an admissions action to pd-apply's service API (it holds Stripe + HubSpot). */
+async function applyService(route, payload, user) {
+  if (!canDecide(user)) return json({ error: "This needs the admin or admissions role." }, 403);
+  const site = applySite();
+  if (!site || !process.env.APPLY_SERVICE_KEY) return json({ error: "Set APPLY_SITE_URL and APPLY_SERVICE_KEY on the dashboard site." }, 500);
+  const r = await fetch(`${site}/api/service/${route}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-apply-key": process.env.APPLY_SERVICE_KEY },
+    body: JSON.stringify({ ...payload, by: user.actor || user.name || user.email }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return json({ error: data.error || `pd-apply returned ${r.status}` }, r.status === 409 ? 409 : 502);
+  return json({ ok: true, ...data });
+}
+
 async function extendHold({ id, days }, user) {
   if (!canDecide(user)) return json({ error: "Extending a hold needs the admin or admissions role." }, 403);
   const site = applySite();
@@ -458,7 +478,18 @@ async function extendHold({ id, days }, user) {
   return json({ ok: true, decision: data.decision });
 }
 
-async function withdraw({ id, withdrawn }) {
+async function withdraw({ id, withdrawn, reason }, user) {
+  // After the deposit, withdrawing cancels the payment plan and the deal in
+  // HubSpot — that's done by pd-apply.
+  if (withdrawn) {
+    const [row] = await db().query(`SELECT to_jsonb(applications)->'enrolment'->'deposit'->>'status' AS dep FROM applications WHERE id = $1`, [id]);
+    if (["paid", "processing"].includes(row?.dep)) {
+      const out = await applyService("withdraw", { id, reason }, user);
+      if (out.status !== 200) return out;
+      const rows = await db().query(`SELECT ${LIST_COLS} FROM applications WHERE id = $1`, [id]);
+      return json({ application: summary(rows[0]), withdraw: (await out.json()) });
+    }
+  }
   const rows = await db().query(
     `UPDATE applications SET status = CASE WHEN $2 THEN 'withdrawn'
         WHEN paid_at IS NOT NULL THEN 'paid' WHEN interview_at IS NOT NULL THEN 'interview' WHEN step2_at IS NOT NULL THEN 'step2' ELSE 'step1' END,
