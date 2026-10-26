@@ -944,7 +944,7 @@ function decisionBlock(app) {
     if (dep?.status === 'paid' || dep?.status === 'processing') {
       lines.push(`<li>${dep.status === 'paid' ? '💳' : '⏳'} <strong>${dep.status === 'paid' ? 'Deposit paid' : 'Bank payment clearing'}</strong> — ${money(dep.total)} by ${dep.method === 'ach' ? 'bank account' : 'card'} on ${new Date(dep.paidAt).toLocaleDateString()} <span class="em">(${esc(dep.reference || '')})</span>. Plan: <strong>${esc(PLAN_LABEL[e.plan] || e.plan || '')}</strong>${e.termsVersion ? ` · terms v${esc(e.termsVersion)}` : ''}</li>`);
       const rest = (e.schedule || []).slice(1);
-      if (rest.length) lines.push(`<li><table class="grid" style="margin:4px 0;font-size:13px"><tbody>${rest.map((p, k) => `<tr><td>${esc(p.due)}</td><td style="text-align:right">${money(p.amount)}</td><td>${payStatus(p)}</td><td>${p.status === 'needs_admissions' && can ? `<button class="btn btn--sm" data-retry="${k + 1}">Retry</button>` : ''}</td></tr>`).join('')}</tbody></table></li>`);
+      if (rest.length) lines.push(`<li><table class="grid" style="margin:4px 0;font-size:13px"><tbody>${rest.map((p, k) => `<tr><td>${esc(p.due)}</td><td style="text-align:right">${money(p.amount)}</td><td>${payStatus(p)}</td><td style="white-space:nowrap">${p.status === 'needs_admissions' && can ? `<button class="btn btn--sm" data-retry="${k + 1}">Retry</button> ` : ''}${['scheduled', 'failed', 'needs_admissions', 'due'].includes(p.status) && can && !e.withdrawn ? `<button class="btn btn--sm" data-markpaid="${k + 1}" title="Paid another way (e.g. bank transfer) — it won't be charged">Mark paid</button>` : ''}</td></tr>`).join('')}</tbody></table></li>`);
       if (e.paused) lines.push(`<li>⏸️ Automatic payments paused ${new Date(e.paused.at).toLocaleDateString()} by ${esc(e.paused.by || '')}</li>`);
       if (e.withdrawn) lines.push(`<li>🚫 <strong>Withdrew</strong> ${new Date(e.withdrawn.at).toLocaleDateString()} (${esc(e.withdrawn.by || '')})${e.withdrawn.reason ? ` — ${esc(e.withdrawn.reason)}` : ''}. Kept ${money(e.withdrawn.kept)}; upcoming payments cancelled.</li>`);
       if (e.emails?.enrolled?.to) lines.push(`<li>✉️ Confirmation emailed ${esc(e.emails.enrolled.to.join(', '))}${e.emails.enrolled.hubspot?.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(e.emails.enrolled.hubspot.error)}</span>` : ''}</li>`);
@@ -1100,6 +1100,13 @@ async function showApplication(id) {
     try { await api('POST', {}, { action: 'payments-pause', id, paused }); toast(paused ? 'Automatic payments paused for this family.' : 'Automatic payments resumed.'); showApplication(id); renderApps(); }
     catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
   });
+  d.querySelectorAll('[data-markpaid]').forEach((b) => b.addEventListener('click', async () => {
+    const reference = prompt('Mark this payment as paid outside Stripe (e.g. a bank transfer)? It won\'t be charged automatically.\n\nReference (e.g. Wise transfer ID):', '');
+    if (reference == null) return;
+    b.disabled = true;
+    try { await api('POST', {}, { action: 'payment-mark-paid', id, item: Number(b.dataset.markpaid), reference }); toast('Marked paid.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); b.disabled = false; }
+  }));
   d.querySelectorAll('[data-retry]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
     try { await api('POST', {}, { action: 'payment-retry', id, item: Number(b.dataset.retry) }); toast('It will be tried again within the hour.'); showApplication(id); renderApps(); }

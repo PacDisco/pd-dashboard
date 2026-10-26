@@ -185,6 +185,7 @@ try {
   assert.match(dtext, /failed ×3 — contact the family/);
   assert.equal(await page.locator('[data-retry="2"]').count(), 1);
   assert.equal(await page.locator('#pay-pause').count(), 1);
+  assert.equal(await page.locator('[data-markpaid]').count(), 2);
   assert.equal(await page.locator('#dec-extend').count(), 0, 'no hold to extend once paid');
   assert.equal(await page.locator('#dec-decline').count(), 0, 'no decline once the deposit is in');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-9-deposit.png` });
