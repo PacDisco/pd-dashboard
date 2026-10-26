@@ -61,7 +61,7 @@ For applicants who finished the full application but haven't paid. pd-apply chec
 
 Open an applicant in **Applications**. The *Decision* box has **Accept** (once the fee is paid) and **Decline**. Only admins and admissions can use them (`APPLY_DECISION_ROLES`, default `admin,admissions`).
 
-- **Accept** holds their place for 7 days for the $2,250 deposit and moves the HubSpot deal to *Accepted* (if the pipeline has that stage). The acceptance email with the deposit and payment options comes with the next update — until then, contact the family yourself.
-- **Decline** asks for an optional personal message and whether to refund the application fee (ticked by default; unticked if they'd already been accepted, since the fee is then non-refundable). The refund goes through Stripe first, then the student and parents get the *not accepted* email (edit it under Fee, interview & text), the deal moves to *Declined* / *Closed lost*, and reminders stop. A decline can't be undone here.
+- **Accept** holds their place for 7 days for the $2,250 deposit and moves the HubSpot deal to *Interview Complete* (it moves on to *Deposit Paid/Customer* when they pay). The acceptance email with the deposit and payment options comes with the next update — until then, contact the family yourself.
+- **Decline** asks for an optional personal message and whether to refund the application fee (ticked by default; unticked if they'd already been accepted, since the fee is then non-refundable). The refund goes through Stripe first, then the student and parents get the *not accepted* email (edit it under Fee, interview & text), the deal moves to *Closed Lost*, and reminders stop. A decline can't be undone here.
 
 Filters: **Accepted** and **Declined** next to the progress filters. An interview booked outside the application (from an email or by admissions) is picked up from HubSpot automatically and shown as *found in HubSpot*.

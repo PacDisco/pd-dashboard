@@ -914,7 +914,7 @@ function decideDialog(app, outcome) {
     const accepted = app.decision?.outcome === 'accepted';
     const body = outcome === 'accepted'
       ? `<p>Accept <strong>${esc(app.name)}</strong> for ${esc(app.program || '')} ${esc(app.term || '')}?</p>
-         <p class="em">Their place is held for 7 days for the $2,250 deposit, and the HubSpot deal moves to Accepted. The acceptance email with the deposit and payment options comes with the next update — until then, let the family know yourself.</p>`
+         <p class="em">Their place is held for 7 days for the $2,250 deposit, and the HubSpot deal moves to Interview Complete. The acceptance email with the deposit and payment options comes with the next update — until then, let the family know yourself.</p>`
       : `<p>Decline <strong>${esc(app.name)}</strong>? The student and parents are emailed that we can't offer a place.</p>
          ${app.paidAt ? `<label class="check"><input type="checkbox" id="dd-refund"${accepted ? '' : ' checked'}><span>Refund the application fee ($${paid.toFixed(2)})${accepted ? ' <span class="help">— they were accepted, so under the terms the fee is non-refundable</span>' : ''}</span></label>` : ''}
          <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. We'd love to see you apply for our Fall programs."></textarea></div>
