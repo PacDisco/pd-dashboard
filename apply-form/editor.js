@@ -10,7 +10,8 @@ import {
   renderStep, FORM_CSS, FIELD_TYPES, OPS, allFields, fieldByKey, lintSchema, nextQid, optionsFor, esc,
 } from '/apply-form/form-kit.mjs';
 import {
-  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS,
+  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
+  DEFAULT_ADVISOR_URL, DEFAULT_ADVISOR_TEXT,
 } from '/apply-form/terms-kit.mjs';
 
 const API = '/api/apply-forms';
@@ -574,6 +575,39 @@ function guessPd(options, name) {
   return best && best.score >= 0.67 ? best.value : '';
 }
 
+// ── editable email (subject, message, on/off) ───────────────────────────────
+// Stored at settings.emails[key]; empty fields fall back to DEFAULT_EMAILS.
+function emailEditor(st, key, title) {
+  const e = st.emails?.[key] || {};
+  const d = DEFAULT_EMAILS[key];
+  return `<details class="panel" style="padding:12px 14px;margin:10px 0 0" data-email="${key}">
+    <summary><strong>${esc(title)}</strong> <span class="em">— ${esc(e.subject || d.subject)}${e.enabled === false ? ' · off' : ''}</span></summary>
+    <label class="check" style="margin-top:10px"><input type="checkbox" data-em="enabled"${e.enabled !== false ? ' checked' : ''}><span>Send this one</span></label>
+    <div class="field"><label>Subject</label><input type="text" data-em="subject" value="${esc(e.subject || '')}" placeholder="${esc(d.subject)}"></div>
+    <div class="field"><label>Message</label><textarea data-em="body" rows="12" placeholder="${esc(d.body)}">${esc(e.body || '')}</textarea>
+      <span class="help">Leave empty to use the default shown. Placeholders: ${(EMAIL_PLACEHOLDERS[key] || []).map((k) => `<code>{${k}}</code>`).join(' ')}. A link: <code>[Finish my application]({link})</code>.</span>
+      <button class="btn btn--sm" type="button" data-em-default style="margin-top:6px">Start from the default</button></div>
+  </details>`;
+}
+
+function wireEmailEditors(st) {
+  $$('[data-email]').forEach((box) => {
+    const key = box.dataset.email;
+    const get = () => { st.emails = st.emails || {}; st.emails[key] = st.emails[key] || {}; return st.emails[key]; };
+    box.querySelectorAll('[data-em]').forEach((el) => {
+      const f = el.dataset.em;
+      el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => { get()[f] = el.type === 'checkbox' ? el.checked : el.value; changed({ rerender: false }); });
+    });
+    box.querySelector('[data-em-default]').addEventListener('click', () => {
+      const d = DEFAULT_EMAILS[key];
+      const subj = box.querySelector('[data-em=subject]'); const body = box.querySelector('[data-em=body]');
+      if (!subj.value) { subj.value = d.subject; get().subject = d.subject; }
+      if (!body.value) { body.value = d.body; get().body = d.body; }
+      changed({ rerender: false });
+    });
+  });
+}
+
 // ── tab: settings ───────────────────────────────────────────────────────────
 function renderSettings() {
   const st = S.draft.settings;
@@ -595,12 +629,22 @@ function renderSettings() {
       </div>
       <div class="field"><label for="tx-feePolicy">Refund wording (payment screen and Stripe page)</label><textarea id="tx-feePolicy" data-text="feePolicy" rows="2" placeholder="${esc(DEFAULT_FEE_POLICY)}">${esc(st.texts.feePolicy || '')}</textarea><span class="help">Leave empty to use the wording shown. <code>{fee}</code> becomes the fee amount. A link to the Program Terms &amp; Conditions is added after it.</span></div>
     </div>
+    <div class="panel"><h2 class="serif">Talk to an advisor (all family emails)</h2><p class="sub">Shown at the bottom of every email to students and parents, with a button to book a call.</p>
+      <label class="check"><input type="checkbox" id="ad-on"${st.advisor?.enabled !== false ? ' checked' : ''}><span>Show it</span></label>
+      <div class="cols">
+        <div class="field"><label for="ad-url">Booking link</label><input type="url" id="ad-url" value="${esc(st.advisor?.url || '')}" placeholder="${esc(DEFAULT_ADVISOR_URL)}"></div>
+        <div class="field"><label for="ad-label">Button text</label><input type="text" id="ad-label" value="${esc(st.advisor?.label || '')}" placeholder="Book a call with an advisor"></div>
+      </div>
+      <div class="field"><label for="ad-text">Line above the button</label><input type="text" id="ad-text" value="${esc(st.advisor?.text || '')}" placeholder="${esc(DEFAULT_ADVISOR_TEXT)}"><span class="help">Leave any field empty to use what's shown.</span></div></div>
     <div class="panel"><h2 class="serif">Email: application fee received</h2><p class="sub">Sent to the student and every parent/guardian on the application once the fee is paid, from admissions@, with the current Program Terms &amp; Conditions at the bottom. Admissions also gets a short “fee paid” alert.</p>
       <label class="check"><input type="checkbox" id="em-fc-on"${st.emails?.feeConfirmation?.enabled !== false ? ' checked' : ''}><span>Send this email</span></label>
       <div class="field"><label for="em-fc-subject">Subject</label><input type="text" id="em-fc-subject" value="${esc(st.emails?.feeConfirmation?.subject || '')}" placeholder="${esc(DEFAULT_EMAILS.feeConfirmation.subject)}"></div>
       <div class="field"><label for="em-fc-body">Message</label><textarea id="em-fc-body" rows="14" placeholder="${esc(DEFAULT_EMAILS.feeConfirmation.body)}">${esc(st.emails?.feeConfirmation?.body || '')}</textarea>
       <span class="help">Leave empty to use the default shown. Placeholders: ${EMAIL_PLACEHOLDERS.feeConfirmation.map((k) => `<code>{${k}}</code>`).join(' ')}. Formatting: <code>**bold**</code>, <code>- bullet</code>, blank line between paragraphs.</span>
-      <button class="btn btn--sm" type="button" id="em-fc-default" style="margin-top:6px">Start from the default</button></div>
+      <button class="btn btn--sm" type="button" id="em-fc-default" style="margin-top:6px">Start from the default</button></div></div>
+    <div class="panel"><h2 class="serif">Reminders: application fee not paid</h2><p class="sub">For applicants who finished the full application but haven't paid the fee. Sent to the student and every parent/guardian, from admissions@, ${FEE_REMINDER_DAYS.map((d) => `${d}`).join(', ').replace(/, (\d+)$/, ' and $1')} days after the application was completed. Each has a personal link back to their application. Reminders stop as soon as the fee is paid or the application is withdrawn, and admissions can stop them for one applicant from the Applications tab. After ${FEE_CLOSE_DAYS} days an unpaid application is marked <em>Closed</em> (they can still pay).</p>
+      <label class="check"><input type="checkbox" id="rm-on"${st.feeReminders?.enabled ? ' checked' : ''}><span>Send reminders <span class="help" id="rm-since">${st.feeReminders?.enabled && st.feeReminders?.since ? `— for applications completed since ${esc(new Date(st.feeReminders.since).toLocaleString())}` : '— only applications completed after you switch this on (and Publish) get them'}</span></span></label>
+      ${[1, 2, 3, 4].map((n) => emailEditor(st, `feeReminder${n}`, `Reminder ${n} — day ${FEE_REMINDER_DAYS[n - 1]}`)).join('')}</div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
       <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
@@ -627,6 +671,19 @@ function renderSettings() {
   $('#em-fc-default').addEventListener('click', () => {
     if (!$('#em-fc-subject').value) { $('#em-fc-subject').value = DEFAULT_EMAILS.feeConfirmation.subject; fc().subject = DEFAULT_EMAILS.feeConfirmation.subject; }
     if (!$('#em-fc-body').value) { $('#em-fc-body').value = DEFAULT_EMAILS.feeConfirmation.body; fc().body = DEFAULT_EMAILS.feeConfirmation.body; }
+    changed({ rerender: false });
+  });
+  wireEmailEditors(st);
+  const ad = () => { st.advisor = st.advisor || {}; return st.advisor; };
+  $('#ad-on').addEventListener('change', (e) => { ad().enabled = e.target.checked; changed({ rerender: false }); });
+  [['#ad-url', 'url'], ['#ad-label', 'label'], ['#ad-text', 'text']].forEach(([sel, k]) => $(sel).addEventListener('input', (e) => { ad()[k] = e.target.value.trim(); changed({ rerender: false }); }));
+  $('#rm-on').addEventListener('change', (e) => {
+    st.feeReminders = st.feeReminders || {};
+    st.feeReminders.enabled = e.target.checked;
+    // The start line: only applications completed after this get reminders,
+    // so switching on never emails the backlog. Every switch-on starts afresh.
+    if (e.target.checked) st.feeReminders.since = new Date().toISOString();
+    $('#rm-since').textContent = e.target.checked ? `— for applications completed from now on. Publish to start.` : '— off';
     changed({ rerender: false });
   });
   $('#s-meet').addEventListener('input', (e) => { st.meetingUrl = e.target.value.trim(); changed({ rerender: false }); });
@@ -773,7 +830,15 @@ async function renderTerms() {
 }
 
 // ── tab: applications ───────────────────────────────────────────────────────
-const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', needs_interview: 'Interview needed', paid: 'Fee paid', withdrawn: 'Withdrawn' };
+const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', needs_interview: 'Interview needed', paid: 'Fee paid', closed: 'Closed (unpaid)', withdrawn: 'Withdrawn' };
+function reminderChip(r) {
+  const m = r.reminders || {};
+  if (r.paidAt || r.status === 'withdrawn') return '';
+  if (m.closedAt) return '<span class="chip chip--bad">Closed — unpaid</span>';
+  if (m.stopped) return '<span class="chip">Reminders stopped</span>';
+  if (m.count) return `<span class="chip chip--info" title="${esc(m.sent.map((x) => `Reminder ${x.stage}: ${new Date(x.at).toLocaleDateString()}`).join('\n'))}">Reminder ${m.sent[m.sent.length - 1].stage}/4 sent</span>`;
+  return '';
+}
 const needsInterview = (r) => !!(r.interview?.fallback && !r.interviewAt && r.status !== 'withdrawn');
 
 async function renderApps() {
@@ -783,7 +848,7 @@ async function renderApps() {
     const out = await api('GET', { action: 'applications', status: a.status, q: a.q });
     a.list = out.applications; a.counts = out.counts;
   } catch (err) { $('#apps-body').innerHTML = `<div class="notice notice--bad">${esc(err.message)}</div>`; return; }
-  const total = Object.entries(a.counts).filter(([k]) => k !== 'withdrawn' && k !== 'needs_interview').reduce((x, [, n]) => x + n, 0);
+  const total = Object.entries(a.counts).filter(([k]) => !['withdrawn', 'needs_interview', 'closed'].includes(k)).reduce((x, [, n]) => x + n, 0);
   $('#flt').innerHTML = `<button class="chipbtn" data-st="" aria-pressed="${!a.status}">All · ${total}</button>${Object.keys(STATUS_LABEL).map((k) => `<button class="chipbtn" data-st="${k}" aria-pressed="${a.status === k}">${STATUS_LABEL[k]} · ${a.counts[k] || 0}</button>`).join('')}
     <input class="inp" id="q" placeholder="Search name, email or program" value="${esc(a.q)}" style="max-width:280px;margin-left:auto">`;
   $$('[data-st]').forEach((b) => b.addEventListener('click', () => { a.status = b.dataset.st; renderApps(); }));
@@ -796,7 +861,7 @@ async function renderApps() {
     ${a.list.map((r) => `<tr data-id="${r.id}" tabindex="0">
       <td><div class="nm">${esc(r.name)}</div><div class="em">${esc(r.email)}</div></td>
       <td>${esc(r.program || '')}<div class="em">${esc(r.term || '')}</div></td>
-      <td><div class="dots" title="${esc(STATUS_LABEL[r.status])}"><span class="on"></span><span class="${r.step2At ? 'on' : ''}"></span><span class="${r.interviewAt ? 'on' : ''}"></span><span class="${r.paidAt ? 'paid' : ''}"></span></div><div class="em">${esc(STATUS_LABEL[r.status])}</div>${needsInterview(r) ? '<span class="chip chip--changes">Interview needed</span>' : ''}</td>
+      <td><div class="dots" title="${esc(STATUS_LABEL[r.status])}"><span class="on"></span><span class="${r.step2At ? 'on' : ''}"></span><span class="${r.interviewAt ? 'on' : ''}"></span><span class="${r.paidAt ? 'paid' : ''}"></span></div><div class="em">${esc(STATUS_LABEL[r.status])}</div>${needsInterview(r) ? '<span class="chip chip--changes">Interview needed</span>' : ''}${reminderChip(r)}</td>
       <td class="em">${new Date(r.createdAt).toLocaleDateString()}</td>
       <td>${r.sync.ok ? '<span class="chip chip--live">OK</span>' : `<span class="chip chip--bad" title="${esc(r.sync.problems.join('\n'))}">Needs a look</span>`}</td></tr>`).join('')}
   </tbody></table></div>`;
@@ -805,6 +870,22 @@ async function renderApps() {
     tr.addEventListener('click', open);
     tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
   });
+}
+
+function remindersBlock(app) {
+  if (!app.step2At || app.paidAt || app.status === 'withdrawn') return '';
+  const m = app.reminders || { sent: [] };
+  const on = !!S.draft.settings.feeReminders?.enabled;
+  const hsNote = (h) => (!h ? '' : h.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(h.error)}</span>` : h.id ? ' <span class="em">· logged in HubSpot</span>' : '');
+  const lines = (m.sent || []).map((x) => `<li>✉️ Reminder ${x.stage} sent ${new Date(x.at).toLocaleString()}${x.to?.length ? ` to ${esc(x.to.join(', '))}` : ''}${hsNote(x.hubspot)}</li>`);
+  if (m.lastError) lines.push(`<li>⚠️ Reminder ${esc(m.lastError.stage)} failed ${new Date(m.lastError.at).toLocaleString()} — ${esc(m.lastError.error)} (retried next hour)</li>`);
+  if (m.closedAt) lines.push(`<li>Closed ${new Date(m.closedAt).toLocaleDateString()} — fee never paid. They can still pay with their link.</li>`);
+  if (m.stopped) lines.push(`<li>Stopped ${new Date(m.stopped.at).toLocaleString()}${m.stopped.by ? ` by ${esc(m.stopped.by)}` : ''}</li>`);
+  const btn = m.stopped || m.closedAt
+    ? `<button class="btn btn--sm" id="rem-toggle" data-stop="0">${m.closedAt ? 'Re-open and resume reminders' : 'Resume reminders'}</button>`
+    : `<button class="btn btn--sm" id="rem-toggle" data-stop="1">Stop reminders</button>`;
+  return `<div class="panel" style="padding:12px 14px"><strong>Fee reminders</strong> <span class="em">${on ? '' : '(switched off in Fee, interview &amp; text)'}</span>
+    <ul class="sync" style="margin:6px 0">${lines.join('') || '<li class="em">None sent yet.</li>'}</ul>${btn}</div>`;
 }
 
 async function showApplication(id) {
@@ -838,7 +919,9 @@ async function showApplication(id) {
       <ul class="sync">${syncRow('jf1', `Step 1 saved to Jotform${app.jotformStep1Id ? ` (#${esc(app.jotformStep1Id)})` : ''}`)}${syncRow('jf2', `Application saved to Jotform${app.jotformStep2Id ? ` (#${esc(app.jotformStep2Id)})` : ''}`)}
         ${syncRow('alert1', `Admissions alerted${sync.alert1?.to ? ` (${esc(sync.alert1.to.join(', '))})` : ''}`)}${syncRow('alert1Error', 'Admissions alert email')}${syncRow('hsContact', 'HubSpot contact')}${syncRow('hsDeal', 'HubSpot deal created')}${syncRow('hsStep2', `Deal in ${esc(sync.hsStep2?.pipeline || 'PD Applications')}${sync.hsStep2?.stage ? ` / ${esc(sync.hsStep2.stage)}` : ''}`)}${syncRow('hsStep2Error', 'Moving the deal to PD Applications')}${syncRow('hsInterview', 'Interview noted in HubSpot')}${syncRow('interviewNeeded', `Admissions asked to arrange the interview${sync.interviewNeeded?.to ? ` (${esc(sync.interviewNeeded.to.join(', '))})` : ''}`)}${syncRow('interviewNeededError', 'Interview-needed alert')}${syncRow('hsFamily', `Parents linked${sync.hsFamily?.parents ? ` (${sync.hsFamily.parents.map((p) => esc(p.email)).join(', ') || 'none given'})` : ''}`)}${syncRow('hsFamilyError', 'Linking parents')}${syncRow('hsProgram', `Linked to program record${sync.hsProgram?.record ? `: ${esc(sync.hsProgram.record.name)} (${esc(sync.hsProgram.record.season || '')} ${esc(sync.hsProgram.record.year || '')})` : ''}`)}${syncRow('hsProgramError', 'Program record')}
         ${syncRow('hsPaid', `Fee recorded in HubSpot${sync.hsPaid?.pipeline ? ` → ${esc(sync.hsPaid.pipeline)} / ${esc(sync.hsPaid.stage || '')}` : ''}`)}
+        ${syncRow('feeEmail', `Fee confirmation emailed${sync.feeEmail?.to ? ` to ${esc(sync.feeEmail.to.join(', '))}` : ''}${sync.feeEmail?.termsVersion ? ` (terms v${esc(sync.feeEmail.termsVersion)})` : ''}`)}${syncRow('feeEmailError', 'Fee confirmation email')}${syncRow('feeEmailLog', `Fee confirmation logged in HubSpot${sync.feeEmailLog?.contacts ? ` (${sync.feeEmailLog.contacts} contact${sync.feeEmailLog.contacts === 1 ? '' : 's'} + deal)` : ''}`)}${syncRow('feeAlert', 'Admissions told the fee was paid')}${syncRow('feeAlertError', 'Fee-paid alert')}
         ${syncRow('hsError', 'HubSpot')}${syncRow('hsPaidError', 'HubSpot payment update')}${syncRow('hsInterviewError', 'HubSpot interview note')}</ul>
+      ${remindersBlock(app)}
       <div class="acts"><button class="btn btn--sm" id="resync">Retry sync</button>${portal(app.hubspotDealId)}
         <button class="btn btn--sm ${app.status === 'withdrawn' ? '' : 'btn--danger'}" id="withdraw">${app.status === 'withdrawn' ? 'Restore application' : 'Mark withdrawn'}</button></div>
       <dl class="ans">${groups.join('') || '<dd>No answers.</dd>'}</dl>
@@ -849,6 +932,12 @@ async function showApplication(id) {
     e.currentTarget.disabled = true; e.currentTarget.textContent = 'Syncing…';
     try { await api('POST', {}, { action: 'resync', id }); toast('Sync finished.'); showApplication(id); renderApps(); }
     catch (err) { toast(esc(err.message), 6000); e.currentTarget.disabled = false; e.currentTarget.textContent = 'Retry sync'; }
+  });
+  d.querySelector('#rem-toggle')?.addEventListener('click', async (e) => {
+    const stop = e.currentTarget.dataset.stop === '1';
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'reminders', id, stop }); toast(stop ? 'Reminders stopped for this applicant.' : 'Reminders resumed.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
   });
   d.querySelector('#withdraw').addEventListener('click', async () => {
     try { await api('POST', {}, { action: 'withdraw', id, withdrawn: app.status !== 'withdrawn' }); d.close(); renderApps(); }

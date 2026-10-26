@@ -28,6 +28,7 @@
 //   GET  application  ?id=            → full record (answers, sync)
 //   POST resync    { id }             re-run Jotform/HubSpot sync via pd-apply
 //   POST withdraw  { id, withdrawn }  hide/unhide an application from the portals
+//   POST reminders { id, stop }       stop (true) or resume (false) fee reminders; resume also re-opens a closed one
 //   GET  file      ?id=               stream an uploaded file from pd-apply
 //   GET  terms                        → { draft, title, updatedAt, live, versions }
 //   GET  terms-version ?v=            → { version, title, body, publishedAt, publishedBy, note }
@@ -83,6 +84,7 @@ export function checkSchema(s) {
   if (!(fee > 0 && fee < 10000)) return "The application fee must be between $1 and $9,999.";
   if (!(rate >= 0 && rate < 0.2)) return "The card fee must be between 0% and 20%.";
   if (s.settings?.meetingUrl && !/^https:\/\/([a-z0-9-]+\.)*hubspot\.com\//i.test(s.settings.meetingUrl)) return "The interview link must be a HubSpot meetings link (https://meetings.hubspot.com/…).";
+  if (s.settings?.advisor?.url && !/^https:\/\/[^\s]+$/i.test(s.settings.advisor.url)) return "The advisor booking link must start with https://.";
   return null;
 }
 
@@ -194,6 +196,7 @@ export default async (req, context, deps = {}) => {
       case "jotform-add": return await jotformAdd(body);
       case "resync": return await resync(body);
       case "withdraw": return await withdraw(body);
+      case "reminders": return await setReminders(body, user);
       case "terms-save": return await termsSave(body, user);
       case "terms-publish": return await termsPublish(body, user);
       case "terms-import": return await termsImport(body);
@@ -314,8 +317,12 @@ async function jotformAdd(body) {
 
 // ── applications ───────────────────────────────────────────────────────────
 
+// `reminders` is read through to_jsonb so the list still works before
+// MIGRATION-reminders.sql has been run (it is simply null then).
 const LIST_COLS = `id, email, first_name, last_name, program, term, status, step1_at, step2_at, interview_at, interview, paid_at,
-  payment, hubspot_contact_id, hubspot_deal_id, jotform_step1_id, jotform_step2_id, sync, created_at, updated_at`;
+  payment, hubspot_contact_id, hubspot_deal_id, jotform_step1_id, jotform_step2_id, sync, created_at, updated_at,
+  to_jsonb(applications)->'reminders' AS reminders`;
+const CLOSED_SQL = `(paid_at IS NULL AND status <> 'withdrawn' AND COALESCE(to_jsonb(applications)->'reminders', '{}'::jsonb) ? 'closedAt')`;
 
 async function listApplications(url) {
   const status = url.searchParams.get("status") || "";
@@ -325,12 +332,14 @@ async function listApplications(url) {
   const rows = await db().query(
     `SELECT ${LIST_COLS} FROM applications
       WHERE ($1 = '' OR status = $1
-             OR ($1 = 'needs_interview' AND interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn'))
+             OR ($1 = 'needs_interview' AND interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn')
+             OR ($1 = 'closed' AND ${CLOSED_SQL}))
         AND ($2 = '%%' OR lower(email) LIKE $2 OR lower(first_name || ' ' || last_name) LIKE $2 OR lower(program) LIKE $2)
       ORDER BY created_at DESC LIMIT $3`, [status, like, limit]);
   const counts = await db()`SELECT status, count(*)::int AS n FROM applications GROUP BY status`;
   const need = await db()`SELECT count(*)::int AS n FROM applications WHERE interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn'`;
-  return { applications: rows.map(summary), counts: { ...Object.fromEntries(counts.map((c) => [c.status, c.n])), needs_interview: need[0]?.n || 0 } };
+  const closed = await db().query(`SELECT count(*)::int AS n FROM applications WHERE ${CLOSED_SQL}`);
+  return { applications: rows.map(summary), counts: { ...Object.fromEntries(counts.map((c) => [c.status, c.n])), needs_interview: need[0]?.n || 0, closed: closed[0]?.n || 0 } };
 }
 
 export function syncHealth(sync) {
@@ -345,6 +354,23 @@ function summary(r) {
     status: r.status, createdAt: r.created_at, step2At: r.step2_at, interviewAt: r.interview_at, interview: r.interview,
     paidAt: r.paid_at, payment: r.payment, hubspotDealId: r.hubspot_deal_id, hubspotContactId: r.hubspot_contact_id,
     jotformStep1Id: r.jotform_step1_id, jotformStep2Id: r.jotform_step2_id, sync: syncHealth(r.sync), syncRaw: r.sync,
+    reminders: reminderSummary(r.reminders),
+  };
+}
+
+/** What the dashboard shows about application-fee reminders. Pure (tested). */
+export function reminderSummary(rem) {
+  if (!rem || typeof rem !== "object") return { sent: [], count: 0 };
+  const sent = Object.entries(rem.sent || {})
+    .filter(([, v]) => v && !v.pending)
+    .map(([stage, v]) => ({ stage: Number(stage), at: v.at, to: v.to || [], hubspot: v.hubspot || null }))
+    .sort((a, b) => a.stage - b.stage);
+  return {
+    sent, count: sent.length,
+    skipped: rem.skipped || [],
+    stopped: rem.stopped || null,
+    closedAt: rem.closedAt || null,
+    lastError: rem.lastError || null,
   };
 }
 
@@ -374,6 +400,23 @@ async function withdraw({ id, withdrawn }) {
     `UPDATE applications SET status = CASE WHEN $2 THEN 'withdrawn'
         WHEN paid_at IS NOT NULL THEN 'paid' WHEN interview_at IS NOT NULL THEN 'interview' WHEN step2_at IS NOT NULL THEN 'step2' ELSE 'step1' END,
       updated_at = now() WHERE id = $1 RETURNING ${LIST_COLS}`, [id, !!withdrawn]);
+  if (!rows[0]) return json({ error: "Not found" }, 404);
+  return json({ application: summary(rows[0]) });
+}
+
+// Stop / resume application-fee reminders for one application. Resuming also
+// re-opens an application that was marked closed.
+async function setReminders({ id, stop }, user) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(id || ""))) return json({ error: "Not found" }, 404);
+  let rows;
+  try {
+    rows = stop
+      ? await db().query(`UPDATE applications SET reminders = reminders || jsonb_build_object('stopped', jsonb_build_object('at', now(), 'by', $2::text)), updated_at = now() WHERE id = $1 RETURNING ${LIST_COLS}`, [id, user.actor || user.email || "dashboard"])
+      : await db().query(`UPDATE applications SET reminders = reminders - 'stopped' - 'closedAt', updated_at = now() WHERE id = $1 RETURNING ${LIST_COLS}`, [id]);
+  } catch (err) {
+    if (/reminders/.test(err.message)) return json({ error: "Run MIGRATION-reminders.sql in the Neon SQL editor first." }, 500);
+    throw err;
+  }
   if (!rows[0]) return json({ error: "Not found" }, 404);
   return json({ application: summary(rows[0]) });
 }

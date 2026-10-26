@@ -78,7 +78,18 @@ export function termsToHtml(md) {
  * HTML for emails: inline styles only (mail clients drop <style>).
  * `size` is the body font size — 13 for the terms, 15 for a message.
  */
-export function termsToEmailHtml(md, { size = 13 } = {}) {
+/** A bulletproof email button (table-based, so Outlook draws it). */
+export function emailButton(text, href, { secondary = false } = {}) {
+  const bg = secondary ? '#ffffff' : '#288195';
+  const fg = secondary ? '#288195' : '#ffffff';
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 18px"><tr><td style="border-radius:8px;background:${bg};border:2px solid #288195">`
+    + `<a href="${esc(href)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:${fg};text-decoration:none;border-radius:8px">${esc(text)}</a>`
+    + '</td></tr></table>';
+}
+
+const LONE_LINK = /^\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)$/;
+
+export function termsToEmailHtml(md, { size = 13, buttons = false } = {}) {
   const st = {
     h1: `font-size:${size + 4}px;margin:20px 0 8px;color:#2f2f2f`,
     h2: `font-size:${size + 2}px;margin:18px 0 6px;color:#2f2f2f`,
@@ -87,6 +98,9 @@ export function termsToEmailHtml(md, { size = 13 } = {}) {
     list: `font-size:${size}px;line-height:1.55;margin:0 0 12px;padding-left:20px;color:#3a3a3a`,
   };
   return parseTerms(md).map((b) => {
+    // A link on its own line becomes a button (in messages, not the terms).
+    const lone = buttons && b.type === 'p' ? LONE_LINK.exec(b.text.trim()) : null;
+    if (lone) return emailButton(lone[1], lone[2]);
     if (b.type === 'p') return `<p style="${st.p}">${inline(b.text)}</p>`;
     if (b.type === 'ol' || b.type === 'ul') return `<${b.type} style="${st.list}">${b.items.map((i) => `<li style="margin:0 0 4px">${inline(i)}</li>`).join('')}</${b.type}>`;
     return `<${b.type} style="${st[b.type]}">${inline(b.text)}</${b.type}>`;
@@ -151,27 +165,101 @@ export const DEFAULT_EMAILS = {
       '',
       'Thank you for applying to **{program}** ({term}). We\'ve received your application fee of {fee}.',
       '',
+      '{interviewButton}',
+      '',
       '**What happens next**',
       '',
-      '- Our admissions team will review your application.',
       '- {interview}',
+      '- Our admissions team will review your application.',
       '- If you\'re accepted, we\'ll email you a link to confirm your place and choose how you\'d like to pay.',
       '',
       'Your application fee counts toward your total tuition. It is refunded in full if your application isn\'t accepted; otherwise it is non-refundable.',
       '',
       'Payment: {total} on {date} (reference {reference})',
       '',
-      'Questions? Just reply to this email.',
-      '',
       'Pacific Discovery Admissions',
     ].join('\n'),
   },
 };
 
-/** The placeholders each message understands, for the dashboard help text. */
-export const EMAIL_PLACEHOLDERS = {
-  feeConfirmation: ['firstName', 'studentName', 'program', 'term', 'fee', 'total', 'date', 'reference', 'interview', 'termsUrl'],
+// Application fee not paid: sent 1, 4, 10 and 21 days after the full
+// application is in (see netlify/functions/_lib/reminders.mjs). {link} is a
+// personal "continue your application" link; {nextStep} says what's left.
+const SIGN_OFF = ['', 'Pacific Discovery Admissions'];
+DEFAULT_EMAILS.feeReminder1 = {
+  subject: 'Your Pacific Discovery application is almost done',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Thanks for completing your application for **{program}** ({term}). There\'s one step left: {nextStep}',
+    '',
+    '[Finish my application]({link})',
+    '',
+    'Your {fee} application fee counts toward your tuition, and it\'s refunded in full if your application isn\'t accepted.',
+    ...SIGN_OFF,
+  ].join('\n'),
 };
+DEFAULT_EMAILS.feeReminder2 = {
+  subject: 'Still thinking about {program}?',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Your application for **{program}** ({term}) is waiting for you. To finish it: {nextStep}',
+    '',
+    '[Finish my application]({link})',
+    '',
+    'Places on each program are limited, and we review applications in the order we receive them.',
+    '',
+    'If anything is holding you back — dates, cost, or questions about the program — book a call with an admissions advisor below, or reply to this email.',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+DEFAULT_EMAILS.feeReminder3 = {
+  subject: 'Checking in about your application',
+  body: [
+    'Hi {firstName},',
+    '',
+    'I wanted to check in personally about your application for **{program}** ({term}). We\'d love to see it through, and it only takes a few minutes to finish: {nextStep}',
+    '',
+    '[Finish my application]({link})',
+    '',
+    'If you\'d like to talk anything through first, book a time with one of our admissions advisors using the button below.',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+DEFAULT_EMAILS.feeReminder4 = {
+  subject: 'Should we keep your application open?',
+  body: [
+    'Hi {firstName},',
+    '',
+    'We haven\'t received the application fee for your **{program}** ({term}) application yet, so we\'ll close your application on {closeDate} unless we hear from you.',
+    '',
+    'If you\'d still like to join us, you can finish here:',
+    '',
+    '[Finish my application]({link})',
+    '',
+    'If your plans have changed, no problem at all — reply and let us know, and we\'ll stop these reminders.',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+/** The placeholders each message understands, for the dashboard help text. */
+const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
+export const EMAIL_PLACEHOLDERS = {
+  feeConfirmation: ['firstName', 'studentName', 'program', 'term', 'fee', 'total', 'date', 'reference', 'interview', 'interviewButton', 'termsUrl'],
+  feeReminder1: REMINDER_PLACEHOLDERS,
+  feeReminder2: REMINDER_PLACEHOLDERS,
+  feeReminder3: REMINDER_PLACEHOLDERS,
+  feeReminder4: REMINDER_PLACEHOLDERS,
+};
+
+/** Days after the full application is in. Index n → template feeReminder{n+1}. */
+export const FEE_REMINDER_DAYS = [1, 4, 10, 21];
+/** Days after the full application when an unpaid application is marked closed. */
+export const FEE_CLOSE_DAYS = 28;
 
 export function emailTemplate(schema, key) {
   const d = DEFAULT_EMAILS[key] || { subject: '', body: '' };
@@ -186,4 +274,35 @@ export function emailTemplate(schema, key) {
 export function feePolicyText(schema, feeLabel) {
   const t = String(schema?.settings?.texts?.feePolicy || '').trim() || DEFAULT_FEE_POLICY;
   return fillTemplate(t, { fee: feeLabel });
+}
+
+// ── "talk to an advisor" block, at the foot of every family email ──────────
+export const DEFAULT_ADVISOR_URL = 'https://meetings.hubspot.com/megan-mckelvey';
+export const DEFAULT_ADVISOR_TEXT = 'Have questions? Book a time to talk with one of our admissions advisors — or just reply to this email.';
+
+/** { url, text, label } or null when switched off (empty URL in the dashboard). */
+export function advisorBlock(schema) {
+  const a = schema?.settings?.advisor || {};
+  if (a.enabled === false) return null;
+  const url = String(a.url || '').trim() || DEFAULT_ADVISOR_URL;
+  if (!/^https:\/\//i.test(url)) return null;
+  return {
+    url,
+    text: String(a.text || '').trim() || DEFAULT_ADVISOR_TEXT,
+    label: String(a.label || '').trim() || 'Book a call with an advisor',
+  };
+}
+
+// The interview scheduler (the same HubSpot page as step 3 of the application).
+export const DEFAULT_INTERVIEW_URL = 'https://meetings.hubspot.com/eda-admissions/pacific-discovery-interviews';
+
+/** The booking link, prefilled with the student's name and email. */
+export function interviewBookingUrl(schema, app) {
+  const raw = String(schema?.settings?.meetingUrl || '').trim() || DEFAULT_INTERVIEW_URL;
+  let u;
+  try { u = new URL(raw); } catch { return DEFAULT_INTERVIEW_URL; }
+  if (app?.first_name) u.searchParams.set('firstName', app.first_name);
+  if (app?.last_name) u.searchParams.set('lastName', app.last_name);
+  if (app?.email) u.searchParams.set('email', app.email);
+  return u.toString();
 }
