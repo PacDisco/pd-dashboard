@@ -266,6 +266,50 @@ DEFAULT_EMAILS.declined = {
   ].join('\n'),
 };
 
+// Accepted (dashboard → Accept): the personal link to confirm their place.
+DEFAULT_EMAILS.accepted = {
+  subject: 'Congratulations — you\'re accepted to {program}!',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Congratulations! We\'re delighted to offer you a place on **{program}** ({term}), starting {startDate}.',
+    '',
+    '{message}',
+    '',
+    'To confirm your place, please complete your payment by **{holdUntil}**. {howToPay}',
+    '',
+    '[Confirm my place]({link})',
+    '',
+    'Your application fee and deposit both count toward your total tuition of {tuition}.',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+// Deposit paid: place confirmed, the payment plan, and the student portal.
+DEFAULT_EMAILS.enrolled = {
+  subject: 'Your place is confirmed — {program}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Your place on **{program}** ({term}) is confirmed — we\'ve received your payment of {paidToday}. We can\'t wait to have you with us!',
+    '',
+    '**Your payment plan: {planName}**',
+    '',
+    '{schedule}',
+    '',
+    '{scheduleNote}',
+    '',
+    '**Your student portal**',
+    '',
+    'Pre-departure information, forms and your payments all live in the student portal. Sign in with {email} — the first time, choose "Forgot password" to set one.',
+    '',
+    '[Open the student portal]({portalUrl})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
 /** The placeholders each message understands, for the dashboard help text. */
 const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
 export const EMAIL_PLACEHOLDERS = {
@@ -275,6 +319,8 @@ export const EMAIL_PLACEHOLDERS = {
   feeReminder3: REMINDER_PLACEHOLDERS,
   feeReminder4: REMINDER_PLACEHOLDERS,
   declined: ['firstName', 'program', 'term', 'message', 'refund'],
+  accepted: ['firstName', 'program', 'term', 'startDate', 'holdUntil', 'howToPay', 'deposit', 'tuition', 'message', 'link'],
+  enrolled: ['firstName', 'program', 'term', 'paidToday', 'planName', 'schedule', 'scheduleNote', 'email', 'portalUrl'],
 };
 
 /** How long an accepted applicant's place is held for the deposit (days). */

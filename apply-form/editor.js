@@ -647,6 +647,11 @@ function renderSettings() {
       ${[1, 2, 3, 4].map((n) => emailEditor(st, `feeReminder${n}`, `Reminder ${n} — day ${FEE_REMINDER_DAYS[n - 1]}`)).join('')}</div>
     <div class="panel"><h2 class="serif">Email: not accepted</h2><p class="sub">Sent to the student and parents when you click <em>Decline</em> on an application. <code>{message}</code> is the optional personal note you type when declining; <code>{refund}</code> is a line about the refunded application fee (empty when there's no refund).</p>
       ${emailEditor(st, 'declined', 'Not accepted')}</div>
+    <div class="panel"><h2 class="serif">Acceptance &amp; deposit</h2><p class="sub">When you click <em>Accept</em>, the student and parents get a personal link to their acceptance page. There they choose how to pay (monthly, two instalments or in full — depending on how close the start date is) and pay the $2,250 deposit to confirm their place. The price comes from Programs &amp; dates; the start date from the program's HubSpot record.</p>
+      <div class="field" style="max-width:260px"><label for="ac-hold">Hold a place for (days)</label><input type="number" id="ac-hold" min="1" max="60" value="${esc(st.acceptance?.holdDays ?? 7)}"><span class="help">The deposit is due by then. Admissions can extend one applicant's hold from the Applications tab.</span></div>
+      ${emailEditor(st, 'accepted', 'Email: accepted')}
+      ${emailEditor(st, 'enrolled', 'Email: place confirmed (deposit paid)')}
+      <p class="help" style="margin-top:8px"><code>{howToPay}</code> adapts to the start date (monthly / two instalments / in full). <code>{message}</code> is the note you type when accepting. <code>{schedule}</code> is the list of upcoming payments.</p></div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
       <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
@@ -679,6 +684,7 @@ function renderSettings() {
   const ad = () => { st.advisor = st.advisor || {}; return st.advisor; };
   $('#ad-on').addEventListener('change', (e) => { ad().enabled = e.target.checked; changed({ rerender: false }); });
   [['#ad-url', 'url'], ['#ad-label', 'label'], ['#ad-text', 'text']].forEach(([sel, k]) => $(sel).addEventListener('input', (e) => { ad()[k] = e.target.value.trim(); changed({ rerender: false }); }));
+  $('#ac-hold').addEventListener('input', (e) => { const n = Math.round(Number(e.target.value)); st.acceptance = { ...(st.acceptance || {}) }; if (n >= 1 && n <= 60) st.acceptance.holdDays = n; else delete st.acceptance.holdDays; changed({ rerender: false }); });
   $('#rm-on').addEventListener('change', (e) => {
     st.feeReminders = st.feeReminders || {};
     st.feeReminders.enabled = e.target.checked;
@@ -832,12 +838,18 @@ async function renderTerms() {
 }
 
 // ── tab: applications ───────────────────────────────────────────────────────
-const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', needs_interview: 'Interview needed', paid: 'Fee paid', accepted: 'Accepted', declined: 'Declined', closed: 'Closed (unpaid)', withdrawn: 'Withdrawn' };
+const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', needs_interview: 'Interview needed', paid: 'Fee paid', accepted: 'Accepted', deposit_paid: 'Deposit paid', declined: 'Declined', closed: 'Closed (unpaid)', withdrawn: 'Withdrawn' };
+const PLAN_LABEL = { monthly: 'Monthly', two: 'Two instalments', full: 'Paid in full', later: 'Balance later' };
+const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const fmtDay = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 function decisionChip(r) {
   const d = r.decision;
   if (!d || r.status === 'withdrawn') return '';
   if (d.outcome === 'declined') return '<span class="chip chip--bad">Declined</span>';
+  const dep = r.enrolment?.deposit;
+  if (dep?.status === 'paid') return `<span class="chip chip--live">Deposit paid · ${esc(PLAN_LABEL[r.enrolment.plan] || '')}</span>`;
+  if (dep?.status === 'processing') return '<span class="chip chip--info">Deposit clearing (bank)</span>';
+  if (d.holdUntil && new Date(d.holdUntil) < new Date()) return `<span class="chip chip--bad" title="Accepted — the hold passed without a deposit">Hold passed ${fmtDay(d.holdUntil)}</span>`;
   return `<span class="chip chip--live" title="Place held until ${esc(new Date(d.holdUntil).toLocaleString())}">Accepted · held to ${fmtDay(d.holdUntil)}</span>`;
 }
 function reminderChip(r) {
@@ -857,7 +869,7 @@ async function renderApps() {
     const out = await api('GET', { action: 'applications', status: a.status, q: a.q });
     a.list = out.applications; a.counts = out.counts;
   } catch (err) { $('#apps-body').innerHTML = `<div class="notice notice--bad">${esc(err.message)}</div>`; return; }
-  const total = Object.entries(a.counts).filter(([k]) => !['withdrawn', 'needs_interview', 'closed', 'accepted', 'declined'].includes(k)).reduce((x, [, n]) => x + n, 0);
+  const total = Object.entries(a.counts).filter(([k]) => !['withdrawn', 'needs_interview', 'closed', 'accepted', 'declined', 'deposit_paid'].includes(k)).reduce((x, [, n]) => x + n, 0);
   $('#flt').innerHTML = `<button class="chipbtn" data-st="" aria-pressed="${!a.status}">All · ${total}</button>${Object.keys(STATUS_LABEL).map((k) => `<button class="chipbtn" data-st="${k}" aria-pressed="${a.status === k}">${STATUS_LABEL[k]} · ${a.counts[k] || 0}</button>`).join('')}
     <input class="inp" id="q" placeholder="Search name, email or program" value="${esc(a.q)}" style="max-width:280px;margin-left:auto">`;
   $$('[data-st]').forEach((b) => b.addEventListener('click', () => { a.status = b.dataset.st; renderApps(); }));
@@ -888,7 +900,7 @@ function decisionBlock(app) {
   const lines = [];
   if (d) {
     const who = `${esc(d.by || '')}, ${new Date(d.at).toLocaleString()}`;
-    if (d.outcome === 'accepted') lines.push(`<li>✅ <strong>Accepted</strong> — ${who}. Place held until <strong>${new Date(d.holdUntil).toLocaleString()}</strong> for the $2,250 deposit.</li>`);
+    if (d.outcome === 'accepted') lines.push(`<li>✅ <strong>Accepted</strong> — ${who}. ${['paid', 'processing'].includes(app.enrolment?.deposit?.status) ? '' : ` Place held until <strong>${new Date(d.holdUntil).toLocaleString()}</strong> for the $2,250 deposit${new Date(d.holdUntil) < new Date() ? ' — <strong>passed</strong>' : ''}.`}</li>`);
     else lines.push(`<li>❌ <strong>Declined</strong> — ${who}.</li>`);
     if (d.refund) lines.push(`<li>💳 Application fee refunded: $${(d.refund.amount / 100).toFixed(2)} <span class="em">(Stripe ${esc(d.refund.id)})</span></li>`);
     else if (d.outcome === 'declined') lines.push('<li class="em">Application fee not refunded.</li>');
@@ -897,11 +909,31 @@ function decisionBlock(app) {
     if (d.hubspot?.ok === false) lines.push(`<li>⚠️ HubSpot not updated: ${esc(d.hubspot.error)}</li>`);
     else if (d.hubspot?.stage) lines.push(`<li class="em">Deal moved to ${esc(d.hubspot.pipeline || '')} / ${esc(d.hubspot.stage)}</li>`);
     if (d.message) lines.push(`<li class="em">Message: “${esc(d.message)}”</li>`);
+    for (const x of d.extended || []) lines.push(`<li class="em">Hold extended to ${new Date(x.holdUntil).toLocaleDateString()} by ${esc(x.by || '')}</li>`);
+  }
+  const e = app.enrolment;
+  if (d?.outcome === 'accepted' && e) {
+    const dep = e.deposit;
+    if (e.offer) lines.push(`<li class="em">Offer: tuition ${money(e.offer.tuition)}, starts ${esc(e.offer.start)}</li>`);
+    if (dep?.status === 'paid' || dep?.status === 'processing') {
+      lines.push(`<li>${dep.status === 'paid' ? '💳' : '⏳'} <strong>${dep.status === 'paid' ? 'Deposit paid' : 'Bank payment clearing'}</strong> — ${money(dep.total)} by ${dep.method === 'ach' ? 'bank account' : 'card'} on ${new Date(dep.paidAt).toLocaleDateString()} <span class="em">(${esc(dep.reference || '')})</span>. Plan: <strong>${esc(PLAN_LABEL[e.plan] || e.plan || '')}</strong>${e.termsVersion ? ` · terms v${esc(e.termsVersion)}` : ''}</li>`);
+      const rest = (e.schedule || []).slice(1);
+      if (rest.length) lines.push(`<li><table class="grid" style="margin:4px 0;font-size:13px"><tbody>${rest.map((p) => `<tr><td>${esc(p.due)}</td><td style="text-align:right">${money(p.amount)}</td><td class="em">${esc(p.manual ? 'family pays by this date' : p.status === 'scheduled' ? 'automatic' : p.status)}</td></tr>`).join('')}</tbody></table></li>`);
+      if (e.emails?.enrolled?.to) lines.push(`<li>✉️ Confirmation emailed ${esc(e.emails.enrolled.to.join(', '))}${e.emails.enrolled.hubspot?.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(e.emails.enrolled.hubspot.error)}</span>` : ''}</li>`);
+      if (e.emails?.enrolled?.error) lines.push(`<li>⚠️ Confirmation email not sent: ${esc(e.emails.enrolled.error)}</li>`);
+      if (e.hubspot?.ok === false) lines.push(`<li>⚠️ HubSpot not updated for the deposit: ${esc(e.hubspot.error)}</li>`);
+    } else if (dep?.status === 'failed') {
+      lines.push(`<li>⚠️ Bank payment for the deposit failed ${new Date(dep.failedAt).toLocaleDateString()} — they can pay again from their acceptance link.</li>`);
+    } else if (e.started) {
+      lines.push(`<li class="em">Opened checkout ${new Date(e.started.at).toLocaleString()} (${esc(PLAN_LABEL[e.started.plan] || '')}, ${e.started.method === 'ach' ? 'bank' : 'card'}) — not paid yet.</li>`);
+    }
   }
   const btns = [];
   if (!d || d.outcome !== 'declined') {
     if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can || !app.paidAt ? ' disabled' : ''} title="${!can ? 'Needs the admin or admissions role' : !app.paidAt ? 'The application fee has not been paid' : ''}">Accept</button>`);
-    btns.push(`<button class="btn btn--sm btn--danger" id="dec-decline"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Decline</button>`);
+    const depositIn = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
+    if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm" id="dec-extend"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Extend hold</button>`);
+    if (!depositIn) btns.push(`<button class="btn btn--sm btn--danger" id="dec-decline"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Decline</button>`);
   }
   return `<div class="panel" style="padding:12px 14px"><strong>Decision</strong>
     ${lines.length ? `<ul class="sync" style="margin:6px 0">${lines.join('')}</ul>` : '<p class="em" style="margin:6px 0">No decision yet.</p>'}
@@ -914,13 +946,14 @@ function decideDialog(app, outcome) {
     const accepted = app.decision?.outcome === 'accepted';
     const body = outcome === 'accepted'
       ? `<p>Accept <strong>${esc(app.name)}</strong> for ${esc(app.program || '')} ${esc(app.term || '')}?</p>
-         <p class="em">Their place is held for 7 days for the $2,250 deposit, and the HubSpot deal moves to Interview Complete. The acceptance email with the deposit and payment options comes with the next update — until then, let the family know yourself.</p>`
+         <p class="em">The student and parents are emailed a personal link to confirm their place: they choose how to pay and pay the $2,250 deposit. The place is held for ${Number(S.draft.settings.acceptance?.holdDays) || 7} days, and the HubSpot deal moves to Interview Complete. The program's HubSpot record needs a start date.</p>
+         <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. It was great to talk with you — we can't wait to have you in Peru!"></textarea></div>`
       : `<p>Decline <strong>${esc(app.name)}</strong>? The student and parents are emailed that we can't offer a place.</p>
          ${app.paidAt ? `<label class="check"><input type="checkbox" id="dd-refund"${accepted ? '' : ' checked'}><span>Refund the application fee ($${paid.toFixed(2)})${accepted ? ' <span class="help">— they were accepted, so under the terms the fee is non-refundable</span>' : ''}</span></label>` : ''}
          <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. We'd love to see you apply for our Fall programs."></textarea></div>
          <p class="em">This can't be undone from the dashboard.</p>`;
     const d = openDialog(`<div class="dlg-head"><h2 class="serif">${outcome === 'accepted' ? 'Accept application' : 'Decline application'}</h2></div>
-      <div class="dlg-body">${body}<div class="acts"><button class="btn" data-x>Cancel</button><button class="btn ${outcome === 'accepted' ? 'btn--primary' : 'btn--danger'}" data-ok>${outcome === 'accepted' ? 'Accept' : 'Decline and email the family'}</button></div></div>`);
+      <div class="dlg-body">${body}<div class="acts"><button class="btn" data-x>Cancel</button><button class="btn ${outcome === 'accepted' ? 'btn--primary' : 'btn--danger'}" data-ok>${outcome === 'accepted' ? 'Accept and email the family' : 'Decline and email the family'}</button></div></div>`);
     let done = false;
     const finish = (v) => { if (done) return; done = true; d.close(); resolve(v); };
     d.querySelector('[data-x]').onclick = () => finish(null);
@@ -998,11 +1031,18 @@ async function showApplication(id) {
       toast(outcome === 'accepted' ? 'Accepting…' : 'Declining…');
       try {
         await api('POST', {}, { action: 'decide', id, outcome, ...choice });
-        toast(outcome === 'accepted' ? 'Accepted. Place held for 7 days.' : 'Declined. The family has been emailed.', 6000);
+        toast(outcome === 'accepted' ? 'Accepted. The family has been emailed their acceptance link.' : 'Declined. The family has been emailed.', 6000);
       } catch (err) { toast(esc(err.message), 9000); }
       showApplication(id); renderApps();
     });
   }
+  d.querySelector('#dec-extend')?.addEventListener('click', async (e) => {
+    const days = prompt('Hold their place for how many more days (from today)?', '7');
+    if (days == null) return;
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'extend-hold', id, days: Number(days) }); toast('Hold extended. Their acceptance link works again.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
+  });
   d.querySelector('#rem-toggle')?.addEventListener('click', async (e) => {
     const stop = e.currentTarget.dataset.stop === '1';
     e.currentTarget.disabled = true;

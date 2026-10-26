@@ -199,6 +199,7 @@ export default async (req, context, deps = {}) => {
       case "withdraw": return await withdraw(body);
       case "reminders": return await setReminders(body, user);
       case "decide": return await decideApplication(body, user);
+      case "extend-hold": return await extendHold(body, user);
       case "terms-save": return await termsSave(body, user);
       case "terms-publish": return await termsPublish(body, user);
       case "terms-import": return await termsImport(body);
@@ -323,8 +324,10 @@ async function jotformAdd(body) {
 // MIGRATION-reminders.sql has been run (it is simply null then).
 const LIST_COLS = `id, email, first_name, last_name, program, term, status, step1_at, step2_at, interview_at, interview, paid_at,
   payment, hubspot_contact_id, hubspot_deal_id, jotform_step1_id, jotform_step2_id, sync, created_at, updated_at,
-  to_jsonb(applications)->'reminders' AS reminders, to_jsonb(applications)->'decision' AS decision`;
+  to_jsonb(applications)->'reminders' AS reminders, to_jsonb(applications)->'decision' AS decision,
+  to_jsonb(applications)->'enrolment' AS enrolment`;
 const OUTCOME_SQL = `(to_jsonb(applications)->'decision'->>'outcome')`;
+const DEPOSIT_SQL = `(to_jsonb(applications)->'enrolment'->'deposit'->>'status')`;
 const CLOSED_SQL = `(paid_at IS NULL AND status <> 'withdrawn' AND COALESCE(to_jsonb(applications)->'reminders', '{}'::jsonb) ? 'closedAt')`;
 
 async function listApplications(url) {
@@ -337,14 +340,16 @@ async function listApplications(url) {
       WHERE ($1 = '' OR status = $1
              OR ($1 = 'needs_interview' AND interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn')
              OR ($1 = 'closed' AND ${CLOSED_SQL})
-             OR ($1 IN ('accepted', 'declined') AND ${OUTCOME_SQL} = $1))
+             OR ($1 IN ('accepted', 'declined') AND ${OUTCOME_SQL} = $1)
+             OR ($1 = 'deposit_paid' AND ${DEPOSIT_SQL} IN ('paid', 'processing')))
         AND ($2 = '%%' OR lower(email) LIKE $2 OR lower(first_name || ' ' || last_name) LIKE $2 OR lower(program) LIKE $2)
       ORDER BY created_at DESC LIMIT $3`, [status, like, limit]);
   const counts = await db()`SELECT status, count(*)::int AS n FROM applications GROUP BY status`;
   const need = await db()`SELECT count(*)::int AS n FROM applications WHERE interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn'`;
   const closed = await db().query(`SELECT count(*)::int AS n FROM applications WHERE ${CLOSED_SQL}`);
   const decided = await db().query(`SELECT ${OUTCOME_SQL} AS o, count(*)::int AS n FROM applications WHERE ${OUTCOME_SQL} IS NOT NULL AND status <> 'withdrawn' GROUP BY 1`);
-  return { applications: rows.map(summary), counts: { ...Object.fromEntries(counts.map((c) => [c.status, c.n])), needs_interview: need[0]?.n || 0, closed: closed[0]?.n || 0, ...Object.fromEntries(decided.map((d) => [d.o, d.n])) } };
+  const deposits = await db().query(`SELECT count(*)::int AS n FROM applications WHERE ${DEPOSIT_SQL} IN ('paid', 'processing') AND status <> 'withdrawn'`);
+  return { applications: rows.map(summary), counts: { ...Object.fromEntries(counts.map((c) => [c.status, c.n])), needs_interview: need[0]?.n || 0, closed: closed[0]?.n || 0, ...Object.fromEntries(decided.map((d) => [d.o, d.n])), deposit_paid: deposits[0]?.n || 0 } };
 }
 
 export function syncHealth(sync) {
@@ -361,6 +366,24 @@ function summary(r) {
     jotformStep1Id: r.jotform_step1_id, jotformStep2Id: r.jotform_step2_id, sync: syncHealth(r.sync), syncRaw: r.sync,
     reminders: reminderSummary(r.reminders),
     decision: r.decision && r.decision.outcome ? r.decision : null,
+    enrolment: enrolmentSummary(r.enrolment),
+  };
+}
+
+/** What the dashboard shows about the deposit and payment plan. Pure (tested). */
+export function enrolmentSummary(e) {
+  if (!e || typeof e !== "object" || (!e.offer && !e.deposit)) return null;
+  return {
+    offer: e.offer || null,
+    plan: e.choice?.plan || e.pending?.plan || null,
+    method: e.choice?.method || null,
+    termsVersion: e.choice?.termsVersion || null,
+    deposit: e.deposit || null,
+    schedule: Array.isArray(e.schedule) ? e.schedule : [],
+    // chose on the acceptance page but hasn't finished paying at Stripe
+    started: !e.deposit && e.pending ? { plan: e.pending.plan, method: e.pending.method, at: e.pending.at } : null,
+    emails: e.emails || {},
+    hubspot: e.hubspot || null,
   };
 }
 
@@ -415,6 +438,20 @@ async function decideApplication({ id, outcome, message, refund }, user) {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-apply-key": process.env.APPLY_SERVICE_KEY },
     body: JSON.stringify({ id, outcome, message, refund, by: user.actor || user.name || user.email }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return json({ error: data.error || `pd-apply returned ${r.status}` }, r.status === 409 ? 409 : 502);
+  return json({ ok: true, decision: data.decision });
+}
+
+async function extendHold({ id, days }, user) {
+  if (!canDecide(user)) return json({ error: "Extending a hold needs the admin or admissions role." }, 403);
+  const site = applySite();
+  if (!site || !process.env.APPLY_SERVICE_KEY) return json({ error: "Set APPLY_SITE_URL and APPLY_SERVICE_KEY on the dashboard site." }, 500);
+  const r = await fetch(`${site}/api/service/extend-hold`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-apply-key": process.env.APPLY_SERVICE_KEY },
+    body: JSON.stringify({ id, days, by: user.actor || user.name || user.email }),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return json({ error: data.error || `pd-apply returned ${r.status}` }, r.status === 409 ? 409 : 502);

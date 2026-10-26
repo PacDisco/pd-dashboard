@@ -59,9 +59,12 @@ For applicants who finished the full application but haven't paid. pd-apply chec
 
 ## Accept / decline
 
+Needs `MIGRATION-decisions.sql` and `MIGRATION-enrolment.sql`.
+
 Open an applicant in **Applications**. The *Decision* box has **Accept** (once the fee is paid) and **Decline**. Only admins and admissions can use them (`APPLY_DECISION_ROLES`, default `admin,admissions`).
 
-- **Accept** holds their place for 7 days for the $2,250 deposit and moves the HubSpot deal to *Interview Complete* (it moves on to *Deposit Paid/Customer* when they pay). The acceptance email with the deposit and payment options comes with the next update — until then, contact the family yourself.
+- **Accept** emails the student and parents a personal link to their acceptance page (with your optional message), holds their place for 7 days for the $2,250 deposit (change the default under *Fee, interview & text → Acceptance & deposit*), and moves the HubSpot deal to *Interview Complete*. The program's HubSpot record needs a *Program Start Date* — Accept says so if it's missing. **Extend hold** gives one applicant more days (it never shortens a hold).
+- On the acceptance page they choose monthly / two instalments / in full (what's offered depends on how close the start is), card or bank account, agree to the terms and pay. The *Decision* box then shows the deposit, plan and schedule, and the deal moves to *Deposit Paid/Customer*.
 - **Decline** asks for an optional personal message and whether to refund the application fee (ticked by default; unticked if they'd already been accepted, since the fee is then non-refundable). The refund goes through Stripe first, then the student and parents get the *not accepted* email (edit it under Fee, interview & text), the deal moves to *Closed Lost*, and reminders stop. A decline can't be undone here.
 
-Filters: **Accepted** and **Declined** next to the progress filters. An interview booked outside the application (from an email or by admissions) is picked up from HubSpot automatically and shown as *found in HubSpot*.
+Filters: **Accepted**, **Deposit paid** and **Declined** next to the progress filters. An interview booked outside the application (from an email or by admissions) is picked up from HubSpot automatically and shown as *found in HubSpot*.

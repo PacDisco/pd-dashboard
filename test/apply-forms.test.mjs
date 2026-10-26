@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
-import handler, { __setSql, checkSchema, syncHealth, reminderSummary, canDecide } from '../netlify/functions/apply-forms.mjs';
+import handler, { __setSql, checkSchema, syncHealth, reminderSummary, canDecide, enrolmentSummary } from '../netlify/functions/apply-forms.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.TEST_PG_URL || 'postgres://postgres@127.0.0.1:55432/apply' });
 const toText = (s, v) => s.reduce((a, x, i) => a + x + (i < v.length ? `$${i + 1}` : ''), '');
@@ -180,6 +180,37 @@ await t('accept / decline: role check, passed to pd-apply with who decided, show
     globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Already declined.' }), { status: 409 });
     const dup = await call(admissions, { action: 'decide', id: r.id, outcome: 'declined' });
     assert.equal(dup.status, 409); assert.equal(dup.body.error, 'Already declined.');
+  } finally { globalThis.fetch = real; delete process.env.APPLY_SITE_URL; delete process.env.APPLY_SERVICE_KEY; }
+});
+
+await t('deposit paid: listed under Deposit paid with plan + schedule; extend hold is proxied with who did it', async () => {
+  const enrolment = {
+    offer: { tuition: 15500, paid: 250, deposit: 2250, start: '2027-09-09' },
+    choice: { plan: 'monthly', method: 'card', termsVersion: 3 },
+    deposit: { amount: 2250, fee: 78.75, total: 2328.75, status: 'paid', method: 'card', reference: 'pi_1', paidAt: new Date().toISOString() },
+    schedule: [{ due: '2026-11-01', amount: 2250, kind: 'deposit', status: 'paid' }, { due: '2026-12-01', amount: 1625, kind: 'instalment', status: 'scheduled' }],
+    lastPending: { secret: 'not shown' },
+  };
+  const [r] = (await pool.query(`INSERT INTO applications (token_hash, email, first_name, last_name, program, term, status, step1_at, step2_at, paid_at, decision, enrolment)
+    VALUES ('dep1','dep@x.org','Dee','Pee','South America Gap Semester','Fall 2027','paid', now(), now(), now(), $1, $2) RETURNING id`,
+    [JSON.stringify({ outcome: 'accepted', at: new Date().toISOString(), by: 'Megan', holdUntil: new Date().toISOString() }), JSON.stringify(enrolment)])).rows;
+  const admissions = { email: 'meg@pd.org', name: 'Megan', roles: ['admissions'] };
+  const l = await call(admissions, null, '?action=applications&status=deposit_paid');
+  assert.deepEqual(l.body.applications.map((a) => a.id), [r.id]);
+  assert.equal(l.body.counts.deposit_paid, 1);
+  const e = l.body.applications[0].enrolment;
+  assert.equal(e.plan, 'monthly'); assert.equal(e.deposit.total, 2328.75); assert.equal(e.schedule.length, 2);
+  assert.equal(e.lastPending, undefined, 'internal checkout details not sent to the browser');
+  assert.equal(enrolmentSummary({}), null); assert.equal(enrolmentSummary(null), null);
+
+  assert.equal((await call(editor, { action: 'extend-hold', id: r.id, days: 5 })).status, 403);
+  process.env.APPLY_SITE_URL = 'https://apply.test'; process.env.APPLY_SERVICE_KEY = 'svc';
+  const real = globalThis.fetch; let sent;
+  globalThis.fetch = async (u, init) => { sent = { url: String(u), body: JSON.parse(init.body) }; return new Response(JSON.stringify({ ok: true, decision: {} }), { status: 200 }); };
+  try {
+    assert.equal((await call(admissions, { action: 'extend-hold', id: r.id, days: 5 })).status, 200);
+    assert.equal(sent.url, 'https://apply.test/api/service/extend-hold');
+    assert.deepEqual(sent.body, { id: r.id, days: 5, by: 'Megan' });
   } finally { globalThis.fetch = real; delete process.env.APPLY_SITE_URL; delete process.env.APPLY_SERVICE_KEY; }
 });
 

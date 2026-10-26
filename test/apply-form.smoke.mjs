@@ -159,6 +159,30 @@ try {
   await page.waitForSelector('#rem-toggle[data-stop="0"]');
   const [ana] = (await pool.query(`SELECT reminders FROM applications WHERE email = 'ana@x.org'`)).rows;
   assert.ok(ana.reminders.stopped);
+  await page.click('.dlg-head [data-x]').catch(() => {});
+
+  // an accepted applicant who paid the deposit on a monthly plan
+  await pool.query(`INSERT INTO applications (token_hash, email, first_name, last_name, program, term, status, step1_at, step2_at, interview_at, paid_at, payment, decision, enrolment)
+    VALUES ('dep-ui','dep@x.org','Sam','Lee','South America Gap Semester','Fall 2027','paid', now(), now(), now(), now(), '{"total":258.75}', $1, $2)`,
+    [JSON.stringify({ outcome: 'accepted', at: new Date().toISOString(), by: 'Megan', holdUntil: new Date(Date.now() + 5 * 864e5).toISOString(), email: { to: ['dep@x.org', 'mum@x.org'] } }),
+      JSON.stringify({ offer: { tuition: 15500, start: '2027-09-09' }, choice: { plan: 'monthly', method: 'card', termsVersion: 1 },
+        deposit: { total: 2328.75, status: 'paid', method: 'card', reference: 'pi_dep', paidAt: new Date().toISOString() },
+        schedule: [{ due: '2026-10-27', amount: 2250, kind: 'deposit', status: 'paid' }, { due: '2026-11-27', amount: 1625, kind: 'instalment', status: 'scheduled' }, { due: '2026-12-27', amount: 1625, kind: 'instalment', status: 'scheduled' }],
+        emails: { enrolled: { to: ['dep@x.org', 'mum@x.org'] } } })]);
+  await page.click('[data-tab=settings]');
+  await page.waitForSelector('#ac-hold');
+  assert.equal(await page.locator('[data-email=accepted]').count(), 1);
+  assert.equal(await page.locator('[data-email=enrolled]').count(), 1);
+  await page.click('[data-tab=apps]');
+  await page.waitForSelector('text=Deposit paid · Monthly');
+  await page.click('.apps tr[data-id]:has-text("Sam Lee")');
+  await page.waitForSelector('dl.ans');
+  const dtext = await page.locator('.dlg-body').textContent();
+  assert.match(dtext, /Deposit paid — \$2,328\.75 by card/);
+  assert.match(dtext, /2026-11-27\s*\$1,625\s*automatic/);
+  assert.equal(await page.locator('#dec-extend').count(), 0, 'no hold to extend once paid');
+  assert.equal(await page.locator('#dec-decline').count(), 0, 'no decline once the deposit is in');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-9-deposit.png` });
   assert.deepEqual(errors, []);
   console.log('  ✓ editor: edit, add conditional field, programs, settings, publish, terms, applications');
 } finally {
