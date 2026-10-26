@@ -372,6 +372,24 @@ export function feeBreakdown(schema) {
   return { base, rate, surcharge, total: Math.round((base + surcharge) * 100) / 100 };
 }
 
+/**
+ * Surcharge rates by payment method, set in the dashboard (Fee, interview &
+ * text). Card defaults to 3.5%; ACH bank debit defaults to 0.
+ */
+export function surchargeRates(schema) {
+  const st = schema?.settings || {};
+  const n = (v, d) => (Number.isFinite(Number(v)) && v !== '' && v !== null && v !== undefined ? Number(v) : d);
+  return { card: n(st.cardFeeRate, 0.035), ach: n(st.achFeeRate, 0) };
+}
+
+/** Amount + surcharge for a payment by `method` ("card" | "ach"), 2 dp. */
+export function withSurcharge(schema, amount, method = 'card') {
+  const rate = surchargeRates(schema)[method === 'ach' ? 'ach' : 'card'];
+  const base = Math.round(Number(amount) * 100) / 100;
+  const surcharge = Math.round(base * rate * 100) / 100;
+  return { base, rate, surcharge, total: Math.round((base + surcharge) * 100) / 100, method: method === 'ach' ? 'ach' : 'card' };
+}
+
 /** Season, year and program type for HubSpot routing. */
 export function enrolmentFacts(schema, values) {
   const program = programByName(schema, values.program);

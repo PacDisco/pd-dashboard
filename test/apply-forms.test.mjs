@@ -83,5 +83,55 @@ await t('applications list + detail + withdraw', async () => {
 await t('syncHealth', async () => {
   assert.deepEqual(syncHealth({ a: { ok: true }, b: { ok: false, error: 'x' } }), { ok: false, problems: ['b: x'] });
 });
+await t('settings: card / ACH fees, refund wording and fee email pass the schema checks', async () => {
+  const d = structuredClone(seed);
+  d.settings.achFeeRate = 0.008; d.settings.texts = { ...(d.settings.texts || {}), feePolicy: 'Fee {fee} refundable only if declined.' };
+  d.settings.emails = { feeConfirmation: { enabled: true, subject: 'Got it — {program}', body: 'Hi {firstName}\n\n- one' } };
+  assert.equal(checkSchema(d), null);
+});
+
+await t('terms: draft save, publish creates versions, nothing-changed and short drafts refused', async () => {
+  await pool.query('DELETE FROM apply_terms_versions; DELETE FROM apply_terms');
+  const g0 = await call(editor, null, '?action=terms');
+  assert.equal(g0.status, 200); assert.equal(g0.body.live, null); assert.equal(g0.body.draft, '');
+  assert.equal((await call(editor, { action: 'terms-save', body: '# T\n\nshort' })).status, 200);
+  assert.equal((await call(editor, { action: 'terms-publish' })).status, 400, 'too short to publish');
+  const body1 = `# Program Terms & Conditions\n\n${'A $250 application fee is refunded in full if you are not accepted. '.repeat(5)}`;
+  await call(editor, { action: 'terms-save', title: 'Program Terms & Conditions', body: body1 });
+  const p1 = await call(editor, { action: 'terms-publish', note: 'first' });
+  assert.equal(p1.status, 200); assert.equal(p1.body.version, 1);
+  assert.equal((await call(editor, { action: 'terms-publish' })).status, 409, 'unchanged');
+  await call(editor, { action: 'terms-save', title: 'Program Terms & Conditions', body: `${body1}\n\n## Payment plans\n\nMonthly until 60 days before departure.` });
+  const p2 = await call(editor, { action: 'terms-publish', note: 'plans' });
+  assert.equal(p2.body.version, 2);
+  const g = await call(editor, null, '?action=terms');
+  assert.equal(g.body.live.version, 2); assert.match(g.body.live.body, /Payment plans/);
+  assert.deepEqual(g.body.versions.map((v) => v.version), [2, 1]);
+  const v1 = await call(editor, null, '?action=terms-version&v=1');
+  assert.equal(v1.body.note, 'first'); assert.ok(!/Payment plans/.test(v1.body.body));
+  assert.equal((await call(editor, null, '?action=terms-version&v=7')).status, 404);
+  assert.equal((await call(viewer, null, '?action=terms')).status, 403);
+});
+
+await t('terms: publishing needs a publish role', async () => {
+  const prev = process.env.APPLY_FORM_PUBLISH_ROLES;
+  process.env.APPLY_FORM_PUBLISH_ROLES = 'admin';
+  try {
+    await call(editor, { action: 'terms-save', body: `# X\n\n${'changed text '.repeat(30)}` });
+    assert.equal((await call(editor, { action: 'terms-publish' })).status, 403);
+  } finally { if (prev === undefined) delete process.env.APPLY_FORM_PUBLISH_ROLES; else process.env.APPLY_FORM_PUBLISH_ROLES = prev; }
+});
+
+await t('terms: import from the website (pacificdiscovery.org only)', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response('<html><body><nav>Menu</nav><main><h1>Program Terms</h1><h2>1. Application Process</h2><p>A <strong>$250</strong> fee.</p><ul><li>One</li><li>Two</li></ul></main></body></html>', { status: 200 });
+  try {
+    const r = await call(editor, { action: 'terms-import' });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.body, '# Program Terms\n\n## 1. Application Process\n\nA **$250** fee.\n\n- One\n- Two');
+    assert.equal((await call(editor, { action: 'terms-import', url: 'https://evil.example/terms' })).status, 400);
+  } finally { globalThis.fetch = real; }
+});
+
 await pool.end();
 console.log(`\n${n} passed`);

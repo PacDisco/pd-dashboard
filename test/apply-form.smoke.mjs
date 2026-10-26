@@ -86,6 +86,10 @@ try {
   await page.fill('#s-fee', '300');
   assert.equal(await page.locator('#s-total').textContent(), '$310.50');
   await page.fill('#s-fee', '250');
+  await page.fill('#s-ach', '0.8');
+  await page.fill('#em-fc-subject', 'Application received — {program}');
+  await page.click('#em-fc-default');
+  assert.match(await page.locator('#em-fc-body').inputValue(), /What happens next/);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-4-settings.png`, fullPage: true });
 
   // publish
@@ -96,6 +100,25 @@ try {
   await page.waitForSelector('.chip--live');
   const [pub] = (await pool.query('SELECT published FROM apply_forms')).rows;
   assert.equal(pub.published.programs[i].price, 9950);
+  assert.equal(pub.published.settings.achFeeRate, 0.008);
+  assert.match(pub.published.settings.emails.feeConfirmation.body, /What happens next/);
+
+  // terms
+  await pool.query('DELETE FROM apply_terms_versions; DELETE FROM apply_terms');
+  await page.click('[data-tab=terms]');
+  await page.waitForSelector('#t-body');
+  assert.ok(await page.locator('#t-publish').isDisabled(), 'nothing to publish yet');
+  await page.fill('#t-body', `# Program Terms & Conditions\n\n## 1. Application Process\n\nA **$250 application fee** is refunded in full if you are not accepted. ${'Lorem ipsum dolor sit amet. '.repeat(8)}\n\n1. Deposit\n2. Balance`);
+  await page.waitForFunction(() => /Application Process/.test(document.querySelector('#t-preview').innerHTML));
+  assert.equal(await page.locator('#t-preview ol li').count(), 2);
+  await page.waitForFunction(() => /Draft saved/.test(document.querySelector('#t-state').textContent), null, { timeout: 5000 });
+  await page.click('#t-publish');
+  await page.fill('#pd-in', 'Initial version');
+  await page.click('[data-ok]');
+  await page.waitForFunction(() => /Live: version 1/.test(document.querySelector('#t-diff').textContent), null, { timeout: 5000 });
+  const [tv] = (await pool.query('SELECT version, note FROM apply_terms_versions')).rows;
+  assert.equal(tv.version, 1); assert.equal(tv.note, 'Initial version');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-6-terms.png`, fullPage: true });
 
   // applications
   await page.click('[data-tab=apps]');
@@ -105,7 +128,7 @@ try {
   assert.match(await page.locator('dl.ans').textContent(), /Mild asthma/);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-5-application.png` });
   assert.deepEqual(errors, []);
-  console.log('  ✓ editor: edit, add conditional field, programs, settings, publish, applications');
+  console.log('  ✓ editor: edit, add conditional field, programs, settings, publish, terms, applications');
 } finally {
   await browser.close(); server.close(); await pool.end();
 }

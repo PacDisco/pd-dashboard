@@ -29,6 +29,11 @@
 //   POST resync    { id }             re-run Jotform/HubSpot sync via pd-apply
 //   POST withdraw  { id, withdrawn }  hide/unhide an application from the portals
 //   GET  file      ?id=               stream an uploaded file from pd-apply
+//   GET  terms                        → { draft, title, updatedAt, live, versions }
+//   GET  terms-version ?v=            → { version, title, body, publishedAt, publishedBy, note }
+//   POST terms-save    { body, title } save the draft
+//   POST terms-publish { note? }       draft → new live version (publish role)
+//   POST terms-import  { url? }        fetch the website terms page → draft text (not saved)
 //
 // Env: NETLIFY_DATABASE_URL, HUBSPOT_TOKEN, JOTFORM_API_KEY,
 //      APPLY_SITE_URL (https://apply.pacificdiscovery.org), APPLY_SERVICE_KEY,
@@ -39,6 +44,7 @@ import { requireEditor, json } from "./_shared/apply-form-access.mjs";
 import { lintSchema, allFields, FIELD_TYPES } from "../../apply-form/form-kit.mjs";
 import { lintQuiz, QUIZ_FORM_ID } from "../../apply-form/quiz-kit.mjs";
 import { checkResultPrograms, programUrl } from "../../apply-form/quiz-programs.mjs";
+import { htmlToTerms, TERMS_DOC_ID } from "../../apply-form/terms-kit.mjs";
 import { lintReferral, REFERRAL_FORM_ID, REFERRAL_PROPERTIES, DEFAULT_ASSOCIATION_LABEL } from "../../apply-form/referral-kit.mjs";
 
 export const FORM_ID = "pd-application";
@@ -167,6 +173,8 @@ export default async (req, context, deps = {}) => {
       if (action === "quiz-responses") return json(await listQuizResponses(url));
       if (action === "quiz-programs") return json(await listQuizPrograms());
       if (action === "referrals") return json(await listReferrals(url));
+      if (action === "terms") return json(await termsGet());
+      if (action === "terms-version") return json(await termsVersion(url.searchParams.get("v")));
       return json({ error: "Unknown action" }, 400);
     }
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -186,6 +194,9 @@ export default async (req, context, deps = {}) => {
       case "jotform-add": return await jotformAdd(body);
       case "resync": return await resync(body);
       case "withdraw": return await withdraw(body);
+      case "terms-save": return await termsSave(body, user);
+      case "terms-publish": return await termsPublish(body, user);
+      case "terms-import": return await termsImport(body);
       default: return json({ error: "Unknown action" }, 400);
     }
   } catch (err) {
@@ -539,4 +550,80 @@ async function hubspotFormCreate(body) {
     return json({ error: `HubSpot said: ${data.message || r.status}.${scope}` }, 502);
   }
   return json({ id: data.id, name, editUrl: `https://app.hubspot.com/forms/${process.env.HUBSPOT_PORTAL_ID || "3855728"}/editor/${data.id}/edit/form` });
+}
+
+// ── Program Terms & Conditions (MIGRATION-terms.sql) ───────────────────────
+// One document, versioned on publish. pd-apply serves the highest version to
+// the website (/terms-embed.js), the applicant emails and the payment pages,
+// and records the version on each payment.
+
+export const TERMS_MAX_BYTES = 200 * 1024;
+export const DEFAULT_TERMS_URL = "https://www.pacificdiscovery.org/apply/program-terms-and-conditions";
+
+async function termsGet() {
+  await db()`INSERT INTO apply_terms (id) VALUES (${TERMS_DOC_ID}) ON CONFLICT (id) DO NOTHING`;
+  const rows = await db()`SELECT title, draft, updated_at, updated_by FROM apply_terms WHERE id = ${TERMS_DOC_ID}`;
+  const versions = await db()`SELECT version, title, note, published_at, published_by, length(body) AS chars
+    FROM apply_terms_versions WHERE doc_id = ${TERMS_DOC_ID} ORDER BY version DESC LIMIT 100`;
+  const liveRow = versions[0]
+    ? (await db()`SELECT body FROM apply_terms_versions WHERE doc_id = ${TERMS_DOC_ID} AND version = ${versions[0].version}`)[0]
+    : null;
+  const r = rows[0] || {};
+  return {
+    title: r.title || "Program Terms & Conditions",
+    draft: r.draft || "",
+    updatedAt: r.updated_at || null,
+    updatedBy: r.updated_by || null,
+    live: versions[0] ? { version: versions[0].version, title: versions[0].title, body: liveRow?.body || "", publishedAt: versions[0].published_at } : null,
+    versions,
+    applySite: applySite(),
+  };
+}
+
+async function termsVersion(v) {
+  if (!/^\d{1,6}$/.test(String(v || ""))) throw Object.assign(new Error("Bad version"), { status: 400 });
+  const rows = await db()`SELECT version, title, body, note, published_at, published_by FROM apply_terms_versions
+    WHERE doc_id = ${TERMS_DOC_ID} AND version = ${Number(v)}`;
+  if (!rows[0]) throw Object.assign(new Error("No such version"), { status: 404 });
+  const r = rows[0];
+  return { version: r.version, title: r.title, body: r.body, note: r.note, publishedAt: r.published_at, publishedBy: r.published_by };
+}
+
+async function termsSave(body, user) {
+  const text = String(body.body ?? "");
+  const title = String(body.title ?? "").trim().slice(0, 200) || "Program Terms & Conditions";
+  if (Buffer.byteLength(text) > TERMS_MAX_BYTES) return json({ error: "The terms are too long (200 KB limit)." }, 413);
+  await db()`INSERT INTO apply_terms (id, title, draft, updated_at, updated_by) VALUES (${TERMS_DOC_ID}, ${title}, ${text}, now(), ${user.actor})
+    ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, draft = EXCLUDED.draft, updated_at = now(), updated_by = EXCLUDED.updated_by`;
+  return json({ ok: true, savedAt: new Date().toISOString() });
+}
+
+async function termsPublish(body, user) {
+  if (!user.canPublish) return json({ error: "Publishing the terms needs an admin or admissions lead." }, 403);
+  const rows = await db()`SELECT title, draft FROM apply_terms WHERE id = ${TERMS_DOC_ID}`;
+  const draft = String(rows[0]?.draft || "").trim();
+  if (draft.length < 200) return json({ error: "The terms look empty or too short to publish." }, 400);
+  const last = await db()`SELECT version, body, title FROM apply_terms_versions WHERE doc_id = ${TERMS_DOC_ID} ORDER BY version DESC LIMIT 1`;
+  if (last[0] && last[0].body.trim() === draft && last[0].title === rows[0].title) {
+    return json({ error: `Nothing has changed since version ${last[0].version}.` }, 409);
+  }
+  const version = (last[0]?.version || 0) + 1;
+  const note = String(body.note || "").trim().slice(0, 500) || null;
+  // The primary key (doc_id, version) makes two simultaneous publishes fail
+  // loudly instead of both claiming the same number.
+  await db()`INSERT INTO apply_terms_versions (doc_id, version, title, body, note, published_by)
+    VALUES (${TERMS_DOC_ID}, ${version}, ${rows[0].title}, ${draft}, ${note}, ${user.actor})`;
+  return json({ ok: true, version });
+}
+
+async function termsImport(body) {
+  const url = String(body.url || DEFAULT_TERMS_URL).trim();
+  if (!/^https:\/\/(www\.)?pacificdiscovery\.org\//i.test(url)) return json({ error: "Only pages on pacificdiscovery.org can be imported." }, 400);
+  const res = await fetch(url, { headers: { "User-Agent": "pd-dashboard terms import" } });
+  if (!res.ok) return json({ error: `The page returned ${res.status}.` }, 502);
+  const html = await res.text();
+  // Prefer the main content area when the page has one.
+  const main = /<main\b[\s\S]*?<\/main>/i.exec(html)?.[0] || /<body\b[\s\S]*<\/body>/i.exec(html)?.[0] || html;
+  const text = htmlToTerms(main);
+  return json({ body: text, source: url, chars: text.length });
 }

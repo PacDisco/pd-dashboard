@@ -9,6 +9,9 @@
 import {
   renderStep, FORM_CSS, FIELD_TYPES, OPS, allFields, fieldByKey, lintSchema, nextQid, optionsFor, esc,
 } from '/apply-form/form-kit.mjs';
+import {
+  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS,
+} from '/apply-form/terms-kit.mjs';
 
 const API = '/api/apply-forms';
 const SAVE_DELAY = 1200;
@@ -21,6 +24,7 @@ const S = {
   tab: 'fields', step: 'step1', sel: null, hubspot: null,
   saveTimer: null, saving: false, dirty: false, saveError: null,
   apps: { status: '', q: '', list: [], counts: {} },
+  terms: null, // { title, draft, live, versions, dirty, saving, timer }
 };
 
 // ── api ─────────────────────────────────────────────────────────────────────
@@ -175,6 +179,7 @@ function render() {
   if (S.tab === 'programs') return renderPrograms();
   if (S.tab === 'settings') return renderSettings();
   if (S.tab === 'apps') return renderApps();
+  if (S.tab === 'terms') return renderTerms();
 }
 
 // ── tab: fields ─────────────────────────────────────────────────────────────
@@ -584,7 +589,18 @@ function renderSettings() {
         <div class="field"><label for="s-fee">Application fee (USD)</label><input type="number" id="s-fee" min="1" step="1" value="${esc(st.appFee)}"></div>
         <div class="field"><label for="s-rate">Card processing fee (%)</label><input type="number" id="s-rate" min="0" max="19" step="0.1" value="${esc(Math.round(rate * 1000) / 10)}"></div>
         <div class="field"><span class="lbl">Applicant pays</span><div style="font-size:22px;font-weight:700;color:var(--ink)" id="s-total">$${total.toFixed(2)}</div></div>
-      </div></div>
+      </div>
+      <div class="cols">
+        <div class="field"><label for="s-ach">ACH bank debit fee (%)</label><input type="number" id="s-ach" min="0" max="19" step="0.1" value="${esc(Math.round(Number(st.achFeeRate || 0) * 1000) / 10)}"><span class="help">Used for deposits and tuition payments made by US bank debit. The card fee above applies to card payments.</span></div>
+      </div>
+      <div class="field"><label for="tx-feePolicy">Refund wording (payment screen and Stripe page)</label><textarea id="tx-feePolicy" data-text="feePolicy" rows="2" placeholder="${esc(DEFAULT_FEE_POLICY)}">${esc(st.texts.feePolicy || '')}</textarea><span class="help">Leave empty to use the wording shown. <code>{fee}</code> becomes the fee amount. A link to the Program Terms &amp; Conditions is added after it.</span></div>
+    </div>
+    <div class="panel"><h2 class="serif">Email: application fee received</h2><p class="sub">Sent to the student and every parent/guardian on the application once the fee is paid, from admissions@, with the current Program Terms &amp; Conditions at the bottom. Admissions also gets a short “fee paid” alert.</p>
+      <label class="check"><input type="checkbox" id="em-fc-on"${st.emails?.feeConfirmation?.enabled !== false ? ' checked' : ''}><span>Send this email</span></label>
+      <div class="field"><label for="em-fc-subject">Subject</label><input type="text" id="em-fc-subject" value="${esc(st.emails?.feeConfirmation?.subject || '')}" placeholder="${esc(DEFAULT_EMAILS.feeConfirmation.subject)}"></div>
+      <div class="field"><label for="em-fc-body">Message</label><textarea id="em-fc-body" rows="14" placeholder="${esc(DEFAULT_EMAILS.feeConfirmation.body)}">${esc(st.emails?.feeConfirmation?.body || '')}</textarea>
+      <span class="help">Leave empty to use the default shown. Placeholders: ${EMAIL_PLACEHOLDERS.feeConfirmation.map((k) => `<code>{${k}}</code>`).join(' ')}. Formatting: <code>**bold**</code>, <code>- bullet</code>, blank line between paragraphs.</span>
+      <button class="btn btn--sm" type="button" id="em-fc-default" style="margin-top:6px">Start from the default</button></div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
       <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
@@ -603,6 +619,16 @@ function renderSettings() {
   const recalc = () => { const f = Number(st.appFee) || 0; const r = Number(st.cardFeeRate) || 0; $('#s-total').textContent = `$${(f + Math.round(f * r * 100) / 100).toFixed(2)}`; };
   $('#s-fee').addEventListener('input', (e) => { st.appFee = Number(e.target.value); recalc(); changed({ rerender: false }); });
   $('#s-rate').addEventListener('input', (e) => { st.cardFeeRate = Math.round(Number(e.target.value) * 10) / 1000; recalc(); changed({ rerender: false }); });
+  $('#s-ach').addEventListener('input', (e) => { st.achFeeRate = Math.round(Number(e.target.value) * 10) / 1000; changed({ rerender: false }); });
+  const fc = () => { st.emails = st.emails || {}; st.emails.feeConfirmation = st.emails.feeConfirmation || {}; return st.emails.feeConfirmation; };
+  $('#em-fc-on').addEventListener('change', (e) => { fc().enabled = e.target.checked; changed({ rerender: false }); });
+  $('#em-fc-subject').addEventListener('input', (e) => { fc().subject = e.target.value; changed({ rerender: false }); });
+  $('#em-fc-body').addEventListener('input', (e) => { fc().body = e.target.value; changed({ rerender: false }); });
+  $('#em-fc-default').addEventListener('click', () => {
+    if (!$('#em-fc-subject').value) { $('#em-fc-subject').value = DEFAULT_EMAILS.feeConfirmation.subject; fc().subject = DEFAULT_EMAILS.feeConfirmation.subject; }
+    if (!$('#em-fc-body').value) { $('#em-fc-body').value = DEFAULT_EMAILS.feeConfirmation.body; fc().body = DEFAULT_EMAILS.feeConfirmation.body; }
+    changed({ rerender: false });
+  });
   $('#s-meet').addEventListener('input', (e) => { st.meetingUrl = e.target.value.trim(); changed({ rerender: false }); });
   $('#s-skip').addEventListener('change', (e) => { st.allowSkipInterview = e.target.checked; changed({ rerender: false }); });
   $('#s-fb').addEventListener('change', (e) => { st.interviewFallback = e.target.checked; changed({ rerender: false }); });
@@ -620,6 +646,130 @@ function renderSettings() {
   $('#s-jf1').addEventListener('input', (e) => { st.jotform.step1 = e.target.value.trim(); changed({ rerender: false }); });
   $('#s-jf2').addEventListener('input', (e) => { st.jotform.step2 = e.target.value.trim(); changed({ rerender: false }); });
   $$('[data-text]').forEach((el) => el.addEventListener('input', () => { st.texts[el.dataset.text] = el.value; changed({ rerender: false }); }));
+}
+
+// ── tab: terms ──────────────────────────────────────────────────────────────
+// The Program Terms & Conditions: one document, its own Save / Publish (the
+// header's Publish button is for the form). Each publish is a new version;
+// pd-apply serves the latest to the website, the emails and the payment pages,
+// and records which version each family was shown.
+const fmtDate = (d) => (d ? new Date(d).toLocaleString() : '');
+
+async function loadTerms() {
+  const t = await api('GET', { action: 'terms' });
+  S.terms = { ...t, dirty: false, saving: false, timer: null };
+}
+
+function termsChanged() {
+  const T = S.terms;
+  T.dirty = true;
+  $('#t-state').textContent = 'Unsaved changes';
+  $('#t-preview').innerHTML = termsToHtml(T.draft) || '<p class="help">Nothing to preview yet.</p>';
+  clearTimeout(T.timer);
+  T.timer = setTimeout(saveTerms, SAVE_DELAY);
+  termsChrome();
+}
+
+async function saveTerms() {
+  const T = S.terms;
+  if (!T || T.saving || !T.dirty) return;
+  T.saving = true; T.dirty = false;
+  $('#t-state') && ($('#t-state').textContent = 'Saving…');
+  try {
+    await api('POST', {}, { action: 'terms-save', title: T.title, body: T.draft });
+    T.updatedAt = new Date().toISOString();
+    if ($('#t-state')) $('#t-state').textContent = `Draft saved ${new Date().toLocaleTimeString()}`;
+  } catch (err) {
+    T.dirty = true;
+    if ($('#t-state')) $('#t-state').textContent = `Not saved: ${err.message}`;
+  } finally { T.saving = false; termsChrome(); }
+}
+
+function termsChrome() {
+  const T = S.terms;
+  if (!T || !$('#t-publish')) return;
+  const same = T.live && T.live.body.trim() === T.draft.trim() && T.live.title === T.title;
+  $('#t-publish').disabled = !S.user?.canPublish || same || T.draft.trim().length < 200;
+  $('#t-publish').title = !S.user?.canPublish ? 'Publishing needs an admin or admissions lead.' : same ? 'The draft is the same as the live version.' : '';
+  $('#t-diff').textContent = !T.live ? 'Not published yet — the website, emails and payment pages have no terms until you publish.' : same ? `Live: version ${T.live.version}, published ${fmtDate(T.live.publishedAt)}` : `Live: version ${T.live.version}. The draft has changes that aren't live yet.`;
+}
+
+async function renderTerms() {
+  if (!S.terms) {
+    $('#app').innerHTML = '<div class="loading">Loading terms…</div>';
+    try { await loadTerms(); }
+    catch (err) {
+      $('#app').innerHTML = `<div class="page"><div class="notice notice--bad">${esc(err.message)}${/apply_terms/.test(err.message) ? ' — run <code>MIGRATION-terms.sql</code> in the Neon SQL editor first.' : ''}</div></div>`;
+      return;
+    }
+    if (S.tab !== 'terms') return;
+  }
+  const T = S.terms;
+  const site = (T.applySite || S.applySite || 'https://apply.pacificdiscovery.org').replace(/\/+$/, '');
+  const snippet = `<div id="pd-terms"></div>\n<script src="${site}/terms-embed.js" defer></script>`;
+  $('#app').innerHTML = `<div class="page">
+    <div class="panel">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+        <div><h2 class="serif">Program Terms &amp; Conditions</h2><p class="sub" id="t-diff" style="margin:4px 0 0"></p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn--sm" type="button" id="t-import">Import from website</button>
+          <button class="btn btn--sm" type="button" id="t-versions">Versions (${T.versions.length})</button>
+          <button class="btn btn--primary" type="button" id="t-publish">Publish terms</button>
+        </div>
+      </div>
+      <p class="sub" style="margin-top:10px">Shown on the website terms page, in the application-fee email, on the Stripe payment page, and on the acceptance page. Publishing creates a new version; each payment records the version the family saw. <span id="t-state">${T.updatedAt ? `Draft saved ${fmtDate(T.updatedAt)}` : ''}</span></p>
+      <div class="field" style="max-width:520px"><label for="t-title">Title</label><input type="text" id="t-title" value="${esc(T.title)}" maxlength="200"></div>
+      <div class="cols" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr));align-items:start">
+        <div class="field"><label for="t-body">Text</label><textarea id="t-body" rows="32" spellcheck="true" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5">${esc(T.draft)}</textarea>
+          <span class="help"><code># Heading</code> · <code>## Sub-heading</code> · <code>1. numbered</code> · <code>- bullet</code> · <code>**bold**</code> · <code>[link](https://…)</code> · blank line between paragraphs.</span></div>
+        <div class="field"><span class="lbl">Preview</span><div id="t-preview" class="panel" style="max-height:760px;overflow:auto;margin:0;line-height:1.6"></div></div>
+      </div>
+    </div>
+    <div class="panel"><h2 class="serif">On the website</h2><p class="sub">Paste this into the terms page on pacificdiscovery.org (an HTML / custom code block) once. After that, publishing here updates the page within a minute.</p>
+      <textarea readonly rows="2" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px" onclick="this.select()">${esc(snippet)}</textarea>
+      <p class="sub" style="margin:8px 0 0">Stand-alone page: <a href="${esc(site)}/terms" target="_blank" rel="noopener">${esc(site)}/terms</a></p></div>
+  </div>`;
+  $('#t-preview').innerHTML = termsToHtml(T.draft) || '<p class="help">Nothing to preview yet. Use “Import from website” to start from the current page.</p>';
+  termsChrome();
+  $('#t-title').addEventListener('input', (e) => { T.title = e.target.value; termsChanged(); });
+  $('#t-body').addEventListener('input', (e) => { T.draft = e.target.value; termsChanged(); });
+  $('#t-import').addEventListener('click', async (e) => {
+    if (T.draft.trim() && !(await confirmDialog('Replace the draft?', 'This replaces the draft text with the current website page. The live version is not affected until you publish.', 'Replace draft', true))) return;
+    e.target.disabled = true;
+    try {
+      const out = await api('POST', {}, { action: 'terms-import' });
+      T.draft = out.body; $('#t-body').value = out.body; termsChanged();
+      toast(`Imported ${out.chars.toLocaleString()} characters from the website. Check the headings and lists, then publish.`, 8000);
+    } catch (err) { toast(esc(err.message), 9000); } finally { e.target.disabled = false; }
+  });
+  $('#t-publish').addEventListener('click', async () => {
+    await saveTerms();
+    const note = await promptDialog('Publish the terms?', 'A new version goes live on the website, emails and payment pages. Families who already paid keep the version they agreed to. Optional note (what changed):', 'e.g. Added payment plan section');
+    if (note === null) return;
+    try {
+      const out = await api('POST', {}, { action: 'terms-publish', note });
+      await loadTerms(); renderTerms();
+      toast(`Version ${out.version} is live.`);
+    } catch (err) { toast(esc(err.message), 8000); }
+  });
+  $('#t-versions').addEventListener('click', () => {
+    const d = openDialog(`<div class="dlg-head"><h2 class="serif">Terms versions</h2><button class="btn btn--sm" data-x>Close</button></div>
+      <div class="dlg-body">${T.versions.length ? T.versions.map((v) => `<div class="panel" style="padding:12px;margin-bottom:8px"><strong>Version ${v.version}</strong> · ${fmtDate(v.published_at)} · ${esc(v.published_by || '')}${v.note ? `<div class="em">${esc(v.note)}</div>` : ''}
+        <div style="margin-top:6px;display:flex;gap:6px"><button class="btn btn--sm" data-view="${v.version}">View</button><button class="btn btn--sm" data-copy="${v.version}">Copy into draft</button></div></div>`).join('') : '<p>No versions yet — publish to create version 1.</p>'}</div>`);
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelectorAll('[data-view],[data-copy]').forEach((b) => b.addEventListener('click', async () => {
+      try {
+        const v = await api('GET', { action: 'terms-version', v: b.dataset.view || b.dataset.copy });
+        if (b.dataset.view) {
+          d.querySelector('.dlg-body').innerHTML = `<p class="sub">Version ${v.version} · ${fmtDate(v.publishedAt)}</p><div class="panel">${termsToHtml(v.body)}</div>`;
+          return;
+        }
+        d.close();
+        T.draft = v.body; T.title = v.title; renderTerms(); termsChanged();
+        toast(`Version ${v.version} copied into the draft. Publish to make it live again.`);
+      } catch (err) { toast(esc(err.message)); }
+    }));
+  });
 }
 
 // ── tab: applications ───────────────────────────────────────────────────────
@@ -719,7 +869,7 @@ async function boot() {
   $('#btn-publish').addEventListener('click', publish);
   $('#btn-discard').addEventListener('click', discard);
   $('#btn-versions').addEventListener('click', () => showVersions().catch((e) => toast(esc(e.message))));
-  window.addEventListener('beforeunload', (e) => { if (S.dirty || S.saving) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', (e) => { if (S.dirty || S.saving || S.terms?.dirty || S.terms?.saving) { e.preventDefault(); e.returnValue = ''; } });
 
   let out;
   try { out = await api('GET', { action: 'get' }); }
