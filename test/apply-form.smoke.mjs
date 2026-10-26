@@ -19,6 +19,9 @@ await pool.query(`INSERT INTO applications (token_hash, email, first_name, last_
   '{"name":{"first":"Sam","last":"Rivera"},"email":"sam@x.org","program":"Hawaii Summer Program","term":"Summer 2027","shirtSize":"Medium","respiratory":"Yes","respiratoryDetails":"Mild asthma"}',
   now(), now(), now(), '{"label":"Tue 13 Oct, 9:00 AM"}', '{"jf1":{"ok":true},"hsDeal":{"ok":true}}')`);
 
+await pool.query(`INSERT INTO applications (token_hash, email, first_name, last_name, program, term, status, answers, step1_at, step2_at, created_at, reminders)
+  VALUES ('h3','ana@x.org','Ana','Lopez','Hawaii Summer Program','Summer 2027','step2','{}', now() - interval '5 days', now() - interval '5 days', now() - interval '5 days',
+  '{"sent":{"1":{"at":"2026-10-22T09:00:00Z","to":["ana@x.org","mom@x.org"]},"2":{"at":"2026-10-25T09:00:00Z","to":["ana@x.org","mom@x.org"]}}}')`);
 const deps = { verifiedUser: async () => ({ email: 'jake@x.org', name: 'Jake', roles: ['admin'] }), accessInputs: async () => ({ grants: null, dashboard: { slug: 'apply-form', allowedRoles: ['admin'] } }) };
 const root = new URL('..', import.meta.url).pathname;
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json' };
@@ -90,6 +93,12 @@ try {
   await page.fill('#em-fc-subject', 'Application received — {program}');
   await page.click('#em-fc-default');
   assert.match(await page.locator('#em-fc-body').inputValue(), /What happens next/);
+  await page.check('#rm-on');
+  await page.click('[data-email=feeReminder3] summary');
+  await page.click('[data-email=feeReminder3] [data-em-default]');
+  assert.match(await page.locator('[data-email=feeReminder3] [data-em=body]').inputValue(), /check in personally/);
+  await page.click('[data-email=feeReminder2] summary');
+  await page.uncheck('[data-email=feeReminder2] [data-em=enabled]');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-4-settings.png`, fullPage: true });
 
   // publish
@@ -102,6 +111,10 @@ try {
   assert.equal(pub.published.programs[i].price, 9950);
   assert.equal(pub.published.settings.achFeeRate, 0.008);
   assert.match(pub.published.settings.emails.feeConfirmation.body, /What happens next/);
+  assert.equal(pub.published.settings.feeReminders.enabled, true);
+  assert.ok(Date.now() - new Date(pub.published.settings.feeReminders.since) < 120000, 'switch-on time recorded');
+  assert.equal(pub.published.settings.emails.feeReminder2.enabled, false);
+  assert.match(pub.published.settings.emails.feeReminder3.body, /check in personally/);
 
   // terms
   await pool.query('DELETE FROM apply_terms_versions; DELETE FROM apply_terms');
@@ -127,6 +140,25 @@ try {
   await page.waitForSelector('dl.ans');
   assert.match(await page.locator('dl.ans').textContent(), /Mild asthma/);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-5-application.png` });
+  await page.click('[data-x]');
+
+  // fee reminders on an unpaid application
+  await page.waitForSelector('text=Reminder 2/4 sent');
+  await page.click('.apps tr[data-id]:has-text("Ana Lopez")');
+  await page.waitForSelector('#rem-toggle');
+  assert.match(await page.locator('.dlg-body').textContent(), /Reminder 2 sent .* to ana@x\.org, mom@x\.org/);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-7-reminders.png` });
+  assert.ok(await page.locator('#dec-accept').isDisabled(), 'cannot accept before the fee is paid');
+  await page.click('#dec-decline');
+  await page.waitForSelector('#dd-msg');
+  assert.match(await page.locator('.dlg-body').textContent(), /Decline Ana Lopez\?/);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-8-decline.png` });
+  await page.click('[data-x]');
+  await page.waitForSelector('#rem-toggle');
+  await page.click('#rem-toggle');
+  await page.waitForSelector('#rem-toggle[data-stop="0"]');
+  const [ana] = (await pool.query(`SELECT reminders FROM applications WHERE email = 'ana@x.org'`)).rows;
+  assert.ok(ana.reminders.stopped);
   assert.deepEqual(errors, []);
   console.log('  ✓ editor: edit, add conditional field, programs, settings, publish, terms, applications');
 } finally {

@@ -246,6 +246,26 @@ DEFAULT_EMAILS.feeReminder4 = {
   ].join('\n'),
 };
 
+// Admissions decided not to offer a place (dashboard → Applications → Decline).
+DEFAULT_EMAILS.declined = {
+  subject: 'Your Pacific Discovery application',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Thank you for applying to **{program}** ({term}), and for the time you spent on your application and interview.',
+    '',
+    'After careful consideration, we\'re not able to offer you a place on this program.',
+    '',
+    '{message}',
+    '',
+    '{refund}',
+    '',
+    'We really appreciate your interest in Pacific Discovery and wish you all the best with your plans.',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
 /** The placeholders each message understands, for the dashboard help text. */
 const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
 export const EMAIL_PLACEHOLDERS = {
@@ -254,7 +274,14 @@ export const EMAIL_PLACEHOLDERS = {
   feeReminder2: REMINDER_PLACEHOLDERS,
   feeReminder3: REMINDER_PLACEHOLDERS,
   feeReminder4: REMINDER_PLACEHOLDERS,
+  declined: ['firstName', 'program', 'term', 'message', 'refund'],
 };
+
+/** How long an accepted applicant's place is held for the deposit (days). */
+export function holdDays(schema) {
+  const n = Number(schema?.settings?.acceptance?.holdDays);
+  return Number.isFinite(n) && n >= 1 && n <= 60 ? Math.round(n) : 7;
+}
 
 /** Days after the full application is in. Index n → template feeReminder{n+1}. */
 export const FEE_REMINDER_DAYS = [1, 4, 10, 21];

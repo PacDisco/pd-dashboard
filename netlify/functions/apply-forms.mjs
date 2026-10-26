@@ -28,6 +28,7 @@
 //   GET  application  ?id=            → full record (answers, sync)
 //   POST resync    { id }             re-run Jotform/HubSpot sync via pd-apply
 //   POST withdraw  { id, withdrawn }  hide/unhide an application from the portals
+//   POST decide    { id, outcome, message?, refund? }  accept / decline via pd-apply (APPLY_DECISION_ROLES)
 //   POST reminders { id, stop }       stop (true) or resume (false) fee reminders; resume also re-opens a closed one
 //   GET  file      ?id=               stream an uploaded file from pd-apply
 //   GET  terms                        → { draft, title, updatedAt, live, versions }
@@ -162,7 +163,7 @@ export default async (req, context, deps = {}) => {
       const fid = formIdOf(url.searchParams.get("form"));
       if (action === "get") {
         const row = await loadRow(fid);
-        return json({ form: shape(row), user: { email: user.email, name: user.name, canPublish: user.canPublish }, lint: row ? lintFor(fid, row.draft) : [], applySite: applySite() });
+        return json({ form: shape(row), user: { email: user.email, name: user.name, canPublish: user.canPublish, canDecide: canDecide(user) }, lint: row ? lintFor(fid, row.draft) : [], applySite: applySite() });
       }
       if (action === "versions") {
         const rows = await db()`SELECT id, kind, rev, note, created_at, created_by FROM apply_form_versions WHERE form_id = ${fid} ORDER BY created_at DESC LIMIT 50`;
@@ -197,6 +198,7 @@ export default async (req, context, deps = {}) => {
       case "resync": return await resync(body);
       case "withdraw": return await withdraw(body);
       case "reminders": return await setReminders(body, user);
+      case "decide": return await decideApplication(body, user);
       case "terms-save": return await termsSave(body, user);
       case "terms-publish": return await termsPublish(body, user);
       case "terms-import": return await termsImport(body);
@@ -321,7 +323,8 @@ async function jotformAdd(body) {
 // MIGRATION-reminders.sql has been run (it is simply null then).
 const LIST_COLS = `id, email, first_name, last_name, program, term, status, step1_at, step2_at, interview_at, interview, paid_at,
   payment, hubspot_contact_id, hubspot_deal_id, jotform_step1_id, jotform_step2_id, sync, created_at, updated_at,
-  to_jsonb(applications)->'reminders' AS reminders`;
+  to_jsonb(applications)->'reminders' AS reminders, to_jsonb(applications)->'decision' AS decision`;
+const OUTCOME_SQL = `(to_jsonb(applications)->'decision'->>'outcome')`;
 const CLOSED_SQL = `(paid_at IS NULL AND status <> 'withdrawn' AND COALESCE(to_jsonb(applications)->'reminders', '{}'::jsonb) ? 'closedAt')`;
 
 async function listApplications(url) {
@@ -333,13 +336,15 @@ async function listApplications(url) {
     `SELECT ${LIST_COLS} FROM applications
       WHERE ($1 = '' OR status = $1
              OR ($1 = 'needs_interview' AND interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn')
-             OR ($1 = 'closed' AND ${CLOSED_SQL}))
+             OR ($1 = 'closed' AND ${CLOSED_SQL})
+             OR ($1 IN ('accepted', 'declined') AND ${OUTCOME_SQL} = $1))
         AND ($2 = '%%' OR lower(email) LIKE $2 OR lower(first_name || ' ' || last_name) LIKE $2 OR lower(program) LIKE $2)
       ORDER BY created_at DESC LIMIT $3`, [status, like, limit]);
   const counts = await db()`SELECT status, count(*)::int AS n FROM applications GROUP BY status`;
   const need = await db()`SELECT count(*)::int AS n FROM applications WHERE interview->>'fallback' = 'true' AND interview_at IS NULL AND status <> 'withdrawn'`;
   const closed = await db().query(`SELECT count(*)::int AS n FROM applications WHERE ${CLOSED_SQL}`);
-  return { applications: rows.map(summary), counts: { ...Object.fromEntries(counts.map((c) => [c.status, c.n])), needs_interview: need[0]?.n || 0, closed: closed[0]?.n || 0 } };
+  const decided = await db().query(`SELECT ${OUTCOME_SQL} AS o, count(*)::int AS n FROM applications WHERE ${OUTCOME_SQL} IS NOT NULL AND status <> 'withdrawn' GROUP BY 1`);
+  return { applications: rows.map(summary), counts: { ...Object.fromEntries(counts.map((c) => [c.status, c.n])), needs_interview: need[0]?.n || 0, closed: closed[0]?.n || 0, ...Object.fromEntries(decided.map((d) => [d.o, d.n])) } };
 }
 
 export function syncHealth(sync) {
@@ -355,6 +360,7 @@ function summary(r) {
     paidAt: r.paid_at, payment: r.payment, hubspotDealId: r.hubspot_deal_id, hubspotContactId: r.hubspot_contact_id,
     jotformStep1Id: r.jotform_step1_id, jotformStep2Id: r.jotform_step2_id, sync: syncHealth(r.sync), syncRaw: r.sync,
     reminders: reminderSummary(r.reminders),
+    decision: r.decision && r.decision.outcome ? r.decision : null,
   };
 }
 
@@ -393,6 +399,26 @@ async function resync({ id }) {
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return json({ error: data.error || `pd-apply returned ${r.status}` }, 502);
   return json({ ok: true, result: data.result, application: data.app ? summary(data.app) : null });
+}
+
+/** Who may accept / decline. Default: admins and admissions. */
+export function canDecide(user) {
+  const allowed = (process.env.APPLY_DECISION_ROLES || "admin,admissions").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return (user?.roles || []).some((r) => allowed.includes(String(r).toLowerCase()));
+}
+
+async function decideApplication({ id, outcome, message, refund }, user) {
+  if (!canDecide(user)) return json({ error: "Accepting or declining needs the admin or admissions role." }, 403);
+  const site = applySite();
+  if (!site || !process.env.APPLY_SERVICE_KEY) return json({ error: "Set APPLY_SITE_URL and APPLY_SERVICE_KEY on the dashboard site." }, 500);
+  const r = await fetch(`${site}/api/service/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-apply-key": process.env.APPLY_SERVICE_KEY },
+    body: JSON.stringify({ id, outcome, message, refund, by: user.actor || user.name || user.email }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return json({ error: data.error || `pd-apply returned ${r.status}` }, r.status === 409 ? 409 : 502);
+  return json({ ok: true, decision: data.decision });
 }
 
 async function withdraw({ id, withdrawn }) {

@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
-import handler, { __setSql, checkSchema, syncHealth } from '../netlify/functions/apply-forms.mjs';
+import handler, { __setSql, checkSchema, syncHealth, reminderSummary, canDecide } from '../netlify/functions/apply-forms.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.TEST_PG_URL || 'postgres://postgres@127.0.0.1:55432/apply' });
 const toText = (s, v) => s.reduce((a, x, i) => a + x + (i < v.length ? `$${i + 1}` : ''), '');
@@ -131,6 +131,56 @@ await t('terms: import from the website (pacificdiscovery.org only)', async () =
     assert.equal(r.body.body, '# Program Terms\n\n## 1. Application Process\n\nA **$250** fee.\n\n- One\n- Two');
     assert.equal((await call(editor, { action: 'terms-import', url: 'https://evil.example/terms' })).status, 400);
   } finally { globalThis.fetch = real; }
+});
+
+await t('fee reminders: status in the list, closed filter, stop and resume', async () => {
+  const [r] = (await pool.query(`INSERT INTO applications (token_hash, email, first_name, last_name, program, term, status, step1_at, step2_at, reminders)
+    VALUES ('rem1','rem@x.org','Rem','One','Hawaii Summer Program','Summer 2027','step2', now(), now() - interval '30 days',
+    '{"sent":{"1":{"at":"2026-10-01T00:00:00Z","to":["rem@x.org"]},"4":{"at":"2026-10-20T00:00:00Z","pending":true}},"skipped":[2,3],"closedAt":"2026-10-25T00:00:00Z"}') RETURNING id`)).rows;
+  const l = await call(editor, null, '?action=applications');
+  const row = l.body.applications.find((a) => a.id === r.id);
+  assert.equal(row.reminders.count, 1, 'a pending (claimed, unsent) reminder is not counted');
+  assert.equal(row.reminders.closedAt, '2026-10-25T00:00:00Z');
+  assert.equal(l.body.counts.closed, 1);
+  const c = await call(editor, null, '?action=applications&status=closed');
+  assert.deepEqual(c.body.applications.map((a) => a.id), [r.id]);
+  const stop = await call(editor, { action: 'reminders', id: r.id, stop: true });
+  assert.equal(stop.status, 200); assert.equal(stop.body.application.reminders.stopped.by, 'Ed');
+  const resume = await call(editor, { action: 'reminders', id: r.id, stop: false });
+  assert.equal(resume.body.application.reminders.stopped, null);
+  assert.equal(resume.body.application.reminders.closedAt, null, 'resume re-opens a closed application');
+  assert.equal((await call(editor, { action: 'reminders', id: '00000000-0000-0000-0000-000000000000', stop: true })).status, 404);
+  assert.deepEqual(reminderSummary(null), { sent: [], count: 0 });
+});
+
+await t('accept / decline: role check, passed to pd-apply with who decided, shown in the list', async () => {
+  assert.equal(canDecide({ roles: ['outreach'] }), false);
+  assert.equal(canDecide({ roles: ['admissions'] }), true);
+  assert.equal(canDecide({ roles: ['admin'] }), true);
+  const [r] = (await pool.query(`INSERT INTO applications (token_hash, email, first_name, last_name, program, term, status, step1_at, step2_at, paid_at)
+    VALUES ('dec1','dec@x.org','Dee','Cee','Hawaii Summer Program','Summer 2027','paid', now(), now(), now()) RETURNING id`)).rows;
+  assert.equal((await call(editor, { action: 'decide', id: r.id, outcome: 'declined' })).status, 403, 'outreach editor cannot decide');
+  const admissions = { email: 'meg@pd.org', name: 'Megan', roles: ['admissions'] };
+  process.env.APPLY_SITE_URL = 'https://apply.test'; process.env.APPLY_SERVICE_KEY = 'svc';
+  const real = globalThis.fetch; let sent;
+  globalThis.fetch = async (u, init) => {
+    sent = { url: String(u), key: init.headers['x-apply-key'], body: JSON.parse(init.body) };
+    await pool.query(`UPDATE applications SET decision = $2 WHERE id = $1`, [r.id, JSON.stringify({ outcome: 'declined', at: new Date().toISOString(), by: 'Megan', refund: { id: 're_1', amount: 25875 } })]);
+    return new Response(JSON.stringify({ ok: true, decision: { outcome: 'declined' } }), { status: 200 });
+  };
+  try {
+    const out = await call(admissions, { action: 'decide', id: r.id, outcome: 'declined', message: 'Try Fall', refund: true });
+    assert.equal(out.status, 200, JSON.stringify(out.body));
+    assert.equal(sent.url, 'https://apply.test/api/service/decision'); assert.equal(sent.key, 'svc');
+    assert.deepEqual({ ...sent.body, id: undefined }, { id: undefined, outcome: 'declined', message: 'Try Fall', refund: true, by: 'Megan' });
+    const l = await call(admissions, null, '?action=applications&status=declined');
+    assert.deepEqual(l.body.applications.map((a) => a.id), [r.id]);
+    assert.equal(l.body.applications[0].decision.refund.amount, 25875);
+    assert.equal(l.body.counts.declined, 1);
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Already declined.' }), { status: 409 });
+    const dup = await call(admissions, { action: 'decide', id: r.id, outcome: 'declined' });
+    assert.equal(dup.status, 409); assert.equal(dup.body.error, 'Already declined.');
+  } finally { globalThis.fetch = real; delete process.env.APPLY_SITE_URL; delete process.env.APPLY_SERVICE_KEY; }
 });
 
 await pool.end();
