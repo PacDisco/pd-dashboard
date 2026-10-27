@@ -9,6 +9,10 @@
 import {
   renderStep, FORM_CSS, FIELD_TYPES, OPS, allFields, fieldByKey, lintSchema, nextQid, optionsFor, esc,
 } from '/apply-form/form-kit.mjs';
+import {
+  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
+  DEFAULT_ADVISOR_URL, DEFAULT_ADVISOR_TEXT,
+} from '/apply-form/terms-kit.mjs';
 
 const API = '/api/apply-forms';
 const SAVE_DELAY = 1200;
@@ -21,6 +25,7 @@ const S = {
   tab: 'fields', step: 'step1', sel: null, hubspot: null,
   saveTimer: null, saving: false, dirty: false, saveError: null,
   apps: { status: '', q: '', list: [], counts: {} },
+  terms: null, // { title, draft, live, versions, dirty, saving, timer }
 };
 
 // ── api ─────────────────────────────────────────────────────────────────────
@@ -175,6 +180,7 @@ function render() {
   if (S.tab === 'programs') return renderPrograms();
   if (S.tab === 'settings') return renderSettings();
   if (S.tab === 'apps') return renderApps();
+  if (S.tab === 'terms') return renderTerms();
 }
 
 // ── tab: fields ─────────────────────────────────────────────────────────────
@@ -569,6 +575,39 @@ function guessPd(options, name) {
   return best && best.score >= 0.67 ? best.value : '';
 }
 
+// ── editable email (subject, message, on/off) ───────────────────────────────
+// Stored at settings.emails[key]; empty fields fall back to DEFAULT_EMAILS.
+function emailEditor(st, key, title) {
+  const e = st.emails?.[key] || {};
+  const d = DEFAULT_EMAILS[key];
+  return `<details class="panel" style="padding:12px 14px;margin:10px 0 0" data-email="${key}">
+    <summary><strong>${esc(title)}</strong> <span class="em">— ${esc(e.subject || d.subject)}${e.enabled === false ? ' · off' : ''}</span></summary>
+    <label class="check" style="margin-top:10px"><input type="checkbox" data-em="enabled"${e.enabled !== false ? ' checked' : ''}><span>Send this one</span></label>
+    <div class="field"><label>Subject</label><input type="text" data-em="subject" value="${esc(e.subject || '')}" placeholder="${esc(d.subject)}"></div>
+    <div class="field"><label>Message</label><textarea data-em="body" rows="12" placeholder="${esc(d.body)}">${esc(e.body || '')}</textarea>
+      <span class="help">Leave empty to use the default shown. Placeholders: ${(EMAIL_PLACEHOLDERS[key] || []).map((k) => `<code>{${k}}</code>`).join(' ')}. A link: <code>[Finish my application]({link})</code>.</span>
+      <button class="btn btn--sm" type="button" data-em-default style="margin-top:6px">Start from the default</button></div>
+  </details>`;
+}
+
+function wireEmailEditors(st) {
+  $$('[data-email]').forEach((box) => {
+    const key = box.dataset.email;
+    const get = () => { st.emails = st.emails || {}; st.emails[key] = st.emails[key] || {}; return st.emails[key]; };
+    box.querySelectorAll('[data-em]').forEach((el) => {
+      const f = el.dataset.em;
+      el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => { get()[f] = el.type === 'checkbox' ? el.checked : el.value; changed({ rerender: false }); });
+    });
+    box.querySelector('[data-em-default]').addEventListener('click', () => {
+      const d = DEFAULT_EMAILS[key];
+      const subj = box.querySelector('[data-em=subject]'); const body = box.querySelector('[data-em=body]');
+      if (!subj.value) { subj.value = d.subject; get().subject = d.subject; }
+      if (!body.value) { body.value = d.body; get().body = d.body; }
+      changed({ rerender: false });
+    });
+  });
+}
+
 // ── tab: settings ───────────────────────────────────────────────────────────
 function renderSettings() {
   const st = S.draft.settings;
@@ -584,7 +623,54 @@ function renderSettings() {
         <div class="field"><label for="s-fee">Application fee (USD)</label><input type="number" id="s-fee" min="1" step="1" value="${esc(st.appFee)}"></div>
         <div class="field"><label for="s-rate">Card processing fee (%)</label><input type="number" id="s-rate" min="0" max="19" step="0.1" value="${esc(Math.round(rate * 1000) / 10)}"></div>
         <div class="field"><span class="lbl">Applicant pays</span><div style="font-size:22px;font-weight:700;color:var(--ink)" id="s-total">$${total.toFixed(2)}</div></div>
-      </div></div>
+      </div>
+      <div class="cols">
+        <div class="field"><label for="s-ach">ACH bank debit fee (%)</label><input type="number" id="s-ach" min="0" max="19" step="0.1" value="${esc(Math.round(Number(st.achFeeRate || 0) * 1000) / 10)}"><span class="help">Used for deposits and tuition payments made by US bank debit. The card fee above applies to card payments.</span></div>
+      </div>
+      <div class="field"><label for="tx-feePolicy">Refund wording (payment screen and Stripe page)</label><textarea id="tx-feePolicy" data-text="feePolicy" rows="2" placeholder="${esc(DEFAULT_FEE_POLICY)}">${esc(st.texts.feePolicy || '')}</textarea><span class="help">Leave empty to use the wording shown. <code>{fee}</code> becomes the fee amount. A link to the Program Terms &amp; Conditions is added after it.</span></div>
+    </div>
+    <div class="panel"><h2 class="serif">Talk to an advisor (all family emails)</h2><p class="sub">Shown at the bottom of every email to students and parents, with a button to book a call.</p>
+      <label class="check"><input type="checkbox" id="ad-on"${st.advisor?.enabled !== false ? ' checked' : ''}><span>Show it</span></label>
+      <div class="cols">
+        <div class="field"><label for="ad-url">Booking link</label><input type="url" id="ad-url" value="${esc(st.advisor?.url || '')}" placeholder="${esc(DEFAULT_ADVISOR_URL)}"></div>
+        <div class="field"><label for="ad-label">Button text</label><input type="text" id="ad-label" value="${esc(st.advisor?.label || '')}" placeholder="Book a call with an advisor"></div>
+      </div>
+      <div class="field"><label for="ad-text">Line above the button</label><input type="text" id="ad-text" value="${esc(st.advisor?.text || '')}" placeholder="${esc(DEFAULT_ADVISOR_TEXT)}"><span class="help">Leave any field empty to use what's shown.</span></div></div>
+    <div class="panel"><h2 class="serif">Email: application fee received</h2><p class="sub">Sent to the student and every parent/guardian on the application once the fee is paid, from admissions@, with the current Program Terms &amp; Conditions at the bottom. Admissions also gets a short “fee paid” alert.</p>
+      <label class="check"><input type="checkbox" id="em-fc-on"${st.emails?.feeConfirmation?.enabled !== false ? ' checked' : ''}><span>Send this email</span></label>
+      <div class="field"><label for="em-fc-subject">Subject</label><input type="text" id="em-fc-subject" value="${esc(st.emails?.feeConfirmation?.subject || '')}" placeholder="${esc(DEFAULT_EMAILS.feeConfirmation.subject)}"></div>
+      <div class="field"><label for="em-fc-body">Message</label><textarea id="em-fc-body" rows="14" placeholder="${esc(DEFAULT_EMAILS.feeConfirmation.body)}">${esc(st.emails?.feeConfirmation?.body || '')}</textarea>
+      <span class="help">Leave empty to use the default shown. Placeholders: ${EMAIL_PLACEHOLDERS.feeConfirmation.map((k) => `<code>{${k}}</code>`).join(' ')}. Formatting: <code>**bold**</code>, <code>- bullet</code>, blank line between paragraphs.</span>
+      <button class="btn btn--sm" type="button" id="em-fc-default" style="margin-top:6px">Start from the default</button></div></div>
+    <div class="panel"><h2 class="serif">Reminders: application fee not paid</h2><p class="sub">For applicants who finished the full application but haven't paid the fee. Sent to the student and every parent/guardian, from admissions@, ${FEE_REMINDER_DAYS.map((d) => `${d}`).join(', ').replace(/, (\d+)$/, ' and $1')} days after the application was completed. Each has a personal link back to their application. Reminders stop as soon as the fee is paid or the application is withdrawn, and admissions can stop them for one applicant from the Applications tab. After ${FEE_CLOSE_DAYS} days an unpaid application is marked <em>Closed</em> (they can still pay).</p>
+      <label class="check"><input type="checkbox" id="rm-on"${st.feeReminders?.enabled ? ' checked' : ''}><span>Send reminders <span class="help" id="rm-since">${st.feeReminders?.enabled && st.feeReminders?.since ? `— for applications completed since ${esc(new Date(st.feeReminders.since).toLocaleString())}` : '— only applications completed after you switch this on (and Publish) get them'}</span></span></label>
+      ${[1, 2, 3, 4].map((n) => emailEditor(st, `feeReminder${n}`, `Reminder ${n} — day ${FEE_REMINDER_DAYS[n - 1]}`)).join('')}</div>
+    <div class="panel"><h2 class="serif">Email: not accepted</h2><p class="sub">Sent to the student and parents when you click <em>Decline</em> on an application. <code>{message}</code> is the optional personal note you type when declining; <code>{refund}</code> is a line about the refunded application fee (empty when there's no refund).</p>
+      ${emailEditor(st, 'declined', 'Not accepted')}</div>
+    <div class="panel"><h2 class="serif">Acceptance &amp; deposit</h2><p class="sub">When you click <em>Accept</em>, the student and parents get a personal link to their acceptance page. There they choose how to pay (monthly, two instalments or in full — depending on how close the start date is) and pay the $2,250 deposit to confirm their place. The price comes from Programs &amp; dates; the start date from the program's HubSpot record.</p>
+      <div class="field" style="max-width:260px"><label for="ac-hold">Hold a place for (days)</label><input type="number" id="ac-hold" min="1" max="60" value="${esc(st.acceptance?.holdDays ?? 7)}"><span class="help">The deposit is due by then. Admissions can extend one applicant's hold from the Applications tab.</span></div>
+      ${(() => {
+        const dc = st.discounts || (st.payInFull ? { enabled: st.payInFull.enabled, full: st.payInFull } : {});
+        const cell = (plan, k) => `<td><input type="number" class="inp" data-disc="${plan}.${k}" min="0" step="50" value="${esc(dc[plan]?.[k] ?? '')}" placeholder="0" style="max-width:110px"></td>`;
+        return `<div class="field" style="margin-top:14px"><label class="check"><input type="checkbox" id="pf-on"${dc.enabled ? ' checked' : ''}><span><strong>Payment plan discounts</strong></span></label>
+        <table class="grid" style="max-width:520px;margin-top:6px"><thead><tr><th></th><th>Semester ($)</th><th>Mini semester ($)</th><th>Summer ($)</th></tr></thead><tbody>
+          <tr><td>Pay in full</td>${['semester', 'mini', 'summer'].map((k) => cell('full', k)).join('')}</tr>
+          <tr><td>Two instalments</td>${['semester', 'mini', 'summer'].map((k) => cell('two', k)).join('')}</tr>
+        </tbody></table>
+        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. Neither is offered within 60 days of the start date. Fixed when you click Accept, so changing them later doesn't affect families already accepted. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
+      })()}
+      ${emailEditor(st, 'accepted', 'Email: accepted')}
+      ${emailEditor(st, 'enrolled', 'Email: place confirmed (deposit paid)')}
+      <p class="help" style="margin-top:8px"><code>{howToPay}</code> adapts to the start date (monthly / two instalments / in full). <code>{message}</code> is the note you type when accepting. <code>{schedule}</code> is the list of upcoming payments.</p></div>
+    <div class="panel"><h2 class="serif">Payments after the deposit</h2><p class="sub">Instalments are charged automatically to the card or bank account the family paid the deposit with (plus that method's fee above). They're emailed 3 days before each payment and get a receipt after. A payment that fails is tried again 3 and 7 days later; after the third failure admissions is emailed and it isn't tried again until you click <em>Retry</em>. Families on "balance later" get reminders 14 and 3 days before it's due, and admissions is told if it's overdue. Every email goes to the student and parents and is logged in HubSpot.</p>
+      <label class="check"><input type="checkbox" id="pay-auto"${st.payments?.autoCharge !== false ? ' checked' : ''}><span>Charge instalments automatically <span class="help">— untick to stop all automatic charges (notices still go out)</span></span></label>
+      <label class="check"><input type="checkbox" id="pay-dep"${st.payments?.depositReminders !== false ? ' checked' : ''}><span>Remind accepted applicants who haven't paid the deposit <span class="help">(5, 2 and 1 days before the hold ends; admissions is told when it passes)</span></span></label>
+      ${emailEditor(st, 'depositReminder', 'Email: deposit reminder')}
+      ${emailEditor(st, 'paymentUpcoming', 'Email: payment in 3 days')}
+      ${emailEditor(st, 'paymentReceived', 'Email: payment received')}
+      ${emailEditor(st, 'paymentFailed', 'Email: payment didn\'t go through')}
+      ${emailEditor(st, 'balanceReminder', 'Email: balance due (balance later)')}
+      ${emailEditor(st, 'choosePlan', 'Email: deposit received — choose a payment plan')}</div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
       <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
@@ -603,6 +689,39 @@ function renderSettings() {
   const recalc = () => { const f = Number(st.appFee) || 0; const r = Number(st.cardFeeRate) || 0; $('#s-total').textContent = `$${(f + Math.round(f * r * 100) / 100).toFixed(2)}`; };
   $('#s-fee').addEventListener('input', (e) => { st.appFee = Number(e.target.value); recalc(); changed({ rerender: false }); });
   $('#s-rate').addEventListener('input', (e) => { st.cardFeeRate = Math.round(Number(e.target.value) * 10) / 1000; recalc(); changed({ rerender: false }); });
+  $('#s-ach').addEventListener('input', (e) => { st.achFeeRate = Math.round(Number(e.target.value) * 10) / 1000; changed({ rerender: false }); });
+  const fc = () => { st.emails = st.emails || {}; st.emails.feeConfirmation = st.emails.feeConfirmation || {}; return st.emails.feeConfirmation; };
+  $('#em-fc-on').addEventListener('change', (e) => { fc().enabled = e.target.checked; changed({ rerender: false }); });
+  $('#em-fc-subject').addEventListener('input', (e) => { fc().subject = e.target.value; changed({ rerender: false }); });
+  $('#em-fc-body').addEventListener('input', (e) => { fc().body = e.target.value; changed({ rerender: false }); });
+  $('#em-fc-default').addEventListener('click', () => {
+    if (!$('#em-fc-subject').value) { $('#em-fc-subject').value = DEFAULT_EMAILS.feeConfirmation.subject; fc().subject = DEFAULT_EMAILS.feeConfirmation.subject; }
+    if (!$('#em-fc-body').value) { $('#em-fc-body').value = DEFAULT_EMAILS.feeConfirmation.body; fc().body = DEFAULT_EMAILS.feeConfirmation.body; }
+    changed({ rerender: false });
+  });
+  wireEmailEditors(st);
+  const ad = () => { st.advisor = st.advisor || {}; return st.advisor; };
+  $('#ad-on').addEventListener('change', (e) => { ad().enabled = e.target.checked; changed({ rerender: false }); });
+  [['#ad-url', 'url'], ['#ad-label', 'label'], ['#ad-text', 'text']].forEach(([sel, k]) => $(sel).addEventListener('input', (e) => { ad()[k] = e.target.value.trim(); changed({ rerender: false }); }));
+  [['#pay-auto', 'autoCharge'], ['#pay-dep', 'depositReminders']].forEach(([sel, k]) => $(sel).addEventListener('change', (e) => { st.payments = { ...(st.payments || {}), [k]: e.target.checked }; changed({ rerender: false }); }));
+  const disc = () => { st.discounts = st.discounts || (st.payInFull ? { enabled: !!st.payInFull.enabled, full: { ...st.payInFull } } : { enabled: false }); delete st.discounts.full?.enabled; delete st.payInFull; return st.discounts; };
+  $('#pf-on').addEventListener('change', (e) => { disc().enabled = e.target.checked; changed({ rerender: false }); });
+  $$('[data-disc]').forEach((el) => el.addEventListener('input', () => {
+    const [plan, k] = el.dataset.disc.split('.');
+    const n = Math.max(0, Math.round(Number(el.value) * 100) / 100);
+    const d = disc(); d[plan] = { ...(d[plan] || {}), [k]: Number.isFinite(n) ? n : 0 };
+    changed({ rerender: false });
+  }));
+  $('#ac-hold').addEventListener('input', (e) => { const n = Math.round(Number(e.target.value)); st.acceptance = { ...(st.acceptance || {}) }; if (n >= 1 && n <= 60) st.acceptance.holdDays = n; else delete st.acceptance.holdDays; changed({ rerender: false }); });
+  $('#rm-on').addEventListener('change', (e) => {
+    st.feeReminders = st.feeReminders || {};
+    st.feeReminders.enabled = e.target.checked;
+    // The start line: only applications completed after this get reminders,
+    // so switching on never emails the backlog. Every switch-on starts afresh.
+    if (e.target.checked) st.feeReminders.since = new Date().toISOString();
+    $('#rm-since').textContent = e.target.checked ? `— for applications completed from now on. Publish to start.` : '— off';
+    changed({ rerender: false });
+  });
   $('#s-meet').addEventListener('input', (e) => { st.meetingUrl = e.target.value.trim(); changed({ rerender: false }); });
   $('#s-skip').addEventListener('change', (e) => { st.allowSkipInterview = e.target.checked; changed({ rerender: false }); });
   $('#s-fb').addEventListener('change', (e) => { st.interviewFallback = e.target.checked; changed({ rerender: false }); });
@@ -622,8 +741,157 @@ function renderSettings() {
   $$('[data-text]').forEach((el) => el.addEventListener('input', () => { st.texts[el.dataset.text] = el.value; changed({ rerender: false }); }));
 }
 
+// ── tab: terms ──────────────────────────────────────────────────────────────
+// The Program Terms & Conditions: one document, its own Save / Publish (the
+// header's Publish button is for the form). Each publish is a new version;
+// pd-apply serves the latest to the website, the emails and the payment pages,
+// and records which version each family was shown.
+const fmtDate = (d) => (d ? new Date(d).toLocaleString() : '');
+
+async function loadTerms() {
+  const t = await api('GET', { action: 'terms' });
+  S.terms = { ...t, dirty: false, saving: false, timer: null };
+}
+
+function termsChanged() {
+  const T = S.terms;
+  T.dirty = true;
+  $('#t-state').textContent = 'Unsaved changes';
+  $('#t-preview').innerHTML = termsToHtml(T.draft) || '<p class="help">Nothing to preview yet.</p>';
+  clearTimeout(T.timer);
+  T.timer = setTimeout(saveTerms, SAVE_DELAY);
+  termsChrome();
+}
+
+async function saveTerms() {
+  const T = S.terms;
+  if (!T || T.saving || !T.dirty) return;
+  T.saving = true; T.dirty = false;
+  $('#t-state') && ($('#t-state').textContent = 'Saving…');
+  try {
+    await api('POST', {}, { action: 'terms-save', title: T.title, body: T.draft });
+    T.updatedAt = new Date().toISOString();
+    if ($('#t-state')) $('#t-state').textContent = `Draft saved ${new Date().toLocaleTimeString()}`;
+  } catch (err) {
+    T.dirty = true;
+    if ($('#t-state')) $('#t-state').textContent = `Not saved: ${err.message}`;
+  } finally { T.saving = false; termsChrome(); }
+}
+
+function termsChrome() {
+  const T = S.terms;
+  if (!T || !$('#t-publish')) return;
+  const same = T.live && T.live.body.trim() === T.draft.trim() && T.live.title === T.title;
+  $('#t-publish').disabled = !S.user?.canPublish || same || T.draft.trim().length < 200;
+  $('#t-publish').title = !S.user?.canPublish ? 'Publishing needs an admin or admissions lead.' : same ? 'The draft is the same as the live version.' : '';
+  $('#t-diff').textContent = !T.live ? 'Not published yet — the website, emails and payment pages have no terms until you publish.' : same ? `Live: version ${T.live.version}, published ${fmtDate(T.live.publishedAt)}` : `Live: version ${T.live.version}. The draft has changes that aren't live yet.`;
+}
+
+async function renderTerms() {
+  if (!S.terms) {
+    $('#app').innerHTML = '<div class="loading">Loading terms…</div>';
+    try { await loadTerms(); }
+    catch (err) {
+      $('#app').innerHTML = `<div class="page"><div class="notice notice--bad">${esc(err.message)}${/apply_terms/.test(err.message) ? ' — run <code>MIGRATION-terms.sql</code> in the Neon SQL editor first.' : ''}</div></div>`;
+      return;
+    }
+    if (S.tab !== 'terms') return;
+  }
+  const T = S.terms;
+  const site = (T.applySite || S.applySite || 'https://apply.pacificdiscovery.org').replace(/\/+$/, '');
+  const snippet = `<div id="pd-terms"></div>\n<script src="${site}/terms-embed.js" defer></script>`;
+  $('#app').innerHTML = `<div class="page">
+    <div class="panel">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+        <div><h2 class="serif">Program Terms &amp; Conditions</h2><p class="sub" id="t-diff" style="margin:4px 0 0"></p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn--sm" type="button" id="t-import">Import from website</button>
+          <button class="btn btn--sm" type="button" id="t-versions">Versions (${T.versions.length})</button>
+          <button class="btn btn--primary" type="button" id="t-publish">Publish terms</button>
+        </div>
+      </div>
+      <p class="sub" style="margin-top:10px">Shown on the website terms page, in the application-fee email, on the Stripe payment page, and on the acceptance page. Publishing creates a new version; each payment records the version the family saw. <span id="t-state">${T.updatedAt ? `Draft saved ${fmtDate(T.updatedAt)}` : ''}</span></p>
+      <div class="field" style="max-width:520px"><label for="t-title">Title</label><input type="text" id="t-title" value="${esc(T.title)}" maxlength="200"></div>
+      <div class="cols" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr));align-items:start">
+        <div class="field"><label for="t-body">Text</label><textarea id="t-body" rows="32" spellcheck="true" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5">${esc(T.draft)}</textarea>
+          <span class="help"><code># Heading</code> · <code>## Sub-heading</code> · <code>1. numbered</code> · <code>- bullet</code> · <code>**bold**</code> · <code>[link](https://…)</code> · blank line between paragraphs.</span></div>
+        <div class="field"><span class="lbl">Preview</span><div id="t-preview" class="panel" style="max-height:760px;overflow:auto;margin:0;line-height:1.6"></div></div>
+      </div>
+    </div>
+    <div class="panel"><h2 class="serif">On the website</h2><p class="sub">Paste this into the terms page on pacificdiscovery.org (an HTML / custom code block) once. After that, publishing here updates the page within a minute.</p>
+      <textarea readonly rows="2" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px" onclick="this.select()">${esc(snippet)}</textarea>
+      <p class="sub" style="margin:8px 0 0">Stand-alone page: <a href="${esc(site)}/terms" target="_blank" rel="noopener">${esc(site)}/terms</a></p></div>
+  </div>`;
+  $('#t-preview').innerHTML = termsToHtml(T.draft) || '<p class="help">Nothing to preview yet. Use “Import from website” to start from the current page.</p>';
+  termsChrome();
+  $('#t-title').addEventListener('input', (e) => { T.title = e.target.value; termsChanged(); });
+  $('#t-body').addEventListener('input', (e) => { T.draft = e.target.value; termsChanged(); });
+  $('#t-import').addEventListener('click', async (e) => {
+    if (T.draft.trim() && !(await confirmDialog('Replace the draft?', 'This replaces the draft text with the current website page. The live version is not affected until you publish.', 'Replace draft', true))) return;
+    e.target.disabled = true;
+    try {
+      const out = await api('POST', {}, { action: 'terms-import' });
+      T.draft = out.body; $('#t-body').value = out.body; termsChanged();
+      toast(`Imported ${out.chars.toLocaleString()} characters from the website. Check the headings and lists, then publish.`, 8000);
+    } catch (err) { toast(esc(err.message), 9000); } finally { e.target.disabled = false; }
+  });
+  $('#t-publish').addEventListener('click', async () => {
+    await saveTerms();
+    const note = await promptDialog('Publish the terms?', 'A new version goes live on the website, emails and payment pages. Families who already paid keep the version they agreed to. Optional note (what changed):', 'e.g. Added payment plan section');
+    if (note === null) return;
+    try {
+      const out = await api('POST', {}, { action: 'terms-publish', note });
+      await loadTerms(); renderTerms();
+      toast(`Version ${out.version} is live.`);
+    } catch (err) { toast(esc(err.message), 8000); }
+  });
+  $('#t-versions').addEventListener('click', () => {
+    const d = openDialog(`<div class="dlg-head"><h2 class="serif">Terms versions</h2><button class="btn btn--sm" data-x>Close</button></div>
+      <div class="dlg-body">${T.versions.length ? T.versions.map((v) => `<div class="panel" style="padding:12px;margin-bottom:8px"><strong>Version ${v.version}</strong> · ${fmtDate(v.published_at)} · ${esc(v.published_by || '')}${v.note ? `<div class="em">${esc(v.note)}</div>` : ''}
+        <div style="margin-top:6px;display:flex;gap:6px"><button class="btn btn--sm" data-view="${v.version}">View</button><button class="btn btn--sm" data-copy="${v.version}">Copy into draft</button></div></div>`).join('') : '<p>No versions yet — publish to create version 1.</p>'}</div>`);
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelectorAll('[data-view],[data-copy]').forEach((b) => b.addEventListener('click', async () => {
+      try {
+        const v = await api('GET', { action: 'terms-version', v: b.dataset.view || b.dataset.copy });
+        if (b.dataset.view) {
+          d.querySelector('.dlg-body').innerHTML = `<p class="sub">Version ${v.version} · ${fmtDate(v.publishedAt)}</p><div class="panel">${termsToHtml(v.body)}</div>`;
+          return;
+        }
+        d.close();
+        T.draft = v.body; T.title = v.title; renderTerms(); termsChanged();
+        toast(`Version ${v.version} copied into the draft. Publish to make it live again.`);
+      } catch (err) { toast(esc(err.message)); }
+    }));
+  });
+}
+
 // ── tab: applications ───────────────────────────────────────────────────────
-const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', needs_interview: 'Interview needed', paid: 'Fee paid', withdrawn: 'Withdrawn' };
+const STATUS_LABEL = { step1: 'Started', step2: 'Application in', interview: 'Interview booked', needs_interview: 'Interview needed', paid: 'Fee paid', accepted: 'Accepted', deposit_paid: 'Deposit paid', declined: 'Declined', closed: 'Closed (unpaid)', withdrawn: 'Withdrawn' };
+const PLAN_LABEL = { monthly: 'Monthly', two: 'Two instalments', full: 'Paid in full', later: 'Balance later' };
+const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 })}`;
+const fmtDay = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+function decisionChip(r) {
+  const d = r.decision;
+  if (!d || r.status === 'withdrawn') return '';
+  if (d.outcome === 'declined') return '<span class="chip chip--bad">Declined</span>';
+  const dep = r.enrolment?.deposit;
+  if (r.enrolment?.withdrawn) return '';
+  if ((r.enrolment?.schedule || []).some((p) => p.status === 'needs_admissions')) return '<span class="chip chip--bad">Payment failed — contact family</span>';
+  if ((r.enrolment?.schedule || []).some((p) => p.status === 'failed')) return '<span class="chip chip--changes">Payment failed — retrying</span>';
+  if (dep?.status === 'paid') return `<span class="chip chip--live">Deposit paid · ${esc(PLAN_LABEL[r.enrolment.plan] || '')}${r.enrolment.paused ? ' · paused' : ''}</span>`;
+  if (dep?.status === 'processing') return '<span class="chip chip--info">Deposit clearing (bank)</span>';
+  if (r.enrolment?.prepaid) return '<span class="chip chip--info">Deposit paid · choosing a plan</span>';
+  if (d.holdUntil && new Date(d.holdUntil) < new Date()) return `<span class="chip chip--bad" title="Accepted — the hold passed without a deposit">Hold passed ${fmtDay(d.holdUntil)}</span>`;
+  return `<span class="chip chip--live" title="Place held until ${esc(new Date(d.holdUntil).toLocaleString())}">Accepted · held to ${fmtDay(d.holdUntil)}</span>`;
+}
+function reminderChip(r) {
+  const m = r.reminders || {};
+  if (r.paidAt || r.status === 'withdrawn') return '';
+  if (m.closedAt) return '<span class="chip chip--bad">Closed — unpaid</span>';
+  if (m.stopped) return '<span class="chip">Reminders stopped</span>';
+  if (m.count) return `<span class="chip chip--info" title="${esc(m.sent.map((x) => `Reminder ${x.stage}: ${new Date(x.at).toLocaleDateString()}`).join('\n'))}">Reminder ${m.sent[m.sent.length - 1].stage}/4 sent</span>`;
+  return '';
+}
 const needsInterview = (r) => !!(r.interview?.fallback && !r.interviewAt && r.status !== 'withdrawn');
 
 async function renderApps() {
@@ -633,7 +901,7 @@ async function renderApps() {
     const out = await api('GET', { action: 'applications', status: a.status, q: a.q });
     a.list = out.applications; a.counts = out.counts;
   } catch (err) { $('#apps-body').innerHTML = `<div class="notice notice--bad">${esc(err.message)}</div>`; return; }
-  const total = Object.entries(a.counts).filter(([k]) => k !== 'withdrawn' && k !== 'needs_interview').reduce((x, [, n]) => x + n, 0);
+  const total = Object.entries(a.counts).filter(([k]) => !['withdrawn', 'needs_interview', 'closed', 'accepted', 'declined', 'deposit_paid'].includes(k)).reduce((x, [, n]) => x + n, 0);
   $('#flt').innerHTML = `<button class="chipbtn" data-st="" aria-pressed="${!a.status}">All · ${total}</button>${Object.keys(STATUS_LABEL).map((k) => `<button class="chipbtn" data-st="${k}" aria-pressed="${a.status === k}">${STATUS_LABEL[k]} · ${a.counts[k] || 0}</button>`).join('')}
     <input class="inp" id="q" placeholder="Search name, email or program" value="${esc(a.q)}" style="max-width:280px;margin-left:auto">`;
   $$('[data-st]').forEach((b) => b.addEventListener('click', () => { a.status = b.dataset.st; renderApps(); }));
@@ -646,7 +914,7 @@ async function renderApps() {
     ${a.list.map((r) => `<tr data-id="${r.id}" tabindex="0">
       <td><div class="nm">${esc(r.name)}</div><div class="em">${esc(r.email)}</div></td>
       <td>${esc(r.program || '')}<div class="em">${esc(r.term || '')}</div></td>
-      <td><div class="dots" title="${esc(STATUS_LABEL[r.status])}"><span class="on"></span><span class="${r.step2At ? 'on' : ''}"></span><span class="${r.interviewAt ? 'on' : ''}"></span><span class="${r.paidAt ? 'paid' : ''}"></span></div><div class="em">${esc(STATUS_LABEL[r.status])}</div>${needsInterview(r) ? '<span class="chip chip--changes">Interview needed</span>' : ''}</td>
+      <td><div class="dots" title="${esc(STATUS_LABEL[r.status])}"><span class="on"></span><span class="${r.step2At ? 'on' : ''}"></span><span class="${r.interviewAt ? 'on' : ''}"></span><span class="${r.paidAt ? 'paid' : ''}"></span></div><div class="em">${esc(STATUS_LABEL[r.status])}</div>${needsInterview(r) ? '<span class="chip chip--changes">Interview needed</span>' : ''}${reminderChip(r)}${decisionChip(r)}</td>
       <td class="em">${new Date(r.createdAt).toLocaleDateString()}</td>
       <td>${r.sync.ok ? '<span class="chip chip--live">OK</span>' : `<span class="chip chip--bad" title="${esc(r.sync.problems.join('\n'))}">Needs a look</span>`}</td></tr>`).join('')}
   </tbody></table></div>`;
@@ -655,6 +923,117 @@ async function renderApps() {
     tr.addEventListener('click', open);
     tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
   });
+}
+
+function payStatus(p) {
+  const tip = p.lastError ? ` title="${esc(`${p.lastError.reason}${p.lastError.message ? ` — ${p.lastError.message}` : ''}`)}"` : '';
+  switch (p.status) {
+    case 'paid': return `<span class="chip chip--live">paid ${p.paidAt ? new Date(p.paidAt).toLocaleDateString() : ''}</span>`;
+    case 'scheduled': return `<span class="em">automatic${p.noticeAt ? ' · notice sent' : ''}</span>`;
+    case 'due': return `<span class="em">family pays by this date${p.overdueAt ? ' — <strong>overdue</strong>' : ''}</span>`;
+    case 'processing': case 'charging': return '<span class="chip chip--info">clearing</span>';
+    case 'failed': return `<span class="chip chip--changes"${tip}>failed ×${p.attempts || 1} · retry ${p.nextAttemptAt ? new Date(p.nextAttemptAt).toLocaleDateString() : 'soon'}</span>`;
+    case 'needs_admissions': return `<span class="chip chip--bad"${tip}>failed ×${p.attempts || 3} — contact the family</span>`;
+    case 'cancelled': return '<span class="em">cancelled</span>';
+    default: return esc(p.status);
+  }
+}
+
+function decisionBlock(app) {
+  if ((app.status === 'withdrawn' && !app.enrolment?.withdrawn) || !app.step2At) return '';
+  const d = app.decision;
+  const can = !!S.user?.canDecide;
+  const lines = [];
+  if (d) {
+    const who = `${esc(d.by || '')}, ${new Date(d.at).toLocaleString()}`;
+    if (d.outcome === 'accepted') lines.push(`<li>✅ <strong>Accepted</strong> — ${who}. ${['paid', 'processing'].includes(app.enrolment?.deposit?.status) ? '' : ` Place held until <strong>${new Date(d.holdUntil).toLocaleString()}</strong> for the ${money(app.enrolment?.offer?.deposit || d.offer?.deposit || 2250)} deposit${new Date(d.holdUntil) < new Date() ? ' — <strong>passed</strong>' : ''}.`}</li>`);
+    else lines.push(`<li>❌ <strong>Declined</strong> — ${who}.</li>`);
+    if (d.refund) lines.push(`<li>💳 Application fee refunded: $${(d.refund.amount / 100).toFixed(2)} <span class="em">(Stripe ${esc(d.refund.id)})</span></li>`);
+    else if (d.outcome === 'declined') lines.push('<li class="em">Application fee not refunded.</li>');
+    if (d.email?.to) lines.push(`<li>✉️ Emailed ${esc(d.email.to.join(', '))}${d.email.hubspot?.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(d.email.hubspot.error)}</span>` : ''}</li>`);
+    if (d.email?.error) lines.push(`<li>⚠️ Email not sent: ${esc(d.email.error)} — use <em>Send acceptance email</em> to try again.</li>`);
+    if (d.outcome === 'accepted' && !d.email) lines.push(`<li>⚠️ <strong>No acceptance email has been sent.</strong>${d.offerError ? ` <span class="em">(${esc(d.offerError)})</span>` : ''} Use <em>Send acceptance email</em> below.</li>`);
+    for (const x of d.resent || []) lines.push(`<li class="em">Acceptance email sent again ${new Date(x.at).toLocaleString()} by ${esc(x.by || '')}</li>`);
+    if (d.hubspot?.ok === false) lines.push(`<li>⚠️ HubSpot not updated: ${esc(d.hubspot.error)}</li>`);
+    else if (d.hubspot?.stage) lines.push(`<li class="em">Deal moved to ${esc(d.hubspot.pipeline || '')} / ${esc(d.hubspot.stage)}</li>`);
+    if (d.message) lines.push(`<li class="em">Message: “${esc(d.message)}”</li>`);
+    for (const x of d.extended || []) lines.push(`<li class="em">Hold extended to ${new Date(x.holdUntil).toLocaleDateString()} by ${esc(x.by || '')}</li>`);
+  }
+  const e = app.enrolment;
+  if (d?.outcome === 'accepted' && e) {
+    const dep = e.deposit;
+    if (e.offer) lines.push(`<li class="em">Offer: tuition ${money(e.offer.tuition)}, starts ${esc(e.offer.start)}</li>`);
+    if (dep?.status === 'paid' || dep?.status === 'processing') {
+      lines.push(`<li>${dep.status === 'paid' ? '💳' : '⏳'} <strong>${dep.status === 'paid' ? 'Deposit paid' : 'Bank payment clearing'}</strong> — ${money(dep.total)} by ${dep.method === 'ach' ? 'bank account' : 'card'} on ${new Date(dep.paidAt).toLocaleDateString()} <span class="em">(${esc(dep.reference || '')})</span>. Plan: <strong>${esc(PLAN_LABEL[e.plan] || e.plan || '')}</strong>${dep.discount ? ` <span class="chip chip--info">−${money(dep.discount)} ${dep.discountPlan === 'two' ? 'two-instalment' : 'pay-in-full'} discount</span>` : ''}${e.termsVersion ? ` · terms v${esc(e.termsVersion)}` : ''}</li>`);
+      const rest = (e.schedule || []).slice(1);
+      if (rest.length) lines.push(`<li><table class="grid" style="margin:4px 0;font-size:13px"><tbody>${rest.map((p, k) => `<tr><td>${esc(p.due)}</td><td style="text-align:right">${money(p.amount)}</td><td>${payStatus(p)}</td><td style="white-space:nowrap">${p.status === 'needs_admissions' && can ? `<button class="btn btn--sm" data-retry="${k + 1}">Retry</button> ` : ''}${['scheduled', 'failed', 'needs_admissions', 'due'].includes(p.status) && can && !e.withdrawn ? `<button class="btn btn--sm" data-markpaid="${k + 1}" title="Paid another way (e.g. bank transfer) — it won't be charged">Mark paid</button>` : ''}</td></tr>`).join('')}</tbody></table></li>`);
+      if (e.paused) lines.push(`<li>⏸️ Automatic payments paused ${new Date(e.paused.at).toLocaleDateString()} by ${esc(e.paused.by || '')}</li>`);
+      if (e.withdrawn) lines.push(`<li>🚫 <strong>Withdrew</strong> ${new Date(e.withdrawn.at).toLocaleDateString()} (${esc(e.withdrawn.by || '')})${e.withdrawn.reason ? ` — ${esc(e.withdrawn.reason)}` : ''}. Kept ${money(e.withdrawn.kept)}; upcoming payments cancelled.</li>`);
+      if (e.emails?.enrolled?.to) lines.push(`<li>✉️ Confirmation emailed ${esc(e.emails.enrolled.to.join(', '))}${e.emails.enrolled.hubspot?.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(e.emails.enrolled.hubspot.error)}</span>` : ''}</li>`);
+      if (e.emails?.enrolled?.error) lines.push(`<li>⚠️ Confirmation email not sent: ${esc(e.emails.enrolled.error)}</li>`);
+      if (e.hubspot?.ok === false) lines.push(`<li>⚠️ HubSpot not updated for the deposit: ${esc(e.hubspot.error)}</li>`);
+    } else if (e.prepaid) {
+      lines.push(`<li>💳 <strong>Deposit marked paid</strong> — ${money(e.prepaid.amount)}${e.prepaid.reference ? ` (${esc(e.prepaid.reference)})` : ''} by ${esc(e.prepaid.by || '')}, ${new Date(e.prepaid.at).toLocaleDateString()}. Waiting for the family to choose a payment plan.</li>`);
+    } else if (e.holdExpired && !dep) {
+      lines.push(`<li>⚠️ Hold passed ${new Date(e.holdExpired.at).toLocaleDateString()} without a deposit.</li>`);
+    } else if (dep?.status === 'failed') {
+      lines.push(`<li>⚠️ Bank payment for the deposit failed ${new Date(dep.failedAt).toLocaleDateString()} — they can pay again from their acceptance link.</li>`);
+    } else if (e.started) {
+      lines.push(`<li class="em">Opened checkout ${new Date(e.started.at).toLocaleString()} (${esc(PLAN_LABEL[e.started.plan] || '')}, ${e.started.method === 'ach' ? 'bank' : 'card'}) — not paid yet.</li>`);
+    }
+  }
+  const btns = [];
+  if (!d || d.outcome !== 'declined') {
+    if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Accept</button>`);
+    const depositIn = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
+    if (depositIn && !app.enrolment?.withdrawn && (app.enrolment?.schedule || []).some((p) => ['scheduled', 'failed'].includes(p.status))) btns.push(`<button class="btn btn--sm" id="pay-pause" data-paused="${app.enrolment.paused ? 1 : 0}"${!can ? ' disabled' : ''}>${app.enrolment.paused ? 'Resume automatic payments' : 'Pause automatic payments'}</button>`);
+    if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm" id="dec-depositpaid"${!can ? ' disabled' : ''} title="Only if it isn't on the deal's payment fields yet — those are picked up automatically">Mark deposit paid</button>`);
+    if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm${d.email?.to ? '' : ' btn--primary'}" id="dec-resend"${!can ? ' disabled' : ''}>${d.email?.to ? 'Resend acceptance email' : 'Send acceptance email'}</button>`);
+    if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm" id="dec-extend"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Extend hold</button>`);
+    if (!depositIn) btns.push(`<button class="btn btn--sm btn--danger" id="dec-decline"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Decline</button>`);
+  }
+  return `<div class="panel" style="padding:12px 14px"><strong>Decision</strong>
+    ${lines.length ? `<ul class="sync" style="margin:6px 0">${lines.join('')}</ul>` : '<p class="em" style="margin:6px 0">No decision yet.</p>'}
+    ${btns.length ? `<div class="acts" style="margin-top:6px">${btns.join('')}</div>` : ''}</div>`;
+}
+
+function decideDialog(app, outcome) {
+  return new Promise((resolve) => {
+    const paid = Number(app.payment?.total || 0);
+    const accepted = app.decision?.outcome === 'accepted';
+    const body = outcome === 'accepted'
+      ? `<p>Accept <strong>${esc(app.name)}</strong> for ${esc(app.program || '')} ${esc(app.term || '')}?</p>
+         ${app.paidAt ? '' : '<p class="notice">The $250 application fee hasn\'t been paid, so it\'s added to their deposit: <strong>$2,500</strong> instead of $2,250. Fee reminders stop.</p>'}
+         <p class="em">The student and parents are emailed a personal link to confirm their place: they choose how to pay and pay the ${app.paidAt ? '$2,250' : '$2,500'} deposit. The place is held for ${Number(S.draft.settings.acceptance?.holdDays) || 7} days, and the HubSpot deal moves to Interview Complete. The program's HubSpot record needs a start date.</p>
+         <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. It was great to talk with you — we can't wait to have you in Peru!"></textarea></div>`
+      : `<p>Decline <strong>${esc(app.name)}</strong>? The student and parents are emailed that we can't offer a place.</p>
+         ${app.paidAt ? `<label class="check"><input type="checkbox" id="dd-refund"${accepted ? '' : ' checked'}><span>Refund the application fee ($${paid.toFixed(2)})${accepted ? ' <span class="help">— they were accepted, so under the terms the fee is non-refundable</span>' : ''}</span></label>` : ''}
+         <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. We'd love to see you apply for our Fall programs."></textarea></div>
+         <p class="em">This can't be undone from the dashboard.</p>`;
+    const d = openDialog(`<div class="dlg-head"><h2 class="serif">${outcome === 'accepted' ? 'Accept application' : 'Decline application'}</h2></div>
+      <div class="dlg-body">${body}<div class="acts"><button class="btn" data-x>Cancel</button><button class="btn ${outcome === 'accepted' ? 'btn--primary' : 'btn--danger'}" data-ok>${outcome === 'accepted' ? 'Accept and email the family' : 'Decline and email the family'}</button></div></div>`);
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; d.close(); resolve(v); };
+    d.querySelector('[data-x]').onclick = () => finish(null);
+    d.querySelector('[data-ok]').onclick = () => finish({ message: d.querySelector('#dd-msg')?.value.trim() || '', refund: d.querySelector('#dd-refund') ? d.querySelector('#dd-refund').checked : undefined });
+    d.onclose = () => finish(null);
+  });
+}
+
+function remindersBlock(app) {
+  if (!app.step2At || app.paidAt || app.status === 'withdrawn') return '';
+  const m = app.reminders || { sent: [] };
+  const on = !!S.draft.settings.feeReminders?.enabled;
+  const hsNote = (h) => (!h ? '' : h.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(h.error)}</span>` : h.id ? ' <span class="em">· logged in HubSpot</span>' : '');
+  const lines = (m.sent || []).map((x) => `<li>✉️ Reminder ${x.stage} sent ${new Date(x.at).toLocaleString()}${x.to?.length ? ` to ${esc(x.to.join(', '))}` : ''}${hsNote(x.hubspot)}</li>`);
+  if (m.lastError) lines.push(`<li>⚠️ Reminder ${esc(m.lastError.stage)} failed ${new Date(m.lastError.at).toLocaleString()} — ${esc(m.lastError.error)} (retried next hour)</li>`);
+  if (m.closedAt) lines.push(`<li>Closed ${new Date(m.closedAt).toLocaleDateString()} — fee never paid. They can still pay with their link.</li>`);
+  if (m.stopped) lines.push(`<li>Stopped ${new Date(m.stopped.at).toLocaleString()}${m.stopped.by ? ` by ${esc(m.stopped.by)}` : ''}</li>`);
+  const btn = m.stopped || m.closedAt
+    ? `<button class="btn btn--sm" id="rem-toggle" data-stop="0">${m.closedAt ? 'Re-open and resume reminders' : 'Resume reminders'}</button>`
+    : `<button class="btn btn--sm" id="rem-toggle" data-stop="1">Stop reminders</button>`;
+  return `<div class="panel" style="padding:12px 14px"><strong>Fee reminders</strong> <span class="em">${on ? '' : '(switched off in Fee, interview &amp; text)'}</span>
+    <ul class="sync" style="margin:6px 0">${lines.join('') || '<li class="em">None sent yet.</li>'}</ul>${btn}</div>`;
 }
 
 async function showApplication(id) {
@@ -682,16 +1061,18 @@ async function showApplication(id) {
   d.innerHTML = `<div class="dlg-head"><div><h2 class="serif">${esc(app.name)}</h2><div class="em">${esc(app.email)} · ${esc(app.program || '')} ${esc(app.term || '')}</div></div><button class="btn btn--sm" data-x>Close</button></div>
     <div class="dlg-body">
       <p><span class="chip chip--info">${esc(STATUS_LABEL[app.status])}</span>
-        ${app.interview?.label ? ` · Interview: ${esc(app.interview.label)}` : ''}
-        ${app.interview?.reused ? ` · Returning applicant — reused their full application${app.interview.previousProgram ? ` for ${esc(app.interview.previousProgram)}${app.interview.previousTerm ? ` ${esc(app.interview.previousTerm)}` : ''}` : ''}, interview skipped` : ''}
+        ${app.interview?.label ? ` · Interview: ${esc(app.interview.label)}${app.interview.source === 'hubspot' ? ' <span class="em">(booked outside the application — found in HubSpot)</span>' : ''}` : ''}
         ${needsInterview(app) ? ` · <span class="chip chip--changes">Interview needed</span> ${esc(app.interview.reasonLabel || '')}${app.interview.note ? ` — “${esc(app.interview.note)}”` : ''}` : ''}
         ${app.paidAt ? ` · Paid $${Number(app.payment?.total || 0).toFixed(2)} on ${new Date(app.paidAt).toLocaleDateString()}` : ''}</p>
       <ul class="sync">${syncRow('jf1', `Step 1 saved to Jotform${app.jotformStep1Id ? ` (#${esc(app.jotformStep1Id)})` : ''}`)}${syncRow('jf2', `Application saved to Jotform${app.jotformStep2Id ? ` (#${esc(app.jotformStep2Id)})` : ''}`)}
         ${syncRow('alert1', `Admissions alerted${sync.alert1?.to ? ` (${esc(sync.alert1.to.join(', '))})` : ''}`)}${syncRow('alert1Error', 'Admissions alert email')}${syncRow('hsContact', 'HubSpot contact')}${syncRow('hsDeal', 'HubSpot deal created')}${syncRow('hsStep2', `Deal in ${esc(sync.hsStep2?.pipeline || 'PD Applications')}${sync.hsStep2?.stage ? ` / ${esc(sync.hsStep2.stage)}` : ''}`)}${syncRow('hsStep2Error', 'Moving the deal to PD Applications')}${syncRow('hsInterview', 'Interview noted in HubSpot')}${syncRow('interviewNeeded', `Admissions asked to arrange the interview${sync.interviewNeeded?.to ? ` (${esc(sync.interviewNeeded.to.join(', '))})` : ''}`)}${syncRow('interviewNeededError', 'Interview-needed alert')}${syncRow('hsFamily', `Parents linked${sync.hsFamily?.parents ? ` (${sync.hsFamily.parents.map((p) => esc(p.email)).join(', ') || 'none given'})` : ''}`)}${syncRow('hsFamilyError', 'Linking parents')}${syncRow('hsProgram', `Linked to program record${sync.hsProgram?.record ? `: ${esc(sync.hsProgram.record.name)} (${esc(sync.hsProgram.record.season || '')} ${esc(sync.hsProgram.record.year || '')})` : ''}`)}${syncRow('hsProgramError', 'Program record')}
         ${syncRow('hsPaid', `Fee recorded in HubSpot${sync.hsPaid?.pipeline ? ` → ${esc(sync.hsPaid.pipeline)} / ${esc(sync.hsPaid.stage || '')}` : ''}`)}
+        ${syncRow('feeEmail', `Fee confirmation emailed${sync.feeEmail?.to ? ` to ${esc(sync.feeEmail.to.join(', '))}` : ''}${sync.feeEmail?.termsVersion ? ` (terms v${esc(sync.feeEmail.termsVersion)})` : ''}`)}${syncRow('feeEmailError', 'Fee confirmation email')}${syncRow('feeEmailLog', `Fee confirmation logged in HubSpot${sync.feeEmailLog?.contacts ? ` (${sync.feeEmailLog.contacts} contact${sync.feeEmailLog.contacts === 1 ? '' : 's'} + deal)` : ''}`)}${syncRow('feeAlert', 'Admissions told the fee was paid')}${syncRow('feeAlertError', 'Fee-paid alert')}
         ${syncRow('hsError', 'HubSpot')}${syncRow('hsPaidError', 'HubSpot payment update')}${syncRow('hsInterviewError', 'HubSpot interview note')}</ul>
+      ${decisionBlock(app)}
+      ${remindersBlock(app)}
       <div class="acts"><button class="btn btn--sm" id="resync">Retry sync</button>${portal(app.hubspotDealId)}
-        <button class="btn btn--sm ${app.status === 'withdrawn' ? '' : 'btn--danger'}" id="withdraw">${app.status === 'withdrawn' ? 'Restore application' : 'Mark withdrawn'}</button></div>
+        ${app.enrolment?.withdrawn ? '' : `<button class="btn btn--sm ${app.status === 'withdrawn' ? '' : 'btn--danger'}" id="withdraw">${app.status === 'withdrawn' ? 'Restore application' : 'Mark withdrawn'}</button>`}</div>
       <dl class="ans">${groups.join('') || '<dd>No answers.</dd>'}</dl>
       ${app.attribution && Object.keys(app.attribution).length ? `<details><summary class="em">Attribution</summary><pre class="em">${esc(JSON.stringify(app.attribution, null, 2))}</pre></details>` : ''}
     </div>`;
@@ -701,10 +1082,79 @@ async function showApplication(id) {
     try { await api('POST', {}, { action: 'resync', id }); toast('Sync finished.'); showApplication(id); renderApps(); }
     catch (err) { toast(esc(err.message), 6000); e.currentTarget.disabled = false; e.currentTarget.textContent = 'Retry sync'; }
   });
-  d.querySelector('#withdraw').addEventListener('click', async () => {
-    try { await api('POST', {}, { action: 'withdraw', id, withdrawn: app.status !== 'withdrawn' }); d.close(); renderApps(); }
-    catch (err) { toast(esc(err.message)); }
+  for (const [sel, outcome] of [['#dec-accept', 'accepted'], ['#dec-decline', 'declined']]) {
+    d.querySelector(sel)?.addEventListener('click', async () => {
+      const choice = await decideDialog(app, outcome);
+      if (!choice) { showApplication(id); return; }
+      toast(outcome === 'accepted' ? 'Accepting…' : 'Declining…');
+      try {
+        await api('POST', {}, { action: 'decide', id, outcome, ...choice });
+        toast(outcome === 'accepted' ? 'Accepted. The family has been emailed their acceptance link.' : 'Declined. The family has been emailed.', 6000);
+      } catch (err) { toast(esc(err.message), 9000); }
+      showApplication(id); renderApps();
+    });
+  }
+  d.querySelector('#dec-depositpaid')?.addEventListener('click', async (e) => {
+    const dflt = app.paidAt ? 2250 : 2500;
+    const amount = prompt(`Deposit paid outside the acceptance page, and NOT yet in the deal's payment fields?\n\n(If it's already on the HubSpot deal there's nothing to do — pd-apply picks it up within the hour and asks the family to choose a plan.)\n\nAmount received ($):`, String(dflt));
+    if (amount == null) return;
+    const reference = prompt('Reference (e.g. Wise transfer ID):', '');
+    if (reference == null) return;
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'deposit-mark-paid', id, amount: Number(amount), reference }); toast('Deposit recorded. The family has been emailed a link to choose their payment plan.', 7000); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 9000); e.currentTarget.disabled = false; }
   });
+  d.querySelector('#dec-resend')?.addEventListener('click', async (e) => {
+    if (!confirm(`Email ${app.name} and their parents a personal link to confirm their place and pay the deposit?`)) return;
+    e.currentTarget.disabled = true; e.currentTarget.textContent = 'Sending…';
+    try { await api('POST', {}, { action: 'resend-acceptance', id }); toast('Acceptance email sent.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 9000); showApplication(id); }
+  });
+  d.querySelector('#dec-extend')?.addEventListener('click', async (e) => {
+    const days = prompt('Hold their place for how many more days (from today)?', '7');
+    if (days == null) return;
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'extend-hold', id, days: Number(days) }); toast('Hold extended. Their acceptance link works again.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
+  });
+  d.querySelector('#rem-toggle')?.addEventListener('click', async (e) => {
+    const stop = e.currentTarget.dataset.stop === '1';
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'reminders', id, stop }); toast(stop ? 'Reminders stopped for this applicant.' : 'Reminders resumed.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
+  });
+  d.querySelector('#withdraw')?.addEventListener('click', async () => {
+    const dep = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
+    let reason = '';
+    if (app.status !== 'withdrawn' && dep) {
+      const open = (app.enrolment.schedule || []).filter((p) => ['scheduled', 'failed', 'needs_admissions', 'due'].includes(p.status));
+      reason = prompt(`Withdraw ${app.name}?\n\nThis cancels ${open.length} upcoming payment${open.length === 1 ? '' : 's'} (${money(open.reduce((a, p) => a + p.amount, 0))}), keeps what's been paid (per the terms) and moves the HubSpot deal to Cancelled. The family isn't emailed.\n\nReason (optional):`, '');
+      if (reason == null) return;
+    }
+    try {
+      const out = await api('POST', {}, { action: 'withdraw', id, withdrawn: app.status !== 'withdrawn', reason });
+      if (out.withdraw) toast(`Withdrawn. Kept ${money(out.withdraw.kept)}; cancelled ${out.withdraw.cancelled} payment${out.withdraw.cancelled === 1 ? '' : 's'}.`, 7000);
+      d.close(); renderApps();
+    } catch (err) { toast(esc(err.message), 7000); }
+  });
+  d.querySelector('#pay-pause')?.addEventListener('click', async (e) => {
+    const paused = e.currentTarget.dataset.paused !== '1';
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'payments-pause', id, paused }); toast(paused ? 'Automatic payments paused for this family.' : 'Automatic payments resumed.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
+  });
+  d.querySelectorAll('[data-markpaid]').forEach((b) => b.addEventListener('click', async () => {
+    const reference = prompt('Mark this payment as paid outside Stripe (e.g. a bank transfer)? It won\'t be charged automatically.\n\nReference (e.g. Wise transfer ID):', '');
+    if (reference == null) return;
+    b.disabled = true;
+    try { await api('POST', {}, { action: 'payment-mark-paid', id, item: Number(b.dataset.markpaid), reference }); toast('Marked paid.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); b.disabled = false; }
+  }));
+  d.querySelectorAll('[data-retry]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try { await api('POST', {}, { action: 'payment-retry', id, item: Number(b.dataset.retry) }); toast('It will be tried again within the hour.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); b.disabled = false; }
+  }));
 }
 
 // ── boot ────────────────────────────────────────────────────────────────────
@@ -720,7 +1170,7 @@ async function boot() {
   $('#btn-publish').addEventListener('click', publish);
   $('#btn-discard').addEventListener('click', discard);
   $('#btn-versions').addEventListener('click', () => showVersions().catch((e) => toast(esc(e.message))));
-  window.addEventListener('beforeunload', (e) => { if (S.dirty || S.saving) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', (e) => { if (S.dirty || S.saving || S.terms?.dirty || S.terms?.saving) { e.preventDefault(); e.returnValue = ''; } });
 
   let out;
   try { out = await api('GET', { action: 'get' }); }
