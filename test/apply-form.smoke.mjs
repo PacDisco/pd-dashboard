@@ -148,7 +148,7 @@ try {
   await page.waitForSelector('#rem-toggle');
   assert.match(await page.locator('.dlg-body').textContent(), /Reminder 2 sent .* to ana@x\.org, mom@x\.org/);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-7-reminders.png` });
-  assert.ok(await page.locator('#dec-accept').isDisabled(), 'cannot accept before the fee is paid');
+  assert.ok(!(await page.locator('#dec-accept').isDisabled()), 'can accept before the fee is paid');
   await page.click('#dec-decline');
   await page.waitForSelector('#dd-msg');
   assert.match(await page.locator('.dlg-body').textContent(), /Decline Ana Lopez\?/);

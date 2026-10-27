@@ -926,7 +926,7 @@ function decisionBlock(app) {
   const lines = [];
   if (d) {
     const who = `${esc(d.by || '')}, ${new Date(d.at).toLocaleString()}`;
-    if (d.outcome === 'accepted') lines.push(`<li>✅ <strong>Accepted</strong> — ${who}. ${['paid', 'processing'].includes(app.enrolment?.deposit?.status) ? '' : ` Place held until <strong>${new Date(d.holdUntil).toLocaleString()}</strong> for the $2,250 deposit${new Date(d.holdUntil) < new Date() ? ' — <strong>passed</strong>' : ''}.`}</li>`);
+    if (d.outcome === 'accepted') lines.push(`<li>✅ <strong>Accepted</strong> — ${who}. ${['paid', 'processing'].includes(app.enrolment?.deposit?.status) ? '' : ` Place held until <strong>${new Date(d.holdUntil).toLocaleString()}</strong> for the ${money(app.enrolment?.offer?.deposit || d.offer?.deposit || 2250)} deposit${new Date(d.holdUntil) < new Date() ? ' — <strong>passed</strong>' : ''}.`}</li>`);
     else lines.push(`<li>❌ <strong>Declined</strong> — ${who}.</li>`);
     if (d.refund) lines.push(`<li>💳 Application fee refunded: $${(d.refund.amount / 100).toFixed(2)} <span class="em">(Stripe ${esc(d.refund.id)})</span></li>`);
     else if (d.outcome === 'declined') lines.push('<li class="em">Application fee not refunded.</li>');
@@ -960,7 +960,7 @@ function decisionBlock(app) {
   }
   const btns = [];
   if (!d || d.outcome !== 'declined') {
-    if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can || !app.paidAt ? ' disabled' : ''} title="${!can ? 'Needs the admin or admissions role' : !app.paidAt ? 'The application fee has not been paid' : ''}">Accept</button>`);
+    if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Accept</button>`);
     const depositIn = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
     if (depositIn && !app.enrolment?.withdrawn && (app.enrolment?.schedule || []).some((p) => ['scheduled', 'failed'].includes(p.status))) btns.push(`<button class="btn btn--sm" id="pay-pause" data-paused="${app.enrolment.paused ? 1 : 0}"${!can ? ' disabled' : ''}>${app.enrolment.paused ? 'Resume automatic payments' : 'Pause automatic payments'}</button>`);
     if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm" id="dec-extend"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Extend hold</button>`);
@@ -977,7 +977,8 @@ function decideDialog(app, outcome) {
     const accepted = app.decision?.outcome === 'accepted';
     const body = outcome === 'accepted'
       ? `<p>Accept <strong>${esc(app.name)}</strong> for ${esc(app.program || '')} ${esc(app.term || '')}?</p>
-         <p class="em">The student and parents are emailed a personal link to confirm their place: they choose how to pay and pay the $2,250 deposit. The place is held for ${Number(S.draft.settings.acceptance?.holdDays) || 7} days, and the HubSpot deal moves to Interview Complete. The program's HubSpot record needs a start date.</p>
+         ${app.paidAt ? '' : '<p class="notice">The $250 application fee hasn\'t been paid, so it\'s added to their deposit: <strong>$2,500</strong> instead of $2,250. Fee reminders stop.</p>'}
+         <p class="em">The student and parents are emailed a personal link to confirm their place: they choose how to pay and pay the ${app.paidAt ? '$2,250' : '$2,500'} deposit. The place is held for ${Number(S.draft.settings.acceptance?.holdDays) || 7} days, and the HubSpot deal moves to Interview Complete. The program's HubSpot record needs a start date.</p>
          <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. It was great to talk with you — we can't wait to have you in Peru!"></textarea></div>`
       : `<p>Decline <strong>${esc(app.name)}</strong>? The student and parents are emailed that we can't offer a place.</p>
          ${app.paidAt ? `<label class="check"><input type="checkbox" id="dd-refund"${accepted ? '' : ' checked'}><span>Refund the application fee ($${paid.toFixed(2)})${accepted ? ' <span class="help">— they were accepted, so under the terms the fee is non-refundable</span>' : ''}</span></label>` : ''}
