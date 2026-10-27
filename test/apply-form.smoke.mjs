@@ -174,6 +174,10 @@ try {
   assert.equal(await page.locator('[data-email=accepted]').count(), 1);
   assert.equal(await page.locator('[data-email=enrolled]').count(), 1);
   assert.ok(await page.isChecked('#pay-auto'));
+  await page.check('#pf-on'); await page.fill('[data-disc="full.semester"]', '500'); await page.fill('[data-disc="two.mini"]', '100');
+  let disc = null;
+  for (let i = 0; i < 30 && !disc?.two?.mini; i++) { await page.waitForTimeout(250); disc = (await pool.query(`SELECT draft->'settings'->'discounts' AS d FROM apply_forms LIMIT 1`)).rows[0]?.d; }
+  assert.deepEqual(disc, { enabled: true, full: { semester: 500 }, two: { mini: 100 } }, 'saved to the draft');
   assert.equal(await page.locator('[data-email=paymentFailed]').count(), 1);
   await page.click('[data-tab=apps]');
   await page.waitForSelector('text=Payment failed — contact family');

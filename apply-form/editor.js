@@ -649,6 +649,16 @@ function renderSettings() {
       ${emailEditor(st, 'declined', 'Not accepted')}</div>
     <div class="panel"><h2 class="serif">Acceptance &amp; deposit</h2><p class="sub">When you click <em>Accept</em>, the student and parents get a personal link to their acceptance page. There they choose how to pay (monthly, two instalments or in full — depending on how close the start date is) and pay the $2,250 deposit to confirm their place. The price comes from Programs &amp; dates; the start date from the program's HubSpot record.</p>
       <div class="field" style="max-width:260px"><label for="ac-hold">Hold a place for (days)</label><input type="number" id="ac-hold" min="1" max="60" value="${esc(st.acceptance?.holdDays ?? 7)}"><span class="help">The deposit is due by then. Admissions can extend one applicant's hold from the Applications tab.</span></div>
+      ${(() => {
+        const dc = st.discounts || (st.payInFull ? { enabled: st.payInFull.enabled, full: st.payInFull } : {});
+        const cell = (plan, k) => `<td><input type="number" class="inp" data-disc="${plan}.${k}" min="0" step="50" value="${esc(dc[plan]?.[k] ?? '')}" placeholder="0" style="max-width:110px"></td>`;
+        return `<div class="field" style="margin-top:14px"><label class="check"><input type="checkbox" id="pf-on"${dc.enabled ? ' checked' : ''}><span><strong>Payment plan discounts</strong></span></label>
+        <table class="grid" style="max-width:520px;margin-top:6px"><thead><tr><th></th><th>Semester ($)</th><th>Mini semester ($)</th><th>Summer ($)</th></tr></thead><tbody>
+          <tr><td>Pay in full</td>${['semester', 'mini', 'summer'].map((k) => cell('full', k)).join('')}</tr>
+          <tr><td>Two instalments</td>${['semester', 'mini', 'summer'].map((k) => cell('two', k)).join('')}</tr>
+        </tbody></table>
+        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. Neither is offered within 60 days of the start date. Fixed when you click Accept, so changing them later doesn't affect families already accepted. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
+      })()}
       ${emailEditor(st, 'accepted', 'Email: accepted')}
       ${emailEditor(st, 'enrolled', 'Email: place confirmed (deposit paid)')}
       <p class="help" style="margin-top:8px"><code>{howToPay}</code> adapts to the start date (monthly / two instalments / in full). <code>{message}</code> is the note you type when accepting. <code>{schedule}</code> is the list of upcoming payments.</p></div>
@@ -693,6 +703,14 @@ function renderSettings() {
   $('#ad-on').addEventListener('change', (e) => { ad().enabled = e.target.checked; changed({ rerender: false }); });
   [['#ad-url', 'url'], ['#ad-label', 'label'], ['#ad-text', 'text']].forEach(([sel, k]) => $(sel).addEventListener('input', (e) => { ad()[k] = e.target.value.trim(); changed({ rerender: false }); }));
   [['#pay-auto', 'autoCharge'], ['#pay-dep', 'depositReminders']].forEach(([sel, k]) => $(sel).addEventListener('change', (e) => { st.payments = { ...(st.payments || {}), [k]: e.target.checked }; changed({ rerender: false }); }));
+  const disc = () => { st.discounts = st.discounts || (st.payInFull ? { enabled: !!st.payInFull.enabled, full: { ...st.payInFull } } : { enabled: false }); delete st.discounts.full?.enabled; delete st.payInFull; return st.discounts; };
+  $('#pf-on').addEventListener('change', (e) => { disc().enabled = e.target.checked; changed({ rerender: false }); });
+  $$('[data-disc]').forEach((el) => el.addEventListener('input', () => {
+    const [plan, k] = el.dataset.disc.split('.');
+    const n = Math.max(0, Math.round(Number(el.value) * 100) / 100);
+    const d = disc(); d[plan] = { ...(d[plan] || {}), [k]: Number.isFinite(n) ? n : 0 };
+    changed({ rerender: false });
+  }));
   $('#ac-hold').addEventListener('input', (e) => { const n = Math.round(Number(e.target.value)); st.acceptance = { ...(st.acceptance || {}) }; if (n >= 1 && n <= 60) st.acceptance.holdDays = n; else delete st.acceptance.holdDays; changed({ rerender: false }); });
   $('#rm-on').addEventListener('change', (e) => {
     st.feeReminders = st.feeReminders || {};
@@ -944,7 +962,7 @@ function decisionBlock(app) {
     const dep = e.deposit;
     if (e.offer) lines.push(`<li class="em">Offer: tuition ${money(e.offer.tuition)}, starts ${esc(e.offer.start)}</li>`);
     if (dep?.status === 'paid' || dep?.status === 'processing') {
-      lines.push(`<li>${dep.status === 'paid' ? '💳' : '⏳'} <strong>${dep.status === 'paid' ? 'Deposit paid' : 'Bank payment clearing'}</strong> — ${money(dep.total)} by ${dep.method === 'ach' ? 'bank account' : 'card'} on ${new Date(dep.paidAt).toLocaleDateString()} <span class="em">(${esc(dep.reference || '')})</span>. Plan: <strong>${esc(PLAN_LABEL[e.plan] || e.plan || '')}</strong>${e.termsVersion ? ` · terms v${esc(e.termsVersion)}` : ''}</li>`);
+      lines.push(`<li>${dep.status === 'paid' ? '💳' : '⏳'} <strong>${dep.status === 'paid' ? 'Deposit paid' : 'Bank payment clearing'}</strong> — ${money(dep.total)} by ${dep.method === 'ach' ? 'bank account' : 'card'} on ${new Date(dep.paidAt).toLocaleDateString()} <span class="em">(${esc(dep.reference || '')})</span>. Plan: <strong>${esc(PLAN_LABEL[e.plan] || e.plan || '')}</strong>${dep.discount ? ` <span class="chip chip--info">−${money(dep.discount)} ${dep.discountPlan === 'two' ? 'two-instalment' : 'pay-in-full'} discount</span>` : ''}${e.termsVersion ? ` · terms v${esc(e.termsVersion)}` : ''}</li>`);
       const rest = (e.schedule || []).slice(1);
       if (rest.length) lines.push(`<li><table class="grid" style="margin:4px 0;font-size:13px"><tbody>${rest.map((p, k) => `<tr><td>${esc(p.due)}</td><td style="text-align:right">${money(p.amount)}</td><td>${payStatus(p)}</td><td style="white-space:nowrap">${p.status === 'needs_admissions' && can ? `<button class="btn btn--sm" data-retry="${k + 1}">Retry</button> ` : ''}${['scheduled', 'failed', 'needs_admissions', 'due'].includes(p.status) && can && !e.withdrawn ? `<button class="btn btn--sm" data-markpaid="${k + 1}" title="Paid another way (e.g. bank transfer) — it won't be charged">Mark paid</button>` : ''}</td></tr>`).join('')}</tbody></table></li>`);
       if (e.paused) lines.push(`<li>⏸️ Automatic payments paused ${new Date(e.paused.at).toLocaleDateString()} by ${esc(e.paused.by || '')}</li>`);
