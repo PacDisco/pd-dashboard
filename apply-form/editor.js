@@ -903,7 +903,9 @@ async function renderApps() {
   } catch (err) { $('#apps-body').innerHTML = `<div class="notice notice--bad">${esc(err.message)}</div>`; return; }
   const total = Object.entries(a.counts).filter(([k]) => !['withdrawn', 'needs_interview', 'closed', 'accepted', 'declined', 'deposit_paid'].includes(k)).reduce((x, [, n]) => x + n, 0);
   $('#flt').innerHTML = `<button class="chipbtn" data-st="" aria-pressed="${!a.status}">All · ${total}</button>${Object.keys(STATUS_LABEL).map((k) => `<button class="chipbtn" data-st="${k}" aria-pressed="${a.status === k}">${STATUS_LABEL[k]} · ${a.counts[k] || 0}</button>`).join('')}
-    <input class="inp" id="q" placeholder="Search name, email or program" value="${esc(a.q)}" style="max-width:280px;margin-left:auto">`;
+    <input class="inp" id="q" placeholder="Search name, email or program" value="${esc(a.q)}" style="max-width:280px;margin-left:auto">
+    ${S.user?.canDecide ? '<button class="btn btn--sm" id="add-hs" title="An applicant who applied before the new form (Jotform) — bring them in from HubSpot so you can accept them">Add from HubSpot</button>' : ''}`;
+  $('#add-hs')?.addEventListener('click', addFromHubspot);
   $$('[data-st]').forEach((b) => b.addEventListener('click', () => { a.status = b.dataset.st; renderApps(); }));
   let qt;
   $('#q').addEventListener('input', (e) => { clearTimeout(qt); qt = setTimeout(() => { a.q = e.target.value; renderApps(); }, 400); });
@@ -937,6 +939,42 @@ function payStatus(p) {
     case 'cancelled': return '<span class="em">cancelled</span>';
     default: return esc(p.status);
   }
+}
+
+// ── older applicants (applied before the new form): add from HubSpot ───────
+function addFromHubspot() {
+  const d = openDialog(`<div class="dlg-head"><h2 class="serif">Add an applicant from HubSpot</h2><button class="btn btn--sm" data-x>Close</button></div>
+    <div class="dlg-body"><p class="em">For students who applied before the new application form. Their HubSpot deal (program, term, price, payments, parents) becomes an application here that you can accept. Nobody is emailed until you click Accept.</p>
+      <div class="acts"><input class="inp" id="hs-email" type="email" placeholder="Student's email" style="flex:1"><button class="btn btn--primary btn--sm" id="hs-find">Find</button></div>
+      <div id="hs-out" style="margin-top:12px"></div></div>`);
+  d.querySelector('[data-x]').onclick = () => d.close();
+  const find = async () => {
+    const out = d.querySelector('#hs-out');
+    out.innerHTML = '<p class="em">Looking in HubSpot…</p>';
+    try {
+      const r = await api('POST', {}, { action: 'hubspot-lookup', email: d.querySelector('#hs-email').value.trim() });
+      if (!r.contact) { out.innerHTML = '<p class="em">No HubSpot contact with that email.</p>'; return; }
+      if (!r.deals.length) { out.innerHTML = `<p class="em">${esc(r.contact.first)} ${esc(r.contact.last)} has no deals in HubSpot.</p>`; return; }
+      out.innerHTML = `<p><strong>${esc(r.contact.first)} ${esc(r.contact.last)}</strong> — choose the deal:</p>
+        <table class="grid" style="font-size:13px"><thead><tr><th>Deal</th><th>Pipeline / stage</th><th>Price</th><th>Paid</th><th></th></tr></thead><tbody>
+        ${r.deals.map((x) => `<tr><td>${esc(x.name)}<div class="em">${esc(x.program || '')} ${esc(x.term || '')}</div></td><td>${esc(x.pipeline)}<div class="em">${esc(x.stage)}</div></td>
+          <td>${x.amount ? money(x.amount) : '—'}</td><td>${money(x.paid || 0)}</td>
+          <td>${x.applicationId ? `<button class="btn btn--sm" data-open="${esc(x.applicationId)}">Open</button>` : `<button class="btn btn--sm btn--primary" data-import="${esc(x.id)}">Add</button>`}</td></tr>`).join('')}
+        </tbody></table>`;
+      out.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => { d.close(); showApplication(b.dataset.open); }));
+      out.querySelectorAll('[data-import]').forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'Adding…';
+        try {
+          const res = await api('POST', {}, { action: 'import', email: r.contact.email, dealId: b.dataset.import });
+          toast(`Added ${esc(r.contact.first)} — ${esc(res.program)} ${esc(res.term)}.${res.parents?.length ? ` Parents: ${esc(res.parents.join(', '))}.` : ' No parents on the deal.'}`, 8000);
+          d.close(); renderApps(); showApplication(res.id);
+        } catch (err) { toast(esc(err.message), 9000); b.disabled = false; b.textContent = 'Add'; }
+      }));
+    } catch (err) { out.innerHTML = `<div class="notice notice--bad">${esc(err.message)}</div>`; }
+  };
+  d.querySelector('#hs-find').addEventListener('click', find);
+  d.querySelector('#hs-email').addEventListener('keydown', (e) => { if (e.key === 'Enter') find(); });
+  d.querySelector('#hs-email').focus();
 }
 
 function decisionBlock(app) {
@@ -987,7 +1025,7 @@ function decisionBlock(app) {
     if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Accept</button>`);
     const depositIn = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
     if (depositIn && !app.enrolment?.withdrawn && (app.enrolment?.schedule || []).some((p) => ['scheduled', 'failed'].includes(p.status))) btns.push(`<button class="btn btn--sm" id="pay-pause" data-paused="${app.enrolment.paused ? 1 : 0}"${!can ? ' disabled' : ''}>${app.enrolment.paused ? 'Resume automatic payments' : 'Pause automatic payments'}</button>`);
-    if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm" id="dec-depositpaid"${!can ? ' disabled' : ''} title="Paid by bank transfer or another way — they'll be asked to choose a payment plan">Mark deposit paid</button>`);
+    if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm" id="dec-depositpaid"${!can ? ' disabled' : ''} title="Only if it isn't on the deal's payment fields yet — those are picked up automatically">Mark deposit paid</button>`);
     if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm${d.email?.to ? '' : ' btn--primary'}" id="dec-resend"${!can ? ' disabled' : ''}>${d.email?.to ? 'Resend acceptance email' : 'Send acceptance email'}</button>`);
     if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm" id="dec-extend"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Extend hold</button>`);
     if (!depositIn) btns.push(`<button class="btn btn--sm btn--danger" id="dec-decline"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Decline</button>`);
@@ -1007,7 +1045,7 @@ function decideDialog(app, outcome) {
          <p class="em">The student and parents are emailed a personal link to confirm their place: they choose how to pay and pay the ${app.paidAt ? '$2,250' : '$2,500'} deposit. The place is held for ${Number(S.draft.settings.acceptance?.holdDays) || 7} days, and the HubSpot deal moves to Interview Complete. The program's HubSpot record needs a start date.</p>
          <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. It was great to talk with you — we can't wait to have you in Peru!"></textarea></div>`
       : `<p>Decline <strong>${esc(app.name)}</strong>? The student and parents are emailed that we can't offer a place.</p>
-         ${app.paidAt ? `<label class="check"><input type="checkbox" id="dd-refund"${accepted ? '' : ' checked'}><span>Refund the application fee ($${paid.toFixed(2)})${accepted ? ' <span class="help">— they were accepted, so under the terms the fee is non-refundable</span>' : ''}</span></label>` : ''}
+         ${app.paidAt && /^pi_/.test(app.payment?.reference || '') ? `<label class="check"><input type="checkbox" id="dd-refund"${accepted ? '' : ' checked'}><span>Refund the application fee ($${paid.toFixed(2)})${accepted ? ' <span class="help">— they were accepted, so under the terms the fee is non-refundable</span>' : ''}</span></label>` : app.paidAt ? '<p class="em">The application fee was paid outside the online application, so it isn\'t refunded automatically — refund it yourself if needed.</p>' : ''}
          <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. We'd love to see you apply for our Fall programs."></textarea></div>
          <p class="em">This can't be undone from the dashboard.</p>`;
     const d = openDialog(`<div class="dlg-head"><h2 class="serif">${outcome === 'accepted' ? 'Accept application' : 'Decline application'}</h2></div>
@@ -1064,7 +1102,7 @@ async function showApplication(id) {
         ${app.interview?.label ? ` · Interview: ${esc(app.interview.label)}${app.interview.source === 'hubspot' ? ' <span class="em">(booked outside the application — found in HubSpot)</span>' : ''}` : ''}
         ${needsInterview(app) ? ` · <span class="chip chip--changes">Interview needed</span> ${esc(app.interview.reasonLabel || '')}${app.interview.note ? ` — “${esc(app.interview.note)}”` : ''}` : ''}
         ${app.paidAt ? ` · Paid $${Number(app.payment?.total || 0).toFixed(2)} on ${new Date(app.paidAt).toLocaleDateString()}` : ''}</p>
-      <ul class="sync">${syncRow('jf1', `Step 1 saved to Jotform${app.jotformStep1Id ? ` (#${esc(app.jotformStep1Id)})` : ''}`)}${syncRow('jf2', `Application saved to Jotform${app.jotformStep2Id ? ` (#${esc(app.jotformStep2Id)})` : ''}`)}
+      <ul class="sync">${syncRow('imported', `Added from HubSpot${sync.imported?.by ? ` by ${esc(sync.imported.by)}` : ''}${sync.imported?.at ? `, ${new Date(sync.imported.at).toLocaleDateString()}` : ''}${sync.imported?.stage ? ` <span class="em">(deal at ${esc(sync.imported.pipeline || '')} / ${esc(sync.imported.stage)})</span>` : ''}`)}${syncRow('jf1', `Step 1 saved to Jotform${app.jotformStep1Id ? ` (#${esc(app.jotformStep1Id)})` : ''}`)}${syncRow('jf2', `Application saved to Jotform${app.jotformStep2Id ? ` (#${esc(app.jotformStep2Id)})` : ''}`)}
         ${syncRow('alert1', `Admissions alerted${sync.alert1?.to ? ` (${esc(sync.alert1.to.join(', '))})` : ''}`)}${syncRow('alert1Error', 'Admissions alert email')}${syncRow('hsContact', 'HubSpot contact')}${syncRow('hsDeal', 'HubSpot deal created')}${syncRow('hsStep2', `Deal in ${esc(sync.hsStep2?.pipeline || 'PD Applications')}${sync.hsStep2?.stage ? ` / ${esc(sync.hsStep2.stage)}` : ''}`)}${syncRow('hsStep2Error', 'Moving the deal to PD Applications')}${syncRow('hsInterview', 'Interview noted in HubSpot')}${syncRow('interviewNeeded', `Admissions asked to arrange the interview${sync.interviewNeeded?.to ? ` (${esc(sync.interviewNeeded.to.join(', '))})` : ''}`)}${syncRow('interviewNeededError', 'Interview-needed alert')}${syncRow('hsFamily', `Parents linked${sync.hsFamily?.parents ? ` (${sync.hsFamily.parents.map((p) => esc(p.email)).join(', ') || 'none given'})` : ''}`)}${syncRow('hsFamilyError', 'Linking parents')}${syncRow('hsProgram', `Linked to program record${sync.hsProgram?.record ? `: ${esc(sync.hsProgram.record.name)} (${esc(sync.hsProgram.record.season || '')} ${esc(sync.hsProgram.record.year || '')})` : ''}`)}${syncRow('hsProgramError', 'Program record')}
         ${syncRow('hsPaid', `Fee recorded in HubSpot${sync.hsPaid?.pipeline ? ` → ${esc(sync.hsPaid.pipeline)} / ${esc(sync.hsPaid.stage || '')}` : ''}`)}
         ${syncRow('feeEmail', `Fee confirmation emailed${sync.feeEmail?.to ? ` to ${esc(sync.feeEmail.to.join(', '))}` : ''}${sync.feeEmail?.termsVersion ? ` (terms v${esc(sync.feeEmail.termsVersion)})` : ''}`)}${syncRow('feeEmailError', 'Fee confirmation email')}${syncRow('feeEmailLog', `Fee confirmation logged in HubSpot${sync.feeEmailLog?.contacts ? ` (${sync.feeEmailLog.contacts} contact${sync.feeEmailLog.contacts === 1 ? '' : 's'} + deal)` : ''}`)}${syncRow('feeAlert', 'Admissions told the fee was paid')}${syncRow('feeAlertError', 'Fee-paid alert')}
@@ -1096,7 +1134,7 @@ async function showApplication(id) {
   }
   d.querySelector('#dec-depositpaid')?.addEventListener('click', async (e) => {
     const dflt = app.paidAt ? 2250 : 2500;
-    const amount = prompt(`Deposit paid outside the acceptance page (bank transfer, the portal…).\n\nAmount received ($):`, String(dflt));
+    const amount = prompt(`Deposit paid outside the acceptance page, and NOT yet in the deal's payment fields?\n\n(If it's already on the HubSpot deal there's nothing to do — pd-apply picks it up within the hour and asks the family to choose a plan.)\n\nAmount received ($):`, String(dflt));
     if (amount == null) return;
     const reference = prompt('Reference (e.g. Wise transfer ID):', '');
     if (reference == null) return;

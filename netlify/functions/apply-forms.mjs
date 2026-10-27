@@ -199,6 +199,8 @@ export default async (req, context, deps = {}) => {
       case "withdraw": return await withdraw(body, user);
       case "payment-retry": return await applyService("payment-retry", { id: body.id, item: body.item }, user);
       case "payments-pause": return await applyService("payments-pause", { id: body.id, paused: !!body.paused }, user);
+      case "hubspot-lookup": return await applyService("hubspot-lookup", { email: body.email }, user);
+      case "import": return await applyService("import", { email: body.email, dealId: body.dealId }, user);
       case "deposit-mark-paid": return await applyService("deposit-mark-paid", { id: body.id, amount: body.amount, reference: body.reference }, user);
       case "resend-acceptance": return await applyService("resend-acceptance", { id: body.id }, user);
       case "payment-mark-paid": return await applyService("payment-mark-paid", { id: body.id, item: body.item, reference: body.reference }, user);
