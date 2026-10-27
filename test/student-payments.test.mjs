@@ -67,6 +67,14 @@ await t('Stripe charge → ledger row', () => {
   assert.equal(fromStripeCharge({ status: 'failed', paid: false }), null);
   assert.equal(fromStripeCharge({ id: 'c', status: 'succeeded', paid: true, amount: 5000, currency: 'jpy', created: 1 }).amount, 5000);
 });
+await t('Stripe charge with base_amount (pd-apply / portal): credits exactly the tuition part, whatever the fee', () => {
+  const ch = (amount, meta) => fromStripeCharge({ id: 'ch', status: 'succeeded', paid: true, amount, currency: 'usd', created: 1, payment_intent: { id: 'pi_1', metadata: meta } }, { surchargeRate: 0.035 });
+  assert.equal(ch(227250, { base_amount: '2250' }).amount, 2250, 'bank payment with a 1% fee');
+  assert.equal(ch(168188, { base_amount: '1625' }).amount, 1625, 'card instalment, 3.5% not a whole dollar');
+  assert.match(ch(168188, { base_amount: '1625' }).fee_note, /processing fee/);
+  assert.equal(ch(225000, { base_amount: '2250' }).amount, 2250, 'no fee');
+  assert.equal(ch(225000, { base_amount: '9999' }).amount, 2250, 'nonsense base ignored');
+});
 await t('Wise credit → ledger row, fee added back; conversions ignored', () => {
   const r = fromWiseTransaction({ type: 'CREDIT', date: '2026-10-17T03:00:00Z', amount: { value: 2243.89, currency: 'USD' }, totalFees: { value: 6.11, currency: 'USD' },
     details: { type: 'DEPOSIT', senderName: 'MARK GRAGG', paymentReference: 'Grace Gragg Japan' }, referenceNumber: 'TRANSFER-555' });

@@ -171,7 +171,13 @@ export function fromStripeCharge(c, { account = "stripe", surchargeRate = 0 } = 
   const customer = typeof c.customer === "object" && c.customer ? c.customer : null;
   const meta = { ...(customer?.metadata || {}), ...(pi?.metadata || {}), ...(c.metadata || {}) };
   const gross = c.amount / div;
-  const { credited, note } = removeSurcharge(gross, surchargeRate);
+  // pd-apply and the student portal record what counts toward tuition as
+  // metadata.base_amount (the card / bank fee is on top). Use it when there;
+  // otherwise fall back to taking the card surcharge off whole-dollar amounts.
+  const base = Number(meta.base_amount);
+  const { credited, note } = Number.isFinite(base) && base > 0 && base <= gross + 0.005
+    ? { credited: round2(base), note: gross - base > 0.005 ? `processing fee (${formatAmount(gross - base)}) not credited` : null }
+    : removeSurcharge(gross, surchargeRate);
   return {
     source: "stripe",
     external_id: piId || c.id,
