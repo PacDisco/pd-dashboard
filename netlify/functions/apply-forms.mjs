@@ -349,6 +349,8 @@ async function listApplications(url) {
              OR ($1 = 'closed' AND ${CLOSED_SQL})
              OR ($1 IN ('accepted', 'declined') AND ${OUTCOME_SQL} = $1)
              OR ($1 = 'deposit_paid' AND ${DEPOSIT_SQL} IN ('paid', 'processing')))
+        -- withdrawn applications only show under the Withdrawn filter
+        AND ($1 = 'withdrawn' OR status <> 'withdrawn')
         AND ($2 = '%%' OR lower(email) LIKE $2 OR lower(first_name || ' ' || last_name) LIKE $2 OR lower(program) LIKE $2)
       ORDER BY created_at DESC LIMIT $3`, [status, like, limit]);
   const counts = await db()`SELECT status, count(*)::int AS n FROM applications GROUP BY status`;

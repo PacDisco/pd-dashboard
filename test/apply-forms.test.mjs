@@ -77,6 +77,9 @@ await t('applications list + detail + withdraw', async () => {
   assert.equal(g.body.application.answers.email, 'a@x.org');
   const w = await call(editor, { action: 'withdraw', id, withdrawn: true });
   assert.equal(w.body.application.status, 'withdrawn');
+  assert.equal((await call(editor, null, '?action=applications&q=ann')).body.applications.length, 0, 'not in All');
+  assert.equal((await call(editor, null, '?action=applications&status=step2')).body.applications.length, 0, 'not in other filters');
+  assert.equal((await call(editor, null, '?action=applications&status=withdrawn&q=ann')).body.applications.length, 1, 'only under Withdrawn');
   const u = await call(editor, { action: 'withdraw', id, withdrawn: false });
   assert.equal(u.body.application.status, 'step2');
 });
