@@ -669,7 +669,8 @@ function renderSettings() {
       ${emailEditor(st, 'paymentUpcoming', 'Email: payment in 3 days')}
       ${emailEditor(st, 'paymentReceived', 'Email: payment received')}
       ${emailEditor(st, 'paymentFailed', 'Email: payment didn\'t go through')}
-      ${emailEditor(st, 'balanceReminder', 'Email: balance due (balance later)')}</div>
+      ${emailEditor(st, 'balanceReminder', 'Email: balance due (balance later)')}
+      ${emailEditor(st, 'choosePlan', 'Email: deposit received — choose a payment plan')}</div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
       <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
@@ -879,6 +880,7 @@ function decisionChip(r) {
   if ((r.enrolment?.schedule || []).some((p) => p.status === 'failed')) return '<span class="chip chip--changes">Payment failed — retrying</span>';
   if (dep?.status === 'paid') return `<span class="chip chip--live">Deposit paid · ${esc(PLAN_LABEL[r.enrolment.plan] || '')}${r.enrolment.paused ? ' · paused' : ''}</span>`;
   if (dep?.status === 'processing') return '<span class="chip chip--info">Deposit clearing (bank)</span>';
+  if (r.enrolment?.prepaid) return '<span class="chip chip--info">Deposit paid · choosing a plan</span>';
   if (d.holdUntil && new Date(d.holdUntil) < new Date()) return `<span class="chip chip--bad" title="Accepted — the hold passed without a deposit">Hold passed ${fmtDay(d.holdUntil)}</span>`;
   return `<span class="chip chip--live" title="Place held until ${esc(new Date(d.holdUntil).toLocaleString())}">Accepted · held to ${fmtDay(d.holdUntil)}</span>`;
 }
@@ -970,6 +972,8 @@ function decisionBlock(app) {
       if (e.emails?.enrolled?.to) lines.push(`<li>✉️ Confirmation emailed ${esc(e.emails.enrolled.to.join(', '))}${e.emails.enrolled.hubspot?.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(e.emails.enrolled.hubspot.error)}</span>` : ''}</li>`);
       if (e.emails?.enrolled?.error) lines.push(`<li>⚠️ Confirmation email not sent: ${esc(e.emails.enrolled.error)}</li>`);
       if (e.hubspot?.ok === false) lines.push(`<li>⚠️ HubSpot not updated for the deposit: ${esc(e.hubspot.error)}</li>`);
+    } else if (e.prepaid) {
+      lines.push(`<li>💳 <strong>Deposit marked paid</strong> — ${money(e.prepaid.amount)}${e.prepaid.reference ? ` (${esc(e.prepaid.reference)})` : ''} by ${esc(e.prepaid.by || '')}, ${new Date(e.prepaid.at).toLocaleDateString()}. Waiting for the family to choose a payment plan.</li>`);
     } else if (e.holdExpired && !dep) {
       lines.push(`<li>⚠️ Hold passed ${new Date(e.holdExpired.at).toLocaleDateString()} without a deposit.</li>`);
     } else if (dep?.status === 'failed') {
@@ -983,7 +987,8 @@ function decisionBlock(app) {
     if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Accept</button>`);
     const depositIn = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
     if (depositIn && !app.enrolment?.withdrawn && (app.enrolment?.schedule || []).some((p) => ['scheduled', 'failed'].includes(p.status))) btns.push(`<button class="btn btn--sm" id="pay-pause" data-paused="${app.enrolment.paused ? 1 : 0}"${!can ? ' disabled' : ''}>${app.enrolment.paused ? 'Resume automatic payments' : 'Pause automatic payments'}</button>`);
-    if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm${d.email?.to ? '' : ' btn--primary'}" id="dec-resend"${!can ? ' disabled' : ''}>${d.email?.to ? 'Resend acceptance email' : 'Send acceptance email'}</button>`);
+    if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm" id="dec-depositpaid"${!can ? ' disabled' : ''} title="Paid by bank transfer or another way — they'll be asked to choose a payment plan">Mark deposit paid</button>`);
+    if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm${d.email?.to ? '' : ' btn--primary'}" id="dec-resend"${!can ? ' disabled' : ''}>${d.email?.to ? 'Resend acceptance email' : 'Send acceptance email'}</button>`);
     if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm" id="dec-extend"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Extend hold</button>`);
     if (!depositIn) btns.push(`<button class="btn btn--sm btn--danger" id="dec-decline"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Decline</button>`);
   }
@@ -1089,6 +1094,16 @@ async function showApplication(id) {
       showApplication(id); renderApps();
     });
   }
+  d.querySelector('#dec-depositpaid')?.addEventListener('click', async (e) => {
+    const dflt = app.paidAt ? 2250 : 2500;
+    const amount = prompt(`Deposit paid outside the acceptance page (bank transfer, the portal…).\n\nAmount received ($):`, String(dflt));
+    if (amount == null) return;
+    const reference = prompt('Reference (e.g. Wise transfer ID):', '');
+    if (reference == null) return;
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'deposit-mark-paid', id, amount: Number(amount), reference }); toast('Deposit recorded. The family has been emailed a link to choose their payment plan.', 7000); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 9000); e.currentTarget.disabled = false; }
+  });
   d.querySelector('#dec-resend')?.addEventListener('click', async (e) => {
     if (!confirm(`Email ${app.name} and their parents a personal link to confirm their place and pay the deposit?`)) return;
     e.currentTarget.disabled = true; e.currentTarget.textContent = 'Sending…';

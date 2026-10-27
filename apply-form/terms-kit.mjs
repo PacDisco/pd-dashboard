@@ -388,6 +388,22 @@ DEFAULT_EMAILS.balanceReminder = {
   ].join('\n'),
 };
 
+// Admissions marked the deposit paid (bank transfer etc.): choose how to pay the rest.
+DEFAULT_EMAILS.choosePlan = {
+  subject: 'Your place is held — choose how to pay the rest of your tuition',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Thank you — we\'ve received your {deposit} deposit, so your place on **{program}** ({term}) is held.',
+    '',
+    'Please choose how you\'d like to pay the rest of your tuition — monthly, in instalments or in full:',
+    '',
+    '[Choose my payment plan]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
 /** The placeholders each message understands, for the dashboard help text. */
 const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
 export const EMAIL_PLACEHOLDERS = {
@@ -404,6 +420,7 @@ export const EMAIL_PLACEHOLDERS = {
   paymentReceived: ['firstName', 'program', 'term', 'amount', 'balanceLine', 'link'],
   paymentFailed: ['firstName', 'program', 'term', 'amount', 'date', 'reason', 'nextStep', 'link'],
   balanceReminder: ['firstName', 'program', 'term', 'amount', 'date', 'link'],
+  choosePlan: ['firstName', 'program', 'term', 'deposit', 'link'],
 };
 
 /** How long an accepted applicant's place is held for the deposit (days). */
