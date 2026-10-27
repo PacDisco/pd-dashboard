@@ -1,0 +1,8 @@
+{
+  "title": "Payment Plans",
+  "description": "What's coming in from families on payment plans, and when — automatic instalments, balances families pay themselves, deposits not yet paid, and payments that need attention.",
+  "category": "Finance",
+  "icon": "📅",
+  "colors": ["#288195", "#55bbd2"],
+  "allowedRoles": ["admin", "operations", "admissions"]
+}

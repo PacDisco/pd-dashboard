@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Payment Plans — Pacific Discovery</title>
+<meta name="description" content="What's coming in from families on payment plans, and when — scheduled instalments, balances due, deposits pending and payments that need attention.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--topaz:#55bbd2;--teal:#288195;--teal-dk:#1f6b7c;--ink:#2f2f2f;--body:#4a4a4a;--muted:#5f666b;--axis:#898781;
+  --line:#e1e6e8;--grid:#e1e0d9;--bg:#f4f6f7;--panel:#fff;--soft:#eef6f8;--surface:#fcfcfb;
+  --s-received:#2a78d6;--s-manual:#eb6834;--s-auto:#1baf7a;--s-risk:#d03b3b;--s-pending:#898781;
+  --warn:#8a4b00;--warn-bg:#fff4e0;--bad:#a8321d;--bad-bg:#fdecea;--ok:#3c6b14;--ok-bg:#e9f5dd}
+*{box-sizing:border-box}
+body{margin:0;font-family:Poppins,system-ui,sans-serif;color:var(--body);background:var(--bg);font-size:14px;line-height:1.5}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--teal)}
+h1,h2,h3{margin:0;color:var(--ink)}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.btn{display:inline-flex;align-items:center;gap:6px;justify-content:center;min-height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:500;white-space:nowrap;color:var(--ink)}
+.btn:hover{background:var(--soft)}
+.btn--sm{min-height:28px;padding:0 9px;font-size:12.5px}
+.inp{border:1px solid #cfd7da;border-radius:8px;padding:6px 10px;background:#fff;min-height:34px}
+.inp:focus{outline:2px solid var(--topaz);border-color:var(--topaz)}
+.bar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.bar h1{font-size:22px}
+.spacer{flex:1}
+.crumb{font-size:13px;color:var(--muted);text-decoration:none}
+main{max-width:1180px;margin:0 auto;padding:16px}
+.filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.filters label{font-size:12.5px;color:var(--muted)}
+.notice{padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:13px;background:var(--bad-bg);color:var(--bad)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.stat .n{font-size:22px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:var(--muted)}
+.stat .s{font-size:11.5px;color:var(--muted)}
+.stat--alert .n{color:var(--bad)}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:16px}
+.panel>header{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.panel>header h2{font-size:16px}
+.panel>header .sub{font-size:12.5px;color:var(--muted)}
+.pad{padding:12px 14px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--body);padding:10px 14px 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.sw--pending{background:repeating-linear-gradient(45deg,var(--s-pending) 0 2px,transparent 2px 5px);border:1px solid var(--s-pending)}
+.chart-wrap{position:relative;padding:6px 8px 4px}
+svg text{font-family:Poppins,system-ui,sans-serif}
+.tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.08);padding:8px 10px;font-size:12.5px;min-width:200px;display:none;z-index:5}
+.tip h4{margin:0 0 4px;font-size:13px;color:var(--ink)}
+.tip .r{display:flex;justify-content:space-between;gap:12px}
+.tip .r span:last-child{font-variant-numeric:tabular-nums;color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.scroll{overflow-x:auto}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.c-ok{background:var(--ok-bg);color:var(--ok)}
+.c-info{background:var(--soft);color:var(--teal-dk)}
+.c-warn{background:var(--warn-bg);color:var(--warn)}
+.c-bad{background:var(--bad-bg);color:var(--bad)}
+.c-muted{background:#eef0f1;color:#4f565b}
+.muted{color:var(--muted);font-size:12.5px}
+.fam{cursor:pointer}
+.fam:hover td{background:#fafcfc}
+.detail td{background:#fafcfc}
+.sched{display:flex;flex-wrap:wrap;gap:6px}
+.sched span{font-size:12px;border:1px solid var(--line);border-radius:8px;padding:2px 8px;background:#fff}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+.toggle{margin-left:auto}
+@media (max-width:760px){ .hide-sm{display:none} }
+</style>
+</head>
+<body>
+<div class="bar">
+  <a class="crumb" href="/">← Dashboards</a>
+  <h1 class="serif">Payment Plans</h1>
+  <span class="spacer"></span>
+  <span class="muted" id="asOf"></span>
+  <button class="btn btn--sm" id="csv">Download CSV</button>
+</div>
+<main>
+  <div id="notices"></div>
+  <div class="filters">
+    <label for="term">Term</label>
+    <select class="inp" id="term"><option value="">All terms</option></select>
+    <input class="inp" id="q" type="search" placeholder="Search family or program" aria-label="Search families" style="min-width:220px">
+  </div>
+  <div class="grid" id="stats"></div>
+
+  <section class="panel">
+    <header><h2>Money in by month</h2><span class="sub">Tuition only — processing fees are on top</span>
+      <button class="btn btn--sm toggle" id="tableToggle" aria-pressed="false">Show as table</button></header>
+    <div class="legend" id="legend"></div>
+    <div class="chart-wrap" id="chartWrap"><div class="tip" id="tip"></div><div id="chart"></div></div>
+    <div class="scroll" id="monthTable" hidden></div>
+  </section>
+
+  <section class="panel">
+    <header><h2>Coming up</h2><span class="sub">Next 60 days</span></header>
+    <div class="scroll" id="upcoming"></div>
+  </section>
+
+  <section class="panel">
+    <header><h2>Families</h2><span class="sub" id="famCount"></span></header>
+    <div class="scroll" id="families"></div>
+  </section>
+</main>
+<script>
+const API = '/api/payment-plans';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const money2 = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 })}`;
+const day = (d) => d ? new Date(`${String(d).slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—';
+const mon = (m, long) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString('en-US', { month: long ? 'long' : 'short', year: long ? 'numeric' : '2-digit', timeZone: 'UTC' });
+const dealUrl = (id) => `https://app.hubspot.com/contacts/3855728/record/0-3/${id}`;
+const SERIES = [
+  ['received', 'Received', 'var(--s-received)'],
+  ['automatic', 'Scheduled — automatic', 'var(--s-auto)'],
+  ['manual', 'Due — family pays', 'var(--s-manual)'],
+  ['atRisk', 'At risk (failed / overdue / paused)', 'var(--s-risk)'],
+  ['pendingDeposit', 'Deposits not yet paid', 'pending'],
+];
+const KIND_LABEL = { automatic: 'Automatic', manual: 'Family pays', atRisk: 'At risk', pendingDeposit: 'Deposit (not paid yet)' };
+const S = { data: null, term: '', q: '', open: new Set(), table: false };
+
+async function load() {
+  const res = await fetch(`${API}?action=report`, { credentials: 'include' });
+  let data = null; try { data = await res.json(); } catch {}
+  if (!res.ok) { $('#notices').innerHTML = `<div class="notice">${esc(data?.error || `HTTP ${res.status}`)}${res.status === 401 ? ' <a href="/">Sign in again</a>.' : ''}</div>`; return; }
+  S.data = data;
+  $('#asOf').textContent = `As of ${day(data.today)}`;
+  $('#term').innerHTML = '<option value="">All terms</option>' + data.terms.map((t) => `<option>${esc(t)}</option>`).join('');
+  render();
+}
+
+// Filter by term / search; months, totals and the upcoming list are rebuilt
+// from the filtered families' events (the same rules the server uses).
+function view() {
+  const d = S.data;
+  const q = S.q.toLowerCase();
+  const fams = d.families.filter((f) => (!S.term || f.term === S.term) && (!q || `${f.name} ${f.email} ${f.program}`.toLowerCase().includes(q)));
+  if (!S.term && !q) return { fams, months: d.months, upcoming: d.upcoming, kpis: d.kpis };
+  const ids = new Set(fams.map((f) => f.id));
+  const evs = d.events.filter((e) => ids.has(e.appId));
+  const months = d.months.map((m) => ({ month: m.month, received: 0, automatic: 0, manual: 0, atRisk: 0, pendingDeposit: 0, fees: 0 }));
+  const byM = Object.fromEntries(months.map((m) => [m.month, m]));
+  for (const e of evs) { const m = byM[e.date.slice(0, 7)]; if (m) { m[e.kind] += e.amount; m.fees += e.fee || 0; } }
+  const s = (f) => evs.filter(f).reduce((a, e) => a + e.amount, 0);
+  const exp = (e) => e.kind !== 'received';
+  const within = (n) => (e) => exp(e) && e.kind !== 'pendingDeposit' && e.date <= addDays(d.today, n);
+  const kpis = {
+    received: s((e) => e.kind === 'received'), receivedThisMonth: s((e) => e.kind === 'received' && e.date.slice(0, 7) === d.today.slice(0, 7)),
+    next30: s(within(30)), next90: s(within(90)), scheduled: s((e) => e.kind === 'automatic' || e.kind === 'manual'),
+    atRisk: s((e) => e.kind === 'atRisk'), pendingDeposits: s((e) => e.kind === 'pendingDeposit'),
+    pendingDepositCount: fams.filter((f) => f.state === 'awaitingDeposit').length,
+    unscheduled: fams.reduce((a, f) => a + (f.unscheduled || 0), 0),
+    families: fams.filter((f) => f.state !== 'withdrawn').length, problems: fams.filter((f) => f.problems.length).length,
+  };
+  const names = Object.fromEntries(fams.map((f) => [f.id, f]));
+  const upcoming = d.upcoming.filter((u) => ids.has(u.appId));
+  return { fams, months, upcoming, kpis };
+}
+const addDays = (dayStr, n) => new Date(new Date(`${dayStr}T12:00:00Z`).getTime() + n * 864e5).toISOString().slice(0, 10);
+
+function render() {
+  const v = view();
+  const k = v.kpis;
+  $('#stats').innerHTML = [
+    [money(k.next30), 'Due in the next 30 days', k.atRisk ? `includes ${money(k.atRisk)} at risk` : ''],
+    [money(k.next90), 'Due in the next 90 days', ''],
+    [money(k.scheduled), 'Scheduled on plans', `${k.families} famil${k.families === 1 ? 'y' : 'ies'} accepted`],
+    [money(k.received), 'Received through plans', `${money(k.receivedThisMonth)} this month`],
+    [money(k.atRisk), 'At risk', `${k.problems} famil${k.problems === 1 ? 'y needs' : 'ies need'} attention`, k.atRisk > 0],
+    [money(k.pendingDeposits), 'Deposits not yet paid', `${k.pendingDepositCount} accepted, not confirmed`],
+    [money(k.unscheduled), 'Not scheduled yet', 'balances of families still to choose a plan'],
+  ].filter(Boolean).map(([n, l, s, alert]) => `<div class="stat${alert ? ' stat--alert' : ''}"><div class="n">${n}</div><div class="l">${l}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('');
+  $('#legend').innerHTML = SERIES.map(([, l, c]) => `<span><i class="sw${c === 'pending' ? ' sw--pending' : ''}" style="${c === 'pending' ? '' : `background:${c}`}"></i>${esc(l)}</span>`).join('');
+  drawChart(v.months);
+  $('#monthTable').innerHTML = `<table><thead><tr><th>Month</th>${SERIES.map(([, l]) => `<th class="num">${esc(l)}</th>`).join('')}<th class="num">Est. fees</th><th class="num">Total</th></tr></thead><tbody>
+    ${v.months.map((m) => `<tr><td>${mon(m.month, true)}</td>${SERIES.map(([key]) => `<td class="num">${m[key] ? money(m[key]) : '—'}</td>`).join('')}<td class="num">${m.fees ? money(m.fees) : '—'}</td><td class="num"><strong>${money(SERIES.reduce((s, [key]) => s + m[key], 0))}</strong></td></tr>`).join('')}</tbody></table>`;
+  $('#chartWrap').hidden = S.table; $('#monthTable').hidden = !S.table; $('#legend').hidden = S.table;
+  $('#tableToggle').textContent = S.table ? 'Show as chart' : 'Show as table';
+  $('#tableToggle').setAttribute('aria-pressed', String(S.table));
+
+  $('#upcoming').innerHTML = v.upcoming.length ? `<table><thead><tr><th>Date</th><th>Family</th><th class="hide-sm">Program</th><th>Type</th><th class="num">Amount</th></tr></thead><tbody>
+    ${v.upcoming.map((u) => `<tr><td>${day(u.date)}</td><td>${esc(u.name)}</td><td class="hide-sm">${esc(u.program)} <span class="muted">${esc(u.term)}</span></td>
+      <td>${kindChip(u.kind, u.method)}</td><td class="num">${money2(u.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nothing due in the next 60 days.</div>';
+
+  $('#famCount').textContent = `${v.fams.length} famil${v.fams.length === 1 ? 'y' : 'ies'}`;
+  $('#families').innerHTML = v.fams.length ? `<table><thead><tr><th>Family</th><th class="hide-sm">Program</th><th>Plan</th><th class="num">Tuition</th><th class="num">Paid</th><th class="num">Still to pay</th><th>Next</th><th>Status</th></tr></thead><tbody>
+    ${v.fams.map(famRow).join('')}</tbody></table>` : '<div class="empty">No accepted families yet.</div>';
+}
+
+function kindChip(kind, method) {
+  if (kind === 'automatic') return `<span class="chip c-ok">Automatic · ${method === 'ach' ? 'bank' : 'card'}</span>`;
+  if (kind === 'manual') return '<span class="chip c-warn">Family pays</span>';
+  if (kind === 'atRisk') return '<span class="chip c-bad">⚠ At risk</span>';
+  return '<span class="chip c-muted">Deposit — not paid yet</span>';
+}
+
+function statusChip(f) {
+  switch (f.state) {
+    case 'onTrack': return `<span class="chip c-ok">✓ On track${f.paused ? ' (paused)' : ''}</span>`;
+    case 'paidInFull': return '<span class="chip c-info">Paid in full</span>';
+    case 'problem': return '<span class="chip c-bad">⚠ Needs attention</span>';
+    case 'awaitingDeposit': return `<span class="chip ${f.holdPassed ? 'c-bad' : 'c-muted'}">${f.holdPassed ? '⚠ Hold passed' : 'Awaiting deposit'}</span>`;
+    case 'choosing': return '<span class="chip c-warn">Choosing a plan</span>';
+    case 'withdrawn': return '<span class="chip c-muted">Withdrawn</span>';
+    default: return '';
+  }
+}
+
+function famRow(f) {
+  const open = S.open.has(f.id);
+  const main = `<tr class="fam" data-id="${esc(f.id)}" aria-expanded="${open}"><td><strong>${esc(f.name)}</strong><div class="muted">${esc(f.email)}</div></td>
+    <td class="hide-sm">${esc(f.program)}<div class="muted">${esc(f.term)}</div></td><td>${esc(f.planName || '—')}${f.method ? `<div class="muted">${f.method === 'ach' ? 'Bank account' : 'Card'}</div>` : ''}</td>
+    <td class="num">${money(f.tuition)}</td><td class="num">${money2(f.paid)}</td><td class="num">${money2(f.remaining)}</td>
+    <td>${f.next ? `${day(f.next.date)}<div class="muted">${money2(f.next.amount)}</div>` : '—'}</td><td>${statusChip(f)}</td></tr>`;
+  if (!open) return main;
+  const sched = f.schedule.length ? `<div class="sched">${f.schedule.map((p, i) => `<span>${i === 0 ? 'Deposit' : day(p.due)} · ${money2(p.amount)} · ${esc({ paid: 'paid', scheduled: 'automatic', due: 'family pays', processing: 'clearing', charging: 'clearing', failed: `failed ×${p.attempts || 1}`, needs_admissions: `failed ×${p.attempts || 3}`, cancelled: 'cancelled' }[p.status] || p.status)}</span>`).join('')}</div>` : '<span class="muted">No schedule yet.</span>';
+  return `${main}<tr class="detail"><td colspan="8">
+    ${f.problems.length ? `<p style="margin:0 0 8px;color:var(--bad)">${f.problems.map(esc).join('<br>')}</p>` : ''}
+    ${sched}
+    <p style="margin:8px 0 0" class="muted">${f.dealId ? `<a href="${dealUrl(f.dealId)}" target="_blank" rel="noopener">HubSpot deal ↗</a> · ` : ''}<a href="/apply-form/#apps">Open in Apply Form</a></p></td></tr>`;
+}
+
+// ── chart: stacked monthly bars, one axis, hover tooltip ────────────────────
+function drawChart(months) {
+  const W = Math.max(300, $('#chartWrap').clientWidth - 16), H = 280, L = 44, R = 8, T = 16, B = 30;
+  const keys = SERIES.map(([k]) => k);
+  const totals = months.map((m) => keys.reduce((s, k) => s + m[k], 0));
+  const max = Math.max(1, ...totals);
+  const step = niceStep(max / 4);
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const bw = (W - L - R) / months.length;
+  const barW = Math.min(36, bw * 0.62);
+  const today = S.data.today.slice(0, 7);
+  let g = '';
+  for (let v = 0; v <= top + 0.5; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--axis)">${v >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`}</text>`;
+  let bars = '';
+  months.forEach((m, i) => {
+    const x = L + i * bw + (bw - barW) / 2;
+    let acc = 0;
+    const segs = keys.filter((k) => m[k] > 0);
+    segs.forEach((k, j) => {
+      const y1 = y(acc + m[k]), y0 = y(acc);
+      const h = Math.max(1, y0 - y1 - (j < segs.length - 1 ? 2 : 0)); // 2px surface gap between segments
+      const isTop = j === segs.length - 1;
+      const fill = k === 'pendingDeposit' ? 'url(#hatch)' : `var(--s-${k === 'received' ? 'received' : k === 'automatic' ? 'auto' : k === 'manual' ? 'manual' : 'risk'})`;
+      const stroke = k === 'pendingDeposit' ? ' stroke="var(--s-pending)" stroke-width="1"' : '';
+      bars += isTop
+        ? `<path d="${roundTop(x, y1, barW, h, 4)}" fill="${fill}"${stroke}/>`
+        : `<rect x="${x}" y="${y1}" width="${barW}" height="${h}" fill="${fill}"${stroke}/>`;
+      acc += m[k];
+    });
+    if (totals[i] > 0 && (i === 3 || totals[i] === Math.max(...totals))) bars += `<text x="${x + barW / 2}" y="${y(totals[i]) - 6}" text-anchor="middle" font-size="11" fill="var(--body)">${money(totals[i])}</text>`;
+    const every = bw < 30 ? 3 : bw < 46 ? 2 : 1;
+    if (m.month === today || (i - 3) % every === 0) bars += `<text x="${x + barW / 2}" y="${H - 10}" text-anchor="middle" font-size="11" fill="${m.month === today ? 'var(--ink)' : 'var(--axis)'}" font-weight="${m.month === today ? 600 : 400}">${mon(m.month)}</text>`;
+    bars += `<rect class="hit" data-i="${i}" x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent"/>`;
+  });
+  const nowX = L + 3 * bw;
+  $('#chart').innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Payment plan money in by month, ${mon(months[0].month, true)} to ${mon(months.at(-1).month, true)}">
+    <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#fff"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--s-pending)" stroke-width="2"/></pattern></defs>
+    ${g}<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#c3c2b7"/>
+    <line x1="${nowX}" x2="${nowX}" y1="${T}" y2="${H - B}" stroke="#c3c2b7" stroke-dasharray="3 3"/><text x="${nowX + 4}" y="${T + 8}" font-size="10.5" fill="var(--axis)">this month →</text>
+    ${bars}</svg>`;
+  const tip = $('#tip');
+  $('#chart').querySelectorAll('.hit').forEach((h) => {
+    h.addEventListener('mousemove', (ev) => {
+      const m = months[Number(h.dataset.i)];
+      const total = keys.reduce((s, k) => s + m[k], 0);
+      tip.innerHTML = `<h4>${mon(m.month, true)}</h4>${SERIES.filter(([k]) => m[k] > 0).map(([k, l]) => `<div class="r"><span>${esc(l)}</span><span>${money(m[k])}</span></div>`).join('') || '<div class="muted">Nothing</div>'}
+        <div class="r" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span><strong>Total</strong></span><span><strong>${money(total)}</strong></span></div>${m.fees ? `<div class="muted">+ about ${money(m.fees)} in processing fees</div>` : ''}`;
+      tip.style.display = 'block';
+      const box = $('#chartWrap').getBoundingClientRect();
+      let left = ev.clientX - box.left + 14; if (left + 230 > box.width) left = ev.clientX - box.left - 240;
+      tip.style.left = `${Math.max(4, left)}px`; tip.style.top = `${ev.clientY - box.top - 10}px`;
+    });
+    h.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
+}
+function niceStep(raw) { const p = 10 ** Math.floor(Math.log10(raw || 1)); const n = raw / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+function roundTop(x, y, w, h, r) { r = Math.min(r, h, w / 2); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
+
+function csv() {
+  const v = view();
+  const rows = [['Family', 'Email', 'Program', 'Term', 'Plan', 'Method', 'Tuition', 'Paid', 'Still to pay', 'Next date', 'Next amount', 'Status', 'Problems', 'HubSpot deal']];
+  for (const f of v.fams) rows.push([f.name, f.email, f.program, f.term, f.planName, f.method || '', f.tuition, f.paid, f.remaining, f.next?.date || '', f.next?.amount || '', f.state, f.problems.join('; '), f.dealId || '']);
+  rows.push([]);
+  rows.push(['Date', 'Family', 'Program', 'Term', 'Type', 'Amount']);
+  for (const f of v.fams) for (const p of f.schedule) if (!['paid', 'cancelled'].includes(p.status)) rows.push([p.due, f.name, f.program, f.term, p.manual ? 'Family pays' : p.status === 'scheduled' ? 'Automatic' : p.status, p.amount]);
+  const text = rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  a.download = `payment-plans-${S.data.today}.csv`; a.click();
+}
+
+$('#term').addEventListener('change', (e) => { S.term = e.target.value; render(); });
+let qt; $('#q').addEventListener('input', (e) => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value.trim(); render(); }, 200); });
+$('#tableToggle').addEventListener('click', () => { S.table = !S.table; render(); });
+$('#csv').addEventListener('click', csv);
+$('#families').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr.fam'); if (!tr || e.target.closest('a')) return;
+  const id = tr.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); render();
+});
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => S.data && render(), 150); });
+load().catch((e) => { $('#notices').innerHTML = `<div class="notice">${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>
