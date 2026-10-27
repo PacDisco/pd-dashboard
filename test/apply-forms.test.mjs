@@ -236,6 +236,9 @@ await t('after the deposit: withdraw / retry / pause go to pd-apply (admissions 
     assert.deepEqual(sent[1], { url: 'https://apply.test/api/service/payment-retry', body: { id: r.id, item: 2, by: 'Megan' } });
     await call(admissions, { action: 'payments-pause', id: r.id, paused: true });
     assert.deepEqual(sent[2].body, { id: r.id, paused: true, by: 'Megan' });
+    await call(admissions, { action: 'resend-acceptance', id: r.id });
+    assert.deepEqual(sent.at(-1), { url: 'https://apply.test/api/service/resend-acceptance', body: { id: r.id, by: 'Megan' } });
+    sent.pop();
     await call(admissions, { action: 'payment-mark-paid', id: r.id, item: 3, reference: 'Wise 9' });
     assert.deepEqual(sent[3], { url: 'https://apply.test/api/service/payment-mark-paid', body: { id: r.id, item: 3, reference: 'Wise 9', by: 'Megan' } });
   } finally { globalThis.fetch = real; delete process.env.APPLY_SITE_URL; delete process.env.APPLY_SERVICE_KEY; }

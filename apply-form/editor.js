@@ -931,7 +931,9 @@ function decisionBlock(app) {
     if (d.refund) lines.push(`<li>💳 Application fee refunded: $${(d.refund.amount / 100).toFixed(2)} <span class="em">(Stripe ${esc(d.refund.id)})</span></li>`);
     else if (d.outcome === 'declined') lines.push('<li class="em">Application fee not refunded.</li>');
     if (d.email?.to) lines.push(`<li>✉️ Emailed ${esc(d.email.to.join(', '))}${d.email.hubspot?.error ? ` <span class="em">· ⚠️ not logged in HubSpot: ${esc(d.email.hubspot.error)}</span>` : ''}</li>`);
-    if (d.email?.error) lines.push(`<li>⚠️ Email not sent: ${esc(d.email.error)} — please email the family yourself.</li>`);
+    if (d.email?.error) lines.push(`<li>⚠️ Email not sent: ${esc(d.email.error)} — use <em>Send acceptance email</em> to try again.</li>`);
+    if (d.outcome === 'accepted' && !d.email) lines.push(`<li>⚠️ <strong>No acceptance email has been sent.</strong>${d.offerError ? ` <span class="em">(${esc(d.offerError)})</span>` : ''} Use <em>Send acceptance email</em> below.</li>`);
+    for (const x of d.resent || []) lines.push(`<li class="em">Acceptance email sent again ${new Date(x.at).toLocaleString()} by ${esc(x.by || '')}</li>`);
     if (d.hubspot?.ok === false) lines.push(`<li>⚠️ HubSpot not updated: ${esc(d.hubspot.error)}</li>`);
     else if (d.hubspot?.stage) lines.push(`<li class="em">Deal moved to ${esc(d.hubspot.pipeline || '')} / ${esc(d.hubspot.stage)}</li>`);
     if (d.message) lines.push(`<li class="em">Message: “${esc(d.message)}”</li>`);
@@ -963,6 +965,7 @@ function decisionBlock(app) {
     if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Accept</button>`);
     const depositIn = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
     if (depositIn && !app.enrolment?.withdrawn && (app.enrolment?.schedule || []).some((p) => ['scheduled', 'failed'].includes(p.status))) btns.push(`<button class="btn btn--sm" id="pay-pause" data-paused="${app.enrolment.paused ? 1 : 0}"${!can ? ' disabled' : ''}>${app.enrolment.paused ? 'Resume automatic payments' : 'Pause automatic payments'}</button>`);
+    if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm${d.email?.to ? '' : ' btn--primary'}" id="dec-resend"${!can ? ' disabled' : ''}>${d.email?.to ? 'Resend acceptance email' : 'Send acceptance email'}</button>`);
     if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm" id="dec-extend"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Extend hold</button>`);
     if (!depositIn) btns.push(`<button class="btn btn--sm btn--danger" id="dec-decline"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Decline</button>`);
   }
@@ -1068,6 +1071,12 @@ async function showApplication(id) {
       showApplication(id); renderApps();
     });
   }
+  d.querySelector('#dec-resend')?.addEventListener('click', async (e) => {
+    if (!confirm(`Email ${app.name} and their parents a personal link to confirm their place and pay the deposit?`)) return;
+    e.currentTarget.disabled = true; e.currentTarget.textContent = 'Sending…';
+    try { await api('POST', {}, { action: 'resend-acceptance', id }); toast('Acceptance email sent.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 9000); showApplication(id); }
+  });
   d.querySelector('#dec-extend')?.addEventListener('click', async (e) => {
     const days = prompt('Hold their place for how many more days (from today)?', '7');
     if (days == null) return;

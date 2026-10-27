@@ -199,6 +199,7 @@ export default async (req, context, deps = {}) => {
       case "withdraw": return await withdraw(body, user);
       case "payment-retry": return await applyService("payment-retry", { id: body.id, item: body.item }, user);
       case "payments-pause": return await applyService("payments-pause", { id: body.id, paused: !!body.paused }, user);
+      case "resend-acceptance": return await applyService("resend-acceptance", { id: body.id }, user);
       case "payment-mark-paid": return await applyService("payment-mark-paid", { id: body.id, item: body.item, reference: body.reference }, user);
       case "reminders": return await setReminders(body, user);
       case "decide": return await decideApplication(body, user);
