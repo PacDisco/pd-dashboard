@@ -657,7 +657,7 @@ function renderSettings() {
           <tr><td>Pay in full</td>${['semester', 'mini', 'summer'].map((k) => cell('full', k)).join('')}</tr>
           <tr><td>Two instalments</td>${['semester', 'mini', 'summer'].map((k) => cell('two', k)).join('')}</tr>
         </tbody></table>
-        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. Neither is offered within 60 days of the start date. Fixed when you click Accept, so changing them later doesn't affect families already accepted. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
+        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. Neither is offered within 60 days of the start date. Families who choose "balance later" still get the pay-in-full saving if they pay the balance before then; choosing monthly or two instalments is final. Families who haven't paid yet see the better of the amount they were offered and the current amount, so raising a discount reaches them and lowering one never takes a saving away. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
       })()}
       ${emailEditor(st, 'accepted', 'Email: accepted')}
       ${emailEditor(st, 'enrolled', 'Email: place confirmed (deposit paid)')}
@@ -665,12 +665,15 @@ function renderSettings() {
     <div class="panel"><h2 class="serif">Payments after the deposit</h2><p class="sub">Instalments are charged automatically to the card or bank account the family paid the deposit with (plus that method's fee above). They're emailed 3 days before each payment and get a receipt after. A payment that fails is tried again 3 and 7 days later; after the third failure admissions is emailed and it isn't tried again until you click <em>Retry</em>. Families on "balance later" get reminders 14 and 3 days before it's due, and admissions is told if it's overdue. Every email goes to the student and parents and is logged in HubSpot.</p>
       <label class="check"><input type="checkbox" id="pay-auto"${st.payments?.autoCharge !== false ? ' checked' : ''}><span>Charge instalments automatically <span class="help">— untick to stop all automatic charges (notices still go out)</span></span></label>
       <label class="check"><input type="checkbox" id="pay-dep"${st.payments?.depositReminders !== false ? ' checked' : ''}><span>Remind accepted applicants who haven't paid the deposit <span class="help">(5, 2 and 1 days before the hold ends; admissions is told when it passes)</span></span></label>
+      <label class="check"><input type="checkbox" id="pay-disc"${st.payments?.discountReminders !== false ? ' checked' : ''}><span>Email families before their plan savings end <span class="help">(14 and 3 days before the 60-day cutoff — accepted families who haven't chosen a plan yet, and families on "balance later", who get the pay-in-full saving if they pay the balance by then. Choosing monthly or two instalments is final.)</span></span></label>
       ${emailEditor(st, 'depositReminder', 'Email: deposit reminder')}
       ${emailEditor(st, 'paymentUpcoming', 'Email: payment in 3 days')}
       ${emailEditor(st, 'paymentReceived', 'Email: payment received')}
       ${emailEditor(st, 'paymentFailed', 'Email: payment didn\'t go through')}
       ${emailEditor(st, 'balanceReminder', 'Email: balance due (balance later)')}
-      ${emailEditor(st, 'choosePlan', 'Email: deposit received — choose a payment plan')}</div>
+      ${emailEditor(st, 'choosePlan', 'Email: deposit received — choose a payment plan')}
+      ${emailEditor(st, 'savingsEnding', 'Email: savings end soon (no plan chosen yet)')}
+      ${emailEditor(st, 'payOffEnding', 'Email: savings end soon — balance later: pay it and save')}</div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
       <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
@@ -703,7 +706,7 @@ function renderSettings() {
   const ad = () => { st.advisor = st.advisor || {}; return st.advisor; };
   $('#ad-on').addEventListener('change', (e) => { ad().enabled = e.target.checked; changed({ rerender: false }); });
   [['#ad-url', 'url'], ['#ad-label', 'label'], ['#ad-text', 'text']].forEach(([sel, k]) => $(sel).addEventListener('input', (e) => { ad()[k] = e.target.value.trim(); changed({ rerender: false }); }));
-  [['#pay-auto', 'autoCharge'], ['#pay-dep', 'depositReminders']].forEach(([sel, k]) => $(sel).addEventListener('change', (e) => { st.payments = { ...(st.payments || {}), [k]: e.target.checked }; changed({ rerender: false }); }));
+  [['#pay-auto', 'autoCharge'], ['#pay-dep', 'depositReminders'], ['#pay-disc', 'discountReminders']].forEach(([sel, k]) => $(sel).addEventListener('change', (e) => { st.payments = { ...(st.payments || {}), [k]: e.target.checked }; changed({ rerender: false }); }));
   const disc = () => { st.discounts = st.discounts || (st.payInFull ? { enabled: !!st.payInFull.enabled, full: { ...st.payInFull } } : { enabled: false }); delete st.discounts.full?.enabled; delete st.payInFull; return st.discounts; };
   $('#pf-on').addEventListener('change', (e) => { disc().enabled = e.target.checked; changed({ rerender: false }); });
   $$('[data-disc]').forEach((el) => el.addEventListener('input', () => {

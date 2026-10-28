@@ -39,7 +39,7 @@ export function buildReport(rows, { today = iso(new Date()), rates = { card: 0.0
     if (d.outcome !== "accepted") continue;
     const name = `${a.first_name || ""} ${a.last_name || ""}`.trim() || a.email;
     const base = { id: a.id, name, email: a.email, program: a.program || "", term: a.term || "", dealId: a.hubspot_deal_id || null };
-    const tuition = r2((Number(e.offer?.tuition) || Number(a.deal_amount) || 0) - (Number(e.deposit?.discount) || 0));
+    const tuition = r2((Number(e.offer?.tuition) || Number(a.deal_amount) || 0) - (Number(e.deposit?.discount) || 0) - (Number(e.payOff?.discount) || 0));
     const method = e.choice?.method === "ach" ? "ach" : "card";
     const rate = e.choice?.rate != null ? Number(e.choice.rate) : rates[method] ?? 0;
     const deposited = ["paid", "processing"].includes(e.deposit?.status);

@@ -318,6 +318,8 @@ DEFAULT_EMAILS.depositReminder = {
     '',
     'Just a reminder that we\'re holding your place on **{program}** ({term}) until **{holdUntil}**. To confirm it, choose how you\'d like to pay and pay your {deposit} deposit.',
     '',
+    '{savingsLine}',
+    '',
     '[Confirm my place]({link})',
     '',
     'Pacific Discovery Admissions',
@@ -382,6 +384,8 @@ DEFAULT_EMAILS.balanceReminder = {
     '',
     'Your remaining tuition of **{amount}** for {program} ({term}) is due by **{date}**. You can pay by card or bank account:',
     '',
+    '{savingLine}',
+    '',
     '[Pay my balance]({link})',
     '',
     'Pacific Discovery Admissions',
@@ -404,6 +408,38 @@ DEFAULT_EMAILS.choosePlan = {
   ].join('\n'),
 };
 
+// Plan savings end soon (14 and 3 days before) — accepted, no plan chosen yet.
+DEFAULT_EMAILS.savingsEnding = {
+  subject: 'Your savings on {program} end {until}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'A quick heads-up: when you confirm your place on **{program}** ({term}), you can {savings}.',
+    '',
+    'These savings are only available until **{until}** — after that, the full price applies.',
+    '',
+    '[Choose my payment plan]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+// Plan savings end soon — on "balance later": pay the balance by then and save.
+DEFAULT_EMAILS.payOffEnding = {
+  subject: 'Last chance to save {saving} on {program}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'You still have **{rest}** of tuition left to pay for **{program}** ({term}). If you pay it by **{until}**, we\'ll take **{saving}** off — you\'d pay {payNow} instead.',
+    '',
+    'After {until} the saving ends and the full balance applies.',
+    '',
+    '[Pay the rest and save {saving}]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
 /** The placeholders each message understands, for the dashboard help text. */
 const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
 export const EMAIL_PLACEHOLDERS = {
@@ -415,12 +451,14 @@ export const EMAIL_PLACEHOLDERS = {
   declined: ['firstName', 'program', 'term', 'message', 'refund'],
   accepted: ['firstName', 'program', 'term', 'startDate', 'holdUntil', 'howToPay', 'deposit', 'tuition', 'message', 'link'],
   enrolled: ['firstName', 'program', 'term', 'paidToday', 'planName', 'schedule', 'scheduleNote', 'email', 'portalUrl'],
-  depositReminder: ['firstName', 'program', 'term', 'holdUntil', 'deposit', 'link'],
+  depositReminder: ['firstName', 'program', 'term', 'holdUntil', 'deposit', 'savingsLine', 'link'],
   paymentUpcoming: ['firstName', 'program', 'term', 'amount', 'method', 'date', 'balanceLine', 'link'],
   paymentReceived: ['firstName', 'program', 'term', 'amount', 'balanceLine', 'link'],
   paymentFailed: ['firstName', 'program', 'term', 'amount', 'date', 'reason', 'nextStep', 'link'],
-  balanceReminder: ['firstName', 'program', 'term', 'amount', 'date', 'link'],
+  balanceReminder: ['firstName', 'program', 'term', 'amount', 'date', 'savingLine', 'link'],
   choosePlan: ['firstName', 'program', 'term', 'deposit', 'link'],
+  savingsEnding: ['firstName', 'program', 'term', 'savings', 'until', 'link'],
+  payOffEnding: ['firstName', 'program', 'term', 'saving', 'rest', 'payNow', 'until', 'link'],
 };
 
 /** How long an accepted applicant's place is held for the deposit (days). */
