@@ -1,0 +1,16 @@
+{
+  "title": "Unearthed Field Budget",
+  "description": "Trip budgets for Unearthed leaders' field expense app (budget.unearthededucation.org) — NZD-based budgets with legs in the currency leaders actually spend in, assign leaders by email, watch spend against allocation, and export the ledger for reconciliation.",
+  "category": "Unearthed",
+  "icon": "🧾",
+  "colors": [
+    "#2d6b74",
+    "#59a1aa"
+  ],
+  "allowedRoles": [
+    "admin",
+    "operations",
+    "unearthed"
+  ],
+  "order": 26
+}

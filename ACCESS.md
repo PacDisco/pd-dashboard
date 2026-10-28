@@ -76,7 +76,8 @@ They gate what someone may **do** inside a dashboard, not what they can open:
 | `enrollment-status.mjs` | `ENROLLMENT_DROP_ROLES` may mark a student dropped |
 | `shirt-orders.mjs` | `SHIRT_ORDER_ROLES` may place an order |
 | `_shared/cash-access.mjs` | who may open the cash forecast data |
-| `budget-admin.mjs` | `WRITE_ROLES` may edit field budgets |
+| `budget-admin.mjs` | `BRANDS.pd.writeRoles` (admin, programs, operations) may edit PD field budgets |
+| `budget-admin-ue.mjs` | `BRANDS.ue.writeRoles` (admin, operations, unearthed) may edit Unearthed field budgets |
 | `users.js`, `config.js` | `admin` may manage people and access |
 
 They're edited on the **People & powers** tab. None of them were changed.

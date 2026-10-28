@@ -48,6 +48,15 @@ export const SOURCES = {
       GROUP BY coalesce(group_id, id)
       ORDER BY t DESC LIMIT ${MAX_KEYS}`)),
 
+  // Same, for the Unearthed field app's own database. No fallback: without
+  // the variable the tile simply has no badge, rather than counting PD's.
+  "ue-field-budget": neonRows(["UE_FIELD_BUDGET_DATABASE_URL"], (sql) => sql.query(
+    `SELECT (extract(epoch FROM max(received_at)) * 1000)::bigint AS t
+       FROM entries
+      WHERE received_at > now() - ${WINDOW}
+      GROUP BY coalesce(group_id, id)
+      ORDER BY t DESC LIMIT ${MAX_KEYS}`)),
+
   // Bookings land in Google Calendar, so checkins-book.mjs bumps a counter.
   "instructor-checkins": counter("instructor-checkins"),
 

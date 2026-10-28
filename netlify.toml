@@ -2,7 +2,9 @@
   publish = "."
   functions = "netlify/functions"
   edge_functions = "netlify/edge-functions"
-  command = "node scripts/build-manifest.js"
+  # The UE Field Budget page is a copy of field-budget/ made here; see
+  # scripts/sync-ue-field-budget.mjs.
+  command = "node scripts/sync-ue-field-budget.mjs && node scripts/build-manifest.js"
 
 [build.environment]
   NODE_VERSION = "20"

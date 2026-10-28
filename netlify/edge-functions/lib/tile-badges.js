@@ -19,6 +19,7 @@ export const BADGED_SLUGS = new Set([
   "sign-inbox",
   "student-uploads",
   "ue-applications",
+  "ue-field-budget",
 ]);
 
 /**

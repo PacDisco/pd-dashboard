@@ -507,3 +507,50 @@ The setting is a standing preference and survives reopening the dialog.
   currency. PEN per USD is 3.34; PEN per EUR is nearer 4.05. The field app shows
   the converted figure on its save button so a wrong rate is visible before
   saving, but a rates map per budget is the real fix.
+
+## Unearthed Education
+
+Unearthed runs its own instructor app at `budget.unearthededucation.org` — the
+same instructor-budgets codebase deployed as a second Netlify site with
+`BRAND=ue`, on its **own** Neon database, receipts Shared Drive and sign-in
+config. Nothing is shared with Pacific Discovery's budgets except code.
+
+The admin side is the same arrangement, one level up:
+
+| Path | What it is |
+|---|---|
+| `ue-field-budget/index.html` | a byte-for-byte copy of `field-budget/index.html` |
+| `ue-field-budget/dashboard.json` | category Unearthed, roles `admin, operations, unearthed` |
+| `netlify/functions/budget-admin-ue.mjs` | the API at `/api/budget-admin-ue`, bound to the UE database |
+| `scripts/sync-ue-field-budget.mjs` | makes the copy; runs first in every build |
+
+**One page, two paths.** The page reads its brand from `location.pathname`:
+under `/ue-field-budget/` it switches to Unearthed's logo, teal palette and
+Inter, and calls `/api/budget-admin-ue`. Edit `field-budget/index.html` only —
+the build re-copies it, and `npm run test:field-brands` fails if the committed
+copy is stale. The folder exists, rather than a rewrite, because dashboard
+access, the manifest and tile badges are all keyed on top-level folders.
+
+**One handler, two databases.** `budget-admin.mjs` exports
+`createBudgetAdmin(brand)`; `BRANDS.pd` and `BRANDS.ue` name each brand's
+database variable(s) and write roles. The brand travels in AsyncLocalStorage,
+so every helper still calls plain `sql()` and gets the database of the request
+it's serving. `UE_FIELD_BUDGET_DATABASE_URL` has **no fallback** — unset, the UE
+page errors rather than quietly editing Pacific Discovery's budgets.
+
+Write roles differ on purpose: PD's `programs` team can't change Unearthed
+budgets, and the `unearthed` role can't change PD's. Both brands keep NZD as the
+base currency with multi-leg, multi-currency budgets exactly as above.
+
+### Setup
+
+1. Set `UE_FIELD_BUDGET_DATABASE_URL` on the dashboard site to the Unearthed
+   field app's `DATABASE_URL` (pooled string).
+2. Deploy. The **Unearthed Field Budget** tile appears under Unearthed; grant it
+   per person in the access screen as usual.
+3. Anyone opening receipt links must be a member of the **Unearthed** receipts
+   Shared Drive.
+
+`npm run test:field-brands` covers the routing: each handler reaches only its
+own database (including under concurrent requests), UE has no fallback, and
+write roles don't cross brands.

@@ -48,10 +48,22 @@
 // PII rather than an aggregate. Writes additionally require a role.
 //
 // Env vars:
-//   FIELD_BUDGET_DATABASE_URL  Neon for the field app. Falls back to
-//                              NETLIFY_DATABASE_URL if you keep one database.
-//   URL / DEPLOY_PRIME_URL     used by verifiedUser to reach GoTrue
+//   FIELD_BUDGET_DATABASE_URL     Neon for the PD field app. Falls back to
+//                                 NETLIFY_DATABASE_URL if you keep one database.
+//   UE_FIELD_BUDGET_DATABASE_URL  Neon for the Unearthed field app — used only
+//                                 by budget-admin-ue.mjs. No fallback.
+//   URL / DEPLOY_PRIME_URL        used by verifiedUser to reach GoTrue
+//
+// ONE HANDLER, TWO BRANDS
+// -----------------------
+// Unearthed runs its own copy of the field app on its own database. Rather
+// than fork 700 lines, createBudgetAdmin(config) builds a handler bound to one
+// brand's database and write roles; this file exports the Pacific Discovery
+// one and budget-admin-ue.mjs exports the Unearthed one. The config travels in
+// AsyncLocalStorage, so every helper below keeps calling plain sql() and still
+// gets the database of the request it is serving.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { neon } from "@neondatabase/serverless";
 import { verifiedUser } from "./_shared/identity.mjs";
 import { hashCode, codeProblem } from "./_shared/access-code.mjs";
@@ -63,16 +75,34 @@ import { buildExportCsv } from "./_shared/field-export.mjs";
 import { fetchSpot, cleanCodes } from "./_shared/field-fx.mjs";
 import { planCategoryCopy } from "./_shared/field-duplicate.mjs";
 
-const WRITE_ROLES = ["admin", "programs", "operations"];
+// Each brand's database and who may change its budgets. `envVars` is tried in
+// order; the Unearthed list deliberately has no fallback, so a missing
+// variable is an error rather than Unearthed admins silently editing
+// Pacific Discovery's budgets.
+export const BRANDS = {
+  pd: {
+    label: "budget-admin",
+    envVars: ["FIELD_BUDGET_DATABASE_URL", "NETLIFY_DATABASE_URL"],
+    writeRoles: ["admin", "programs", "operations"],
+  },
+  ue: {
+    label: "budget-admin-ue",
+    envVars: ["UE_FIELD_BUDGET_DATABASE_URL"],
+    writeRoles: ["admin", "operations", "unearthed"],
+  },
+};
 
-let _sql;
+const brandContext = new AsyncLocalStorage();
+const _sqlByUrl = new Map();
+
 function sql() {
-  if (!_sql) {
-    const url = process.env.FIELD_BUDGET_DATABASE_URL || process.env.NETLIFY_DATABASE_URL;
-    if (!url) throw new Error("FIELD_BUDGET_DATABASE_URL is not set");
-    _sql = neon(url);
-  }
-  return _sql;
+  const brand = brandContext.getStore();
+  if (!brand) throw new Error("budget-admin: sql() called outside a request");
+  const name = brand.envVars.find((v) => process.env[v]);
+  if (!name) throw new Error(`${brand.envVars[0]} is not set`);
+  const url = process.env[name];
+  if (!_sqlByUrl.has(url)) _sqlByUrl.set(url, neon(url));
+  return _sqlByUrl.get(url);
 }
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store" };
@@ -678,7 +708,13 @@ async function handleSetStatus(body) {
 
 /* ---------------------------------------------------------------- entry --- */
 
-export default async (req) => {
+export function createBudgetAdmin(brand) {
+  return (req) => brandContext.run(brand, () => handle(req, brand));
+}
+
+export default createBudgetAdmin(BRANDS.pd);
+
+async function handle(req, brand) {
   const url = new URL(req.url);
   let body = {};
   if (req.method === "POST") {
@@ -689,7 +725,7 @@ export default async (req) => {
   try {
     // Reads are gated as well as writes: this payload carries instructor email
     // addresses, and /api/* is outside the edge auth gate.
-    const user = await verifiedUser(req, "budget-admin");
+    const user = await verifiedUser(req, brand.label);
     if (!user) return json(401, { error: "Sign in to view programme budgets." });
 
     if (req.method === "GET") {
@@ -705,7 +741,7 @@ export default async (req) => {
 
     if (req.method === "POST") {
       const roles = user.roles || [];
-      if (!roles.some((r) => WRITE_ROLES.includes(r))) {
+      if (!roles.some((r) => brand.writeRoles.includes(r))) {
         return json(403, { error: "Your role can't change programme budgets." });
       }
       if (action === "create") return await handleCreate(body);
@@ -721,7 +757,7 @@ export default async (req) => {
 
     return json(405, { error: "Method not allowed" });
   } catch (err) {
-    console.error("budget-admin:", err);
+    console.error(`${brand.label}:`, err);
     return json(500, { error: err.message });
   }
-};
+}

@@ -4,6 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Field Budget</title>
+<script>
+  // This page is served twice: /field-budget/ for Pacific Discovery and
+  // /ue-field-budget/ for Unearthed Education. ue-field-budget/index.html is a
+  // byte-for-byte copy made by scripts/sync-ue-field-budget.mjs at build, so
+  // the brand comes from the path, never from a second copy of the code.
+  // Unearthed reads and writes its own database through /api/budget-admin-ue.
+  (function () {
+    var ue = /^\/ue-field-budget(\/|$)/i.test(location.pathname);
+    window.FIELD_BRAND = ue ? 'ue' : 'pd';
+    document.documentElement.setAttribute('data-brand', window.FIELD_BRAND);
+    if (ue) {
+      document.title = 'Unearthed Field Budget';
+      var l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap';
+      document.head.appendChild(l);
+    }
+  })();
+</script>
 <meta name="description" content="Programme budgets for the instructor field expense app — legs set the currency, categories and subcategories roll up, and instructors log against them.">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -257,6 +276,24 @@
            border-radius:12px; background:#fff; }
   dialog { border:0; }
   dialog::backdrop { background: rgba(74,74,74,.45); }
+
+  /* Unearthed Education — from the leader portal: Inter, deep teal #2d6b74,
+     light teal #59a1aa, cream #f9f8f2, near-black #231f20. Only the tokens and
+     type change; the PD token names are kept so no rule above needs touching. */
+  html[data-brand="ue"] {
+    --topaz: #59a1aa;
+    --topaz-dark: #2d6b74;
+    --topaz-darker: #22535a;
+    --topaz-soft: #eaf3f4;
+    --green: #5b8f6a;
+    --ink: #231f20;
+    --over: #c0392b;
+  }
+  html[data-brand="ue"] body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f8f2; }
+  html[data-brand="ue"] h1, html[data-brand="ue"] h2, html[data-brand="ue"] .serif {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 600; letter-spacing: -0.01em;
+  }
+  html[data-brand="ue"] .brand-pd, html:not([data-brand="ue"]) .brand-ue { display: none !important; }
 </style>
 <script src="/assets/lightbox.js" defer></script>
 </head>
@@ -265,13 +302,16 @@
 <div class="wrap">
   <a class="back mb-4" href="/">&larr; Back to dashboards</a>
 
-  <img src="https://www.pacificdiscovery.org/graphics/logo.png"
-       alt="Pacific Discovery" width="314" height="84"
+  <img class="brand-pd" src="https://www.pacificdiscovery.org/graphics/logo.png"
+       alt="Pacific Discovery" width="314" height="84" loading="lazy"
+       style="height:26px;width:auto;display:block;margin:6px 0 14px">
+  <img class="brand-ue" src="/assets/unearthed-logo.png"
+       alt="Unearthed Education" width="493" height="120" loading="lazy"
        style="height:26px;width:auto;display:block;margin:6px 0 14px">
 
   <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
     <div>
-      <h1 class="text-2xl">Field Budget</h1>
+      <h1 class="text-2xl"><span class="brand-ue">Unearthed </span>Field Budget</h1>
       <p class="lede">
         Each budget holds one or more legs. A leg sets the currency instructors spend in;
         its categories and subcategories roll up into it. Totals convert to the base
@@ -433,7 +473,7 @@
 </dialog>
 
 <script>
-const API = '/api/budget-admin';
+const API = window.FIELD_BRAND === 'ue' ? '/api/budget-admin-ue' : '/api/budget-admin';
 // Suggestions, not a whitelist — any three-letter ISO 4217 code can be typed.
 // Programme destinations first, then the currencies budgets are funded in.
 const CURRENCIES = [

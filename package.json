@@ -7,7 +7,7 @@
     "node": "20"
   },
   "scripts": {
-    "build": "node scripts/build-manifest.js",
+    "build": "node scripts/sync-ue-field-budget.mjs && node scripts/build-manifest.js",
     "test": "node test/instructor-checklist.test.mjs",
     "test:access": "node test/dashboard-access.test.mjs",
     "test:badges": "node test/tile-badges.test.mjs",
@@ -19,6 +19,8 @@
     "test:export": "node test/field-export.test.mjs",
     "test:fx": "node test/field-fx.test.mjs",
     "test:duplicate": "node test/field-duplicate.test.mjs",
+    "test:field-brands": "node test/field-budget-brands.test.mjs && node scripts/sync-ue-field-budget.mjs --check",
+    "sync:ue-field-budget": "node scripts/sync-ue-field-budget.mjs",
     "test:time-access": "node test/time-access.test.mjs",
     "test:seasonal": "node test/seasonal-reset.test.mjs",
     "test:time": "node test/time-tracking.test.mjs",

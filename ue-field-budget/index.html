@@ -1,0 +1,1810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Budget</title>
+<script>
+  // This page is served twice: /field-budget/ for Pacific Discovery and
+  // /ue-field-budget/ for Unearthed Education. ue-field-budget/index.html is a
+  // byte-for-byte copy made by scripts/sync-ue-field-budget.mjs at build, so
+  // the brand comes from the path, never from a second copy of the code.
+  // Unearthed reads and writes its own database through /api/budget-admin-ue.
+  (function () {
+    var ue = /^\/ue-field-budget(\/|$)/i.test(location.pathname);
+    window.FIELD_BRAND = ue ? 'ue' : 'pd';
+    document.documentElement.setAttribute('data-brand', window.FIELD_BRAND);
+    if (ue) {
+      document.title = 'Unearthed Field Budget';
+      var l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap';
+      document.head.appendChild(l);
+    }
+  })();
+</script>
+<meta name="description" content="Programme budgets for the instructor field expense app — legs set the currency, categories and subcategories roll up, and instructors log against them.">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  /* Pacific Discovery brand: topaz #55bbd2, secondary green #81c243, body grey
+     #4a4a4a, Poppins for UI and DM Serif Display for headings. */
+  :root {
+    --topaz: #55bbd2;
+    --topaz-dark: #288195;   /* darkened along the brand hue to clear 4.5:1 with
+                                white text; brand topaz alone is only 2.2:1 */
+    --topaz-darker: #1e6a7a;
+    --topaz-soft: #eaf7fa;
+    --green: #81c243;
+    --ink: #4a4a4a;
+    --over: #b02a37;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f7f7f7; color: var(--ink); }
+  h1, h2, .serif { font-family: 'DM Serif Display', Times, serif; font-weight: 400; }
+  /* Poppins figures are proportional and it has no tnum feature, so money is
+     right-aligned to keep the decimal flush. */
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .btn-spin {
+    display:inline-block; width:13px; height:13px; margin-right:8px;
+    vertical-align:-2px; border:2px solid currentColor; border-top-color:transparent;
+    border-radius:50%; animation:spin .7s linear infinite;
+  }
+  button:disabled { opacity:.75; cursor:progress; }
+  .spinner { border: 4px solid #e5e7eb; border-top: 4px solid var(--topaz); border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px 80px; }
+  .lede { color: #797979; margin: 0 0 24px; max-width: 64ch; font-size: 14px; }
+
+  .back {
+    display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:500;
+    color:var(--ink); background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+    text-decoration:none; padding:6px 14px; box-shadow:0 1px 2px rgba(0,0,0,.05);
+  }
+  .back:hover { background:#f9fafb; }
+
+  .btn-primary {
+    background:var(--topaz-dark); color:#fff; font-weight:500;
+    border:2px solid var(--topaz-dark); border-radius:70px;
+  }
+  .btn-primary:hover { background:var(--topaz-darker); border-color:var(--topaz-darker); }
+  .btn-quiet {
+    background:#fff; border:2px solid #dee2e6; color:var(--ink); border-radius:70px;
+  }
+  .btn-quiet:hover { background:#f9fafb; border-color:var(--topaz); }
+  .lnk { color:var(--topaz-dark); font-weight:500; }
+  .lnk:hover { text-decoration:underline; }
+
+  /* Accordion. <details> gives keyboard support and open/close semantics for
+     free; only the marker needs replacing. */
+  .bcard { background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+  .bcard > summary {
+    list-style: none; cursor: pointer; padding: 16px 20px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .bcard > summary::-webkit-details-marker { display: none; }
+  .bcard > summary:hover { background: #fafafa; }
+  .bcard > summary:focus-visible { outline: 2px solid var(--topaz-dark); outline-offset: -2px; }
+  .chev { flex: none; width: 16px; color: #9ca3af; transition: transform .15s ease; }
+  .bcard[open] .chev { transform: rotate(90deg); }
+  .bcard[open] > summary { border-bottom: 1px solid #f3f4f6; }
+  .bcard-body { padding: 4px 20px 18px; }
+
+  /* Enough signal while collapsed to spot a problem without opening anything. */
+  .minibar { width: 120px; height: 4px; background:#e5e7eb; border-radius:2px; overflow:hidden; }
+  .minibar span { display:block; height:100%; background:var(--topaz); }
+  .minibar.over span { background:var(--over); }
+  .warn { color:var(--over); font-size:11px; font-weight:600; white-space:nowrap; }
+
+  /* Leg block inside an expanded budget. */
+  .leg { margin-top: 18px; }
+  .leg:first-of-type { margin-top: 8px; }
+  .leg-head {
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    padding-bottom:8px; border-bottom:2px solid var(--topaz-soft); margin-bottom:10px;
+  }
+  .leg-head > span:first-child { flex:1; min-width:0; }
+  .leg-head .minibar { flex:none; align-self:center; width:90px; }
+  .leg-head .leg-over { color:var(--over); }
+  /* A planning rate that has wandered. Amber, not red: nothing is wrong with
+     the numbers, they are just measured against an old rate. */
+  .drift {
+    font-size:10.5px; font-weight:600; margin-left:8px; cursor:help;
+    color:#8a6100; background:#fdf3d4; border:1px solid #f0dda0;
+    border-radius:9999px; padding:1px 8px; white-space:nowrap;
+  }
+  .leg-name { font-weight:600; }
+  .leg-cur {
+    font-size:11px; font-weight:600; color:var(--topaz-dark); background:var(--topaz-soft);
+    border-radius:9999px; padding:2px 9px; margin-left:8px;
+  }
+
+  /* Each row is a fuel gauge; the bar is the row's own bottom edge, so the
+     remaining balance reads without a legend. */
+  .row { position:relative; padding:9px 2px 12px; }
+  .row.d2 { padding-left:14px; }
+  .row.d3 { padding-left:30px; }
+  .row.d3 .row-top { font-size:13px; }
+  .row-top { display:flex; justify-content:space-between; gap:12px; font-size:14px; }
+  .row-meta { font-size:11.5px; color:#797979; }
+  .track { position:absolute; left:0; right:0; bottom:0; height:4px; background:#e5e7eb; border-radius:2px; }
+  .row.d2 .track { left:14px; }
+  .row.d3 .track { left:30px; }
+  .fill { height:100%; background:var(--topaz); border-radius:2px; }
+  .row.over .fill { background:var(--over); }
+  .row.over .row-top span:last-child { color:var(--over); }
+
+  /* Cash on hand. Physical notes in a pocket, so it gets its own visual
+     language — green, countable — rather than looking like another gauge. */
+  .cash-chip {
+    display:inline-flex; align-items:center; gap:7px; flex-wrap:wrap;
+    font-size:11.5px; font-weight:600; color:#2f5d16;
+    background:#eef7e6; border:1px solid #cfe6bb; border-radius:9999px;
+    padding:2px 10px; margin-top:4px;
+  }
+  .cash-chip .lbl { font-weight:500; color:#4f7a24; text-transform:uppercase; letter-spacing:.05em; font-size:10px; }
+  .cash-chip.none { color:#797979; background:#f7f7f7; border-color:#e5e7eb; }
+  .cash-chip.none .lbl { color:#9ca3af; }
+  .cash-chip.short { color:var(--over); background:#fdeceb; border-color:#f5c6c3; }
+  .cash-chip.short .lbl { color:var(--over); }
+
+  .cash { margin-top:18px; padding-top:14px; border-top:1px solid #e5e7eb; }
+  .cash h3 { font-size:12px; font-weight:600; color:#797979; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+  .cash table { width:100%; font-size:13px; border-collapse:collapse; }
+  .cash th {
+    text-align:right; font-size:10.5px; font-weight:500; color:#9ca3af;
+    text-transform:uppercase; letter-spacing:.06em; padding:0 0 6px 12px; white-space:nowrap;
+  }
+  .cash th:first-child { text-align:left; padding-left:0; }
+  .cash td { padding:7px 0 7px 12px; text-align:right; border-top:1px solid #f3f4f6; white-space:nowrap; }
+  .cash td:first-child { text-align:left; padding-left:0; white-space:normal; }
+  .cash .held { font-weight:600; }
+  .cash .held.short { color:var(--over); }
+  .cash .zero { color:#d1d5db; }
+  .cash .elsewhere { font-size:11px; color:#797979; }
+  .cash tfoot td { border-top:2px solid var(--topaz-soft); font-weight:600; }
+
+  /* Ledger grouped by budget category. */
+  .seg { display:inline-flex; border:2px solid #dee2e6; border-radius:70px; overflow:hidden; }
+  .seg button {
+    font-size:12px; padding:6px 14px; background:#fff; color:var(--ink); font-weight:500;
+  }
+  .seg button + button { border-left:1px solid #e5e7eb; }
+  .seg button.on { background:var(--topaz-dark); color:#fff; }
+  .lg-leg {
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    font-weight:600; font-size:14px; margin:22px 0 0;
+    padding-bottom:6px; border-bottom:2px solid var(--topaz-soft);
+  }
+  .lg-leg:first-child { margin-top:4px; }
+  .lg-cat {
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    margin:14px 0 2px; font-size:13px;
+  }
+  .lg-cat .nm { font-weight:600; }
+  .lg-cat .crumb { color:#9ca3af; font-weight:400; }
+  .lg-cat .sub { font-size:11.5px; color:#797979; white-space:nowrap; }
+  .lg-cat .sub.over { color:var(--over); font-weight:600; }
+  .lg-bar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+  .lg-search {
+    display:flex; align-items:center; gap:8px; flex:1; min-width:220px;
+    border:1px solid #d1d5db; border-radius:8px; padding:7px 11px; background:#fff;
+  }
+  .lg-search:focus-within { outline:2px solid var(--topaz-dark); outline-offset:-1px; }
+  .lg-search svg { flex:none; color:#9ca3af; }
+  .lg-search input { border:0; padding:0; font-size:13px; }
+  .lg-search input:focus { outline:none; }
+  .lg-check { display:inline-flex; align-items:center; gap:7px; font-size:13px; white-space:nowrap; cursor:pointer; }
+  .lg-check input { width:16px; height:16px; accent-color:var(--topaz-dark); cursor:pointer; }
+  .lg-hit { background:#fdf3d4; border-radius:2px; }
+  /* Cash vs card. Cash borrows the green of the cash-on-hand block above,
+     because these are the rows that move that balance. */
+  .pm {
+    display:inline-block; font-size:10.5px; font-weight:600; letter-spacing:.04em;
+    text-transform:uppercase; border-radius:9999px; padding:1px 8px; white-space:nowrap;
+  }
+  .pm-cash { color:#2f5d16; background:#eef7e6; border:1px solid #cfe6bb; }
+  .pm-card { color:var(--topaz-dark); background:var(--topaz-soft); border:1px solid #cce8ef; }
+  .pm-none { color:#9ca3af; background:#f7f7f7; border:1px solid #e5e7eb; }
+  .lg-tbl { width:100%; font-size:13px; border-collapse:collapse; }
+  .lg-tbl th {
+    text-align:left; font-size:10.5px; font-weight:500; color:#9ca3af;
+    text-transform:uppercase; letter-spacing:.06em; padding:4px 8px 4px 0; border-bottom:1px solid #f3f4f6;
+  }
+  .lg-tbl td { padding:6px 8px 6px 0; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+  .lg-tbl .voided { opacity:.5; text-decoration:line-through; }
+  .lg-empty { font-size:12px; color:#9ca3af; padding:6px 0 10px; }
+
+  .people { margin-top:16px; padding-top:14px; border-top:1px solid #e5e7eb; }
+  .pill .cash-held { color:#2f5d16; font-weight:600; }
+  .pill .cash-held.short { color:var(--over); }
+  .pill {
+    display:inline-flex; align-items:center; gap:6px; background:#f7f7f7;
+    border:1px solid #e5e7eb; border-radius:9999px; padding:4px 11px;
+    font-size:12px; margin:0 6px 6px 0;
+  }
+  .pill button { color:#9ca3af; font-weight:700; line-height:1; }
+  .pill button:hover { color:var(--over); }
+
+  label { display:block; margin:14px 0 5px; font-size:12px; font-weight:500; color:#797979; }
+  input, select { width:100%; font:inherit; color:var(--ink); background:#fff;
+    border:1px solid #d1d5db; border-radius:8px; padding:9px 10px; font-size:14px; }
+  input:focus, select:focus { outline:2px solid var(--topaz-dark); outline-offset:-1px; }
+  input:read-only { background:#f3f4f6; color:#6b7280; cursor:not-allowed; }
+  .two { display:flex; gap:10px; } .two > div { flex:1; min-width:0; }
+
+  /* ---- editor: one card per leg ---- */
+  .legcard { border:1px solid #dee2e6; border-radius:10px; padding:14px; margin-bottom:12px; background:#fdfdfd; }
+  .legcard-top { display:flex; gap:8px; align-items:flex-start; }
+  .legcard-top .legname { flex:2; }
+  .legcard-top .legcur { flex:1; min-width:92px; }
+  .legtools { display:flex; gap:4px; flex:none; padding-top:1px; }
+  .icon {
+    width:30px; height:36px; flex:none; border:1px solid #d1d5db; border-radius:8px;
+    background:#fff; color:#9ca3af; font:inherit; font-size:14px; line-height:1; cursor:pointer;
+  }
+  .icon:hover { color:var(--topaz-dark); border-color:var(--topaz); background:var(--topaz-soft); }
+  .icon.danger:hover { color:var(--over); border-color:var(--over); background:#fbeaec; }
+
+  .subhead { font-size:11px; font-weight:600; color:#797979; text-transform:uppercase;
+             letter-spacing:.05em; margin:14px 0 6px; }
+
+  .raterow { display:flex; gap:8px; margin-bottom:6px; }
+  .raterow .rateval { flex:1; text-align:right; font-variant-numeric:tabular-nums; }
+  .curfield { text-transform:uppercase; letter-spacing:.06em; font-weight:500; }
+  .raterow .ratecur { flex:0 0 88px; text-align:left; }
+  .legcard-top .legcur { flex:0 0 92px; }
+
+  .catrow { display:flex; gap:8px; margin-bottom:6px; align-items:center; }
+  .catrow.child { margin-left:26px; }
+  .catrow .cname { flex:2; min-width:0; }
+  .catrow .camt { flex:1; min-width:84px; text-align:right; font-variant-numeric:tabular-nums; }
+  .catrow .grip { color:#d1d5db; cursor:grab; }
+  .catrow .grip:hover { color:#6b7280; background:#f3f4f6; }
+  .catrow.dragging { opacity:.4; }
+  .catlist.dropping { background:#f9fafb; border-radius:8px; }
+  .catrow.child .addsub { visibility:hidden; pointer-events:none; }
+
+  .total { display:flex; justify-content:space-between; margin-top:10px; padding-top:8px;
+           border-top:1px solid #dee2e6; font-weight:600; font-size:13px; }
+  .hint { font-size:11.5px; color:#797979; margin-top:5px; }
+  .err { font-size:13px; color:var(--over); margin-top:8px; }
+  .empty { color:#797979; font-size:14px; padding:22px; border:1px dashed #dee2e6;
+           border-radius:12px; background:#fff; }
+  dialog { border:0; }
+  dialog::backdrop { background: rgba(74,74,74,.45); }
+
+  /* Unearthed Education — from the leader portal: Inter, deep teal #2d6b74,
+     light teal #59a1aa, cream #f9f8f2, near-black #231f20. Only the tokens and
+     type change; the PD token names are kept so no rule above needs touching. */
+  html[data-brand="ue"] {
+    --topaz: #59a1aa;
+    --topaz-dark: #2d6b74;
+    --topaz-darker: #22535a;
+    --topaz-soft: #eaf3f4;
+    --green: #5b8f6a;
+    --ink: #231f20;
+    --over: #c0392b;
+  }
+  html[data-brand="ue"] body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f8f2; }
+  html[data-brand="ue"] h1, html[data-brand="ue"] h2, html[data-brand="ue"] .serif {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 600; letter-spacing: -0.01em;
+  }
+  html[data-brand="ue"] .brand-pd, html:not([data-brand="ue"]) .brand-ue { display: none !important; }
+</style>
+<script src="/assets/lightbox.js" defer></script>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="back mb-4" href="/">&larr; Back to dashboards</a>
+
+  <img class="brand-pd" src="https://www.pacificdiscovery.org/graphics/logo.png"
+       alt="Pacific Discovery" width="314" height="84" loading="lazy"
+       style="height:26px;width:auto;display:block;margin:6px 0 14px">
+  <img class="brand-ue" src="/assets/unearthed-logo.png"
+       alt="Unearthed Education" width="493" height="120" loading="lazy"
+       style="height:26px;width:auto;display:block;margin:6px 0 14px">
+
+  <div class="flex items-start justify-between gap-4 flex-wrap mb-1">
+    <div>
+      <h1 class="text-2xl"><span class="brand-ue">Unearthed </span>Field Budget</h1>
+      <p class="lede">
+        Each budget holds one or more legs. A leg sets the currency instructors spend in;
+        its categories and subcategories roll up into it. Totals convert to the base
+        currency for reporting.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="newBtn" class="btn-primary text-sm px-5 py-2">New budget</button>
+      <button id="toggleAllBtn" class="btn-quiet text-sm px-4 py-2">Expand all</button>
+      <button id="refreshBtn" class="btn-quiet text-sm px-4 py-2">Refresh</button>
+    </div>
+  </div>
+
+  <div id="err" class="hidden bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3 my-4"></div>
+
+  <div id="loading" class="flex justify-center py-16"><div class="spinner"></div></div>
+  <div id="list" class="mt-6 space-y-3"></div>
+</div>
+
+<datalist id="curlist"></datalist>
+
+<!-- Budget editor, shared by new and edit -->
+<dialog id="dlg" class="rounded-xl p-0 w-full max-w-2xl">
+  <div class="p-6">
+    <h2 id="dlgTitle" class="text-lg mb-4">New budget</h2>
+
+    <label for="f-name">Name</label>
+    <input id="f-name" placeholder="Fall 2026 — South America">
+
+    <div class="two mt-3">
+      <div>
+        <label for="f-base">Base currency</label>
+        <select id="f-base">
+          <option selected>NZD</option><option>USD</option><option>AUD</option><option>EUR</option>
+        </select>
+        <p class="hint">What finance reports in. Instructors never see it.</p>
+      </div>
+      <div>
+        <label for="f-funded">Approved amount</label>
+        <input id="f-funded" type="number" step="0.01" placeholder="0.00" class="num text-right">
+        <p class="hint">Optional, in base currency.</p>
+      </div>
+    </div>
+
+    <div class="two mt-3">
+      <div><label for="f-start">Starts</label><input id="f-start" type="date"></div>
+      <div><label for="f-end">Ends</label><input id="f-end" type="date"></div>
+    </div>
+
+    <div class="subhead">Legs</div>
+    <div id="f-legs"></div>
+    <button id="addLeg" class="mt-1 text-sm lnk">+ Add leg</button>
+
+    <div class="total"><span>Total, base currency</span><span id="f-total" class="num">—</span></div>
+    <p class="hint" id="f-totalNote"></p>
+
+    <div id="emailBlock">
+      <label for="f-emails">Instructors</label>
+      <input id="f-emails" placeholder="katie@…, manuel@…">
+      <p class="hint">Comma separated. Case and +tags are normalised automatically.</p>
+    </div>
+
+    <p id="f-err" class="err hidden"></p>
+
+    <div class="flex justify-end gap-2 mt-5">
+      <button id="cancelBtn" class="btn-quiet px-4 py-2 text-sm">Cancel</button>
+      <button id="saveBtn" class="btn-primary px-5 py-2 text-sm">Create budget</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Access code -->
+<dialog id="codeDlg" class="rounded-xl p-0 w-full max-w-md">
+  <div class="p-6">
+    <h2 id="codeTitle" class="text-lg mb-1">Access code</h2>
+    <p class="hint" id="codeWho"></p>
+
+    <label for="c-code">New code</label>
+    <input id="c-code" type="text" autocomplete="off" spellcheck="false" placeholder="At least 8 characters">
+    <div class="flex gap-2 mt-2">
+      <button id="c-gen" class="btn-quiet text-sm px-4 py-1.5" type="button">Suggest one</button>
+      <button id="c-show" class="btn-quiet text-sm px-4 py-1.5" type="button">Hide</button>
+    </div>
+    <p class="hint">
+      Write it down before saving — it's stored hashed and can't be read back.
+      Give it to the instructor directly, not in a group chat.
+    </p>
+
+    <p id="c-err" class="err hidden"></p>
+    <p id="c-ok" class="hint hidden" style="color:#4f7a24;font-weight:600"></p>
+
+    <div class="flex justify-between gap-2 mt-5">
+      <button id="c-clear" class="btn-quiet px-4 py-2 text-sm" type="button">Revoke</button>
+      <span class="flex gap-2">
+        <button id="c-cancel" class="btn-quiet px-4 py-2 text-sm" type="button">Cancel</button>
+        <button id="c-save" class="btn-primary px-5 py-2 text-sm" type="button">Set code</button>
+      </span>
+    </div>
+  </div>
+</dialog>
+
+<!-- Ledger -->
+<dialog id="dupDlg" class="rounded-xl p-0 w-full max-w-md">
+  <div class="p-6">
+    <h2 class="text-lg mb-1">Duplicate budget</h2>
+    <p class="hint" id="dupFrom" style="margin-top:0"></p>
+
+    <label for="d-name">New name</label>
+    <input id="d-name" placeholder="Fall 2027 — Polynesian Journey">
+
+    <div class="two">
+      <div><label for="d-start">Starts</label><input id="d-start" type="date"></div>
+      <div><label for="d-end">Ends</label><input id="d-end" type="date"></div>
+    </div>
+
+    <label class="lg-check" style="margin-top:14px">
+      <input id="d-people" type="checkbox"> Also copy the assigned instructors
+    </label>
+
+    <p class="hint">
+      Legs, categories, subcategories, allocations and planning rates are copied.
+      <strong>No entries are copied</strong> — the new budget starts at zero spent.
+    </p>
+
+    <p id="d-err" class="err hidden"></p>
+
+    <div class="flex justify-end gap-2 mt-5">
+      <button id="d-cancel" class="btn-quiet px-4 py-2 text-sm" type="button">Cancel</button>
+      <button id="d-save" class="btn-primary px-5 py-2 text-sm" type="button">Duplicate</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="ledgerDlg" class="rounded-xl p-0 w-full max-w-4xl">
+  <div class="p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="ledgerTitle" class="text-lg">Entries</h2>
+      <div class="flex gap-2 items-center">
+        <span class="seg" role="group" aria-label="Group entries">
+          <button id="byCat" class="on" type="button">By category</button>
+          <button id="byDate" type="button">By date</button>
+        </span>
+        <a id="csvLink" class="btn-quiet px-4 py-2 text-sm" href="#">Download CSV</a>
+        <button id="closeLedger" class="btn-quiet px-4 py-2 text-sm">Close</button>
+      </div>
+    </div>
+    <div class="lg-bar">
+      <label class="lg-search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="lgSearch" type="search" placeholder="Search description, person, category, amount…" autocomplete="off">
+      </label>
+      <label class="lg-check">
+        <input id="lgCorr" type="checkbox" checked> Show corrections
+      </label>
+      <span id="lgCount" class="hint" style="margin:0"></span>
+    </div>
+    <div id="ledgerBody" class="overflow-x-auto" style="max-height:62vh"></div>
+  </div>
+</dialog>
+
+<script>
+const API = window.FIELD_BRAND === 'ue' ? '/api/budget-admin-ue' : '/api/budget-admin';
+// Suggestions, not a whitelist — any three-letter ISO 4217 code can be typed.
+// Programme destinations first, then the currencies budgets are funded in.
+const CURRENCIES = [
+  'NZD', 'USD', 'AUD', 'EUR', 'GBP',
+  'PEN', 'CLP', 'ARS', 'BOB', 'COP', 'BRL', 'GTQ', 'CRC', 'MXN', 'BZD',
+  'THB', 'VND', 'KHR', 'LAK', 'IDR', 'MYR', 'PHP', 'INR', 'NPR', 'LKR', 'JPY',
+  'FJD', 'WST', 'TOP', 'VUV', 'PGK', 'SBD',
+  'ZAR', 'TZS', 'KES', 'MAD', 'NAD', 'BWP',
+  'CAD', 'CHF', 'NOK', 'SEK', 'ISK', 'TRY', 'MNT', 'GEL',
+];
+let DATA = null;
+let EDITING = null;              // budget id in edit mode, else null
+const OPEN = new Set();          // expanded budget cards, kept across refreshes
+let DRAGGING = null;
+
+const $ = (id) => document.getElementById(id);
+const normCur = (v) => String(v || '').trim().toUpperCase().slice(0, 3);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
+  { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+// Not every currency has 100 minor units — VND, JPY and CLP have none, a few
+// Gulf currencies use 1000. Storing everything as "cents" would be a
+// hundredfold error on those.
+const ZERO_DECIMAL = new Set(['BIF','CLP','DJF','GNF','ISK','JPY','KMF','KRW',
+  'PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']);
+const THREE_DECIMAL = new Set(['BHD','IQD','JOD','KWD','LYD','OMR','TND']);
+const decimals = (cur) => ZERO_DECIMAL.has(cur) ? 0 : (THREE_DECIMAL.has(cur) ? 3 : 2);
+const minorUnits = (cur) => Math.pow(10, decimals(cur));
+
+const fmt = (m, cur) => {
+  const c = cur || 'NZD';
+  const d = decimals(c);
+  const v = (m || 0) / minorUnits(c);
+  try {
+    return new Intl.NumberFormat('en-NZ', {
+      style: 'currency', currency: c, currencyDisplay: 'code',
+      minimumFractionDigits: d, maximumFractionDigits: d,
+    }).format(v);
+  } catch {
+    return `${c} ${v.toFixed(d)}`;
+  }
+};
+
+function showErr(msg) {
+  const el = $('err');
+  if (!msg) { el.classList.add('hidden'); return; }
+  el.textContent = msg; el.classList.remove('hidden');
+}
+
+// Disables a button and shows a spinner inside it for the duration. Saving a
+// budget writes every category, so it is slow enough that an undisabled button
+// invites a second click and a duplicate write.
+async function busy(btn, label, fn) {
+  if (btn.dataset.busy) return;
+  const original = btn.innerHTML;
+  btn.dataset.busy = '1';
+  btn.disabled = true;
+  btn.innerHTML = `<span class="btn-spin" aria-hidden="true"></span>${label}`;
+  try {
+    return await fn();
+  } finally {
+    delete btn.dataset.busy;
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+async function api(path, opts) {
+  const res = await fetch(`${API}${path}`, { credentials: 'include', ...opts });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error || `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+/* ---------------------------------------------------------------- tree ---
+   Allocation lives on leaves, recursively: a node with children is the sum of
+   its children, one without children holds its own figure. Same rule at every
+   level, so a leg is the sum of its categories and a category is the sum of its
+   subcategories — unless it has none. */
+
+function treeFor(budgetId) {
+  const all = DATA.categories.filter((c) => c.budget_id === budgetId);
+  const kidsOf = (id) => all.filter((c) => c.parent_id === id);
+  const spentBy = Object.fromEntries(
+    DATA.spend.filter((s) => s.budget_id === budgetId).map((s) => [s.category_id, s.spent]));
+
+  const shape = (node, depth) => {
+    const kids = kidsOf(node.id).map((k) => shape(k, depth + 1));
+    const allocated = kids.length
+      ? kids.reduce((n, k) => n + k.allocated, 0)
+      : (node.allocated || 0);
+    const spent = (spentBy[node.id] || 0) + kids.reduce((n, k) => n + k.spent, 0);
+    return { ...node, depth, kids, allocated, spent, over: spent > allocated };
+  };
+  return all.filter((c) => !c.parent_id).map((leg) => shape(leg, 1));
+}
+
+/* ------------------------------------------------------------------ fx ---
+   Planning rates are typed in once and never revisited, so the card says when
+   one has wandered away from the market. Nothing is recalculated: the stored
+   rate remains what entries were measured against, and changing it is the
+   admin's decision. See netlify/functions/_shared/field-fx.mjs. */
+
+const DRIFT_THRESHOLD = 0.05;
+
+// Units of `to` per 1 unit of `from`, from a table quoted against one base.
+function crossRate(market, from, to) {
+  if (!market || !market.rates) return null;
+  const f = normCur(from), t = normCur(to), mb = normCur(market.base);
+  if (!f || !t) return null;
+  if (f === t) return 1;
+  const at = (c) => {
+    if (c === mb) return 1;
+    const v = Number(market.rates[c]);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  const a = at(f), b = at(t);
+  return a === null || b === null ? null : b / a;
+}
+
+// What the leg's stored rate is against what the market says today.
+function legDrift(leg, base) {
+  const stored = Number((leg.rates || {})[base]);
+  const live = crossRate(DATA.market, base, leg.currency);
+  if (!Number.isFinite(stored) || stored <= 0 || live === null) return null;
+  const pct = (stored - live) / live;
+  return { stored, live, pct, drifted: Math.abs(pct) >= DRIFT_THRESHOLD };
+}
+
+// A leg's rates map is expressed in LEG-currency units per 1 unit of the other
+// currency, so converting the leg's own total into base means dividing.
+function toBase(amount, leg, base) {
+  if (!leg.currency || leg.currency === base) return amount;
+  const r = Number((leg.rates || {})[base]);
+  return Number.isFinite(r) && r > 0 ? Math.round(amount / r) : null;
+}
+
+/* ---------------------------------------------------------------- cash ---
+   How much physical cash each instructor is holding. The API does the folding
+   (netlify/functions/_shared/field-cash.mjs); this end only arranges it.
+
+   The components are shown beside the balance rather than just the balance,
+   because a balance alone can't be checked against anything. A count in a
+   pocket that doesn't match "held" is then traceable to one of three figures,
+   and a sign recorded the wrong way round shows up as an obviously wrong
+   subtotal instead of a quietly wrong total. */
+
+function cashFor(budgetId) {
+  return (DATA.cash || []).filter((r) => r.budget_id === budgetId);
+}
+
+// Currencies are kept apart: adding PEN to USD needs a rate, and the value of
+// this number is that it is countable rather than estimated.
+function cashByCurrency(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    const c = out.get(r.currency) || { currency: r.currency, in: 0, out: 0, spent: 0 };
+    c.in += r.in; c.out += r.out; c.spent += r.spent;
+    out.set(r.currency, c);
+  }
+  return [...out.values()]
+    .map((c) => ({ ...c, held: c.in - c.out - c.spent }))
+    .sort((a, b) => b.held - a.held || a.currency.localeCompare(b.currency));
+}
+
+function personHeld(email, currency) {
+  const row = (DATA.cashByPerson || []).find((p) => p.email === email && p.currency === currency);
+  return row ? row.held : null;
+}
+
+/* ---------------------------------------------------------------- list --- */
+
+async function load() {
+  showErr(null);
+  $('loading').classList.remove('hidden');
+  try {
+    DATA = await api('?action=list');
+    if (!OPEN.size && DATA.budgets.length === 1) OPEN.add(DATA.budgets[0].id);
+    render();
+  } catch (e) {
+    showErr(e.message);
+    $('list').innerHTML = '';
+  } finally {
+    $('loading').classList.add('hidden');
+  }
+}
+
+function render() {
+  const wrap = $('list');
+  if (!DATA.budgets.length) {
+    wrap.innerHTML = `<div class="empty">No budgets yet. Create one and it appears in the instructors' field app straight away.</div>`;
+    return;
+  }
+
+  wrap.innerHTML = DATA.budgets.map((b) => {
+    const base = b.base_currency || 'NZD';
+    const legs = treeFor(b.id);
+    const people = DATA.assignments.filter((a) => a.budget_id === b.id);
+    const nReceipts = (DATA.receipts.find((r) => r.budget_id === b.id) || {}).n || 0;
+    const cashRows = cashFor(b.id);
+    const cashCur = cashByCurrency(cashRows);
+
+    // Roll up to base. A leg with no base rate can't be converted, and that is
+    // said out loud rather than silently dropped from the total.
+    let allocBase = 0, spentBase = 0, unconverted = [];
+    for (const leg of legs) {
+      const a = toBase(leg.allocated, leg, base);
+      const s = toBase(leg.spent, leg, base);
+      if (a === null) { unconverted.push(leg.name); continue; }
+      allocBase += a; spentBase += s || 0;
+    }
+    const pct = allocBase > 0 ? Math.min(100, (spentBase / allocBase) * 100) : (spentBase > 0 ? 100 : 0);
+    const overCount = legs.reduce((n, leg) =>
+      n + (leg.over ? 1 : 0) + leg.kids.filter((k) => k.over).length, 0);
+
+    const gauge = (n) => {
+      const p = n.allocated > 0 ? Math.min(100, (n.spent / n.allocated) * 100) : (n.spent > 0 ? 100 : 0);
+      const unbudgeted = n.allocated === 0 && n.spent > 0;
+      return `<div class="row d${n.depth} ${n.over ? 'over' : ''}">
+          <div class="row-top">
+            <span>${esc(n.name)}${unbudgeted ? ' <span class="warn">unbudgeted</span>' : ''}</span>
+            <span class="num">${fmt(n.allocated - n.spent, n.legCurrency)}</span>
+          </div>
+          <div class="row-meta num">${fmt(n.spent, n.legCurrency)} of ${fmt(n.allocated, n.legCurrency)}</div>
+          <div class="track"><div class="fill" style="width:${p}%"></div></div>
+        </div>${n.kids.map(gauge).join('')}`;
+    };
+    // Stamp the leg currency down the tree so every gauge formats correctly.
+    const stamp = (n, cur) => { n.legCurrency = cur; n.kids.forEach((k) => stamp(k, cur)); };
+    legs.forEach((leg) => stamp(leg, leg.currency));
+
+    // Each leg reads like the card summary above it: what's left, of what, and
+    // a bar. Without the allocation beside it, a leg balance is a number with
+    // nothing to judge it against — USD 2,904 left is healthy on a 3k leg and
+    // alarming on a 30k one.
+    const legBlocks = legs.map((leg) => {
+      const left = leg.allocated - leg.spent;
+      const nzd = toBase(left, leg, base);
+      const pct = leg.allocated > 0
+        ? Math.min(100, (leg.spent / leg.allocated) * 100)
+        : (leg.spent > 0 ? 100 : 0);
+      const overspent = leg.spent > leg.allocated;
+      const drift = legDrift(leg, base);
+      return `<section class="leg">
+        <div class="leg-head">
+          <span><span class="leg-name">${esc(leg.name)}</span><span class="leg-cur">${esc(leg.currency || '—')}</span>${
+            drift && drift.drifted
+              ? `<span class="drift" title="Planning rate ${drift.stored} ${esc(leg.currency)} per ${esc(base)}; the market is around ${drift.live.toFixed(4)} today. Stored figures are unchanged — edit the budget to update the rate.">rate ${
+                  (drift.pct > 0 ? '+' : '') + Math.round(drift.pct * 100)}% vs market</span>`
+              : ''}</span>
+          <span class="minibar ${overspent ? 'over' : ''}" title="${Math.round(pct)}% spent">
+            <span style="width:${pct}%"></span>
+          </span>
+          <span class="text-right">
+            <span class="num font-semibold${overspent ? ' leg-over' : ''}">${fmt(left, leg.currency)}</span>
+            <span class="block text-xs" style="color:#797979">
+              <span class="num">of ${fmt(leg.allocated, leg.currency)}</span>${
+                nzd !== null && leg.currency !== base
+                  ? ` · <span class="num">≈ ${fmt(nzd, base)}</span>`
+                  : ''}
+            </span>
+            ${nzd === null ? `<span class="block text-xs warn">no ${base} rate</span>` : ''}
+          </span>
+        </div>
+        ${leg.kids.map(gauge).join('') || '<p class="hint">No categories in this leg yet.</p>'}
+      </section>`;
+    }).join('');
+
+    return `<details class="bcard" data-budget="${esc(b.id)}" ${OPEN.has(b.id) ? 'open' : ''}>
+      <summary>
+        <svg class="chev" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="flex-1 min-w-0">
+          <span class="font-semibold">${esc(b.name)}</span>
+          ${b.status === 'closed' ? '<span class="text-xs ml-2" style="color:#797979">closed</span>' : ''}
+          ${overCount ? `<span class="warn ml-2">${overCount} over</span>` : ''}
+          ${unconverted.length ? `<span class="warn ml-2">${unconverted.length} leg without ${base} rate</span>` : ''}
+          <span class="block text-xs mt-0.5" style="color:#797979">
+            ${legs.length} leg${legs.length === 1 ? '' : 's'} · ${
+              legs.map((l) => l.currency).filter(Boolean).join(', ') || 'no currency'} → ${esc(base)} · ${
+              people.length} instructor${people.length === 1 ? '' : 's'} · ${nReceipts} receipt${nReceipts === 1 ? '' : 's'}
+          </span>
+          ${cashCur.length ? `<span class="cash-chip${cashCur.some((c) => c.held < 0) ? ' short' : ''}"
+            title="Cash the instructors on this budget are holding, by currency">
+            <span class="lbl">cash on hand</span>${cashCur.map((c) => fmt(c.held, c.currency)).join(' · ')}
+          </span>` : ''}
+        </span>
+        <span class="minibar ${spentBase > allocBase ? 'over' : ''}" title="${Math.round(pct)}% spent">
+          <span style="width:${pct}%"></span>
+        </span>
+        <span class="text-right">
+          <span class="num font-semibold block">${fmt(allocBase - spentBase, base)}</span>
+          <span class="text-xs" style="color:#797979">of ${fmt(allocBase, base)}</span>
+        </span>
+      </summary>
+
+      <div class="bcard-body">
+        <p class="text-xs mb-1" style="color:#797979">
+          ${b.funded_base ? `approved ${fmt(b.funded_base, base)} · ` : ''}${
+            b.starts_on ? String(b.starts_on).slice(0, 10) : '—'} to ${
+            b.ends_on ? String(b.ends_on).slice(0, 10) : '—'}
+        </p>
+        ${legBlocks || '<p class="hint">No legs yet — edit this budget to add one.</p>'}
+
+        ${cashRows.length ? `<div class="cash">
+          <h3>Cash on hand</h3>
+          <table>
+            <thead><tr>
+              <th>Instructor</th><th>Cash in</th><th>Cash out</th><th>Spent</th><th>Held</th>
+            </tr></thead>
+            <tbody>${cashRows.map((r) => {
+              const across = personHeld(r.email, r.currency);
+              const elsewhere = across !== null && across !== r.held;
+              const assigned = people.some((p) => p.email === r.email);
+              return `<tr>
+                <td>
+                  <span class="font-medium">${esc((r.email || '').split('@')[0])}</span>
+                  <span class="elsewhere">${esc(r.currency)}</span>
+                  ${assigned ? '' : ' <span class="warn">unassigned</span>'}
+                  ${elsewhere ? `<span class="block elsewhere">${fmt(across, r.currency)} in hand across all budgets</span>` : ''}
+                </td>
+                <td>${r.in ? fmt(r.in, r.currency) : '<span class="zero">—</span>'}</td>
+                <td>${r.out ? fmt(r.out, r.currency) : '<span class="zero">—</span>'}</td>
+                <td>${r.spent ? fmt(r.spent, r.currency) : '<span class="zero">—</span>'}</td>
+                <td class="held${r.held < 0 ? ' short' : ''}">${fmt(r.held, r.currency)}</td>
+              </tr>`;
+            }).join('')}</tbody>
+            ${cashCur.length > 1 || cashRows.length > 1 ? `<tfoot>${cashCur.map((c) => `<tr>
+              <td>All instructors · ${esc(c.currency)}</td>
+              <td>${c.in ? fmt(c.in, c.currency) : '<span class="zero">—</span>'}</td>
+              <td>${c.out ? fmt(c.out, c.currency) : '<span class="zero">—</span>'}</td>
+              <td>${c.spent ? fmt(c.spent, c.currency) : '<span class="zero">—</span>'}</td>
+              <td class="held${c.held < 0 ? ' short' : ''}">${fmt(c.held, c.currency)}</td>
+            </tr>`).join('')}</tfoot>` : ''}
+          </table>
+          <p class="hint">
+            Cash in is withdrawals and cash received; cash out is money exchanged
+            or handed to someone else; spent is cash expenses only, never card.
+            Held is what's left — what should be in the pocket right now.
+            ${cashRows.some((r) => r.held < 0)
+              ? '<span class="warn">A negative balance means the ledger has more cash spent than drawn — usually a withdrawal nobody logged.</span>'
+              : ''}
+            ${DATA.cashUnresolved
+              ? `<span class="warn">${DATA.cashUnresolved} correction${DATA.cashUnresolved === 1 ? '' : 's'} could not be matched to an entry and ${DATA.cashUnresolved === 1 ? 'is' : 'are'} left out.</span>`
+              : ''}
+          </p>
+        </div>` : ''}
+
+        <div class="people">
+          <div class="mb-2">
+            ${people.length
+              ? people.map((p) => {
+                  const c = (DATA.codes || []).find((x) => x.email === p.email);
+                  const locked = c && c.locked_until && new Date(c.locked_until) > new Date();
+                  const held = cashRows.filter((r) => r.email === p.email && r.held !== 0);
+                  return `<span class="pill">${esc(p.email)}
+                    ${held.map((r) => `<span class="cash-held${r.held < 0 ? ' short' : ''}"
+                      title="Cash on hand for this budget">${fmt(r.held, r.currency)}</span>`).join('')}
+                    <button data-code="${esc(p.email)}" title="${c ? 'Change access code' : 'Set an access code'}"
+                      style="color:${c ? 'var(--topaz-dark)' : '#b02a37'};font-weight:600">
+                      ${locked ? 'locked' : (c ? 'code' : 'no code')}</button>
+                    <button data-unassign="${esc(p.email)}" title="Remove">×</button></span>`;
+                }).join('')
+              : '<span class="hint">No instructors assigned — nobody can log against this yet.</span>'}
+          </div>
+          <div class="flex gap-2 flex-wrap items-center">
+            <input data-assign-input placeholder="Add instructor emails, comma separated" style="flex:1;min-width:220px">
+            <button data-assign class="btn-quiet text-sm px-4 py-1.5">Assign</button>
+            <button data-edit class="btn-quiet text-sm px-4 py-1.5">Edit</button>
+            <button data-duplicate class="btn-quiet text-sm px-4 py-1.5"
+              title="Copy the legs, categories and allocations into a new budget with nothing spent against it">Duplicate</button>
+            <button data-ledger class="btn-quiet text-sm px-4 py-1.5">View entries</button>
+            <button data-status="${b.status === 'active' ? 'closed' : 'active'}" class="btn-quiet text-sm px-4 py-1.5">
+              ${b.status === 'active' ? 'Close' : 'Reopen'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </details>`;
+  }).join('');
+
+  // <details> fires toggle on the element itself, and load() rebuilds innerHTML,
+  // so state has to be remembered rather than read off the DOM.
+  wrap.querySelectorAll('.bcard').forEach((d) => {
+    d.addEventListener('toggle', () => {
+      if (d.open) OPEN.add(d.dataset.budget); else OPEN.delete(d.dataset.budget);
+    });
+  });
+}
+
+/* -------------------------------------------------------------- actions --- */
+
+$('list').addEventListener('click', async (ev) => {
+  const section = ev.target.closest('[data-budget]');
+  if (!section) return;
+  const budgetId = section.dataset.budget;
+  try {
+    if (ev.target.matches('[data-unassign]')) {
+      const email = ev.target.dataset.unassign;
+      if (!confirm(`Remove ${email} from this budget? Entries they already logged stay.`)) return;
+      await api('?action=unassign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget_id: budgetId, email }),
+      });
+      return load();
+    }
+    if (ev.target.matches('[data-assign]')) {
+      const input = section.querySelector('[data-assign-input]');
+      const emails = input.value.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!emails.length) return;
+      return busy(ev.target, 'Assigning…', async () => {
+      const r = await api('?action=assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget_id: budgetId, emails }),
+      });
+      if (r.skipped?.length) showErr(`Not valid email addresses, skipped: ${r.skipped.join(', ')}`);
+      input.value = '';
+      return load();
+      });
+    }
+    if (ev.target.matches('[data-status]')) {
+      await api('?action=set-status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget_id: budgetId, status: ev.target.dataset.status }),
+      });
+      return load();
+    }
+    if (ev.target.matches('[data-code]')) return openCode(ev.target.dataset.code);
+    if (ev.target.matches('[data-edit]')) return openEdit(budgetId);
+    if (ev.target.matches('[data-duplicate]')) return openDuplicate(budgetId);
+    if (ev.target.matches('[data-ledger]')) return openLedger(budgetId);
+  } catch (e) { showErr(e.message); }
+});
+
+/* ----------------------------------------------------------- access code ---
+   The code is a password. It is sent once, hashed server-side with a per-user
+   salt, and never comes back — so the only way to "look it up" later is to set
+   a new one. */
+
+let CODE_EMAIL = null;
+
+function openCode(email) {
+  CODE_EMAIL = email;
+  const c = (DATA.codes || []).find((x) => x.email === email);
+  $('codeTitle').textContent = c ? 'Change access code' : 'Set access code';
+  $('codeWho').innerHTML = `<strong>${esc(email)}</strong>` + (c
+    ? ` · set ${String(c.code_set_at).slice(0, 10)}${
+        c.last_login_at ? ` · last signed in ${String(c.last_login_at).slice(0, 10)}` : ' · never signed in'}`
+    : ' · no code yet, so they cannot sign in');
+  $('c-code').value = '';
+  $('c-code').type = 'text';
+  $('c-show').textContent = 'Hide';
+  $('c-clear').style.display = c ? '' : 'none';
+  $('c-err').classList.add('hidden');
+  $('c-ok').classList.add('hidden');
+  $('codeDlg').showModal();
+  setTimeout(() => $('c-code').focus(), 50);
+}
+
+// Four short words beat a random string here: an instructor has to read it off a
+// message and type it on a phone, possibly in the dark.
+const WORDS = ['andes','river','condor','llama','summit','valley','trail','coast',
+               'jungle','glacier','harbour','island','canyon','forest','marker','compass'];
+$('c-gen').addEventListener('click', () => {
+  const pick = () => WORDS[crypto.getRandomValues(new Uint32Array(1))[0] % WORDS.length];
+  $('c-code').value = `${pick()}-${pick()}-${crypto.getRandomValues(new Uint32Array(1))[0] % 90 + 10}`;
+  $('c-code').type = 'text';
+  $('c-show').textContent = 'Hide';
+});
+$('c-show').addEventListener('click', () => {
+  const i = $('c-code');
+  i.type = i.type === 'password' ? 'text' : 'password';
+  $('c-show').textContent = i.type === 'password' ? 'Show' : 'Hide';
+});
+$('c-cancel').addEventListener('click', () => { $('c-code').value = ''; $('codeDlg').close(); });
+
+$('c-save').addEventListener('click', () => busy($('c-save'), 'Setting…', async () => {
+  const err = $('c-err');
+  try {
+    await api('?action=set-code', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: CODE_EMAIL, code: $('c-code').value }),
+    });
+    $('c-ok').textContent = 'Code set. It is not recoverable — make sure you have it written down.';
+    $('c-ok').classList.remove('hidden');
+    err.classList.add('hidden');
+    await load();
+  } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
+}));
+
+$('c-clear').addEventListener('click', async () => {
+  if (!confirm(`Revoke the access code for ${CODE_EMAIL}? They won't be able to sign in again until you set a new one.`)) return;
+  try {
+    await api('?action=clear-code', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: CODE_EMAIL }),
+    });
+    $('codeDlg').close();
+    load();
+  } catch (e) { $('c-err').textContent = e.message; $('c-err').classList.remove('hidden'); }
+});
+
+/* ------------------------------------------------------------ duplicate ---
+   Reuses the shape a programme was planned in — legs, currencies, planning
+   rates, categories and allocations — with nothing spent against it. Entries
+   are never copied: a ledger belongs to the programme it was spent on, and a
+   copy carrying last season's spend would report against this season's
+   allocations. */
+
+let DUP_ID = null;
+
+function openDuplicate(budgetId) {
+  const b = DATA.budgets.find((x) => x.id === budgetId);
+  if (!b) return;
+  DUP_ID = budgetId;
+  const legs = treeFor(budgetId);
+  const nCats = legs.reduce((n, l) => n + 1 + l.kids.length + l.kids.reduce((m, k) => m + k.kids.length, 0), 0);
+  const people = DATA.assignments.filter((a) => a.budget_id === budgetId).length;
+
+  $('dupFrom').textContent =
+    `From “${b.name}” — ${legs.length} leg${legs.length === 1 ? '' : 's'}, ${nCats} categor${nCats === 1 ? 'y' : 'ies'}, ${people} instructor${people === 1 ? '' : 's'}.`;
+  // A year is the usual gap, and it is easier to correct a suggestion than to
+  // type a name from scratch.
+  $('d-name').value = nextSeasonName(b.name);
+  // Dates are deliberately left blank rather than carried over: a copy that
+  // opens already holding February's dates is one nobody remembers to fix.
+  $('d-start').value = '';
+  $('d-end').value = '';
+  $('d-people').checked = false;
+  $('d-err').classList.add('hidden');
+  $('dupDlg').showModal();
+  $('d-name').focus();
+  $('d-name').select();
+}
+
+// "Fall 2026 - Polynesian Journey" -> "Fall 2027 - Polynesian Journey".
+// Only the first standalone 4-digit year, and only one that looks like a year.
+function nextSeasonName(name) {
+  const m = String(name || '').match(/\b(20\d{2})\b/);
+  if (!m) return `${name} (copy)`;
+  return name.replace(m[1], String(Number(m[1]) + 1));
+}
+
+$('d-cancel').addEventListener('click', () => $('dupDlg').close());
+$('d-save').addEventListener('click', (ev) => busy(ev.target, 'Duplicating…', async () => {
+  const err = $('d-err');
+  err.classList.add('hidden');
+  const name = $('d-name').value.trim();
+  if (!name) { err.textContent = 'Give the new budget a name.'; err.classList.remove('hidden'); return; }
+  try {
+    const r = await api('?action=duplicate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        budget_id: DUP_ID, name,
+        starts_on: $('d-start').value || null,
+        ends_on: $('d-end').value || null,
+        copy_assignments: $('d-people').checked,
+      }),
+    });
+    $('dupDlg').close();
+    await load();
+    // Open the copy, since the next thing anyone does is check it.
+    OPEN.add(r.id);
+    render();
+    flash(`Duplicated — ${r.categories} categor${r.categories === 1 ? 'y' : 'ies'} copied, no entries.`);
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
+}));
+
+/* --------------------------------------------------------------- ledger --- */
+
+let LEDGER = null;             // { budgetId, entries } for the open dialog
+let LEDGER_VIEW = 'category';  // 'category' | 'date'
+let LEDGER_Q = '';             // search text
+let LEDGER_CORR = true;        // show corrections and the entries they void
+
+async function openLedger(budgetId) {
+  const b = DATA.budgets.find((x) => x.id === budgetId);
+  $('ledgerTitle').textContent = `${b.name} — entries`;
+  $('csvLink').href = `${API}?action=export&budget=${encodeURIComponent(budgetId)}`;
+  // A search is about one question on one budget; carrying it into the next
+  // one opens a ledger that looks half empty for no visible reason. The
+  // corrections checkbox is a standing preference, so that one stays.
+  LEDGER_Q = '';
+  $('lgSearch').value = '';
+  $('lgCount').textContent = '';
+  $('ledgerBody').innerHTML = '<div class="flex justify-center py-10"><div class="spinner"></div></div>';
+  $('ledgerDlg').showModal();
+  try {
+    const { entries } = await api(`?action=entries&budget=${encodeURIComponent(budgetId)}`);
+    LEDGER = { budgetId, entries };
+    drawLedger();
+  } catch (e) {
+    LEDGER = null;
+    $('ledgerBody').innerHTML = `<p class="err py-6">${esc(e.message)}</p>`;
+  }
+}
+
+function setLedgerView(view) {
+  LEDGER_VIEW = view;
+  $('byCat').classList.toggle('on', view === 'category');
+  $('byDate').classList.toggle('on', view === 'date');
+  if (LEDGER) drawLedger();
+}
+$('byCat').addEventListener('click', () => setLedgerView('category'));
+$('byDate').addEventListener('click', () => setLedgerView('date'));
+$('lgSearch').addEventListener('input', (e) => { LEDGER_Q = e.target.value; if (LEDGER) drawLedger(); });
+$('lgCorr').addEventListener('change', (e) => { LEDGER_CORR = e.target.checked; if (LEDGER) drawLedger(); });
+
+/* ------------------------------------------------------------- filtering ---
+   Everything an entry could reasonably be searched by, lowercased once and
+   cached on the row. Amounts go in twice — as typed ("245.00") and as digits
+   ("24500") — because people search for what they can see on a receipt, and
+   the minor-unit figure is what a developer would reach for. */
+function haystack(e) {
+  if (e._hay) return e._hay;
+  const dec = (v, c) => (Number(v || 0) / minorUnits(c || 'NZD')).toFixed(decimals(c || 'NZD'));
+  e._hay = [
+    e.spent_on, e.email, (e.email || '').split('@')[0],
+    e.category_name, e.leg_name, e.entry_type, e.payment_method, e.description,
+    e.currency, dec(e.amount, e.currency), Math.abs(Number(e.amount || 0)),
+    e.leg_currency, dec(e.budget_amount, e.leg_currency || e.currency),
+  ].join(' ').toLowerCase();
+  return e._hay;
+}
+
+/**
+ * The rows to draw, and what was taken out to get there.
+ *
+ * Hiding corrections hides BOTH the correction and the entry it voids — the
+ * pair is what an undo looks like in an append-only ledger, and dropping only
+ * one half would leave spend on screen that doesn't count, or a negative with
+ * nothing to explain it. Because the two always sum to zero, every subtotal is
+ * identical either way; the list gets shorter and no number moves.
+ *
+ * Search is all-terms-must-match, so "katie food" narrows rather than widens.
+ */
+function ledgerFiltered() {
+  const { entries } = LEDGER;
+  const voided = new Set(entries.filter((e) => e.corrects_id).map((e) => e.corrects_id));
+  let rows = entries;
+  let hiddenPairs = 0;
+
+  if (!LEDGER_CORR) {
+    const before = rows.length;
+    rows = rows.filter((e) => e.entry_type !== 'correction' && !voided.has(e.id));
+    hiddenPairs = before - rows.length;
+  }
+
+  const q = LEDGER_Q.trim().toLowerCase();
+  const terms = q ? q.split(/\s+/) : [];
+  if (terms.length) rows = rows.filter((e) => terms.every((t) => haystack(e).includes(t)));
+
+  return { rows, voided, terms, hiddenPairs, total: entries.length };
+}
+
+function drawLedger() {
+  const { budgetId, entries } = LEDGER;
+  if (!entries.length) {
+    $('lgCount').textContent = '';
+    $('ledgerBody').innerHTML = '<p class="hint py-6">Nothing logged yet.</p>';
+    return;
+  }
+  const f = ledgerFiltered();
+
+  const bits = [];
+  if (f.terms.length) bits.push(`${f.rows.length} of ${f.total} entries match`);
+  else bits.push(`${f.rows.length} entr${f.rows.length === 1 ? 'y' : 'ies'}`);
+  if (f.hiddenPairs) bits.push(`${f.hiddenPairs} corrected row${f.hiddenPairs === 1 ? '' : 's'} hidden · totals unchanged`);
+  $('lgCount').textContent = bits.join(' · ');
+
+  if (!f.rows.length) {
+    $('ledgerBody').innerHTML = `<p class="hint py-6">Nothing matches “${esc(LEDGER_Q.trim())}”.</p>`;
+    return;
+  }
+
+  $('ledgerBody').innerHTML = LEDGER_VIEW === 'category'
+    ? ledgerByCategory(budgetId, f)
+    : ledgerRows(f.rows, f.voided, { leg: true, category: true, head: true, terms: f.terms });
+}
+
+/**
+ * How it was paid for. Worth its own column rather than being folded into the
+ * description: it is what decides whether a row touches the cash on hand above,
+ * and the two kinds of spend reconcile against different things — a card charge
+ * against the bank statement, cash against what's in the pocket.
+ *
+ * Cash movements have no choice about it, but they still say "cash" rather than
+ * going blank: a column of dashes reads as missing data.
+ */
+function paymentPill(e) {
+  const m = String(e.payment_method || '').toLowerCase();
+  if (m === 'cash') return '<span class="pm pm-cash">cash</span>';
+  if (m === 'card') return '<span class="pm pm-card">card</span>';
+  return m
+    ? `<span class="pm pm-none">${esc(m)}</span>`
+    : '<span class="pm pm-none">—</span>';
+}
+
+// Mark the searched terms in the text that matched, so a hit in a long
+// description doesn't have to be hunted for. Escaping happens first, then the
+// marks are inserted — never the other way round.
+function mark(value, terms) {
+  const out = esc(value ?? '');
+  if (!terms || !terms.length) return out;
+  const pattern = terms
+    .filter(Boolean)
+    .map((t) => esc(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  if (!pattern) return out;
+  return out.replace(new RegExp(`(${pattern})`, 'gi'), '<span class="lg-hit">$1</span>');
+}
+
+/* Shared row rendering. `cols` drops the columns a grouped view already states
+   in its header, so the same markup serves both. */
+function ledgerRows(entries, voided, cols) {
+  const head = cols.head === false ? '' : [
+    '<th>Date</th>',
+    cols.leg ? '<th>Leg</th>' : '',
+    '<th>Who</th>',
+    cols.category ? '<th>Category</th>' : '',
+    '<th>Description</th>',
+    '<th class="text-center">Method</th>',
+    '<th class="text-right">Paid</th>',
+    '<th class="text-right">Against budget</th>',
+    '<th class="text-center">Receipt</th>',
+  ].join('');
+  const t = cols.terms;
+  const body = entries.map((e) => `<tr class="${voided.has(e.id) ? 'voided' : ''}">
+      <td class="num whitespace-nowrap">${esc(String(e.spent_on || '').slice(0, 10) || '—')}</td>
+      ${cols.leg ? `<td class="text-xs" style="color:#797979">${esc(e.leg_name || '')}</td>` : ''}
+      <td style="color:#797979">${mark((e.email || '').split('@')[0], t)}</td>
+      ${cols.category ? `<td>${mark(e.category_name || e.entry_type, t)}</td>` : ''}
+      <td style="color:#797979">${mark(e.description, t)}${
+        e.entry_type === 'correction' ? ' <span class="warn">correction</span>' : ''}${
+        voided.has(e.id) ? ' <span class="warn">corrected</span>' : ''}${
+        !cols.category && !e.category_id ? ` <span class="text-xs" style="color:#9ca3af">${esc(e.entry_type)}</span>` : ''}</td>
+      <td class="text-center">${paymentPill(e)}</td>
+      <td class="num text-right whitespace-nowrap">${fmt(e.amount, e.currency)}</td>
+      <td class="num text-right whitespace-nowrap">${
+        e.entry_type === 'expense' || e.entry_type === 'correction'
+          ? fmt(e.budget_amount, e.leg_currency || e.currency)
+          : '<span style="color:#d1d5db">—</span>'}</td>
+      <td class="text-center">${e.receipt_link
+        ? `<a href="${esc(e.receipt_link)}" target="_blank" rel="noopener" class="lnk">view</a>`
+        : '<span style="color:#d1d5db">—</span>'}</td>
+    </tr>`).join('');
+  return `<table class="lg-tbl">${head ? `<thead><tr>${head}</tr></thead>` : ''}<tbody>${body}</tbody></table>`;
+}
+
+/* ------------------------------------------------------------- by category --
+   Grouped down the same tree the budget card draws, in the same order, so a
+   category that looks overspent up there can be opened here and read line by
+   line. Each group carries its own subtotal against its allocation — the whole
+   reason for looking is usually "where did that go", and a group of entries
+   with no total attached doesn't answer it.
+
+   Only expenses and their corrections count towards a category subtotal, which
+   is the same rule the gauges use. Cash movements carry no category at all and
+   get their own section rather than being dropped. */
+
+function ledgerByCategory(budgetId, f) {
+  const { rows: entries, voided, terms } = f;
+  const searching = terms.length > 0;
+  const legs = treeFor(budgetId);
+  // Column headers once, above the first group. Repeating them between every
+  // category turns a page of numbers into a page of labels.
+  let first = true;
+  const cols = () => { const c = { leg: false, category: false, head: first, terms }; first = false; return c; };
+  const byCategory = new Map();
+  const uncategorised = [];
+  const movements = [];
+
+  const known = new Set();
+  const walk = (n) => { known.add(n.id); n.kids.forEach(walk); };
+  legs.forEach(walk);
+
+  for (const e of entries) {
+    if (!e.category_id) { movements.push(e); continue; }
+    if (!known.has(e.category_id)) { uncategorised.push(e); continue; }
+    if (!byCategory.has(e.category_id)) byCategory.set(e.category_id, []);
+    byCategory.get(e.category_id).push(e);
+  }
+
+  // Spend as the gauges count it: expenses plus the corrections against them.
+  const subtotal = (rows) => rows.reduce((n, e) =>
+    n + (e.entry_type === 'expense' || e.entry_type === 'correction' ? (e.budget_amount || 0) : 0), 0);
+
+  const section = (node, legCurrency, crumbs) => {
+    const own = byCategory.get(node.id) || [];
+    const path = [...crumbs, node.name];
+    // This node's own rows are rendered BEFORE recursing, so the one set of
+    // column headers lands on the first group that appears on screen rather
+    // than on whichever descendant happened to be visited first.
+    const ownRows = own.length ? ledgerRows(own, voided, cols()) : '';
+    const kids = node.kids.map((k) => section(k, legCurrency, path)).join('');
+    if (!own.length) return kids;   // a pure roll-up adds a heading and nothing else
+
+    const spent = subtotal(own);
+    // Only a leaf's subtotal is comparable to its allocation, so only a leaf
+    // gets the overspend colour — see `measure` below.
+    const over = !searching && !node.kids.length && node.allocated > 0 && node.spent > node.allocated;
+    const label = path.length > 1
+      ? `<span class="crumb">${esc(path.slice(0, -1).join(' › '))} › </span><span class="nm">${esc(node.name)}</span>`
+      : `<span class="nm">${esc(node.name)}</span>`;
+
+    // A group's subtotal only covers the entries listed under it. For a leaf
+    // that is the whole story, so it reads against the allocation. For a parent
+    // that also has subcategories it is NOT: the allocation shown on the budget
+    // card is the roll-up of its children, and putting a direct-only subtotal
+    // next to it would invite subtracting one from the other. Say which it is
+    // instead — the roll-up is already on the card above.
+    // While a search is narrowing the list, the subtotal is of what's shown —
+    // so it must not sit next to an allocation as though it were the whole
+    // category. Say "in N shown" instead of quietly comparing two different
+    // populations.
+    const measure = searching
+      ? `${fmt(spent, legCurrency)} in ${own.length} shown`
+      : node.kids.length
+        ? `${fmt(spent, legCurrency)} logged directly here`
+        : `${fmt(spent, legCurrency)}${node.allocated > 0
+            ? ` of ${fmt(node.allocated, legCurrency)}`
+            : ' · unbudgeted'}`;
+
+    return `<div class="lg-cat" data-cat="${esc(node.id)}">
+        <span>${label} <span class="crumb">· ${own.length} entr${own.length === 1 ? 'y' : 'ies'}</span></span>
+        <span class="sub num ${over ? 'over' : ''}">${measure}</span>
+      </div>
+      ${ownRows}${kids}`;
+  };
+
+  const legBlocks = legs.map((leg) => {
+    const inner = leg.kids.map((k) => section(k, leg.currency, [])).join('')
+      + section({ ...leg, kids: [] }, leg.currency, []);   // spend logged straight at the leg
+    // A search that matches nothing in this leg drops the leg entirely rather
+    // than leaving a heading over an empty space.
+    if (searching && !inner) return '';
+    return `<div class="lg-leg">
+        <span>${esc(leg.name)} <span class="leg-cur">${esc(leg.currency || '—')}</span></span>
+        <span class="num">${fmt(leg.spent, leg.currency)} of ${fmt(leg.allocated, leg.currency)}</span>
+      </div>
+      ${inner || '<p class="lg-empty">Nothing logged against this leg yet.</p>'}`;
+  }).join('');
+
+  const extra = (title, rows, note) => rows.length ? `<div class="lg-leg">
+      <span>${esc(title)}</span><span class="num">${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}</span>
+    </div>
+    <p class="lg-empty">${esc(note)}</p>
+    ${ledgerRows(rows, voided, { leg: true, category: false, head: true, terms })}` : '';
+
+  return legBlocks
+    + extra('Cash movements', movements,
+        'Withdrawals, exchanges and transfers. They move money between pockets and currencies rather than spending it, so they belong to no category.')
+    + extra('Uncategorised', uncategorised,
+        'Logged against a category that has since been removed from this budget.');
+}
+
+$('closeLedger').addEventListener('click', () => $('ledgerDlg').close());
+
+/* --------------------------------------------------------------- editor ---
+   One card per leg: name, currency, its planning rates, and its categories
+   nested two deep inside it. A flat three-level indented list would technically
+   work but is miserable to arrange. */
+
+const DEFAULT_CATS = ['Food', 'Transport', 'Gratuities', 'Activities', 'Misc', 'First aid'];
+
+function curDatalist() {
+  return [...new Set(CURRENCIES)].map((c) => `<option value="${c}">`).join('');
+}
+
+// An input plus datalist rather than a select: the list covers the destinations
+// we run, and anything else is typed rather than waiting on a code change.
+function curInput(cls, value) {
+  return `<input class="${cls} curfield" list="curlist" value="${esc(value || '')}"
+    placeholder="CUR" maxlength="3" autocapitalize="characters" spellcheck="false"
+    inputmode="text" title="Three-letter currency code">`;
+}
+
+function addRateRow(container, code = '', rate = '') {
+  const row = document.createElement('div');
+  row.className = 'raterow';
+  row.innerHTML = `${curInput('ratecur', code)}
+    <input class="rateval" type="number" step="0.000001" placeholder="0.0000" value="${esc(rate)}">
+    <button class="icon danger" type="button" title="Remove">×</button>`;
+  row.querySelector('button').addEventListener('click', () => { row.remove(); recalcTotal(); });
+  row.querySelectorAll('input').forEach((i) => i.addEventListener('input', recalcTotal));
+  row.querySelector('.ratecur').addEventListener('blur', (ev) => {
+    ev.target.value = normCur(ev.target.value); recalcTotal();
+  });
+  container.append(row);
+  return row;
+}
+
+function addCatRow(list, name = '', amount = '', id = '', isChild = false, after = null) {
+  const row = document.createElement('div');
+  row.className = 'catrow' + (isChild ? ' child' : '');
+  row.dataset.catId = id;
+  row.innerHTML = `<button class="icon grip" type="button" title="Drag to reorder, or focus and use ↑ ↓">☰</button>
+    <button class="icon nest" type="button" title="Make this a subcategory of the row above">↳</button>
+    <input class="cname" placeholder="Category" value="${esc(name)}">
+    <input class="camt" type="number" step="0.01" placeholder="0.00" value="${esc(amount)}">
+    <button class="icon addsub" type="button" title="Add a subcategory under this one">+</button>
+    <button class="icon danger" type="button" title="Remove">×</button>`;
+
+  const [grip, nest, addsub, remove] = row.querySelectorAll('button');
+
+  remove.addEventListener('click', () => {
+    if (!row.classList.contains('child')) {
+      let n = row.nextElementSibling;
+      const kids = [];
+      while (n && n.classList.contains('child')) { kids.push(n); n = n.nextElementSibling; }
+      if (kids.length && !confirm(`Remove "${row.querySelector('.cname').value || 'this category'}" and its ${kids.length} subcategor${kids.length === 1 ? 'y' : 'ies'}?`)) return;
+      kids.forEach((k) => k.remove());
+    }
+    row.remove(); recalcTotal();
+  });
+
+  nest.addEventListener('click', () => {
+    if (row.classList.contains('child')) { row.classList.remove('child'); }
+    else {
+      const prev = row.previousElementSibling;
+      if (!prev || prev.classList.contains('child')) {
+        return flash('A subcategory needs a category directly above it.');
+      }
+      row.classList.add('child');
+    }
+    normalise(list); recalcTotal();
+  });
+
+  // Adds a child directly beneath this category's existing children, so a group
+  // can be built in place instead of appending to the bottom and dragging up.
+  addsub.addEventListener('click', () => {
+    if (row.classList.contains('child')) return;
+    let last = row;
+    while (last.nextElementSibling && last.nextElementSibling.classList.contains('child')) {
+      last = last.nextElementSibling;
+    }
+    addCatRow(list, '', '', '', true, last).querySelector('.cname').focus();
+    recalcTotal();
+  });
+
+  grip.addEventListener('mousedown', () => { row.draggable = true; });
+  grip.addEventListener('mouseup', () => { row.draggable = false; });
+  grip.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    ev.preventDefault();
+    moveBlock(list, row, ev.key === 'ArrowUp' ? -1 : 1);
+    grip.focus();
+  });
+  row.addEventListener('dragstart', (ev) => {
+    DRAGGING = row; row.classList.add('dragging');
+    ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', '');
+  });
+  row.addEventListener('dragend', () => {
+    row.classList.remove('dragging'); row.draggable = false; DRAGGING = null;
+    list.classList.remove('dropping'); normalise(list); recalcTotal();
+  });
+
+  row.querySelectorAll('input').forEach((i) => i.addEventListener('input', recalcTotal));
+
+  if (after && after.parentNode === list) after.after(row);
+  else list.append(row);
+  return row;
+}
+
+/* ---- reordering. A category moves as a block with its subcategories, so a
+   category can only land on a category boundary — otherwise it would wedge
+   itself between another category and its children and adopt them. ---- */
+
+function blockOf(row) {
+  const rows = [row];
+  if (!row.classList.contains('child')) {
+    let n = row.nextElementSibling;
+    while (n && n.classList.contains('child')) { rows.push(n); n = n.nextElementSibling; }
+  }
+  return rows;
+}
+function dropTargets(list, dragged) {
+  const block = new Set(blockOf(dragged));
+  const rest = [...list.querySelectorAll('.catrow')].filter((r) => !block.has(r));
+  return dragged.classList.contains('child') ? rest : rest.filter((r) => !r.classList.contains('child'));
+}
+function insertBlockBefore(list, block, target) {
+  block.forEach((r) => (target ? list.insertBefore(r, target) : list.appendChild(r)));
+}
+function normalise(list) {
+  const first = list.querySelector('.catrow');
+  if (first && first.classList.contains('child')) first.classList.remove('child');
+}
+function moveBlock(list, row, dir) {
+  const block = blockOf(row);
+  const targets = dropTargets(list, row);
+  if (!targets.length) return;
+  if (dir < 0) {
+    const before = targets.filter((t) => t.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (!before.length) return;
+    insertBlockBefore(list, block, before[before.length - 1]);
+  } else {
+    const after = targets.filter((t) => t.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_PRECEDING);
+    if (!after.length) return;
+    const nb = blockOf(after[0]);
+    insertBlockBefore(list, block, nb[nb.length - 1].nextElementSibling);
+  }
+  normalise(list);
+}
+function wireDropZone(list) {
+  if (list.dataset.wired) return;
+  list.dataset.wired = '1';
+  list.addEventListener('dragover', (ev) => {
+    if (!DRAGGING || !list.contains(DRAGGING)) return;
+    ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+    list.classList.add('dropping');
+    const targets = dropTargets(list, DRAGGING);
+    const after = targets.find((t) => {
+      const box = t.getBoundingClientRect();
+      return ev.clientY < box.top + box.height / 2;
+    });
+    const block = blockOf(DRAGGING);
+    if (after !== block[0]) insertBlockBefore(list, block, after || null);
+  });
+  list.addEventListener('drop', (ev) => ev.preventDefault());
+  list.addEventListener('dragleave', (ev) => {
+    if (!list.contains(ev.relatedTarget)) list.classList.remove('dropping');
+  });
+}
+
+/* ---- leg cards ---- */
+
+function addLegCard(leg = null) {
+  const card = document.createElement('div');
+  card.className = 'legcard';
+  card.innerHTML = `
+    <div class="legcard-top">
+      <input class="legname" placeholder="Leg name, e.g. Peru" value="${esc(leg?.name || '')}">
+      ${curInput('legcur', leg?.currency || 'PEN')}
+      <div class="legtools">
+        <button class="icon legup" type="button" title="Move leg up">↑</button>
+        <button class="icon legdown" type="button" title="Move leg down">↓</button>
+        <button class="icon danger legdel" type="button" title="Remove leg">×</button>
+      </div>
+    </div>
+
+    <div class="subhead">Planning rates <span class="legcurlabel"></span></div>
+    <div class="rates"></div>
+    <div class="flex gap-3 items-center flex-wrap mt-1">
+      <button class="text-sm lnk addrate" type="button">+ Add currency</button>
+      <button class="text-sm lnk fetchrates" type="button">Use today's rates</button>
+      <span class="ratenote hint" style="margin:0"></span>
+    </div>
+    <p class="hint rateNote"></p>
+
+    <div class="subhead">Categories</div>
+    <div class="catlist"></div>
+    <button class="mt-1 text-sm lnk addcat" type="button">+ Add category</button>
+    <div class="total"><span>Leg total</span><span class="legtotal num">—</span></div>`;
+
+  card.dataset.legId = leg?.id || '';
+  const catlist = card.querySelector('.catlist');
+  const rates = card.querySelector('.rates');
+  const cur = card.querySelector('.legcur');
+
+  const syncCur = () => {
+    card.querySelector('.legcurlabel').textContent = '';
+    card.querySelector('.rateNote').innerHTML =
+      `In <strong>${esc(normCur(cur.value) || 'the leg currency')}</strong> per 1 unit. The ${esc($('f-base').value)} row is ` +
+      `what converts this leg into the base currency for reporting.`;
+    // A rate against the leg's own currency is meaningless and invites someone
+    // to type 3.34 for PEN in a PEN leg.
+    [...rates.querySelectorAll('.raterow')].forEach((r) => {
+      r.style.display = normCur(r.querySelector('.ratecur').value) === normCur(cur.value) ? 'none' : '';
+    });
+    recalcTotal();
+  };
+  cur.addEventListener('input', syncCur);
+  cur.addEventListener('blur', () => { cur.value = normCur(cur.value); syncCur(); });
+
+  card.querySelector('.addrate').addEventListener('click', () => { addRateRow(rates); syncCur(); });
+
+  /* Fill the rate boxes from today's market.
+     It writes into the form, not the database — the stored planning rate is
+     what every entry on this leg was measured against, so replacing it is a
+     decision the admin makes and saves, not something a button does behind
+     them. Rows the admin has already typed into are left alone unless they
+     ask again. */
+  const note = card.querySelector('.ratenote');
+  card.querySelector('.fetchrates').addEventListener('click', async (ev) => {
+    const legCur = normCur(card.querySelector('.legcur').value);
+    const rows = [...rates.querySelectorAll('.raterow')];
+    const codes = rows.map((r) => normCur(r.querySelector('.ratecur').value)).filter(Boolean);
+    if (!legCur) { note.textContent = 'Set this leg\u2019s currency first.'; return; }
+    if (!codes.length) { note.textContent = 'Add a currency to fetch a rate for.'; return; }
+
+    note.textContent = 'Fetching\u2026';
+    try {
+      const { market, error } = await api(
+        `?action=fx&base=${encodeURIComponent(legCur)}&symbols=${encodeURIComponent([...codes, legCur].join(','))}`);
+      if (!market) { note.textContent = error || 'No rate source is reachable right now.'; return; }
+
+      let filled = 0, missed = [];
+      for (const row of rows) {
+        const code = normCur(row.querySelector('.ratecur').value);
+        if (!code) continue;
+        // The stored map is LEG units per 1 unit of `code`, which is what the
+        // response is quoted in when we ask with the leg as the base.
+        const rate = crossRate(market, code, legCur);
+        if (rate === null) { missed.push(code); continue; }
+        row.querySelector('.rateval').value = Number(rate.toPrecision(6));
+        filled++;
+      }
+      recalcTotal();
+      note.textContent = [
+        filled ? `${filled} rate${filled === 1 ? '' : 's'} set from ${market.source}, ${market.date}.` : '',
+        missed.length ? `No rate for ${missed.join(', ')}.` : '',
+        'Mid-market — your bank\u2019s spread sits on top.',
+      ].filter(Boolean).join(' ');
+    } catch (e) {
+      note.textContent = e.message;
+    }
+  });
+  card.querySelector('.addcat').addEventListener('click', () => {
+    addCatRow(catlist).querySelector('.cname').focus();
+  });
+  card.querySelector('.legdel').addEventListener('click', () => {
+    if (!confirm('Remove this leg and all its categories?')) return;
+    card.remove(); recalcTotal();
+  });
+  card.querySelector('.legup').addEventListener('click', () => {
+    const prev = card.previousElementSibling;
+    if (prev) { $('f-legs').insertBefore(card, prev); recalcTotal(); }
+  });
+  card.querySelector('.legdown').addEventListener('click', () => {
+    const next = card.nextElementSibling;
+    if (next) { $('f-legs').insertBefore(next, card); recalcTotal(); }
+  });
+
+  $('f-legs').append(card);
+  wireDropZone(catlist);
+
+  if (leg) {
+    Object.entries(leg.rates || {}).forEach(([c, r]) => addRateRow(rates, c, r));
+    (leg.kids || []).forEach((cat) => {
+      const lc = leg.currency || 'NZD';
+      addCatRow(catlist, cat.name, cat.kids.length ? '' : (cat.allocated / minorUnits(lc)).toFixed(decimals(lc)), cat.id, false);
+      cat.kids.forEach((k) => addCatRow(catlist, k.name, (k.allocated / minorUnits(lc)).toFixed(decimals(lc)), k.id, true));
+    });
+  } else {
+    addRateRow(rates, $('f-base').value, '');
+    addRateRow(rates, 'USD', '');
+    DEFAULT_CATS.forEach((n) => addCatRow(catlist, n));
+  }
+  syncCur();
+  return card;
+}
+
+/* ---- read the form back out ---- */
+
+function readLegs() {
+  return [...$('f-legs').querySelectorAll('.legcard')].map((card) => {
+    const rates = {};
+    [...card.querySelectorAll('.raterow')].forEach((r) => {
+      const code = normCur(r.querySelector('.ratecur').value);
+      const n = Number(r.querySelector('.rateval').value);
+      if (code && Number.isFinite(n) && n > 0) rates[code] = n;
+    });
+
+    const categories = [];
+    [...card.querySelectorAll('.catrow')].forEach((r) => {
+      const name = r.querySelector('.cname').value.trim();
+      if (!name) return;
+      const legCur = normCur(card.querySelector('.legcur').value);
+      const allocated = Math.round((Number(r.querySelector('.camt').value) || 0) * minorUnits(legCur));
+      const node = { name, allocated };
+      if (r.dataset.catId) node.id = r.dataset.catId;
+      if (r.classList.contains('child') && categories.length) {
+        const parent = categories[categories.length - 1];
+        (parent.children ||= []).push(node);
+      } else {
+        categories.push(node);
+      }
+    });
+
+    const leg = {
+      name: card.querySelector('.legname').value.trim(),
+      currency: normCur(card.querySelector('.legcur').value),
+      rates, categories,
+    };
+    if (card.dataset.legId) leg.id = card.dataset.legId;
+    return leg;
+  });
+}
+
+// A parent's amount box mirrors its children, so it is read-only and recomputed
+// on every edit — there is one place each figure is set.
+function recalcTotal() {
+  const base = $('f-base').value;
+  let total = 0;
+  const missing = [];
+
+  [...$('f-legs').querySelectorAll('.legcard')].forEach((card) => {
+    const cur = normCur(card.querySelector('.legcur').value);
+    const rows = [...card.querySelectorAll('.catrow')];
+    let legSum = 0;
+
+    rows.forEach((r, i) => {
+      const amt = r.querySelector('.camt');
+      if (r.classList.contains('child')) { amt.readOnly = false; return; }
+      const kids = [];
+      for (let n = rows[i + 1]; n && n.classList.contains('child'); n = n.nextElementSibling) kids.push(n);
+      if (!kids.length) { amt.readOnly = false; return; }
+      const sum = kids.reduce((t, k) => t + (Number(k.querySelector('.camt').value) || 0), 0);
+      amt.value = sum ? sum.toFixed(2) : '';
+      amt.readOnly = true;
+    });
+
+    // Leaves only — a parent's box mirrors its children, so counting both doubles it.
+    legSum = rows.filter((r) => !r.querySelector('.camt').readOnly)
+      .reduce((t, r) => t + (Number(r.querySelector('.camt').value) || 0), 0);
+
+    card.querySelector('.legtotal').textContent = fmt(Math.round(legSum * minorUnits(cur)), cur);
+
+    if (cur === base) { total += legSum; return; }
+    const rateRow = [...card.querySelectorAll('.raterow')]
+      .find((r) => normCur(r.querySelector('.ratecur').value) === base);
+    const rate = rateRow ? Number(rateRow.querySelector('.rateval').value) : 0;
+    if (rate > 0) total += legSum / rate;
+    else missing.push(card.querySelector('.legname').value.trim() || 'unnamed leg');
+  });
+
+  $('f-total').textContent = fmt(Math.round(total * minorUnits(base)), base);
+  $('f-totalNote').textContent = missing.length
+    ? `Excludes ${missing.join(', ')} — no ${base} rate set, so it can't be converted.`
+    : '';
+}
+
+function flash(msg) {
+  const fe = $('f-err');
+  fe.textContent = msg; fe.classList.remove('hidden');
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => fe.classList.add('hidden'), 5000);
+}
+
+/* ---- open / save ---- */
+
+$('newBtn').addEventListener('click', () => {
+  EDITING = null;
+  $('dlgTitle').textContent = 'New budget';
+  $('f-name').value = ''; $('f-emails').value = ''; $('f-funded').value = '';
+  $('f-base').value = 'NZD';
+  $('f-start').value = ''; $('f-end').value = '';
+  $('f-legs').innerHTML = '';
+  addLegCard();
+  $('emailBlock').classList.remove('hidden');
+  $('saveBtn').textContent = 'Create budget';
+  $('f-err').classList.add('hidden');
+  recalcTotal();
+  $('dlg').showModal();
+});
+
+function openEdit(budgetId) {
+  const b = DATA.budgets.find((x) => x.id === budgetId);
+  EDITING = budgetId;
+  $('dlgTitle').textContent = `Edit ${b.name}`;
+  $('f-name').value = b.name;
+  $('f-base').value = b.base_currency || 'NZD';
+  $('f-funded').value = b.funded_base
+    ? (b.funded_base / minorUnits(b.base_currency || 'NZD')).toFixed(decimals(b.base_currency || 'NZD'))
+    : '';
+  $('f-start').value = b.starts_on ? String(b.starts_on).slice(0, 10) : '';
+  $('f-end').value = b.ends_on ? String(b.ends_on).slice(0, 10) : '';
+  $('f-legs').innerHTML = '';
+  treeFor(budgetId).forEach((leg) => addLegCard(leg));
+  if (!$('f-legs').children.length) addLegCard();
+  $('emailBlock').classList.add('hidden');   // assignment is inline on the card
+  $('saveBtn').textContent = 'Save changes';
+  $('f-err').classList.add('hidden');
+  recalcTotal();
+  $('dlg').showModal();
+}
+
+$('addLeg').addEventListener('click', () => {
+  addLegCard().querySelector('.legname').focus();
+  recalcTotal();
+});
+$('f-base').addEventListener('change', recalcTotal);
+$('cancelBtn').addEventListener('click', () => $('dlg').close());
+$('refreshBtn').addEventListener('click', () => busy($('refreshBtn'), 'Loading…', load));
+
+$('toggleAllBtn').addEventListener('click', () => {
+  const expanding = OPEN.size < (DATA?.budgets.length || 0);
+  OPEN.clear();
+  if (expanding) DATA.budgets.forEach((b) => OPEN.add(b.id));
+  $('toggleAllBtn').textContent = expanding ? 'Collapse all' : 'Expand all';
+  render();
+});
+
+$('saveBtn').addEventListener('click', () => busy($('saveBtn'), 'Saving…', async () => {
+  const funded = $('f-funded').value.trim();
+  const common = {
+    name: $('f-name').value.trim(),
+    base_currency: $('f-base').value,
+    funded_base: funded === '' ? null : Math.round(Number(funded) * minorUnits($('f-base').value)),
+    starts_on: $('f-start').value || null,
+    ends_on: $('f-end').value || null,
+    legs: readLegs(),
+  };
+  try {
+    if (EDITING) {
+      await api('?action=update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget_id: EDITING, ...common }),
+      });
+    } else {
+      await api('?action=create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...common,
+          emails: $('f-emails').value.split(',').map((s) => s.trim()).filter(Boolean),
+        }),
+      });
+    }
+    $('dlg').close();
+    await load();
+  } catch (e) { flash(e.message); }
+}));
+
+$('curlist').innerHTML = curDatalist();
+load();
+</script>
+</body>
+</html>
