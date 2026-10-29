@@ -40,6 +40,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getStore } from "@netlify/blobs";
 import { canAccess, normalizeGrants } from "../../edge-functions/lib/dashboard-access.js";
+import { aircallConfigured, dial, ensureWebhook, findUserId, followUpFromCall, samePhone, toE164, tokensMatch } from "./aircall.mjs";
 import { isAvailable, nextAvailableAt, nextChangeAt, normalizeSchedule, validTz } from "./lead-alerts-hours.mjs";
 
 export const SLUG = "lead-alerts";
@@ -131,6 +132,8 @@ export const SCHEMA_SQL = [
      offline_since  TIMESTAMPTZ,
      updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
    )`,
+  `ALTER TABLE lead_alert_prefs ADD COLUMN IF NOT EXISTS aircall_email TEXT`,
+  `ALTER TABLE lead_alert_prefs ADD COLUMN IF NOT EXISTS aircall_user_id TEXT`,
   `CREATE TABLE IF NOT EXISTS lead_alert_reminders (
      event_id  TEXT NOT NULL,
      email     TEXT NOT NULL,
@@ -849,6 +852,9 @@ export function toClient(r) {
     detail: r.detail || "",
     source: r.source || "",
     hubspotUrl: hubspotUrl(r.contact_id),
+    // Opens the record with HubSpot's email composer, so the email goes out
+    // from her connected inbox and is logged on the contact.
+    hubspotEmailUrl: r.contact_id ? `${hubspotUrl(r.contact_id)}?interaction=email` : null,
     handledAt: iso(r.handled_at),
     handledBy: r.handled_by || "",
     handledHow: r.handled_how || "",
@@ -963,4 +969,98 @@ export async function recentAlertTimes(limit = 100, days = 45) {
                          WHERE detected_at > now() - interval '${Number(days)} days'
                          ORDER BY detected_at DESC LIMIT ${Number(limit)}`);
   return rows.map((r) => Number(r.t)).filter(Number.isFinite);
+}
+
+// ── Aircall ─────────────────────────────────────────────────────────────────
+
+async function stateGet(key) {
+  const rows = await q(`SELECT value FROM lead_alert_state WHERE key = $1`, [key]);
+  return rows[0]?.value ?? null;
+}
+async function stateSet(key, value) {
+  await q(`INSERT INTO lead_alert_state (key, value, updated_at) VALUES ($1, $2::jsonb, now())
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [key, JSON.stringify(value)]);
+}
+
+export async function aircallStatus() {
+  await ensureSchema();
+  const hook = await stateGet("aircall_webhook");
+  return {
+    configured: aircallConfigured(),
+    webhook: !!(hook?.token || process.env.AIRCALL_WEBHOOK_TOKEN),
+    lastCallAt: hook?.lastCallAt || null,
+    // Aircall doesn't document a link that opens its iPhone app; override if
+    // a different one turns out to work.
+    iosUrl: clean(process.env.AIRCALL_IOS_URL) || "aircall://",
+  };
+}
+
+/** Admin: create/find the Aircall webhook and remember its token. */
+export async function connectAircall(siteUrl) {
+  await ensureSchema();
+  if (!siteUrl) throw Object.assign(new Error("Site URL unknown (URL env var)"), { status: 500 });
+  const w = await ensureWebhook(siteUrl);
+  if (!w.token) throw Object.assign(new Error("Aircall didn't return a webhook token"), { status: 502 });
+  const prev = (await stateGet("aircall_webhook")) || {};
+  await stateSet("aircall_webhook", { ...prev, id: w.id, token: w.token, url: w.url, connectedAt: new Date().toISOString() });
+  return { id: w.id, url: w.url, created: w.created };
+}
+
+export async function webhookTokenOk(given) {
+  if (process.env.AIRCALL_WEBHOOK_TOKEN && tokensMatch(given, process.env.AIRCALL_WEBHOOK_TOKEN)) return true;
+  await ensureSchema();
+  const hook = await stateGet("aircall_webhook");
+  return tokensMatch(given, hook?.token);
+}
+
+/**
+ * A finished Aircall call: close every open alert (last 7 days) whose phone
+ * matches the other party. Returns the ids closed.
+ */
+export async function closeFromAircallCall(call) {
+  await ensureSchema();
+  const f = followUpFromCall(call);
+  if (!f) return [];
+  const open = await q(
+    `SELECT id, phone, occurred_at FROM lead_alert_events
+      WHERE handled_at IS NULL AND phone IS NOT NULL AND phone <> ''
+        AND occurred_at > now() - interval '${FEED_DAYS} days'`);
+  const hits = open.filter((e) => samePhone(e.phone, f.phone) && Date.parse(f.at) >= Date.parse(iso(e.occurred_at)) - 5 * 60_000);
+  const closed = [];
+  for (const e of hits) {
+    const at = new Date(Math.max(Date.parse(f.at), Date.parse(iso(e.occurred_at)))).toISOString();
+    const r = await q(`UPDATE lead_alert_events SET handled_at = $2, handled_by = $3, handled_how = $4
+                        WHERE id = $1 AND handled_at IS NULL RETURNING id`, [e.id, at, f.by, f.how]);
+    if (r.length) closed.push(e.id);
+  }
+  const hook = (await stateGet("aircall_webhook")) || {};
+  await stateSet("aircall_webhook", { ...hook, lastCallAt: new Date().toISOString() });
+  return closed;
+}
+
+/**
+ * "Send to Aircall on my computer": fill the advisor's Aircall desktop app
+ * with this lead's number. Her Aircall user is found by her login email, or
+ * by the Aircall email she saved if that's different.
+ */
+export async function dialForEvent(email, eventId, aircallEmail) {
+  await ensureSchema();
+  const key = clean(email).toLowerCase();
+  const ev = (await q(`SELECT phone, name FROM lead_alert_events WHERE id = $1`, [eventId]))[0];
+  if (!ev) throw Object.assign(new Error("Alert not found"), { status: 404 });
+  const to = toE164(ev.phone);
+  if (!to) throw Object.assign(new Error("No phone number for this lead"), { status: 400 });
+
+  let pref = (await q(`SELECT aircall_email, aircall_user_id FROM lead_alert_prefs WHERE email = $1`, [key]))[0];
+  const wantEmail = clean(aircallEmail).toLowerCase() || pref?.aircall_email || key;
+  let userId = (!aircallEmail && pref?.aircall_user_id) || null;
+  if (!userId) {
+    userId = await findUserId(wantEmail);
+    if (!userId) throw Object.assign(new Error(`No Aircall user with the email ${wantEmail}.`), { status: 404, needsAircallEmail: true });
+    await q(`INSERT INTO lead_alert_prefs (email, aircall_email, aircall_user_id) VALUES ($1, $2, $3)
+             ON CONFLICT (email) DO UPDATE SET aircall_email = EXCLUDED.aircall_email, aircall_user_id = EXCLUDED.aircall_user_id`,
+      [key, wantEmail, userId]);
+  }
+  await dial(userId, to);
+  return { to, name: ev.name };
 }

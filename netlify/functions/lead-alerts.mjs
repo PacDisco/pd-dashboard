@@ -8,6 +8,8 @@
 //   POST /api/lead-alerts/subscribe     { subscription } register this phone
 //   POST /api/lead-alerts/unsubscribe   { endpoint }
 //   POST /api/lead-alerts/prefs         { tz, schedule } my available hours (schedule null = 24/7)
+//   POST /api/lead-alerts/dial          { id, aircallEmail? } put the lead's number in my Aircall desktop app
+//   POST /api/lead-alerts/aircall-setup connect the Aircall webhook (admin only)
 //   POST /api/lead-alerts/test          send a test notification to my phones
 //   POST /api/lead-alerts/scan          run a scan now (admin only)
 //
@@ -17,7 +19,7 @@
 import { verifiedUser, actorName } from "./_shared/identity.mjs";
 import {
   accessChecker, feedFor, markSeen, setHandled, saveSubscription, removeSubscription,
-  subscriptionsFor, testPush, savePrefs, runScan, vapidPublicKey, FOLLOW_UP_MIN, REMIND_AFTER_MIN,
+  subscriptionsFor, testPush, savePrefs, aircallStatus, connectAircall, dialForEvent, runScan, vapidPublicKey, FOLLOW_UP_MIN, REMIND_AFTER_MIN,
 } from "./_shared/lead-alerts.mjs";
 
 function json(body, status = 200) {
@@ -40,11 +42,12 @@ export default async (req) => {
 
   try {
     if (req.method === "GET" && (action === "lead-alerts" || action === "feed")) {
-      const [feed, devices] = await Promise.all([feedFor(user.email), subscriptionsFor(user.email)]);
+      const [feed, devices, aircall] = await Promise.all([feedFor(user.email), subscriptionsFor(user.email), aircallStatus()]);
       return json({
         ...feed,
         me: { email: user.email, name: user.name, isAdmin: user.roles.includes("admin") },
         devices: devices.length,
+        aircall,
         vapidPublicKey: vapidPublicKey(),
         followUpMinutes: FOLLOW_UP_MIN,
         remindAfterMinutes: REMIND_AFTER_MIN,
@@ -77,6 +80,21 @@ export default async (req) => {
 
       case "prefs":
         return json({ ok: true, prefs: await savePrefs(user.email, { tz: body.tz, schedule: body.schedule }) });
+
+      case "dial": {
+        const id = String(body.id || "");
+        if (!id) return json({ error: "id required" }, 400);
+        try {
+          return json({ ok: true, ...(await dialForEvent(user.email, id, body.aircallEmail)) });
+        } catch (e) {
+          if (e.needsAircallEmail) return json({ error: e.message, needsAircallEmail: true }, 404);
+          throw e;
+        }
+      }
+
+      case "aircall-setup":
+        if (!user.roles.includes("admin")) return json({ error: "Admins only" }, 403);
+        return json({ ok: true, ...(await connectAircall(process.env.URL || new URL(req.url).origin)) });
 
       case "test":
         return json({ ok: true, ...(await testPush(user.email)) });

@@ -6,7 +6,7 @@
 //
 // Bump VERSION when the shell changes so phones pick up the new files.
 
-const VERSION = "lead-alerts-v2";
+const VERSION = "lead-alerts-v5";
 const SHELL = [
   "/lead-alerts/",
   "/lead-alerts/manifest.webmanifest",

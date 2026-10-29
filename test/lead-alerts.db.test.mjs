@@ -29,7 +29,10 @@ let pg;
 try { pg = require(process.env.PG_MODULE || "pg"); } catch { console.log("SKIP lead-alerts.db — `npm i pg` (not a site dependency)."); process.exit(0); }
 
 process.env.HUBSPOT_TOKEN = "test-token";
+process.env.AIRCALL_API_ID = "ac-id"; process.env.AIRCALL_API_TOKEN = "ac-token";
 const LA = await import("../netlify/functions/_shared/lead-alerts.mjs");
+const AC = await import("../netlify/functions/_shared/aircall.mjs");
+const webhookHandler = (await import("../netlify/functions/aircall-webhook.mjs")).default;
 
 const client = new pg.Client({ connectionString: URL_ });
 await client.connect();
@@ -278,6 +281,60 @@ test("outside her hours: nothing pushed; when they start, one digest; reminder 4
   const back = await LA.savePrefs("advisor@pd.org", { tz, schedule: null });
   assert.equal(back.always, true);
   assert.equal(back.availableNow, true);
+});
+
+test("Aircall: connect webhook, a call to the lead closes the alert, bad token is refused", async () => {
+  const acCalls = [];
+  AC._setAircallFetchForTests(async (url, init) => {
+    acCalls.push({ url, method: init.method, body: init.body ? JSON.parse(init.body) : null, auth: init.headers.Authorization });
+    const res = (status, j) => ({ ok: status < 300, status, json: async () => j, text: async () => (j ? JSON.stringify(j) : "") });
+    if (url.endsWith("/webhooks?per_page=50")) return res(200, { webhooks: [] });
+    if (url.endsWith("/webhooks") && init.method === "POST") return res(201, { webhook: { webhook_id: "w1", token: "secret-token", url: init.body && JSON.parse(init.body).url } });
+    if (url.includes("/users?per_page=50&page=1")) return res(200, { users: [{ id: 11, email: "other@pd.org" }], meta: { next_page_link: "x" } });
+    if (url.includes("/users?per_page=50&page=2")) return res(200, { users: [{ id: 42, email: "Advisor@pd.org" }], meta: { next_page_link: null } });
+    if (url.endsWith("/users/42/dial")) return res(204, null);
+    if (url.endsWith("/users/77/dial")) return res(405, { message: "not available" });
+    throw new Error("unexpected aircall " + url);
+  });
+
+  const st0 = await LA.aircallStatus();
+  assert.deepEqual([st0.configured, st0.webhook], [true, false]);
+  const c = await LA.connectAircall("https://dashboard.example.org/");
+  assert.equal(c.url, "https://dashboard.example.org/api/aircall-webhook");
+  const create = acCalls.find((x) => x.method === "POST" && x.url.endsWith("/webhooks"));
+  assert.deepEqual(create.body.events, ["call.ended"]);
+  assert.equal(create.auth, "Basic " + Buffer.from("ac-id:ac-token").toString("base64"));
+  assert.equal((await LA.aircallStatus()).webhook, true);
+
+  await sql.query(`INSERT INTO quiz_responses (email, first_name, last_name, phone, created_at) VALUES ('call@x.com', 'Cal', 'Lee', '+1 (555) 010-0177', now() - interval '1 minute')`);
+  await LA.runScan({ log: quiet });
+
+  const post = (body) => webhookHandler(new Request("https://x/api/aircall-webhook", { method: "POST", body: JSON.stringify(body) }));
+  const call = { id: 9, direction: "outbound", raw_digits: "+1 555-010-0177", started_at: Math.floor(Date.now() / 1000), answered_at: Math.floor(Date.now() / 1000) + 5, ended_at: Math.floor(Date.now() / 1000) + 200, user: { name: "Megan N" } };
+  assert.equal((await post({ resource: "call", event: "call.ended", token: "wrong", data: call })).status, 401);
+  assert.equal((await one(`SELECT handled_at FROM lead_alert_events WHERE email = 'call@x.com'`)).handled_at, null);
+
+  const r = await post({ resource: "call", event: "call.ended", token: "secret-token", data: call });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).closed, 1);
+  const row = await one(`SELECT handled_by, handled_how FROM lead_alert_events WHERE email = 'call@x.com'`);
+  assert.deepEqual(row, { handled_by: "Megan N", handled_how: "Called via Aircall · 3 min call" });
+
+  // A missed inbound call from another number changes nothing.
+  const r2 = await post({ resource: "call", event: "call.ended", token: "secret-token", data: { ...call, direction: "inbound", answered_at: null, raw_digits: "+15559999999" } });
+  assert.equal((await r2.json()).closed, 0);
+  assert.equal((await (await post({ resource: "call", event: "call.created", token: "secret-token", data: call })).json()).ignored, "call.created");
+});
+
+test("Aircall: dial finds her Aircall user by email and sends the number in E.164", async () => {
+  const id = (await one(`SELECT id FROM lead_alert_events WHERE email = 'call@x.com'`)).id;
+  const r = await LA.dialForEvent("advisor@pd.org", id);
+  assert.equal(r.to, "+15550100177");
+  // Cached: the second dial doesn't page through users again.
+  await LA.dialForEvent("advisor@pd.org", id);
+  await sql.query(`UPDATE lead_alert_prefs SET aircall_user_id = '77' WHERE email = 'advisor@pd.org'`);
+  await assert.rejects(LA.dialForEvent("advisor@pd.org", id), (e) => e.status === 409 && /unavailable/.test(e.message));
+  await assert.rejects(LA.dialForEvent("nobody@pd.org", id), (e) => e.needsAircallEmail === true);
 });
 
 let failed = 0;
