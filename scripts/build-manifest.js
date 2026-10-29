@@ -58,6 +58,10 @@ const ALL_ROLES = ["admin", BASELINE_ROLE, ...FUNCTIONAL_ROLES];
 // the baseline if its own dashboard.json names the role — see writeRedirects().
 const BASELINE_ROLES = ALL_ROLES.filter((r) => r !== "contractor");
 
+// Dashboards that are installable phone apps (PWAs) with their own sign-in.
+// Must match the auth-gate excludedPath entries in netlify.toml.
+const PUBLIC_SHELL_SLUGS = new Set(["lead-alerts"]);
+
 // Folders that look like dashboards but aren't
 const EXCLUDED_DIRS = new Set([
   "netlify", "scripts", "node_modules",
@@ -230,6 +234,13 @@ function writeRedirects(dashboards) {
     "# belongs in auth-gate.js, not here. See INSTRUCTOR-CHECKLIST.md.",
   ];
   for (const d of dashboards) {
+    // Installable phone apps whose shell is public and which sign in for
+    // themselves (their /api/* endpoints check access). No Role= line, so an
+    // expired cookie can never stop the installed app from loading.
+    if (PUBLIC_SHELL_SLUGS.has(String(d.slug).toLowerCase())) {
+      lines.push(`# /${d.slug}/* — public app shell, signs in itself (see LEAD-ALERTS.md)`);
+      continue;
+    }
     const target = d.url || `/${d.folderName || d.slug}/`;
     // _redirects globs work on the URL path, not the slug
     const pathGlob = target.endsWith("/") ? `${target}*` : `${target}/*`;

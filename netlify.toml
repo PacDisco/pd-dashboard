@@ -2,9 +2,7 @@
   publish = "."
   functions = "netlify/functions"
   edge_functions = "netlify/edge-functions"
-  # The UE Field Budget page is a copy of field-budget/ made here; see
-  # scripts/sync-ue-field-budget.mjs.
-  command = "node scripts/sync-ue-field-budget.mjs && node scripts/build-manifest.js"
+  command = "node scripts/build-manifest.js"
 
 [build.environment]
   NODE_VERSION = "20"
@@ -62,6 +60,12 @@
 [functions."student-payments"]
   timeout = 26
 
+# Lead Alerts: every 2 minutes, look for new applications, quiz completions and
+# HubSpot "New lead" contacts and push them to the admissions phone app. See
+# LEAD-ALERTS.md.
+[functions."lead-alerts-scan"]
+  schedule = "*/2 * * * *"
+
 # Route /api/config → config function, /api/users[/*] → users function.
 [[redirects]]
   from = "/api/config"
@@ -116,6 +120,20 @@
     Content-Type = "text/javascript; charset=utf-8"
     Cache-Control = "no-cache"
 
+# Lead Alerts phone app (PWA). The service worker must never be cached by the
+# CDN/browser or phones keep running an old one; the manifest needs its type.
+[[headers]]
+  for = "/lead-alerts/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Content-Type = "text/javascript; charset=utf-8"
+
+[[headers]]
+  for = "/lead-alerts/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "no-cache"
+
 [[headers]]
   for = "/*"
   [headers.values]
@@ -128,6 +146,12 @@
   path = "/*"
   excludedPath = [
     "/",
+    # Lead Alerts is an installable phone app with its own sign-in screen: the
+    # shell holds no data, and every /api/lead-alerts call checks the Identity
+    # token + dashboard access itself. Gating the shell would bounce the
+    # installed app out to the browser whenever its cookie expired.
+    "/lead-alerts",
+    "/lead-alerts/*",
     "/index.html",
     "/api/*",
     "/.netlify/*",

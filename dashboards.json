@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T20:32:49.592Z",
+  "generatedAt": "2026-10-28T22:46:28.280Z",
   "dashboards": [
     {
       "slug": "contacts",
@@ -22,7 +22,7 @@
     },
     {
       "slug": "apply-form",
-      "title": "Apply Form",
+      "title": "Application Form",
       "description": "Edit the online application (apply.pacificdiscovery.org) — fields, programs, prices and travel dates — and follow each applicant through application, interview and fee.",
       "category": "Enrollment",
       "icon": "📝",
@@ -39,26 +39,6 @@
         "outreach"
       ],
       "url": "/apply-form/"
-    },
-    {
-      "slug": "lead-sources",
-      "title": "Lead Sources",
-      "description": "Where leads really came from — HubSpot's Original Source next to the source captured by the quiz and the application, with Offline records recovered, and what each channel turns into.",
-      "category": "Enrollment",
-      "icon": "🧭",
-      "owner": "",
-      "pinned": false,
-      "order": 26,
-      "colors": [
-        "#55bbd2",
-        "#81c243"
-      ],
-      "allowedRoles": [
-        "admin",
-        "admissions",
-        "outreach"
-      ],
-      "url": "/lead-sources/"
     },
     {
       "slug": "cash-forecast",
@@ -154,6 +134,25 @@
       "url": "/flights/"
     },
     {
+      "slug": "instructor-checkins",
+      "title": "Instructor Check-ins",
+      "description": "Weekly check-ins instructors book from their portal — see what's coming up, choose who's invited and whose calendars block times, connect Google Calendars on any domain, and set booking hours.",
+      "category": "Programs",
+      "icon": "🗓️",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#0f766e",
+        "#22d3ee"
+      ],
+      "allowedRoles": [
+        "admin",
+        "programs",
+        "operations"
+      ],
+      "url": "/instructor-checkins/"
+    },
+    {
       "slug": "instructor-field-reports",
       "title": "Instructor Field Reports",
       "description": "Field reports submitted by instructors in-program — synthesized for operational follow-up.",
@@ -212,6 +211,45 @@
       "url": "/invoices/"
     },
     {
+      "slug": "lead-alerts",
+      "title": "Lead Alerts",
+      "description": "Phone app for admissions: a push notification the moment someone becomes a New Lead, starts or submits an application, or finishes the quiz — so every one gets a follow-up within the hour. Open it on your phone and add it to your Home Screen.",
+      "category": "Enrollment",
+      "icon": "🔔",
+      "owner": "",
+      "pinned": false,
+      "order": 24,
+      "colors": [
+        "#f15c39",
+        "#55bbd2"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions"
+      ],
+      "url": "/lead-alerts/"
+    },
+    {
+      "slug": "lead-sources",
+      "title": "Lead Sources",
+      "description": "Where leads really came from — HubSpot's Original Source next to the source captured by the quiz and the application, with Offline records recovered, and what each channel turns into.",
+      "category": "Enrollment",
+      "icon": "🧭",
+      "owner": "",
+      "pinned": false,
+      "order": 26,
+      "colors": [
+        "#55bbd2",
+        "#81c243"
+      ],
+      "allowedRoles": [
+        "admin",
+        "admissions",
+        "outreach"
+      ],
+      "url": "/lead-sources/"
+    },
+    {
       "slug": "marketing-performance",
       "title": "Marketing Performance",
       "description": "Cost per lead, opportunity and sale by channel — ad spend joined to the live HubSpot funnel, with cookie attribution shown against what applicants actually say.",
@@ -231,6 +269,25 @@
         "admissions"
       ],
       "url": "/marketing-performance/"
+    },
+    {
+      "slug": "payment-plans",
+      "title": "Payment Plans",
+      "description": "What's coming in from families on payment plans, and when — automatic instalments, balances families pay themselves, deposits not yet paid, and payments that need attention.",
+      "category": "Finance",
+      "icon": "📅",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#288195",
+        "#55bbd2"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations",
+        "admissions"
+      ],
+      "url": "/payment-plans/"
     },
     {
       "slug": "pd-whatsapp",
@@ -271,6 +328,26 @@
         "operations"
       ],
       "url": "/pipeline/"
+    },
+    {
+      "slug": "popups",
+      "title": "Website Popups",
+      "description": "Design popups for pacificdiscovery.org — choose the pages and timing, collect details, and send every sign-up straight into HubSpot as a new Pacific Discovery lead.",
+      "category": "Outreach",
+      "icon": "💬",
+      "owner": "",
+      "pinned": false,
+      "order": 31,
+      "colors": [
+        "#F15B39",
+        "#288195"
+      ],
+      "allowedRoles": [
+        "admin",
+        "outreach",
+        "admissions"
+      ],
+      "url": "/popups/"
     },
     {
       "slug": "program-pages",
@@ -411,6 +488,25 @@
       "url": "/stripe/"
     },
     {
+      "slug": "student-payments",
+      "title": "Student Payments",
+      "description": "Stripe and Wise payments logged against HubSpot student deals in USD — plus the queue for payments that couldn't be matched, and application PDFs attached to student records.",
+      "category": "Finance",
+      "icon": "🧾",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#288195",
+        "#81c243"
+      ],
+      "allowedRoles": [
+        "admin",
+        "operations",
+        "admissions"
+      ],
+      "url": "/student-payments/"
+    },
+    {
       "slug": "student-uploads",
       "title": "Student Document Uploads",
       "description": "Files students have submitted via the Document Upload Jotform — grouped by email, so every file a student has ever sent shows up under one card.",
@@ -522,6 +618,25 @@
         "admissions"
       ],
       "url": "/unearthed-whatsapp/"
+    },
+    {
+      "slug": "weekly-check-ins",
+      "title": "Weekly Check-Ins",
+      "description": "Instructor weekly check-ins from the field, by program — wellbeing and group-dynamic scores, flags that need HQ support, check-in history, and shared notes to raise at next week's check-in.",
+      "category": "Programs",
+      "icon": "📋",
+      "owner": "",
+      "pinned": false,
+      "colors": [
+        "#059669",
+        "#6ee7b7"
+      ],
+      "allowedRoles": [
+        "admin",
+        "programs",
+        "operations"
+      ],
+      "url": "/weekly-check-ins/"
     }
   ]
 }

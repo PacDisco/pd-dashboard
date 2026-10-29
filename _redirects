@@ -31,9 +31,13 @@
 /instructor-field-reports/*  200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /instructors/*               200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /invoices/*                  200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
+# /lead-alerts/* — public app shell, signs in itself (see LEAD-ALERTS.md)
+/lead-sources/*              200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /marketing-performance/*     200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
+/payment-plans/*             200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /pd-whatsapp/*               200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /pipeline/*                  200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
+/popups/*                    200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /program-pages/*             200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /program-schedule/*          200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /sales-funnel/*              200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
@@ -41,9 +45,11 @@
 /sign-request/*              200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /slider/*                    200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /stripe/*                    200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
+/student-payments/*          200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /student-uploads/*           200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /time-tracking/*             200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer,contractor
 /ue-applications/*           200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /ue-flights/*                200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /unearthed-stripe/*          200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
 /unearthed-whatsapp/*        200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer
+/weekly-check-ins/*          200!    Role=admin,member,admissions,outreach,programs,operations,flights,unearthed,timesheet-reviewer

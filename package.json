@@ -7,7 +7,7 @@
     "node": "20"
   },
   "scripts": {
-    "build": "node scripts/sync-ue-field-budget.mjs && node scripts/build-manifest.js",
+    "build": "node scripts/build-manifest.js",
     "test": "node test/instructor-checklist.test.mjs",
     "test:access": "node test/dashboard-access.test.mjs",
     "test:badges": "node test/tile-badges.test.mjs",
@@ -19,8 +19,6 @@
     "test:export": "node test/field-export.test.mjs",
     "test:fx": "node test/field-fx.test.mjs",
     "test:duplicate": "node test/field-duplicate.test.mjs",
-    "test:field-brands": "node test/field-budget-brands.test.mjs && node scripts/sync-ue-field-budget.mjs --check",
-    "sync:ue-field-budget": "node scripts/sync-ue-field-budget.mjs",
     "test:time-access": "node test/time-access.test.mjs",
     "test:seasonal": "node test/seasonal-reset.test.mjs",
     "test:time": "node test/time-tracking.test.mjs",
@@ -51,7 +49,10 @@
     "test:quiz-programs": "node test/quiz-programs.test.mjs",
     "test:referrals": "node test/referral-kit.test.mjs",
     "sync:form-kit": "node scripts/sync-form-kit.mjs",
-    "test:student-payments": "node test/student-payments.test.mjs"
+    "test:student-payments": "node test/student-payments.test.mjs",
+    "test:lead-alerts": "node test/lead-alerts.test.mjs && node test/lead-alerts-hours.test.mjs",
+    "test:lead-alerts-ui": "node test/lead-alerts.smoke.mjs",
+    "test:lead-alerts-db": "node test/lead-alerts.db.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
@@ -59,7 +60,8 @@
     "@netlify/blobs": "^8.1.0",
     "googleapis": "^171.4.0",
     "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8"
+    "jspdf-autotable": "^5.0.8",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

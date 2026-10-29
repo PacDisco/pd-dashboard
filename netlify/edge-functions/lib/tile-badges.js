@@ -15,11 +15,11 @@ export const BADGED_SLUGS = new Set([
   "instructor-field-reports",
   "instructors",
   "invoices",
+  "lead-alerts",
   "popups",
   "sign-inbox",
   "student-uploads",
   "ue-applications",
-  "ue-field-budget",
 ]);
 
 /**

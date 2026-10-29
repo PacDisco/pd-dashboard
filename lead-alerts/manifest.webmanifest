@@ -1,0 +1,17 @@
+{
+  "name": "PD Lead Alerts",
+  "short_name": "Lead Alerts",
+  "description": "New leads, applications and quiz completions for Pacific Discovery admissions — follow up within the hour.",
+  "id": "/lead-alerts/",
+  "start_url": "/lead-alerts/?source=pwa",
+  "scope": "/lead-alerts/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16191c",
+  "theme_color": "#16191c",
+  "icons": [
+    { "src": "/lead-alerts/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/lead-alerts/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/lead-alerts/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -14,6 +14,7 @@
 import { neon } from "@neondatabase/serverless";
 import { readStats } from "./popups-store.mjs";
 import { LOOKBACK_DAYS, MAX_KEYS, jotformStamp, readCounter } from "./tile-badges.mjs";
+import { recentAlertTimes } from "./lead-alerts.mjs";
 
 // ── source kinds ────────────────────────────────────────────────────────────
 
@@ -48,15 +49,6 @@ export const SOURCES = {
       GROUP BY coalesce(group_id, id)
       ORDER BY t DESC LIMIT ${MAX_KEYS}`)),
 
-  // Same, for the Unearthed field app's own database. No fallback: without
-  // the variable the tile simply has no badge, rather than counting PD's.
-  "ue-field-budget": neonRows(["UE_FIELD_BUDGET_DATABASE_URL"], (sql) => sql.query(
-    `SELECT (extract(epoch FROM max(received_at)) * 1000)::bigint AS t
-       FROM entries
-      WHERE received_at > now() - ${WINDOW}
-      GROUP BY coalesce(group_id, id)
-      ORDER BY t DESC LIMIT ${MAX_KEYS}`)),
-
   // Bookings land in Google Calendar, so checkins-book.mjs bumps a counter.
   "instructor-checkins": counter("instructor-checkins"),
 
@@ -72,6 +64,14 @@ export const SOURCES = {
        FROM payments
       WHERE source = 'email' AND created_at > now() - ${WINDOW}
       ORDER BY created_at DESC LIMIT ${MAX_KEYS}`)),
+
+  // Lead Alerts: every alert the phone app raised (new lead, application, quiz).
+  // The app is outside the edge gate (it's a PWA with its own sign-in), so it
+  // clears this bubble itself by POSTing /api/tile-badges when opened.
+  "lead-alerts": {
+    type: "custom",
+    snapshot: async () => ({ kind: "times", keys: await recentAlertTimes(MAX_KEYS, LOOKBACK_DAYS), limit: MAX_KEYS }),
+  },
 
   // Website popup sign-ups: the per-popup submit counts popup-submit.mjs keeps.
   "popups": {

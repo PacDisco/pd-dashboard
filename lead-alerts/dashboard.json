@@ -1,0 +1,9 @@
+{
+  "title": "Lead Alerts",
+  "description": "Phone app for admissions: a push notification the moment someone becomes a New Lead, starts or submits an application, or finishes the quiz — so every one gets a follow-up within the hour. Open it on your phone and add it to your Home Screen.",
+  "category": "Enrollment",
+  "icon": "🔔",
+  "colors": ["#f15c39", "#55bbd2"],
+  "allowedRoles": ["admin", "admissions"],
+  "order": 24
+}
