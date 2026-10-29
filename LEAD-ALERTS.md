@@ -23,18 +23,12 @@ shows a red count of what's new since the advisor last opened it.
 ## The follow-up loop
 
 - Each card shows a countdown to the 60-minute mark, then **Overdue** in red.
-- Card buttons: Call · Text · Email · HubSpot · **Contacted**.
-  - **Call / Text go through Aircall.** Aircall's mobile app can't be opened
-    with a number from another app, and HubSpot's mobile app calls from the
-    advisor's personal number, so by default these copy the number (Text also
-    offers a ready-made message to copy) with steps to paste into Aircall.
-    Aircall's HubSpot integration logs the call/text on the contact. If Aircall
-    handles phone links on her phone, she can switch "Call & Text buttons" at
-    the bottom of the app to "Open my phone's default calling app" (per phone).
-    Texting straight from the app via Aircall's API would need Aircall's
-    Professional plan.
-  - **Email** opens the contact in HubSpot with the email composer
-    (`?interaction=email`), so it sends from her connected inbox and is logged.
+- Card buttons: **Copy number** · **Open Aircall** · **HubSpot** · **Contacted**.
+  Calls and texts go through the Aircall app, which logs them to HubSpot.
+  Open Aircall copies the number first, so she just pastes it in Aircall.
+  It opens the app on iPhone (`aircall://`) and Android (by package name,
+  `com.aircall`); on a computer the button is greyed out. HubSpot opens the
+  contact record. No Aircall API key is needed.
 - An alert also closes **automatically** when HubSpot shows a logged
   call/email/meeting after it (`notes_last_contacted`, e.g. Aircall) or the lead
   status moves off NEW.
@@ -61,48 +55,6 @@ to all), in your phone's time zone. Each person on the app has their own hours.
 - Saving hours that switch you on right now sends the digest straight away.
 - Blocks can cross midnight (e.g. 20:00 → 02:00). Use 11:59 PM for "until midnight".
 - Reminders are per person, so two advisors with different hours each get their own.
-
-## Aircall
-
-With an Aircall API key the app ties into Aircall two ways:
-
-- **Calls close alerts by themselves.** Aircall sends every finished call to
-  `/api/aircall-webhook`. If the other number matches an open alert's lead
-  (last 9 digits, so formatting/country code don't matter), the alert closes
-  with what happened: "Called via Aircall · 4 min call", "Called via Aircall ·
-  no answer" (an attempt within the hour counts), or "They called in ·
-  answered via Aircall". Works for calls from the Aircall phone app and the
-  desktop app. Missed inbound calls don't count. Texts don't trigger this
-  (Aircall's message events need its Messaging API / Professional plan), so
-  tap **Contacted** after a text.
-- **"Send to Aircall on my computer"** in the Call sheet puts the number into
-  the Aircall desktop app (Workspace), ready to call. Aircall only supports this
-  on desktop, not the phone apps, and the advisor must be set to available.
-  Her Aircall user is found by her dashboard email; if her Aircall login is a
-  different email the app asks for it once and remembers it.
-
-- **Open Aircall** — a button in the header and in the Call/Text sheet (phones
-  only) that copies the number/message and switches to the Aircall app.
-  Android launches it by package name (`com.aircall`). Aircall doesn't publish
-  a link for its iPhone app, so iPhone tries `aircall://`; if that doesn't
-  open it, the app says to open Aircall from the Home Screen (the number is
-  already copied). If you find a link that works, set `AIRCALL_IOS_URL` in
-  Netlify — no code change needed.
-
-### Setup
-
-1. Aircall Dashboard → Integrations & API → **API keys** → create one. Add to
-   Netlify env vars (Functions scope): `AIRCALL_API_ID`, `AIRCALL_API_TOKEN`.
-2. Redeploy.
-3. Open Lead Alerts as an **admin** → bottom of the page → **Connect Aircall**.
-   This creates the webhook in Aircall (event `call.ended`) and stores its
-   verification token. Running it again is safe (it finds the existing one).
-4. Test: make an alert (test quiz with your phone number), call that number from
-   Aircall, hang up — the card moves to Done within seconds.
-
-If you'd rather create the webhook by hand in Aircall, point it at
-`https://dashboard.pacificdiscovery.org/api/aircall-webhook` with `call.ended`
-and put its token in `AIRCALL_WEBHOOK_TOKEN`.
 
 ## The red bubble
 
@@ -149,12 +101,11 @@ Use **Send a test notification** at the bottom of the app to confirm.
   (netlify.toml) and from `_redirects` Role= rules (build-manifest
   `PUBLIC_SHELL_SLUGS`) so the installed app always loads; it signs in with
   Netlify Identity and sends a Bearer token.
-- `netlify/functions/lead-alerts.mjs` — `/api/lead-alerts[/seen|handled|subscribe|unsubscribe|prefs|dial|aircall-setup|test|scan]`;
+- `netlify/functions/lead-alerts.mjs` — `/api/lead-alerts[/seen|handled|subscribe|unsubscribe|prefs|test|scan]`;
   every call verifies the Identity token and Lead Alerts access.
 - `netlify/functions/lead-alerts-scan.mjs` — scheduled `*/2 * * * *`.
 - `netlify/functions/_shared/lead-alerts.mjs` — sources, de-dupe, push, hours/digest, storage.
 - `netlify/functions/_shared/lead-alerts-hours.mjs` — the available-hours rules (pure).
-- `netlify/functions/_shared/aircall.mjs` + `netlify/functions/aircall-webhook.mjs` — Aircall API, webhook and dial.
 - Pushes are re-checked against dashboard access at send time; a person who
   loses access has their phones removed. Dead subscriptions (404/410) are removed.
 

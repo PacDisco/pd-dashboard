@@ -50,7 +50,7 @@
     "test:referrals": "node test/referral-kit.test.mjs",
     "sync:form-kit": "node scripts/sync-form-kit.mjs",
     "test:student-payments": "node test/student-payments.test.mjs",
-    "test:lead-alerts": "node test/lead-alerts.test.mjs && node test/lead-alerts-hours.test.mjs && node test/aircall.test.mjs",
+    "test:lead-alerts": "node test/lead-alerts.test.mjs && node test/lead-alerts-hours.test.mjs",
     "test:lead-alerts-ui": "node test/lead-alerts.smoke.mjs",
     "test:lead-alerts-db": "node test/lead-alerts.db.test.mjs"
   },

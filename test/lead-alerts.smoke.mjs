@@ -22,14 +22,12 @@ const min = (m) => new Date(Date.now() - m * 60_000).toISOString();
 const db = {
   seenAt: min(30),
   events: [
-    { id: "app2:a", type: "app_submitted", label: "Application submitted", occurredAt: min(4), detectedAt: min(3), name: "Jane Doe", email: "jane@example.com", phone: "+1 555 0100", detail: "Southeast Asia Semester · Fall 2027", source: "", hubspotUrl: "https://app.hubspot.com/contacts/1/record/0-1/9", hubspotEmailUrl: "https://app.hubspot.com/contacts/1/record/0-1/9?interaction=email" },
+    { id: "app2:a", type: "app_submitted", label: "Application submitted", occurredAt: min(4), detectedAt: min(3), name: "Jane Doe", email: "jane@example.com", phone: "+1 555 0100", detail: "Southeast Asia Semester · Fall 2027", source: "", hubspotUrl: "https://app.hubspot.com/contacts/1/record/0-1/9" },
     { id: "quiz:b", type: "quiz", label: "Quiz completed", occurredAt: min(22), detectedAt: min(21), name: "Sam Lee", email: "sam@example.com", phone: "", detail: "Result: The Explorer", source: "", hubspotUrl: null },
     { id: "hs:c", type: "new_lead", label: "New lead", occurredAt: min(75), detectedAt: min(74), name: "Kai Moana", email: "kai@example.com", phone: "+1 555 0300", detail: "Booklet download", source: "Paid social", hubspotUrl: "https://app.hubspot.com/x" },
     { id: "app1:d", type: "app_started", label: "Application started", occurredAt: min(200), detectedAt: min(199), name: "Ana Ruiz", email: "ana@example.com", phone: "", detail: "Fall 2027", source: "", hubspotUrl: null, handledAt: min(180), handledBy: "Megan", handledHow: "Marked contacted" },
   ],
   calls: [],
-  aircall: { configured: true, webhook: false },
-  dials: [],
   prefs: { tz: null, schedule: null, always: true, availableNow: true, nextChangeAt: null },
 };
 // One that came in overnight while she was off: its hour starts at 9am tomorrow-ish.
@@ -42,7 +40,7 @@ function feed() {
   const open = events.filter((e) => !e.handledAt);
   return { events, seenAt: db.seenAt, newCount: events.filter((e) => e.isNew).length,
     stats: { open: open.length, overdue: open.filter((e) => Date.now() - Date.parse(e.occurredAt) > 3600_000).length, medianMinutes: 20, withinHourPct: 100, handled: 1 },
-    prefs: db.prefs, aircall: db.aircall, me: { email: "advisor@pacificdiscovery.org", isAdmin: true }, devices: db.calls.filter((c) => c.path.endsWith("/subscribe")).length ? 1 : 0,
+    prefs: db.prefs, me: { email: "advisor@pacificdiscovery.org", isAdmin: true }, devices: db.calls.filter((c) => c.path.endsWith("/subscribe")).length ? 1 : 0,
     vapidPublicKey: "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U",
     followUpMinutes: 60, remindAfterMinutes: 45, generatedAt: new Date().toISOString() };
 }
@@ -64,12 +62,6 @@ const server = http.createServer(async (req, res) => {
       return send(200, { ok: true, event: { ...e, isNew: false } });
     }
     if (url.pathname === "/api/lead-alerts/subscribe") return send(200, { ok: true });
-    if (url.pathname === "/api/lead-alerts/aircall-setup") { db.aircall = { configured: true, webhook: true }; return send(200, { ok: true, created: true }); }
-    if (url.pathname === "/api/lead-alerts/dial") {
-      db.dials.push(json);
-      if (!json.aircallEmail) return send(404, { error: "No Aircall user with the email advisor@pacificdiscovery.org.", needsAircallEmail: true });
-      return send(200, { ok: true, to: "+15550100" });
-    }
     if (url.pathname === "/api/lead-alerts/prefs") {
       db.prefs = json.schedule
         ? { tz: json.tz, schedule: json.schedule, always: false, availableNow: false, nextChangeAt: new Date(Date.now() + 3600_000).toISOString() }
@@ -141,10 +133,10 @@ test("feed: red bubble counts what's new since last open; overdue is flagged; ol
   assert.match(await page.textContent("#ev-hs\\:c .clock"), /Overdue by/);
   assert.match(await page.textContent("#ev-app2\\:a .clock"), /min left · follow up by/);
   assert.equal(await page.$$eval(".newdot", (els) => els.length), 2);
-  assert.equal(await page.getAttribute("#ev-app2\\:a [data-call]", "aria-disabled"), null);
-  assert.equal(await page.getAttribute("#ev-quiz\\:b [data-call]", "aria-disabled"), "true", "no phone → no call button");
-  assert.equal(await page.getAttribute("#ev-app2\\:a a.act >> nth=0", "href"), "https://app.hubspot.com/contacts/1/record/0-1/9?interaction=email", "Email opens HubSpot's composer");
-  assert.equal(await page.getAttribute("#ev-quiz\\:b a.act >> nth=0", "aria-disabled"), "true", "not in HubSpot yet → no email button");
+  assert.equal(await page.getAttribute("#ev-app2\\:a [data-copy]", "aria-disabled"), null);
+  assert.equal(await page.getAttribute("#ev-quiz\\:b [data-copy]", "aria-disabled"), "true", "no phone → nothing to copy");
+  assert.equal(await page.getAttribute("#ev-app2\\:a a.act", "href"), "https://app.hubspot.com/contacts/1/record/0-1/9");
+  assert.equal(await page.getAttribute("#ev-quiz\\:b a.act", "aria-disabled"), "true", "not in HubSpot yet → no HubSpot button");
   // Opening the app marks everything seen, and clears the landing-page tile bubble too.
   await page.waitForTimeout(200);
   assert.ok(db.calls.some((c) => c.path === "/api/lead-alerts/seen"));
@@ -161,55 +153,21 @@ test("reopening after seen: no bubble", async () => {
   await ctx.close();
 });
 
-test("Call and Text copy for Aircall instead of dialling from her own number", async () => {
+test("Copy number and Open Aircall (Android launches the Aircall app by package)", async () => {
   const { ctx, page } = await phone();
   await page.goto(`${ORIGIN}/lead-alerts/`);
   await page.waitForSelector(".card");
-  await page.click("#ev-app2\\:a [data-call]");
-  await page.waitForSelector("#reachBg:not([hidden])");
-  assert.equal(await page.textContent("#reachTitle"), "Call Jane Doe in Aircall");
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "+15550100");
-  assert.equal(await page.isVisible("#reachMsg"), false);
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "lead-alerts-call.png") });
-  await page.click("#reachClose");
-  await page.click("#ev-app2\\:a [data-text]");
-  assert.equal(await page.textContent("#reachTitle"), "Text Jane Doe in Aircall");
-  const msg = await page.inputValue("#reachMsg");
-  assert.match(msg, /^Hi Jane, this is Advisor from Pacific Discovery\. Thanks for submitting your application!/);
-  // On a phone: one tap copies the message and jumps to Aircall (Android: by package name).
-  assert.equal(await page.isVisible("#reachCopyMsg"), false);
-  await page.click("#reachOpenMsg");
+  const labels = await page.$$eval("#ev-app2\\:a .act span", (els) => els.map((e) => e.textContent));
+  assert.deepEqual(labels, ["Copy number", "Open Aircall", "HubSpot", "Contacted"]);
+  await page.click("#ev-app2\\:a [data-copy]");
+  await page.waitForFunction(() => /Number copied/.test(document.querySelector("#toast").textContent));
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "+1 555 0100");
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await page.click("#ev-app2\\:a [data-aircall]");
   await page.waitForFunction(() => window.__nav.length > 0);
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), msg);
   assert.match(await page.evaluate(() => window.__nav.pop()), /^intent:#Intent;.*package=com\.aircall;end$/);
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "lead-alerts-text.png") });
-  await page.click("#reachClose");
-  // Switching modes is remembered on this phone.
-  await page.selectOption("#linkMode", "links");
-  assert.equal(await page.evaluate(() => localStorage.getItem("lead-alerts.linkMode")), "links");
-  await ctx.close();
-});
-
-test("Aircall: admin connects it; Call can send the number to Aircall on the computer", async () => {
-  const { ctx, page } = await phone();
-  await page.goto(`${ORIGIN}/lead-alerts/`);
-  await page.waitForSelector("#acConnect");
-  await page.click("#acConnect");
-  await page.waitForFunction(() => /Aircall connected/.test(document.querySelector("#acInfo").textContent));
-  await page.click("#ev-app2\\:a [data-call]");
-  await page.waitForSelector("#reachDialWrap:not([hidden])");
-  assert.match(await page.textContent("#reachSteps"), /closes itself when the call ends/);
-  await page.click("#reachDial");
-  await page.waitForSelector("#reachAcWrap:not([hidden])");             // her Aircall email differs → asks once
-  await page.fill("#reachAcEmail", "megan@aircall-login.com");
-  await page.click("#reachDial");
-  await page.waitForFunction(() => /Sent/.test(document.querySelector("#toast").textContent));
-  assert.deepEqual(db.dials.pop(), { id: "app2:a", aircallEmail: "megan@aircall-login.com" });
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "lead-alerts-aircall.png") });
-  await page.click("#reachClose");
-  // Text sheet has no "send to computer" (Aircall's dial is calls only).
-  await page.click("#ev-app2\\:a [data-text]");
-  assert.equal(await page.isVisible("#reachDial"), false);
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "+1 555 0100", "Open Aircall copies the number first");
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "lead-alerts-buttons.png") });
   await ctx.close();
 });
 
@@ -271,18 +229,14 @@ test("available hours: defaults to 24/7; set weekdays 9–5; held state is shown
   await ctx.close();
 });
 
-test("Open Aircall: header button on phones; iPhone tries the app link and explains if it can't", async () => {
+test("iPhone: Open Aircall goes to aircall://", async () => {
   const { ctx, page } = await phone({ ios: true });
   await page.goto(`${ORIGIN}/lead-alerts/`);
   await page.waitForSelector(".card");
   assert.equal(await page.isVisible("#openAcBtn"), true);
-  await page.click("#ev-app2\\:a [data-call]");
-  assert.equal(await page.textContent("#reachOpenNum"), "Open Aircall");
-  await page.click("#reachOpenNum");
+  await page.click("#ev-app2\\:a [data-aircall]");
   await page.waitForFunction(() => window.__nav.length > 0);
   assert.equal(await page.evaluate(() => window.__nav.pop()), "aircall://");
-  // The page never went to the background, so it tells her what to do.
-  await page.waitForFunction(() => /open it from your Home Screen/.test(document.querySelector("#toast").textContent), null, { timeout: 4000 });
   await ctx.close();
 });
 

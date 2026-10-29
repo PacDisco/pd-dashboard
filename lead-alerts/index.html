@@ -85,7 +85,7 @@
   .clock { font-size: 12.5px; font-weight: 600; margin-top: 8px; color: var(--pd-teal); }
   .clock.late { color: var(--red); }
   .clock.ok { color: var(--pd-green); font-weight: 500; }
-  .actions { display: grid; grid-template-columns: repeat(4, 1fr) 1.5fr; gap: 6px; margin-top: 10px; }
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr) 1.3fr; gap: 6px; margin-top: 10px; }
   .act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 4px; font-size: 11px; text-decoration: none; cursor: pointer; min-height: 52px; }
   .act svg { width: 18px; height: 18px; }
   .act[aria-disabled="true"] { opacity: .35; pointer-events: none; }
@@ -133,10 +133,6 @@
   .sheet .btns { display: flex; gap: 8px; }
   .sheet .btns .btn { flex: 1; padding: 12px; }
   .sheet .err { color: #ff8a6b; font-size: 13px; margin: 0 0 10px; }
-  .reach-num { font-size: 28px; font-weight: 700; text-align: center; letter-spacing: .02em; margin: 6px 0 12px; font-variant-numeric: tabular-nums; user-select: all; -webkit-user-select: all; }
-  .reach-steps { margin: 0 0 8px; padding-left: 20px; color: #c9d0d6; font-size: 14px; line-height: 1.6; }
-  .reach-note { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
-  #reachMsg { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 10px; font: inherit; font-size: 15px; width: 100%; resize: vertical; }
   button.act { font: inherit; font-size: 11px; }
   [hidden] { display: none !important; }
 </style>
@@ -192,13 +188,6 @@
 
     <footer class="foot">
       <div id="footInfo"></div>
-      <div id="acInfo"></div>
-      <label class="tzrow" style="margin:0">Call &amp; Text buttons
-        <select id="linkMode">
-          <option value="copy">Copy the number for Aircall (recommended)</option>
-          <option value="links">Open my phone's default calling app</option>
-        </select>
-      </label>
       <div class="row">
         <button class="btn ghost" id="testBtn" hidden>Send a test notification</button>
         <button class="btn ghost" id="offBtn" hidden>Turn off on this phone</button>
@@ -228,32 +217,6 @@
     </div>
   </div>
 </div>
-<div class="sheet-bg" id="reachBg" hidden>
-  <div class="sheet" role="dialog" aria-labelledby="reachTitle">
-    <h2 id="reachTitle"></h2>
-    <p class="lead" id="reachLead"></p>
-    <div class="reach-num" id="reachNum"></div>
-    <button class="btn" id="reachOpenNum" style="width:100%;margin-bottom:8px" hidden>Open Aircall</button>
-    <button class="btn" id="reachCopyNum" style="width:100%;margin-bottom:8px">Copy number</button>
-    <div id="reachDialWrap" hidden>
-      <button class="btn ghost" id="reachDial" style="width:100%;margin-bottom:8px">Send to Aircall on my computer</button>
-      <div class="tzrow" id="reachAcWrap" hidden style="margin-bottom:8px">Your Aircall login email
-        <input type="email" id="reachAcEmail" autocomplete="email" style="background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px;font:inherit;font-size:15px" />
-      </div>
-    </div>
-    <div style="height:4px"></div>
-    <div id="reachMsgWrap">
-      <div class="tzrow" style="margin-bottom:8px">Message
-        <textarea id="reachMsg" rows="5"></textarea>
-      </div>
-      <button class="btn ghost" id="reachCopyMsg" style="width:100%;margin-bottom:12px">Copy message</button>
-      <button class="btn ghost" id="reachOpenMsg" style="width:100%;margin-bottom:12px" hidden>Copy message &amp; open Aircall</button>
-    </div>
-    <ol class="reach-steps" id="reachSteps"></ol>
-    <p class="reach-note">Aircall logs this to the contact in HubSpot automatically.</p>
-    <div class="btns"><button class="btn ghost" id="reachClose">Done</button></div>
-  </div>
-</div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -265,9 +228,8 @@
     swReg: null, sub: null, busy: false, focusId: decodeURIComponent((location.hash || "").slice(1)) || null,
   };
   const ICON = {
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
     call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
-    text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
     hub:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>',
     check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   };
@@ -320,7 +282,7 @@
     const j = await res.json().catch(() => ({}));
     if (res.status === 401) { showGate(); throw new Error("Signed out"); }
     if (res.status === 403) { showGate(j.error || "Your account doesn't have access to Lead Alerts yet — ask Jake to grant it."); throw new Error("No access"); }
-    if (!res.ok) throw Object.assign(new Error(j.error || `HTTP ${res.status}`), { needsAircallEmail: !!j.needsAircallEmail });
+    if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
     return j;
   }
 
@@ -508,7 +470,6 @@
     }
     renderSetup();
     renderDuty();
-    renderAircall();
 
     const devices = d.devices || 0;
     $("footInfo").innerHTML = `Signed in as ${esc(d.me?.email || "")}. Notifications go to ${devices} device${devices === 1 ? "" : "s"} on your account. Updated ${clockTime(d.generatedAt)}.`;
@@ -555,27 +516,12 @@
       <p class="sub">${esc([e.email, e.phone].filter(Boolean).join(" · "))}</p>
       ${clock}
       <div class="actions">
-        <button class="act" data-call="${esc(e.id)}" ${tel ? "" : 'aria-disabled="true"'}>${ICON.call}<span>Call</span></button>
-        <button class="act" data-text="${esc(e.id)}" ${tel ? "" : 'aria-disabled="true"'}>${ICON.text}<span>Text</span></button>
-        ${action(e.hubspotEmailUrl || "", ICON.mail, "Email", 'target="_blank" rel="noopener"')}
+        <button class="act" data-copy="${esc(e.id)}" ${tel ? "" : 'aria-disabled="true"'}>${ICON.copy}<span>Copy number</span></button>
+        <button class="act" data-aircall="${esc(e.id)}" ${canOpenAircall ? "" : 'aria-disabled="true" title="Aircall opens from your phone"'}>${ICON.call}<span>Open Aircall</span></button>
         ${action(e.hubspotUrl || "", ICON.hub, "HubSpot", 'target="_blank" rel="noopener"')}
         ${main}
       </div>
     </article>`;
-  }
-
-  // ── Aircall status (footer) ──────────────────────────────────────────────
-  function renderAircall() {
-    const a = S.data?.aircall || {}; const admin = !!S.data?.me?.isAdmin; const el = $("acInfo");
-    if (a.webhook) { el.innerHTML = "Aircall connected: calls to or from a lead close their alert automatically."; return; }
-    if (!admin) { el.innerHTML = a.configured ? "Aircall is partly set up — ask Jake to connect it." : ""; return; }
-    if (!a.configured) { el.innerHTML = "Aircall: add <b>AIRCALL_API_ID</b> and <b>AIRCALL_API_TOKEN</b> in Netlify, redeploy, then connect here."; return; }
-    el.innerHTML = `<button class="btn ghost" id="acConnect">Connect Aircall (admin)</button>`;
-    $("acConnect").onclick = async () => {
-      $("acConnect").disabled = true;
-      try { const r = await api("/api/lead-alerts/aircall-setup", {}); toast(r.created ? "Aircall connected" : "Aircall was already connected"); await refresh({ quiet: true }); }
-      catch (e) { toast(e.message, 5000); $("acConnect").disabled = false; }
-    };
   }
 
   // ── available hours ──────────────────────────────────────────────────────
@@ -659,17 +605,9 @@
     } finally { $("hSave").disabled = false; }
   };
 
-  // ── call / text through Aircall ──────────────────────────────────────────
-  // Aircall's phone app can't be opened with a number from another app, and
-  // HubSpot's mobile app calls from her personal number. So by default the
-  // buttons copy the number (and a ready-to-send text) for her to paste into
-  // Aircall, which logs the call/text to HubSpot. If Aircall handles phone
-  // links on her phone, she can switch to "open my default calling app".
-  const LINK_KEY = "lead-alerts.linkMode";
-  const getMode = () => { try { return localStorage.getItem(LINK_KEY) || "copy"; } catch { return "copy"; } };
-  $("linkMode").value = getMode();
-  $("linkMode").onchange = () => { try { localStorage.setItem(LINK_KEY, $("linkMode").value); } catch {} toast($("linkMode").value === "copy" ? "Call & Text will copy numbers for Aircall." : "Call & Text will open your default calling app."); };
-
+  // ── Copy number / Open Aircall ───────────────────────────────────────────
+  // Calls and texts go through the Aircall app (which logs them to HubSpot).
+  // "Open Aircall" copies the number first, so she just pastes it in Aircall.
   async function copy(text, label) {
     try { await navigator.clipboard.writeText(text); toast(`${label} copied`); return true; }
     catch {
@@ -680,22 +618,8 @@
       t.remove(); toast(ok ? `${label} copied` : "Couldn't copy — press and hold the number to copy it"); return ok;
     }
   }
-  const WHAT = {
-    app_submitted: "submitting your application",
-    app_started: "starting your application",
-    quiz: "taking our gap year quiz",
-    new_lead: "your interest in Pacific Discovery",
-  };
-  function textFor(e) {
-    const first = (e.name || "").trim().split(/\s+/)[0] || "there";
-    const me = ((S.user?.user_metadata?.full_name || "").trim().split(/\s+/)[0]) || "the admissions team";
-    return `Hi ${first}, this is ${me} from Pacific Discovery. Thanks for ${WHAT[e.type] || "getting in touch"}! Do you have a few minutes for a quick call about your plans? When suits you?`;
-  }
-  // ── open the Aircall app ─────────────────────────────────────────────────
-  // Android: launch by package name (com.aircall); Chrome sends her to the Play
-  // Store if it isn't installed. iPhone: Aircall publishes no link for its app,
-  // so we try its URL scheme (AIRCALL_IOS_URL, default aircall://) and, if the
-  // page is still showing a moment later, say to open it from the Home Screen.
+  // Android: launch by package name (Chrome offers the Play Store if it's not
+  // installed). iPhone: Aircall's app link. Desktop: no Aircall phone app.
   const isAndroid = /Android/i.test(navigator.userAgent);
   const canOpenAircall = isAndroid || isIOS;
   const go = (u) => (window.__laNavigate ? window.__laNavigate(u) : (location.href = u));   // hook for tests
@@ -704,71 +628,28 @@
       go("intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.aircall;end");
       return;
     }
-    const url = S.data?.aircall?.iosUrl || "aircall://";
     let left = false;
     const onHide = () => { if (document.visibilityState === "hidden") left = true; };
     document.addEventListener("visibilitychange", onHide);
     setTimeout(() => {
       document.removeEventListener("visibilitychange", onHide);
-      if (!left) toast("Couldn't open Aircall automatically — open it from your Home Screen. The number is copied.", 5000);
+      if (!left) toast("Couldn't open Aircall — is it installed? Open it from your Home Screen.", 5000);
     }, 1800);
-    go(url);
+    go("aircall://");
   }
   $("openAcBtn").hidden = !canOpenAircall;
   $("openAcBtn").onclick = openAircall;
 
-  function openReach(kind, id) {
-    const e = S.data.events.find((x) => x.id === id);
-    const tel = digits(e?.phone);
-    if (!e || !tel) return;
-    if (getMode() === "links") { location.href = `${kind === "call" ? "tel" : "sms"}:${tel}`; return; }
-    const who = e.name || e.email;
-    $("reachTitle").textContent = kind === "call" ? `Call ${who} in Aircall` : `Text ${who} in Aircall`;
-    $("reachLead").textContent = kind === "call" ? "The number is copied. Open Aircall, paste it into the keypad and call." : "Copy the number, start a new conversation in Aircall, then copy and paste the message.";
-    $("reachNum").textContent = e.phone;
-    $("reachMsgWrap").hidden = kind !== "text";
-    $("reachMsg").value = textFor(e);
-    $("reachSteps").innerHTML = kind === "call"
-      ? `<li>Open the <b>Aircall</b> app</li><li>Tap <b>Keypad</b>, paste the number, tap call</li><li>${S.data.aircall?.webhook ? "That's it — this alert closes itself when the call ends" : "Come back here and tap <b>Contacted</b>"}</li>`
-      : canOpenAircall
-        ? "<li>Tap <b>Copy number &amp; open Aircall</b> → new message → paste the number</li><li>Come back, tap <b>Copy message &amp; open Aircall</b> → paste → send</li><li>Come back here and tap <b>Contacted</b></li>"
-        : "<li>Open the <b>Aircall</b> app → new message</li><li>Paste the number, then paste the message</li><li>Come back here and tap <b>Contacted</b></li>";
-    $("reachCopyNum").onclick = () => copy(tel, "Number");
-    // On a phone the main button copies (again, to be safe) and jumps to Aircall.
-    $("reachOpenNum").hidden = !canOpenAircall;
-    $("reachOpenNum").textContent = kind === "call" ? "Open Aircall" : "Copy number & open Aircall";
-    $("reachOpenNum").onclick = async () => { await copy(tel, "Number"); openAircall(); };
-    $("reachCopyNum").className = canOpenAircall ? "btn ghost" : "btn";
-    $("reachOpenMsg").hidden = !canOpenAircall || kind !== "text";
-    $("reachCopyMsg").hidden = canOpenAircall && kind === "text";
-    $("reachOpenMsg").onclick = async () => { await copy($("reachMsg").value, "Message"); openAircall(); };
-    $("reachDialWrap").hidden = !(kind === "call" && S.data.aircall?.configured);
-    $("reachAcWrap").hidden = true;
-    $("reachDial").onclick = async () => {
-      $("reachDial").disabled = true;
-      try {
-        const body = { id };
-        if (!$("reachAcWrap").hidden && $("reachAcEmail").value.trim()) body.aircallEmail = $("reachAcEmail").value.trim();
-        await api("/api/lead-alerts/dial", body);
-        toast("Sent — tap call in Aircall on your computer");
-      } catch (e) {
-        if (e.needsAircallEmail) { $("reachAcWrap").hidden = false; $("reachAcEmail").focus(); }
-        toast(e.message, 4500);
-      } finally { $("reachDial").disabled = false; }
-    };
-    $("reachCopyMsg").onclick = () => copy($("reachMsg").value, "Message");
-    $("reachBg").hidden = false;
-    if (kind === "call") copy(tel, "Number");     // the tap that opened this counts as the gesture
-  }
-  $("reachClose").onclick = () => ($("reachBg").hidden = true);
-  $("reachBg").addEventListener("click", (ev) => { if (ev.target === $("reachBg")) $("reachBg").hidden = true; });
-
   // ── events ───────────────────────────────────────────────────────────────
   $("list").addEventListener("click", (ev) => {
-    const call = ev.target.closest("[data-call]");
-    const text = ev.target.closest("[data-text]");
-    if (call && call.getAttribute("aria-disabled") !== "true") openReach("call", call.dataset.call);
-    if (text && text.getAttribute("aria-disabled") !== "true") openReach("text", text.dataset.text);
+    const cp = ev.target.closest("[data-copy]");
+    const ac = ev.target.closest("[data-aircall]");
+    const phoneOf = (el) => S.data.events.find((x) => x.id === el.dataset.copy || x.id === el.dataset.aircall)?.phone || "";
+    if (cp && cp.getAttribute("aria-disabled") !== "true") copy(phoneOf(cp), "Number");
+    if (ac && ac.getAttribute("aria-disabled") !== "true") {
+      const num = phoneOf(ac);
+      (num ? copy(num, "Number") : Promise.resolve()).then(openAircall);
+    }
     const done = ev.target.closest("[data-done]");
     const undo = ev.target.closest("[data-undo]");
     if (done) markHandled(done.dataset.done, false);

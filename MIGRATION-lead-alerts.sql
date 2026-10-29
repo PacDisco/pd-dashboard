@@ -53,10 +53,6 @@ CREATE TABLE IF NOT EXISTS lead_alert_prefs (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-ALTER TABLE lead_alert_prefs ADD COLUMN IF NOT EXISTS aircall_email TEXT;
-
-ALTER TABLE lead_alert_prefs ADD COLUMN IF NOT EXISTS aircall_user_id TEXT;
-
 CREATE TABLE IF NOT EXISTS lead_alert_reminders (
   event_id  TEXT NOT NULL,
   email     TEXT NOT NULL,
