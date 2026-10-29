@@ -60,6 +60,16 @@
 [functions."student-payments"]
   timeout = 26
 
+# Form attachments: every 5 minutes, attach a PDF of every quiz, referral,
+# step-1-only application and Meta lead form to the HubSpot contact. See
+# FORM-ATTACHMENTS.md.
+[functions."form-attachments-sync"]
+  schedule = "*/5 * * * *"
+
+# "Run now" on /api/form-attachments runs the same pass.
+[functions."form-attachments"]
+  timeout = 26
+
 # Lead Alerts: every 2 minutes, look for new applications, quiz completions and
 # HubSpot "New lead" contacts and push them to the admissions phone app. See
 # LEAD-ALERTS.md.

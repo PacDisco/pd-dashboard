@@ -100,6 +100,11 @@ main{max-width:1180px;margin:0 auto;padding:16px}
     <header><h2>Application PDFs</h2><span class="muted" id="pdfLine"></span></header>
     <ul class="pdf-errs" id="pdfErrs"></ul>
   </section>
+
+  <section class="panel">
+    <header><h2>Quiz, referral, popup &amp; Meta lead PDFs</h2><span class="muted" id="formLine"></span><button class="btn btn--sm" id="formRunBtn">Attach now</button></header>
+    <ul class="pdf-errs" id="formErrs"></ul>
+  </section>
 </main>
 
 <script>
@@ -230,7 +235,48 @@ $('#syncBtn').addEventListener('click', async () => {
   b.disabled = false; b.textContent = 'Sync now';
 });
 
+// ── lead-form PDFs (/api/form-attachments) ─────────────────────────────────
+const FORM_API = '/api/form-attachments';
+const KIND_LABEL = { quiz: 'Quizzes', referral: 'Referrals', step1: 'Applications started (step 1 only)', meta: 'Meta lead forms' };
+async function formApi(method, body) {
+  const res = await fetch(FORM_API, { method, credentials: 'include', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  let data = null; try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data;
+}
+async function loadForms() {
+  const s = await formApi('GET');
+  const r = s.state?.last_result || {};
+  const meta = r.metaIngest?.skipped ? ' · Meta: not connected (set META_LEADS_TOKEN + META_PAGE_IDS)' : r.metaIngest?.error ? ` · Meta: ${r.metaIngest.error}` : '';
+  $('#formLine').textContent = (s.state?.last_run_at ? `Last run ${when(s.state.last_run_at)}` : 'Not run yet') + meta + ' · popups attach as they’re submitted';
+  const items = [];
+  for (const [kind, label] of Object.entries(KIND_LABEL)) {
+    const k = s.kinds[kind] || {};
+    if (k.error) { items.push(`<li><strong>${esc(label)}</strong> — <span class="muted">${esc(k.error)}</span></li>`); continue; }
+    items.push(`<li><strong>${esc(label)}</strong> — ${k.attached} attached · ${k.waiting} waiting${k.errors ? ` · ${k.errors} retrying` : ''}</li>`);
+    for (const e of (k.recentErrors || []).slice(0, 5)) {
+      items.push(`<li class="muted" style="padding-left:16px">${esc(e.who)} — ${esc(e.error)} (${e.attempts} tries) <button class="btn btn--sm" data-form-retry="${esc(e.id)}" data-kind="${kind}">Retry</button></li>`);
+    }
+  }
+  $('#formErrs').innerHTML = items.join('');
+}
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('button[data-form-retry]'); if (!t) return;
+  try { await formApi('POST', { action: 'retry', kind: t.dataset.kind, id: t.dataset.formRetry }); toast('Will retry on the next run.'); } catch (x) { toast(x.message); }
+});
+$('#formRunBtn').addEventListener('click', async () => {
+  const b = $('#formRunBtn'); b.disabled = true; b.textContent = 'Attaching…';
+  try {
+    const { result } = await formApi('POST', { action: 'run' });
+    if (result.skipped) toast('Already running — try again in a minute.');
+    else toast(`${Object.keys(KIND_LABEL).reduce((n, k) => n + (result[k]?.attached || 0), 0)} PDFs attached${result.metaIngest?.added ? ` · ${result.metaIngest.added} new Meta leads` : ''}`);
+    await loadForms();
+  } catch (x) { toast(x.message); }
+  b.disabled = false; b.textContent = 'Attach now';
+});
+
 Promise.all([loadSummary(), loadList()]).catch((x) => notice('bad', esc(x.message)));
+loadForms().catch((x) => { $('#formErrs').innerHTML = `<li class="muted">${esc(x.message)}</li>`; });
 </script>
 </body>
 </html>

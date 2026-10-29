@@ -8,6 +8,7 @@
 //      notes write) — falls back to HUBSPOT_TOKEN, which the dashboard already uses.
 
 import { hubspotProperties, noteText, HUBSPOT_TAG } from "./popups-core.mjs";
+import { popupPdf } from "./submission-pdf.mjs";
 
 const BASE = "https://api.hubapi.com";
 
@@ -112,12 +113,26 @@ export async function upsertContact(popup, values, page, { fetchImpl, log = cons
   }
   const id = String(saved.id || existing?.id);
 
+  // The submission as a PDF, attached to the note below. Best effort: if the
+  // upload fails (e.g. the token lacks the `files` scope) the note still goes on.
+  let fileId = null;
+  try {
+    const pdf = popupPdf({ popup, values, page });
+    fileId = await uploadPdf(pdf.bytes, pdf.fileName, fetchImpl);
+  } catch (e) {
+    log.warn(`[popup-submit] PDF not attached: ${e.message}`);
+  }
+
   // Timeline note: which popup, which page, what they chose. Best effort.
   try {
     await hubspot("/crm/v3/objects/notes", {
       method: "POST",
       body: JSON.stringify({
-        properties: { hs_timestamp: new Date().toISOString(), hs_note_body: noteText(popup, values, page).replace(/\n/g, "<br>") },
+        properties: {
+          hs_timestamp: new Date().toISOString(),
+          hs_note_body: noteText(popup, values, page).replace(/\n/g, "<br>"),
+          ...(fileId ? { hs_attachment_ids: fileId } : {}),
+        },
         associations: [{ to: { id }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 202 }] }],
       }),
     }, fetchImpl);
@@ -126,4 +141,24 @@ export async function upsertContact(popup, values, page, { fetchImpl, log = cons
   }
   if (dropped.length) log.warn(`[popup-submit] ${popup.id}: left out ${dropped.join(", ")}`);
   return { id, created: !existing, dropped };
+}
+
+/** Upload a PDF to HubSpot Files (private) and return its id. Needs the `files` scope. */
+export async function uploadPdf(bytes, fileName, fetchImpl = fetch) {
+  const form = new FormData();
+  form.append("file", new Blob([bytes], { type: "application/pdf" }), fileName);
+  form.append("fileName", fileName);
+  form.append("folderPath", `${(process.env.FORM_PDF_FOLDER || "/Lead Forms").replace(/\/+$/, "")}/Website Popups`);
+  form.append("options", JSON.stringify({ access: "PRIVATE", overwrite: false, duplicateValidationStrategy: "NONE" }));
+  const res = await fetchImpl(`${BASE}/files/v3/files`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token()}` },
+    body: form,
+    signal: AbortSignal.timeout(8_000),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new HubSpotError(res.status, "/files/v3/files", text);
+  const id = JSON.parse(text || "{}").id;
+  if (!id) throw new Error("HubSpot file upload returned no id");
+  return String(id);
 }

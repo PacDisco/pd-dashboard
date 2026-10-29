@@ -174,6 +174,8 @@ export async function searchDeals(q) {
 // ── files + notes (application PDFs) ───────────────────────────────────────
 
 export async function uploadFile(bytes, fileName, folderPath = "/Student Applications") {
+  // folderPath: "/Student Applications" for applications; the form sync uses
+  // "/Lead Forms/<kind>" (FORM_PDF_FOLDER to change the root).
   const form = new FormData();
   form.append("file", new Blob([bytes], { type: "application/pdf" }), fileName);
   form.append("fileName", fileName);
@@ -185,9 +187,11 @@ export async function uploadFile(bytes, fileName, folderPath = "/Student Applica
 }
 
 // HUBSPOT_DEFINED association types: note → contact 202, note → deal 214.
-export async function createNote({ body, fileId, contactId, dealId, timestamp }) {
+// `contactIds` puts one note on several contacts (a referral: referrer + referred).
+export async function createNote({ body, fileId, contactId, contactIds, dealId, timestamp }) {
   const associations = [];
-  if (contactId) associations.push({ to: { id: String(contactId) }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 202 }] });
+  const contacts = [...new Set([contactId, ...(contactIds || [])].filter(Boolean).map(String))];
+  for (const id of contacts) associations.push({ to: { id }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 202 }] });
   if (dealId) associations.push({ to: { id: String(dealId) }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 214 }] });
   const data = await hs(`/crm/v3/objects/notes`, {
     method: "POST",
@@ -199,4 +203,27 @@ export async function createNote({ body, fileId, contactId, dealId, timestamp })
 
 export async function linkNoteToDeal(noteId, dealId) {
   return hs(`/crm/v4/objects/notes/${noteId}/associations/default/deals/${dealId}`, { method: "PUT" });
+}
+
+/**
+ * The HubSpot contact id for an email (primary or additional email), or null.
+ * Several matches → the oldest, which is the one HubSpot dedupes onto.
+ */
+export async function contactIdForEmail(email) {
+  const e = String(email || "").trim().toLowerCase();
+  if (!e.includes("@")) return null;
+  const data = await hs(`/crm/v3/objects/contacts/search`, {
+    method: "POST",
+    body: {
+      filterGroups: [
+        { filters: [{ propertyName: "email", operator: "EQ", value: e }] },
+        { filters: [{ propertyName: "hs_additional_emails", operator: "CONTAINS_TOKEN", value: e }] },
+      ],
+      properties: ["email"],
+      sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
+      limit: 5,
+    },
+  });
+  const r = data?.results || [];
+  return r.length ? String(r[0].id) : null;
 }

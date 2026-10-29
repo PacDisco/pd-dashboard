@@ -37,14 +37,16 @@ export function answerText(field, v) {
 }
 
 /**
- * The questions to print, grouped by step and section.
+ * The questions to print, grouped by step and section. `steps` limits it to
+ * those step keys (e.g. ["step1"] for an application that stopped at step 1).
  * @returns {{ sections: [{ step, title, rows: [{ label, value }] }], omittedPrivate: number }}
  */
-export function applicationRows(schema, answers = {}, { includePrivate = false } = {}) {
+export function applicationRows(schema, answers = {}, { includePrivate = false, steps = null } = {}) {
   const sections = [];
   let omittedPrivate = 0;
   const byKey = new Map();
   for (const step of schema?.steps || []) {
+    if (steps && !steps.includes(step.key)) continue;
     for (const section of step.sections || []) {
       const entry = { step: step.title || step.key, title: section.title || section.key, rows: [] };
       byKey.set(`${step.key}/${section.key}`, entry);
@@ -52,6 +54,7 @@ export function applicationRows(schema, answers = {}, { includePrivate = false }
     }
   }
   for (const { field, step, section } of allFields(schema)) {
+    if (steps && !steps.includes(step)) continue;
     if (!isInput(field) || field.type === "hidden" || field.hidden) continue;
     if (!isVisible(schema, field, answers)) continue;
     if (field.sensitive && !includePrivate) { omittedPrivate++; continue; }

@@ -4,7 +4,9 @@ Every 10 minutes, `student-payments-sync` does three things:
 
 1. **Pulls new payments** from Stripe (succeeded charges) and Wise (incoming bank deposits on every balance) from the last 3 days. Each payment becomes a row in `deal_payments`. If the same payment is read twice, it's only stored once.
 2. **Logs them against the HubSpot student deal** in USD. It writes the next empty `payment_N` (1–15) as `amount, reference, YYYY-MM-DD` (the same format already used on deals) and updates `total_amount_paid`. Payments it can't place go to the review queue on the **Student Payments** dashboard. It never writes to HubSpot on a guess.
-3. **Attaches application PDFs**. Every full application from apply.pacificdiscovery.org that has a HubSpot contact or deal gets a PDF, added as a note on the contact and deal. It does up to 5 per run, oldest first, so existing applications backfill on their own. If the deal is created later (when the fee is paid), the note gets linked to it.
+3. **Attaches application PDFs**. Every full application from apply.pacificdiscovery.org gets a PDF, added as a note on the contact and deal. If pd-apply never stored a contact id on the application, the contact is found by email (retried hourly until it exists). It does up to 5 per run, oldest first, so existing applications backfill on their own. If the deal is created later (when the fee is paid), the note gets linked to it.
+
+Quizzes, referrals, step-1-only applications, website popups and Meta lead forms get PDFs too — see **FORM-ATTACHMENTS.md**.
 
 All environment variables go on the **pd-dashboard** Netlify site.
 

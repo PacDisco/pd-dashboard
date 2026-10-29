@@ -25,6 +25,7 @@ Storage: Netlify Blobs store `popups` (`doc` = all popups, `stats` = sign-up cou
 2. **HubSpot token.** The dashboard's existing `HUBSPOT_TOKEN` is used. It needs these private-app scopes:
    - `crm.objects.contacts.read` and `crm.objects.contacts.write` — find and create/update contacts (and add the timeline note)
    - `crm.schemas.contacts.read` — lets the designer list properties and load dropdown choices (optional: without it you type property names instead)
+   - `files` — each submission is also attached to the timeline note as a PDF (in HubSpot Files under `/Lead Forms/Website Popups`). Without it the note still goes on, just without the PDF. See FORM-ATTACHMENTS.md.
    To keep popups on a separate key, create a private app with just those scopes and set `POPUP_HUBSPOT_TOKEN` instead.
 3. **GTM.** Add a *Custom HTML* tag, trigger *All Pages*:
    ```html

@@ -10,6 +10,8 @@
 //               in the review queue with the reason and the candidate deals.
 //   3. PDFs     full applications from pd-apply without an attached PDF → build,
 //               upload to HubSpot Files, attach as a note on the contact + deal.
+//               (Quizzes, referrals, step-1-only applications and Meta lead
+//               forms: form-attachments-run.mjs. Popups: at submit time.)
 //
 // Why wait SETTLE_MINUTES before processing: pd-apply writes the app fee to
 // payment_1 itself right after checkout. Waiting lets that land first, so the
@@ -259,20 +261,26 @@ export async function attachApplicationPdfs({ deadline, limit = 5 }) {
     } catch (e) { out.errors++; console.warn("[student-payments] relink", a.id, e.message); }
   }
 
+  // Applications pd-apply couldn't link to a contact (Zapier/Make lag or a
+  // failed sync) are matched by email here, so none are left out.
   const todoWhere = `step2_at IS NOT NULL AND status <> 'withdrawn' AND pdf_note_id IS NULL
-      AND (hubspot_contact_id IS NOT NULL OR hubspot_deal_id IS NOT NULL)
       AND (pdf_error_at IS NULL OR pdf_error_at < now() - interval '1 hour')`;
   const apps = await q(`SELECT * FROM applications WHERE ${todoWhere} ORDER BY step2_at LIMIT $1`, [limit]);
   for (const app of apps) {
     if (Date.now() > deadline) break;
     try {
+      let contactId = app.hubspot_contact_id;
+      if (!contactId && !app.hubspot_deal_id) {
+        contactId = h.contactIdForEmail ? await h.contactIdForEmail(app.email) : null;
+        if (!contactId) throw new Error(`No HubSpot contact for ${app.email} yet`);
+      }
       const schema = await schemaFor(app.form_rev);
       const bytes = deps().buildPdf({ app, schema, includePrivate });
       const fileId = await h.uploadFile(bytes, pdfFileName(app));
       const when = new Date(app.step2_at).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: "Pacific/Auckland" });
       const noteId = await h.createNote({
         body: `<p><strong>Application — ${escapeHtml(applicantName(app))}</strong><br>${escapeHtml(app.program || "")}${app.term ? ` · ${escapeHtml(app.term)}` : ""}<br>Submitted on apply.pacificdiscovery.org, ${when}. PDF attached.</p>`,
-        fileId, contactId: app.hubspot_contact_id, dealId: app.hubspot_deal_id, timestamp: new Date(app.step2_at).toISOString(),
+        fileId, contactId, dealId: app.hubspot_deal_id, timestamp: new Date(app.step2_at).toISOString(),
       });
       await q(
         `UPDATE applications SET pdf_note_id = $2, pdf_file_id = $3, pdf_deal_id = $4, pdf_attached_at = now(), pdf_error = NULL, pdf_error_at = NULL WHERE id = $1`,

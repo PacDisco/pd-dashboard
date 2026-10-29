@@ -52,7 +52,8 @@
     "test:student-payments": "node test/student-payments.test.mjs",
     "test:lead-alerts": "node test/lead-alerts.test.mjs && node test/lead-alerts-hours.test.mjs",
     "test:lead-alerts-ui": "node test/lead-alerts.smoke.mjs",
-    "test:lead-alerts-db": "node test/lead-alerts.db.test.mjs"
+    "test:lead-alerts-db": "node test/lead-alerts.db.test.mjs",
+    "test:form-attachments": "node test/form-attachments.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
