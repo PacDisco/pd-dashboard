@@ -12,10 +12,11 @@
 // can open; the private answers stay in the Apply Form dashboard and the
 // portals, which already gate them.
 
-import { createRequire } from "node:module";
+// Static import so Netlify's esbuild bundles jspdf into the function. A
+// createRequire("jspdf") call is invisible to the bundler and fails on Netlify
+// with "Cannot find module 'jspdf'".
+import { jsPDF } from "jspdf";
 import { allFields, isInput, isVisible, valueText, dateText } from "../../../apply-form/form-kit.mjs";
-
-const require = createRequire(import.meta.url);
 
 /** jsPDF's built-in Helvetica is WinAnsi: map what we can, drop the rest. */
 export function pdfText(s) {
@@ -78,7 +79,6 @@ export function pdfFileName(app) {
 
 /** @returns {Uint8Array} */
 export function buildApplicationPdf({ app, schema, includePrivate = false }) {
-  const { jsPDF } = require("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();

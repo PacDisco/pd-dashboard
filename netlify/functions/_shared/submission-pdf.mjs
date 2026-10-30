@@ -16,10 +16,11 @@
 // applicationRows(), so conditional questions and private fields are handled
 // the same way everywhere.
 
-import { createRequire } from "node:module";
+// Static import so Netlify's esbuild bundles jspdf into the function. A
+// createRequire("jspdf") call is invisible to the bundler and fails on Netlify
+// with "Cannot find module 'jspdf'".
+import { jsPDF } from "jspdf";
 import { pdfText, applicationRows } from "./application-pdf.mjs";
-
-const require = createRequire(import.meta.url);
 
 const TEAL = [40, 129, 149];
 const INK = [47, 47, 47];
@@ -33,7 +34,6 @@ export const fmtDateTime = (d) => (d ? new Date(d).toLocaleString("en-US", { day
  * @returns {Uint8Array}
  */
 export function renderSubmissionPdf({ title, name, meta = [], sections = [], footnote = "" }) {
-  const { jsPDF } = require("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
