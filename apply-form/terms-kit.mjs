@@ -388,6 +388,8 @@ DEFAULT_EMAILS.balanceReminder = {
     '',
     '[Pay my balance]({link})',
     '',
+    '{wireDetails}',
+    '',
     'Pacific Discovery Admissions',
   ].join('\n'),
 };
@@ -436,6 +438,28 @@ DEFAULT_EMAILS.payOffEnding = {
     '',
     '[Pay the rest and save {saving}]({link})',
     '',
+    '{wireDetails}',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
+// Bank transfer (wire): the family chose to pay by bank transfer on the acceptance page.
+DEFAULT_EMAILS.wireInstructions = {
+  subject: 'Bank transfer details for {program}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Thanks for letting us know you\'ll pay by bank transfer. Please send **{amount}** (USD) to the account below, with **{reference}** as the payment reference:',
+    '',
+    '{details}',
+    '',
+    '{wireNote}',
+    '',
+    'We\'re holding your place until **{holdUntil}**. Once your transfer arrives we\'ll confirm your place by email — bank transfers can take a few business days, so there\'s no need to worry if it isn\'t instant.',
+    '',
+    '[View my acceptance]({link})',
+    '',
     'Pacific Discovery Admissions',
   ].join('\n'),
 };
@@ -455,11 +479,38 @@ export const EMAIL_PLACEHOLDERS = {
   paymentUpcoming: ['firstName', 'program', 'term', 'amount', 'method', 'date', 'balanceLine', 'link'],
   paymentReceived: ['firstName', 'program', 'term', 'amount', 'balanceLine', 'link'],
   paymentFailed: ['firstName', 'program', 'term', 'amount', 'date', 'reason', 'nextStep', 'link'],
-  balanceReminder: ['firstName', 'program', 'term', 'amount', 'date', 'savingLine', 'link'],
+  balanceReminder: ['firstName', 'program', 'term', 'amount', 'date', 'savingLine', 'wireDetails', 'link'],
   choosePlan: ['firstName', 'program', 'term', 'deposit', 'link'],
   savingsEnding: ['firstName', 'program', 'term', 'savings', 'until', 'link'],
-  payOffEnding: ['firstName', 'program', 'term', 'saving', 'rest', 'payNow', 'until', 'link'],
+  payOffEnding: ['firstName', 'program', 'term', 'saving', 'rest', 'payNow', 'until', 'wireDetails', 'link'],
+  wireInstructions: ['firstName', 'program', 'term', 'amount', 'reference', 'details', 'wireNote', 'holdUntil', 'link'],
 };
+
+// ── bank transfer (wire) ───────────────────────────────────────────────────
+// One "Label: value" per line; shown as a table on the acceptance page and a
+// list in the email. Editable in the dashboard (Acceptance & deposit).
+export const DEFAULT_WIRE_DETAILS = [
+  'Account name: PACIFIC DISCOVERY LIMITED',
+  'Account number: 216617201640',
+  'Routing number (wire and ACH): 101019628',
+  'Account type: Checking',
+  'Bank: Wise US Inc, 108 W 13th St, Wilmington, DE 19801, United States',
+  'SWIFT/BIC (from outside the US): TRWIUS35XXX',
+].join('\n');
+export const DEFAULT_WIRE_NOTE = 'From a US bank, send a domestic wire or ACH transfer using the routing number. From outside the US, send an international SWIFT transfer in US dollars, and ask your bank to cover the transfer fees so the full amount arrives.';
+
+/** { lines: [[label, value]], note } or null when switched off in the dashboard. */
+export function wireDetails(schema) {
+  const w = schema?.settings?.wire || {};
+  if (w.enabled === false) return null;
+  const text = String(w.details || '').trim() || DEFAULT_WIRE_DETAILS;
+  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => {
+    const i = l.indexOf(':');
+    return i > 0 ? [l.slice(0, i).trim(), l.slice(i + 1).trim()] : ['', l];
+  });
+  if (!lines.length) return null;
+  return { lines, note: String(w.note || '').trim() || DEFAULT_WIRE_NOTE };
+}
 
 /** How long an accepted applicant's place is held for the deposit (days). */
 export function holdDays(schema) {

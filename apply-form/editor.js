@@ -10,7 +10,7 @@ import {
   renderStep, FORM_CSS, FIELD_TYPES, OPS, allFields, fieldByKey, lintSchema, nextQid, optionsFor, esc,
 } from '/apply-form/form-kit.mjs';
 import {
-  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
+  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_WIRE_DETAILS, DEFAULT_WIRE_NOTE, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
   DEFAULT_ADVISOR_URL, DEFAULT_ADVISOR_TEXT,
 } from '/apply-form/terms-kit.mjs';
 
@@ -657,23 +657,28 @@ function renderSettings() {
           <tr><td>Pay in full</td>${['semester', 'mini', 'summer'].map((k) => cell('full', k)).join('')}</tr>
           <tr><td>Two instalments</td>${['semester', 'mini', 'summer'].map((k) => cell('two', k)).join('')}</tr>
         </tbody></table>
-        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. Neither is offered within 60 days of the start date. Families who choose "balance later" still get the pay-in-full saving if they pay the balance before then; choosing monthly or two instalments is final. Families who haven't paid yet see the better of the amount they were offered and the current amount, so raising a discount reaches them and lowering one never takes a saving away. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
+        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. Neither is offered within 60 days of the start date. Families who choose "balance later" still get the pay-in-full saving if they pay the balance by its due date (by card, bank account, or a transfer you mark paid in time); choosing monthly or two instalments is final. Families who haven't paid yet see the better of the amount they were offered and the current amount, so raising a discount reaches them and lowering one never takes a saving away. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
       })()}
+      <div class="field" style="margin-top:14px"><label class="check"><input type="checkbox" id="wire-on"${st.wire?.enabled !== false ? ' checked' : ''}><span><strong>Bank transfer (wire)</strong> <span class="help">— shown as a payment option to families outside the US (from the Country on their application) and as a small link for everyone else. Choosing it emails them these details and alerts admissions; use <em>Mark deposit paid</em> when it arrives.</span></span></label>
+        <label for="wire-details" style="margin-top:6px">Account details <span class="help">(one "Label: value" per line)</span></label>
+        <textarea id="wire-details" rows="7" placeholder="${esc(DEFAULT_WIRE_DETAILS)}">${esc(st.wire?.details || '')}</textarea>
+        <label for="wire-note" style="margin-top:6px">Note under the details</label>
+        <textarea id="wire-note" rows="3" placeholder="${esc(DEFAULT_WIRE_NOTE)}">${esc(st.wire?.note || '')}</textarea></div>
+      ${emailEditor(st, 'wireInstructions', 'Email: bank transfer details')}
       ${emailEditor(st, 'accepted', 'Email: accepted')}
       ${emailEditor(st, 'enrolled', 'Email: place confirmed (deposit paid)')}
       <p class="help" style="margin-top:8px"><code>{howToPay}</code> adapts to the start date (monthly / two instalments / in full). <code>{message}</code> is the note you type when accepting. <code>{schedule}</code> is the list of upcoming payments.</p></div>
     <div class="panel"><h2 class="serif">Payments after the deposit</h2><p class="sub">Instalments are charged automatically to the card or bank account the family paid the deposit with (plus that method's fee above). They're emailed 3 days before each payment and get a receipt after. A payment that fails is tried again 3 and 7 days later; after the third failure admissions is emailed and it isn't tried again until you click <em>Retry</em>. Families on "balance later" get reminders 14 and 3 days before it's due, and admissions is told if it's overdue. Every email goes to the student and parents and is logged in HubSpot.</p>
       <label class="check"><input type="checkbox" id="pay-auto"${st.payments?.autoCharge !== false ? ' checked' : ''}><span>Charge instalments automatically <span class="help">— untick to stop all automatic charges (notices still go out)</span></span></label>
       <label class="check"><input type="checkbox" id="pay-dep"${st.payments?.depositReminders !== false ? ' checked' : ''}><span>Remind accepted applicants who haven't paid the deposit <span class="help">(5, 2 and 1 days before the hold ends; admissions is told when it passes)</span></span></label>
-      <label class="check"><input type="checkbox" id="pay-disc"${st.payments?.discountReminders !== false ? ' checked' : ''}><span>Email families before their plan savings end <span class="help">(14 and 3 days before the 60-day cutoff — accepted families who haven't chosen a plan yet, and families on "balance later", who get the pay-in-full saving if they pay the balance by then. Choosing monthly or two instalments is final.)</span></span></label>
+      <label class="check"><input type="checkbox" id="pay-disc"${st.payments?.discountReminders !== false ? ' checked' : ''}><span>Email families before their plan savings end <span class="help">(14 and 3 days before the 60-day cutoff, to accepted families who haven't chosen a plan yet. Families on "balance later" are told about their saving in the balance reminders instead. Choosing monthly or two instalments is final.)</span></span></label>
       ${emailEditor(st, 'depositReminder', 'Email: deposit reminder')}
       ${emailEditor(st, 'paymentUpcoming', 'Email: payment in 3 days')}
       ${emailEditor(st, 'paymentReceived', 'Email: payment received')}
       ${emailEditor(st, 'paymentFailed', 'Email: payment didn\'t go through')}
       ${emailEditor(st, 'balanceReminder', 'Email: balance due (balance later)')}
       ${emailEditor(st, 'choosePlan', 'Email: deposit received — choose a payment plan')}
-      ${emailEditor(st, 'savingsEnding', 'Email: savings end soon (no plan chosen yet)')}
-      ${emailEditor(st, 'payOffEnding', 'Email: savings end soon — balance later: pay it and save')}</div>
+      ${emailEditor(st, 'savingsEnding', 'Email: savings end soon (no plan chosen yet)')}</div>
     <div class="panel"><h2 class="serif">Interview</h2><p class="sub">Step 3 embeds this HubSpot scheduling page, prefilled with the applicant's name and email. Booking a time moves them on to payment automatically.</p>
       <div class="field"><label for="s-meet">HubSpot meetings link</label><input type="url" id="s-meet" value="${esc(st.meetingUrl || '')}" placeholder="https://meetings.hubspot.com/…"></div>
       <label class="check"><input type="checkbox" id="s-fb"${st.interviewFallback !== false ? ' checked' : ''}><span>Offer <em>"Can't find a time, or the calendar won't load?"</em> — they continue to payment, and admissions gets an email + HubSpot note to arrange the interview <span class="help">(recommended)</span></span></label>
@@ -715,6 +720,8 @@ function renderSettings() {
     const d = disc(); d[plan] = { ...(d[plan] || {}), [k]: Number.isFinite(n) ? n : 0 };
     changed({ rerender: false });
   }));
+  $('#wire-on')?.addEventListener('change', (e) => { st.wire = { ...(st.wire || {}), enabled: e.target.checked }; changed({ rerender: false }); });
+  [['#wire-details', 'details'], ['#wire-note', 'note']].forEach(([sel, k]) => $(sel)?.addEventListener('input', (e) => { st.wire = { ...(st.wire || {}) }; if (e.target.value.trim()) st.wire[k] = e.target.value; else delete st.wire[k]; changed({ rerender: false }); }));
   $('#ac-hold').addEventListener('input', (e) => { const n = Math.round(Number(e.target.value)); st.acceptance = { ...(st.acceptance || {}) }; if (n >= 1 && n <= 60) st.acceptance.holdDays = n; else delete st.acceptance.holdDays; changed({ rerender: false }); });
   $('#rm-on').addEventListener('change', (e) => {
     st.feeReminders = st.feeReminders || {};
@@ -885,6 +892,7 @@ function decisionChip(r) {
   if (dep?.status === 'processing') return '<span class="chip chip--info">Deposit clearing (bank)</span>';
   if (r.enrolment?.prepaid) return '<span class="chip chip--info">Deposit paid · choosing a plan</span>';
   if (d.holdUntil && new Date(d.holdUntil) < new Date()) return `<span class="chip chip--bad" title="Accepted — the hold passed without a deposit">Hold passed ${fmtDay(d.holdUntil)}</span>`;
+  if (r.enrolment?.wire) return `<span class="chip chip--changes" title="Said they'd pay ${esc(money(r.enrolment.wire.amount))} by bank transfer — Mark deposit paid when it arrives">Paying by wire · held to ${fmtDay(d.holdUntil)}</span>`;
   return `<span class="chip chip--live" title="Place held until ${esc(new Date(d.holdUntil).toLocaleString())}">Accepted · held to ${fmtDay(d.holdUntil)}</span>`;
 }
 function reminderChip(r) {
@@ -1015,6 +1023,8 @@ function decisionBlock(app) {
       if (e.hubspot?.ok === false) lines.push(`<li>⚠️ HubSpot not updated for the deposit: ${esc(e.hubspot.error)}</li>`);
     } else if (e.prepaid) {
       lines.push(`<li>💳 <strong>Deposit marked paid</strong> — ${money(e.prepaid.amount)}${e.prepaid.reference ? ` (${esc(e.prepaid.reference)})` : ''} by ${esc(e.prepaid.by || '')}, ${new Date(e.prepaid.at).toLocaleDateString()}. Waiting for the family to choose a payment plan.</li>`);
+    } else if (e.wire && !dep) {
+      lines.push(`<li>🏦 <strong>Paying by bank transfer</strong> — said on ${new Date(e.wire.at).toLocaleDateString()} they'd send ${money(e.wire.amount)} (${esc(PLAN_LABEL[e.wire.plan] || e.wire.plan || '')}), reference "${esc(e.wire.reference || '')}"${e.wire.emailed ? '; bank details emailed' : ''}. When it arrives in Wise, click <em>Mark deposit paid</em>.${e.holdExpired ? ' <strong>The hold has passed</strong> — extend it if the transfer is on its way.' : ''}</li>`);
     } else if (e.holdExpired && !dep) {
       lines.push(`<li>⚠️ Hold passed ${new Date(e.holdExpired.at).toLocaleDateString()} without a deposit.</li>`);
     } else if (dep?.status === 'failed') {
@@ -1136,7 +1146,7 @@ async function showApplication(id) {
     });
   }
   d.querySelector('#dec-depositpaid')?.addEventListener('click', async (e) => {
-    const dflt = app.paidAt ? 2250 : 2500;
+    const dflt = app.enrolment?.wire?.amount || (app.paidAt ? 2250 : 2500);
     const amount = prompt(`Deposit paid outside the acceptance page, and NOT yet in the deal's payment fields?\n\n(If it's already on the HubSpot deal there's nothing to do — pd-apply picks it up within the hour and asks the family to choose a plan.)\n\nAmount received ($):`, String(dflt));
     if (amount == null) return;
     const reference = prompt('Reference (e.g. Wise transfer ID):', '');
@@ -1188,7 +1198,7 @@ async function showApplication(id) {
     const reference = prompt('Mark this payment as paid outside Stripe (e.g. a bank transfer)? It won\'t be charged automatically.\n\nReference (e.g. Wise transfer ID):', '');
     if (reference == null) return;
     b.disabled = true;
-    try { await api('POST', {}, { action: 'payment-mark-paid', id, item: Number(b.dataset.markpaid), reference }); toast('Marked paid.'); showApplication(id); renderApps(); }
+    try { const r = await api('POST', {}, { action: 'payment-mark-paid', id, item: Number(b.dataset.markpaid), reference }); toast(r?.item?.payOffDiscount ? `Marked paid — ${money(r.item.amount)}, with the ${money(r.item.payOffDiscount)} pay-in-full saving applied (paid before the deadline). The HubSpot deal amount was reduced.` : 'Marked paid.', 8000); showApplication(id); renderApps(); }
     catch (err) { toast(esc(err.message), 7000); b.disabled = false; }
   }));
   d.querySelectorAll('[data-retry]').forEach((b) => b.addEventListener('click', async () => {

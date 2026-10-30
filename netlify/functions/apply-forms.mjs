@@ -397,6 +397,8 @@ export function enrolmentSummary(e) {
     prepaid: e.prepaid || null,
     withdrawn: e.withdrawn || null,
     holdExpired: e.holdExpired || null,
+    // said they'd pay by bank transfer (wire) on the acceptance page
+    wire: e.wire ? { plan: e.wire.plan, amount: e.wire.amount, reference: e.wire.reference, at: e.wire.at, emailed: !!e.wire.email?.to } : null,
   };
 }
 
