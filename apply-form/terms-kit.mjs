@@ -464,6 +464,26 @@ DEFAULT_EMAILS.wireInstructions = {
   ].join('\n'),
 };
 
+// Admissions changed the price on the HubSpot deal after the deposit: the remaining payments follow it.
+DEFAULT_EMAILS.scheduleUpdated = {
+  subject: 'Your payment schedule for {program} has been updated',
+  body: [
+    'Hi {firstName},',
+    '',
+    'The tuition for **{program}** ({term}) has been updated from {from} to **{to}**, so your remaining payments have changed:',
+    '',
+    '{schedule}',
+    '',
+    '{balanceLine}',
+    '',
+    '{changeNote}',
+    '',
+    '[View my payments]({link})',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
 /** The placeholders each message understands, for the dashboard help text. */
 const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
 export const EMAIL_PLACEHOLDERS = {
@@ -483,6 +503,7 @@ export const EMAIL_PLACEHOLDERS = {
   choosePlan: ['firstName', 'program', 'term', 'deposit', 'link'],
   savingsEnding: ['firstName', 'program', 'term', 'savings', 'until', 'link'],
   payOffEnding: ['firstName', 'program', 'term', 'saving', 'rest', 'payNow', 'until', 'wireDetails', 'link'],
+  scheduleUpdated: ['firstName', 'program', 'term', 'from', 'to', 'schedule', 'balanceLine', 'changeNote', 'link'],
   wireInstructions: ['firstName', 'program', 'term', 'amount', 'reference', 'details', 'wireNote', 'holdUntil', 'link'],
 };
 
