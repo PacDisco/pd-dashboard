@@ -185,8 +185,12 @@ async function handleList() {
     // indistinguishable. `kind` and `method` are therefore the ORIGINAL's —
     // paired with the correction's already-negated amount, which is what makes
     // the float net back. See _shared/field-cash.mjs.
+    //
+    // `email` is the ORIGINAL's too. Anyone on a budget can remove anyone's
+    // entry and the correction carries the remover's email, so grouping by the
+    // correction's own email moved the voided cash into the wrong pocket.
     db`select e.budget_id,
-              e.email,
+              coalesce(o.email, e.email)                   as email,
               e.currency,
               coalesce(o.entry_type, e.entry_type)         as kind,
               coalesce(o.payment_method, e.payment_method) as method,
@@ -195,7 +199,7 @@ async function handleList() {
               count(*)::int                                as n
          from entries e
          left join entries o on o.id = e.corrects_id
-        group by e.budget_id, e.email, e.currency,
+        group by e.budget_id, coalesce(o.email, e.email), e.currency,
                  coalesce(o.entry_type, e.entry_type),
                  coalesce(o.payment_method, e.payment_method),
                  sign(e.amount)`,
