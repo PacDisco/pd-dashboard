@@ -438,7 +438,7 @@ async function resync({ id }) {
   const r = await fetch(`${site}/api/service/resync`, { method: "POST", headers: { "Content-Type": "application/json", "x-apply-key": process.env.APPLY_SERVICE_KEY }, body: JSON.stringify({ id }) });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return json({ error: data.error || `pd-apply returned ${r.status}` }, 502);
-  return json({ ok: true, result: data.result, application: data.app ? summary(data.app) : null });
+  return json({ ok: true, result: data.result, fromDeal: data.fromDeal || null, application: data.app ? summary(data.app) : null });
 }
 
 /** Who may accept / decline. Default: admins and admissions. */

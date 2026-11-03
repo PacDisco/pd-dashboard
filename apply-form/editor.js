@@ -1121,10 +1121,11 @@ async function showApplication(id) {
         ${syncRow('alert1', `Admissions alerted${sync.alert1?.to ? ` (${esc(sync.alert1.to.join(', '))})` : ''}`)}${syncRow('alert1Error', 'Admissions alert email')}${syncRow('hsContact', 'HubSpot contact')}${syncRow('hsDeal', 'HubSpot deal created')}${syncRow('hsStep2', `Deal in ${esc(sync.hsStep2?.pipeline || 'PD Applications')}${sync.hsStep2?.stage ? ` / ${esc(sync.hsStep2.stage)}` : ''}`)}${syncRow('hsStep2Error', 'Moving the deal to PD Applications')}${syncRow('hsInterview', 'Interview noted in HubSpot')}${syncRow('interviewNeeded', `Admissions asked to arrange the interview${sync.interviewNeeded?.to ? ` (${esc(sync.interviewNeeded.to.join(', '))})` : ''}`)}${syncRow('interviewNeededError', 'Interview-needed alert')}${syncRow('hsFamily', `Parents linked${sync.hsFamily?.parents ? ` (${sync.hsFamily.parents.map((p) => esc(p.email)).join(', ') || 'none given'})` : ''}`)}${syncRow('hsFamilyError', 'Linking parents')}${syncRow('hsProgram', `Linked to program record${sync.hsProgram?.record ? `: ${esc(sync.hsProgram.record.name)} (${esc(sync.hsProgram.record.season || '')} ${esc(sync.hsProgram.record.year || '')})` : ''}`)}${syncRow('hsProgramError', 'Program record')}
         ${syncRow('hsPaid', `Fee recorded in HubSpot${sync.hsPaid?.pipeline ? ` → ${esc(sync.hsPaid.pipeline)} / ${esc(sync.hsPaid.stage || '')}` : ''}`)}
         ${syncRow('feeEmail', `Fee confirmation emailed${sync.feeEmail?.to ? ` to ${esc(sync.feeEmail.to.join(', '))}` : ''}${sync.feeEmail?.termsVersion ? ` (terms v${esc(sync.feeEmail.termsVersion)})` : ''}`)}${syncRow('feeEmailError', 'Fee confirmation email')}${syncRow('feeEmailLog', `Fee confirmation logged in HubSpot${sync.feeEmailLog?.contacts ? ` (${sync.feeEmailLog.contacts} contact${sync.feeEmailLog.contacts === 1 ? '' : 's'} + deal)` : ''}`)}${syncRow('feeAlert', 'Admissions told the fee was paid')}${syncRow('feeAlertError', 'Fee-paid alert')}
-        ${syncRow('hsError', 'HubSpot')}${syncRow('hsPaidError', 'HubSpot payment update')}${syncRow('hsInterviewError', 'HubSpot interview note')}</ul>
+        ${syncRow('hsError', 'HubSpot')}${syncRow('hsPaidError', 'HubSpot payment update')}${syncRow('hsInterviewError', 'HubSpot interview note')}
+        ${(sync.programChanges || []).map((c) => `<li>🔀 <strong>Switched on the HubSpot deal</strong> ${new Date(c.at).toLocaleDateString()}: ${c.changes.map((x) => `${esc(x.field)} ${esc(x.from || '—')} → <strong>${esc(x.to)}</strong>`).join(', ')}</li>`).join('')}</ul>
       ${decisionBlock(app)}
       ${remindersBlock(app)}
-      <div class="acts"><button class="btn btn--sm" id="resync">Retry sync</button>${portal(app.hubspotDealId)}
+      <div class="acts"><button class="btn btn--sm" id="resync" title="Re-runs the HubSpot / Jotform sync and picks up a program or season switched on the HubSpot deal">Retry sync</button>${portal(app.hubspotDealId)}
         ${app.enrolment?.withdrawn ? '' : `<button class="btn btn--sm ${app.status === 'withdrawn' ? '' : 'btn--danger'}" id="withdraw">${app.status === 'withdrawn' ? 'Restore application' : 'Mark withdrawn'}</button>`}</div>
       <dl class="ans">${groups.join('') || '<dd>No answers.</dd>'}</dl>
       ${app.attribution && Object.keys(app.attribution).length ? `<details><summary class="em">Attribution</summary><pre class="em">${esc(JSON.stringify(app.attribution, null, 2))}</pre></details>` : ''}
@@ -1132,7 +1133,7 @@ async function showApplication(id) {
   d.querySelector('[data-x]').onclick = () => d.close();
   d.querySelector('#resync').addEventListener('click', async (e) => {
     e.currentTarget.disabled = true; e.currentTarget.textContent = 'Syncing…';
-    try { await api('POST', {}, { action: 'resync', id }); toast('Sync finished.'); showApplication(id); renderApps(); }
+    try { const r = await api('POST', {}, { action: 'resync', id }); const ch = r?.fromDeal?.changed?.[0]; toast(ch?.changes ? `Updated from the HubSpot deal: ${ch.changes.map((x) => `${x.field} → ${x.to}`).join(', ')}.` : 'Sync finished.', ch ? 8000 : 4000); showApplication(id); renderApps(); }
     catch (err) { toast(esc(err.message), 6000); e.currentTarget.disabled = false; e.currentTarget.textContent = 'Retry sync'; }
   });
   for (const [sel, outcome] of [['#dec-accept', 'accepted'], ['#dec-decline', 'declined']]) {
