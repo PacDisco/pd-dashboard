@@ -562,11 +562,22 @@ export function insuranceSettings(schema) {
   return { enabled: s.enabled !== false, url: pick('url'), requirement: pick('requirement'), partner: pick('partner'), linkLabel: pick('linkLabel'), disclosure: pick('disclosure') };
 }
 
+/** The affiliate link with CJ's `sid` sub-tracking tag (shows which email a sale came from in CJ reports). */
+export function affiliateLink(url, sid = '') {
+  if (!sid) return url;
+  try {
+    const u = new URL(url);
+    u.searchParams.set('sid', sid);
+    return u.toString();
+  } catch { return url; }
+}
+
 /**
  * The travel insurance section for a family email (markdown), or "" when off.
  *   cfarBy  the date 7 days after their deposit, if known (day-5 email)
+ *   sid     CJ sub-tracking tag for the link: "acceptance" / "day5"
  */
-export function insuranceBlock(schema, { cfarBy = '' } = {}) {
+export function insuranceBlock(schema, { cfarBy = '', sid = '' } = {}) {
   const s = insuranceSettings(schema);
   if (!s.enabled) return '';
   return [
@@ -580,7 +591,7 @@ export function insuranceBlock(schema, { cfarBy = '' } = {}) {
     '',
     s.partner,
     '',
-    `[${s.linkLabel}](${s.url})`,
+    `[${s.linkLabel}](${affiliateLink(s.url, sid)})`,
     '',
     `*${s.disclosure}*`,
   ].join('\n');
