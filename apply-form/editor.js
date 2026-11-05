@@ -10,7 +10,7 @@ import {
   renderStep, FORM_CSS, FIELD_TYPES, OPS, allFields, fieldByKey, lintSchema, nextQid, optionsFor, esc,
 } from '/apply-form/form-kit.mjs';
 import {
-  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_WIRE_DETAILS, DEFAULT_WIRE_NOTE, DEFAULT_INSURANCE, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
+  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_WIRE_DETAILS, DEFAULT_WIRE_NOTE, DEFAULT_INSURANCE, DEFAULT_FLIGHTS_NOTE, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
   DEFAULT_ADVISOR_URL, DEFAULT_ADVISOR_TEXT,
 } from '/apply-form/terms-kit.mjs';
 
@@ -673,6 +673,8 @@ function renderSettings() {
         <div style="flex:1;min-width:160px"><label for="ins-label">Button</label><input type="text" id="ins-label" value="${esc(st.insurance?.linkLabel || '')}" placeholder="${esc(DEFAULT_INSURANCE.linkLabel)}"></div></div>
         <label for="ins-disc" style="margin-top:6px">Affiliate disclosure</label><textarea id="ins-disc" rows="2" placeholder="${esc(DEFAULT_INSURANCE.disclosure)}">${esc(st.insurance?.disclosure || '')}</textarea></div>
       ${emailEditor(st, 'insuranceReminder', 'Email: travel insurance (5 days after the deposit)')}
+      <div class="field" style="margin-top:14px"><label class="check"><input type="checkbox" id="fl-on"${st.acceptance?.flightsNoteEnabled !== false ? ' checked' : ''}><span><strong>Flights note in the acceptance email</strong></span></label>
+        <textarea id="fl-note" rows="2" placeholder="${esc(DEFAULT_FLIGHTS_NOTE)}">${esc(st.acceptance?.flightsNote || '')}</textarea></div>
       ${emailEditor(st, 'accepted', 'Email: accepted')}
       ${emailEditor(st, 'enrolled', 'Email: place confirmed (deposit paid)')}
       <p class="help" style="margin-top:8px"><code>{howToPay}</code> adapts to the start date (monthly / two instalments / in full). <code>{message}</code> is the note you type when accepting. <code>{schedule}</code> is the list of upcoming payments.</p></div>
@@ -730,6 +732,8 @@ function renderSettings() {
     const d = disc(); d[plan] = { ...(d[plan] || {}), [k]: Number.isFinite(n) ? n : 0 };
     changed({ rerender: false });
   }));
+  $('#fl-on')?.addEventListener('change', (e) => { st.acceptance = { ...(st.acceptance || {}), flightsNoteEnabled: e.target.checked }; changed({ rerender: false }); });
+  $('#fl-note')?.addEventListener('input', (e) => { st.acceptance = { ...(st.acceptance || {}) }; if (e.target.value.trim()) st.acceptance.flightsNote = e.target.value.trim(); else delete st.acceptance.flightsNote; changed({ rerender: false }); });
   $('#ins-on')?.addEventListener('change', (e) => { st.insurance = { ...(st.insurance || {}), enabled: e.target.checked }; changed({ rerender: false }); });
   [['#ins-url', 'url'], ['#ins-req', 'requirement'], ['#ins-days', 'travelDays'], ['#ins-partner', 'partner'], ['#ins-label', 'linkLabel'], ['#ins-disc', 'disclosure']].forEach(([sel, k]) => $(sel)?.addEventListener('input', (e) => { st.insurance = { ...(st.insurance || {}) }; if (e.target.value.trim()) st.insurance[k] = e.target.value.trim(); else delete st.insurance[k]; changed({ rerender: false }); }));
   $('#wire-on')?.addEventListener('change', (e) => { st.wire = { ...(st.wire || {}), enabled: e.target.checked }; changed({ rerender: false }); });

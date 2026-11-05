@@ -282,6 +282,8 @@ DEFAULT_EMAILS.accepted = {
     '',
     'Your application fee and deposit both count toward your total tuition of {tuition}.',
     '',
+    '{flights}',
+    '',
     '{insurance}',
     '',
     'Pacific Discovery Admissions',
@@ -509,7 +511,7 @@ export const EMAIL_PLACEHOLDERS = {
   feeReminder3: REMINDER_PLACEHOLDERS,
   feeReminder4: REMINDER_PLACEHOLDERS,
   declined: ['firstName', 'program', 'term', 'message', 'refund'],
-  accepted: ['firstName', 'program', 'term', 'startDate', 'holdUntil', 'howToPay', 'deposit', 'tuition', 'message', 'insurance', 'link'],
+  accepted: ['firstName', 'program', 'term', 'startDate', 'holdUntil', 'howToPay', 'deposit', 'tuition', 'message', 'flights', 'insurance', 'link'],
   insuranceReminder: ['firstName', 'program', 'term', 'insurance', 'cfarBy', 'link'],
   enrolled: ['firstName', 'program', 'term', 'paidToday', 'planName', 'schedule', 'scheduleNote', 'email', 'portalUrl'],
   depositReminder: ['firstName', 'program', 'term', 'holdUntil', 'deposit', 'savingsLine', 'link'],
@@ -536,6 +538,15 @@ export const DEFAULT_WIRE_DETAILS = [
   'SWIFT/BIC (from outside the US): TRWIUS35XXX',
 ].join('\n');
 export const DEFAULT_WIRE_NOTE = 'From a US bank, send a domestic wire or ACH transfer using the routing number. From outside the US, send an international SWIFT transfer in US dollars, and ask your bank to cover the transfer fees so the full amount arrives.';
+
+// ── flights (acceptance email) ─────────────────────────────────────────────
+export const DEFAULT_FLIGHTS_NOTE = '**Please don\'t book any flights yet.** Our admissions team will send you the arrival time and meeting details for your program — only book once you have that information and admissions has approved your flights.';
+/** The flights note for the acceptance email (dashboard: Acceptance & deposit → Flights note; empty uses the default). */
+export function flightsNote(schema) {
+  const s = schema?.settings?.acceptance || {};
+  if (s.flightsNoteEnabled === false) return '';
+  return String(s.flightsNote || '').trim() || DEFAULT_FLIGHTS_NOTE;
+}
 
 // ── travel insurance (acceptance email + 5 days after the deposit) ─────────
 // World Nomads affiliate rules: no plan recommendations, no coverage claims
