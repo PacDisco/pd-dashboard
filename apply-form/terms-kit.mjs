@@ -544,6 +544,7 @@ export const DEFAULT_WIRE_NOTE = 'From a US bank, send a domestic wire or ACH tr
 export const DEFAULT_INSURANCE = {
   url: 'https://www.kqzyfj.com/click-101918016-17344096',
   requirement: 'Pacific Discovery requires every student to have travel insurance for their program, with at least $250,000 emergency medical and $700,000 emergency evacuation cover, including the activities on your program.',
+  travelDays: 'Make sure your policy covers your whole trip — from the day you leave home to the day you get back, including your travel days on each side of the program{dates}.',
   partner: 'One option is World Nomads — you can get a quote and read exactly what each plan covers on their website.',
   linkLabel: 'Get a World Nomads quote',
   disclosure: 'Pacific Discovery is a World Nomads affiliate and may receive a fee if you buy a policy through this link. We aren\'t licensed to give insurance advice — please read the policy wording to check it suits you.',
@@ -559,7 +560,7 @@ export const isInternationalApp = (app) => isInternationalCountry(app?.answers?.
 export function insuranceSettings(schema) {
   const s = schema?.settings?.insurance || {};
   const pick = (k) => String(s[k] || '').trim() || DEFAULT_INSURANCE[k];
-  return { enabled: s.enabled !== false, url: pick('url'), requirement: pick('requirement'), partner: pick('partner'), linkLabel: pick('linkLabel'), disclosure: pick('disclosure') };
+  return { enabled: s.enabled !== false, url: pick('url'), requirement: pick('requirement'), travelDays: pick('travelDays'), partner: pick('partner'), linkLabel: pick('linkLabel'), disclosure: pick('disclosure') };
 }
 
 /** The affiliate link with CJ's `sid` sub-tracking tag (shows which email a sale came from in CJ reports). */
@@ -577,13 +578,18 @@ export function affiliateLink(url, sid = '') {
  *   cfarBy  the date 7 days after their deposit, if known (day-5 email)
  *   sid     CJ sub-tracking tag for the link: "acceptance" / "day5"
  */
-export function insuranceBlock(schema, { cfarBy = '', sid = '' } = {}) {
+export function insuranceBlock(schema, { cfarBy = '', sid = '', start = '', end = '' } = {}) {
   const s = insuranceSettings(schema);
   if (!s.enabled) return '';
+  // "{dates}" → " (the program runs September 9 – December 10, 2027)" when the dates are known.
+  const fmt = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const dates = /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end) ? ` (the program itself runs ${fmt(start)} – ${fmt(end)})` : '';
   return [
     '**Travel insurance**',
     '',
     s.requirement,
+    '',
+    s.travelDays.replace('{dates}', dates),
     '',
     cfarBy
       ? `**Cancel For Any Reason (CFAR):** if you want this kind of cover, many policies only offer it within a short window after your first trip payment — often 7 days, which for you is **${cfarBy}**. After that it usually can't be added.`
