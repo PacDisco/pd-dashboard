@@ -170,7 +170,7 @@ try {
         schedule: [{ due: '2026-10-27', amount: 2250, kind: 'deposit', status: 'paid' }, { due: '2026-11-27', amount: 1625, kind: 'instalment', status: 'scheduled' }, { due: '2026-12-27', amount: 1625, kind: 'instalment', status: 'needs_admissions', attempts: 3, lastError: { reason: 'insufficient_funds' } }],
         emails: { enrolled: { to: ['dep@x.org', 'mum@x.org'] } } })]);
   await page.click('[data-tab=settings]');
-  await page.waitForSelector('#ac-hold');
+  await page.waitForSelector('#pf-days');
   assert.equal(await page.locator('[data-email=accepted]').count(), 1);
   assert.equal(await page.locator('[data-email=enrolled]').count(), 1);
   assert.ok(await page.isChecked('#pay-auto'));
@@ -193,6 +193,26 @@ try {
   assert.equal(await page.locator('#dec-extend').count(), 0, 'no hold to extend once paid');
   assert.equal(await page.locator('#dec-decline').count(), 0, 'no decline once the deposit is in');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-9-deposit.png` });
+  if (SHOTS) {
+    // extra pictures for the admissions guide
+    await page.click('.dlg-head [data-x]');
+    await page.screenshot({ path: `${SHOTS}/editor-10-list.png`, clip: { x: 0, y: 0, width: 1400, height: 520 } });
+    await page.click('.apps tr[data-id]:has-text("Sam Rivera")');
+    await page.waitForSelector('#dec-accept');
+    await page.click('#dec-accept');
+    await page.waitForSelector('[data-ok]');
+    await page.screenshot({ path: `${SHOTS}/editor-11-accept-dialog.png` });
+    await page.click('[data-x]');
+    await page.click('[data-x]').catch(() => {});
+    await page.click('#add-hs').catch(() => {});
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${SHOTS}/editor-12-add-hubspot.png` });
+    await page.keyboard.press('Escape');
+    await page.click('[data-tab=settings]');
+    await page.waitForSelector('#pf-on');
+    const panel = page.locator('.panel', { has: page.locator('#pf-on') });
+    await panel.screenshot({ path: `${SHOTS}/editor-13-discounts.png` });
+  }
   assert.deepEqual(errors, []);
   console.log('  ✓ editor: edit, add conditional field, programs, settings, publish, terms, applications');
 } finally {

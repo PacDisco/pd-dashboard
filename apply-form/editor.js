@@ -10,7 +10,7 @@ import {
   renderStep, FORM_CSS, FIELD_TYPES, OPS, allFields, fieldByKey, lintSchema, nextQid, optionsFor, esc,
 } from '/apply-form/form-kit.mjs';
 import {
-  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_WIRE_DETAILS, DEFAULT_WIRE_NOTE, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
+  termsToHtml, DEFAULT_FEE_POLICY, DEFAULT_WIRE_DETAILS, DEFAULT_WIRE_NOTE, DEFAULT_INSURANCE, DEFAULT_EMAILS, EMAIL_PLACEHOLDERS, FEE_REMINDER_DAYS, FEE_CLOSE_DAYS,
   DEFAULT_ADVISOR_URL, DEFAULT_ADVISOR_TEXT,
 } from '/apply-form/terms-kit.mjs';
 
@@ -648,7 +648,6 @@ function renderSettings() {
     <div class="panel"><h2 class="serif">Email: not accepted</h2><p class="sub">Sent to the student and parents when you click <em>Decline</em> on an application. <code>{message}</code> is the optional personal note you type when declining; <code>{refund}</code> is a line about the refunded application fee (empty when there's no refund).</p>
       ${emailEditor(st, 'declined', 'Not accepted')}</div>
     <div class="panel"><h2 class="serif">Acceptance &amp; deposit</h2><p class="sub">When you click <em>Accept</em>, the student and parents get a personal link to their acceptance page. There they choose how to pay (monthly, two instalments or in full — depending on how close the start date is) and pay the $2,250 deposit to confirm their place. The price comes from Programs &amp; dates; the start date from the program's HubSpot record.</p>
-      <div class="field" style="max-width:260px"><label for="ac-hold">Hold a place for (days)</label><input type="number" id="ac-hold" min="1" max="60" value="${esc(st.acceptance?.holdDays ?? 7)}"><span class="help">The deposit is due by then. Admissions can extend one applicant's hold from the Applications tab.</span></div>
       ${(() => {
         const dc = st.discounts || (st.payInFull ? { enabled: st.payInFull.enabled, full: st.payInFull } : {});
         const cell = (plan, k) => `<td><input type="number" class="inp" data-disc="${plan}.${k}" min="0" step="50" value="${esc(dc[plan]?.[k] ?? '')}" placeholder="0" style="max-width:110px"></td>`;
@@ -657,7 +656,8 @@ function renderSettings() {
           <tr><td>Pay in full</td>${['semester', 'mini', 'summer'].map((k) => cell('full', k)).join('')}</tr>
           <tr><td>Two instalments</td>${['semester', 'mini', 'summer'].map((k) => cell('two', k)).join('')}</tr>
         </tbody></table>
-        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. Neither is offered within 60 days of the start date. Families who choose "balance later" still get the pay-in-full saving if they pay the balance by its due date (by card, bank account, or a transfer you mark paid in time); choosing monthly or two instalments is final. Families who haven't paid yet see the better of the amount they were offered and the current amount, so raising a discount reaches them and lowering one never takes a saving away. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
+        <div class="field" style="max-width:300px;margin-top:8px"><label for="pf-days">Discounts last (days after acceptance)</label><input type="number" id="pf-days" min="1" max="90" value="${esc(dc.days ?? 7)}"><span class="help">Admissions can give one family longer with <em>Extend discounts</em>. Scholarship students (the <em>Scholarship</em> button) never see them.</span></div>
+        <span class="help">Pay in full: taken off today's payment. Two instalments: taken off the final payment. They're only offered for the days set below after acceptance, and never within 60 days of the start date. Families who choose "balance later" get the pay-in-full saving if they pay the balance before the discounts end (by card, bank account, or a transfer you mark paid in time); choosing monthly or two instalments is final. Families who haven't paid yet see the better of the amount they were offered and the current amount, so raising a discount reaches them and lowering one never takes a saving away. Once the deposit is paid the HubSpot deal amount is reduced by the discount.</span></div>`;
       })()}
       <div class="field" style="margin-top:14px"><label class="check"><input type="checkbox" id="wire-on"${st.wire?.enabled !== false ? ' checked' : ''}><span><strong>Bank transfer (wire)</strong> <span class="help">— shown as a payment option to families outside the US (from the Country on their application) and as a small link for everyone else. Choosing it emails them these details and alerts admissions; use <em>Mark deposit paid</em> when it arrives.</span></span></label>
         <label for="wire-details" style="margin-top:6px">Account details <span class="help">(one "Label: value" per line)</span></label>
@@ -665,6 +665,13 @@ function renderSettings() {
         <label for="wire-note" style="margin-top:6px">Note under the details</label>
         <textarea id="wire-note" rows="3" placeholder="${esc(DEFAULT_WIRE_NOTE)}">${esc(st.wire?.note || '')}</textarea></div>
       ${emailEditor(st, 'wireInstructions', 'Email: bank transfer details')}
+      <div class="field" style="margin-top:14px"><label class="check"><input type="checkbox" id="ins-on"${st.insurance?.enabled !== false ? ' checked' : ''}><span><strong>Travel insurance</strong> <span class="help">— a section in the acceptance email, and an email 5 days after the deposit with the date their Cancel For Any Reason window closes. World Nomads' affiliate rules: don't recommend a specific plan or describe what it covers, use their approved copy (from CJ) for the partner text, and keep the disclosure.</span></span></label>
+        <label for="ins-req" style="margin-top:6px">Our requirement</label><textarea id="ins-req" rows="2" placeholder="${esc(DEFAULT_INSURANCE.requirement)}">${esc(st.insurance?.requirement || '')}</textarea>
+        <label for="ins-partner" style="margin-top:6px">World Nomads text <span class="help">(their approved copy)</span></label><textarea id="ins-partner" rows="2" placeholder="${esc(DEFAULT_INSURANCE.partner)}">${esc(st.insurance?.partner || '')}</textarea>
+        <div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:2;min-width:200px"><label for="ins-url">Affiliate link</label><input type="url" id="ins-url" value="${esc(st.insurance?.url || '')}" placeholder="${esc(DEFAULT_INSURANCE.url)}"></div>
+        <div style="flex:1;min-width:160px"><label for="ins-label">Button</label><input type="text" id="ins-label" value="${esc(st.insurance?.linkLabel || '')}" placeholder="${esc(DEFAULT_INSURANCE.linkLabel)}"></div></div>
+        <label for="ins-disc" style="margin-top:6px">Affiliate disclosure</label><textarea id="ins-disc" rows="2" placeholder="${esc(DEFAULT_INSURANCE.disclosure)}">${esc(st.insurance?.disclosure || '')}</textarea></div>
+      ${emailEditor(st, 'insuranceReminder', 'Email: travel insurance (5 days after the deposit)')}
       ${emailEditor(st, 'accepted', 'Email: accepted')}
       ${emailEditor(st, 'enrolled', 'Email: place confirmed (deposit paid)')}
       <p class="help" style="margin-top:8px"><code>{howToPay}</code> adapts to the start date (monthly / two instalments / in full). <code>{message}</code> is the note you type when accepting. <code>{schedule}</code> is the list of upcoming payments.</p></div>
@@ -715,15 +722,18 @@ function renderSettings() {
   [['#pay-auto', 'autoCharge'], ['#pay-dep', 'depositReminders'], ['#pay-disc', 'discountReminders']].forEach(([sel, k]) => $(sel).addEventListener('change', (e) => { st.payments = { ...(st.payments || {}), [k]: e.target.checked }; changed({ rerender: false }); }));
   const disc = () => { st.discounts = st.discounts || (st.payInFull ? { enabled: !!st.payInFull.enabled, full: { ...st.payInFull } } : { enabled: false }); delete st.discounts.full?.enabled; delete st.payInFull; return st.discounts; };
   $('#pf-on').addEventListener('change', (e) => { disc().enabled = e.target.checked; changed({ rerender: false }); });
+  $('#pf-days')?.addEventListener('input', (e) => { const n = Math.round(Number(e.target.value)); const d = disc(); if (n >= 1 && n <= 90) d.days = n; else delete d.days; changed({ rerender: false }); });
   $$('[data-disc]').forEach((el) => el.addEventListener('input', () => {
     const [plan, k] = el.dataset.disc.split('.');
     const n = Math.max(0, Math.round(Number(el.value) * 100) / 100);
     const d = disc(); d[plan] = { ...(d[plan] || {}), [k]: Number.isFinite(n) ? n : 0 };
     changed({ rerender: false });
   }));
+  $('#ins-on')?.addEventListener('change', (e) => { st.insurance = { ...(st.insurance || {}), enabled: e.target.checked }; changed({ rerender: false }); });
+  [['#ins-url', 'url'], ['#ins-req', 'requirement'], ['#ins-partner', 'partner'], ['#ins-label', 'linkLabel'], ['#ins-disc', 'disclosure']].forEach(([sel, k]) => $(sel)?.addEventListener('input', (e) => { st.insurance = { ...(st.insurance || {}) }; if (e.target.value.trim()) st.insurance[k] = e.target.value.trim(); else delete st.insurance[k]; changed({ rerender: false }); }));
   $('#wire-on')?.addEventListener('change', (e) => { st.wire = { ...(st.wire || {}), enabled: e.target.checked }; changed({ rerender: false }); });
   [['#wire-details', 'details'], ['#wire-note', 'note']].forEach(([sel, k]) => $(sel)?.addEventListener('input', (e) => { st.wire = { ...(st.wire || {}) }; if (e.target.value.trim()) st.wire[k] = e.target.value; else delete st.wire[k]; changed({ rerender: false }); }));
-  $('#ac-hold').addEventListener('input', (e) => { const n = Math.round(Number(e.target.value)); st.acceptance = { ...(st.acceptance || {}) }; if (n >= 1 && n <= 60) st.acceptance.holdDays = n; else delete st.acceptance.holdDays; changed({ rerender: false }); });
+  $('#ac-hold')?.addEventListener('input', (e) => { const n = Math.round(Number(e.target.value)); st.acceptance = { ...(st.acceptance || {}) }; if (n >= 1 && n <= 60) st.acceptance.holdDays = n; else delete st.acceptance.holdDays; changed({ rerender: false }); });
   $('#rm-on').addEventListener('change', (e) => {
     st.feeReminders = st.feeReminders || {};
     st.feeReminders.enabled = e.target.checked;
@@ -892,9 +902,10 @@ function decisionChip(r) {
   if (dep?.status === 'paid') return `<span class="chip chip--live">Deposit paid · ${esc(PLAN_LABEL[r.enrolment.plan] || '')}${r.enrolment.paused ? ' · paused' : ''}</span>`;
   if (dep?.status === 'processing') return '<span class="chip chip--info">Deposit clearing (bank)</span>';
   if (r.enrolment?.prepaid) return '<span class="chip chip--info">Deposit paid · choosing a plan</span>';
-  if (d.holdUntil && new Date(d.holdUntil) < new Date()) return `<span class="chip chip--bad" title="Accepted — the hold passed without a deposit">Hold passed ${fmtDay(d.holdUntil)}</span>`;
-  if (r.enrolment?.wire) return `<span class="chip chip--changes" title="Said they'd pay ${esc(money(r.enrolment.wire.amount))} by bank transfer — Mark deposit paid when it arrives">Paying by wire · held to ${fmtDay(d.holdUntil)}</span>`;
-  return `<span class="chip chip--live" title="Place held until ${esc(new Date(d.holdUntil).toLocaleString())}">Accepted · held to ${fmtDay(d.holdUntil)}</span>`;
+  const discEnd = r.enrolment?.offer?.discountUntil || d.holdUntil;
+  if (discEnd && new Date(discEnd) < new Date() && !r.enrolment?.wire) return `<span class="chip chip--changes" title="Accepted — no deposit yet and the plan discounts have ended. Their link still works.">Accepted · no deposit yet</span>`;
+  if (r.enrolment?.wire) return `<span class="chip chip--changes" title="Said they'd pay ${esc(money(r.enrolment.wire.amount))} by bank transfer — Mark deposit paid when it arrives">Paying by wire</span>`;
+  return `<span class="chip chip--live" title="Accepted — waiting for the deposit${discEnd ? `; plan discounts until ${esc(new Date(discEnd).toLocaleString())}` : ''}">Accepted · awaiting deposit</span>`;
 }
 function reminderChip(r) {
   const m = r.reminders || {};
@@ -1009,6 +1020,14 @@ function decisionBlock(app) {
     if (d.message) lines.push(`<li class="em">Message: “${esc(d.message)}”</li>`);
     for (const x of d.extended || []) lines.push(`<li class="em">Hold extended to ${new Date(x.holdUntil).toLocaleDateString()} by ${esc(x.by || '')}</li>`);
   }
+  // Plan discounts: scholarship, or how long they last (7 days after acceptance unless extended)
+  const off = app.enrolment?.offer;
+  const discOn = !!S.draft?.settings?.discounts?.enabled;
+  if (app.enrolment?.scholarship) lines.push(`<li>🎓 <strong>Scholarship student</strong> — no plan discounts are offered (marked by ${esc(app.enrolment.scholarship.by || '')}).</li>`);
+  else if (discOn && d?.outcome === 'accepted' && off && !['paid', 'processing'].includes(app.enrolment?.deposit?.status)) {
+    const until = off.discountUntil || (off.at ? new Date(Date.parse(off.at) + (Number(S.draft.settings.discounts.days) || 7) * 864e5).toISOString() : null);
+    if (until) lines.push(`<li>🏷️ Plan discounts ${Date.parse(until) > Date.now() ? `available until <strong>${new Date(until).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</strong>` : `<strong>ended ${new Date(until).toLocaleDateString()}</strong>`}${(off.discountsExtended || []).length ? ` <span class="em">(extended by ${esc(off.discountsExtended.at(-1).by || '')})</span>` : ''}</li>`);
+  }
   const e = app.enrolment;
   if (d?.outcome === 'accepted' && e) {
     const dep = e.deposit;
@@ -1028,7 +1047,7 @@ function decisionBlock(app) {
     } else if (e.wire && !dep) {
       lines.push(`<li>🏦 <strong>Paying by bank transfer</strong> — said on ${new Date(e.wire.at).toLocaleDateString()} they'd send ${money(e.wire.amount)} (${esc(PLAN_LABEL[e.wire.plan] || e.wire.plan || '')}), reference "${esc(e.wire.reference || '')}"${e.wire.emailed ? '; bank details emailed' : ''}. When it arrives in Wise, click <em>Mark deposit paid</em>.${e.holdExpired ? ' <strong>The hold has passed</strong> — extend it if the transfer is on its way.' : ''}</li>`);
     } else if (e.holdExpired && !dep) {
-      lines.push(`<li>⚠️ Hold passed ${new Date(e.holdExpired.at).toLocaleDateString()} without a deposit.</li>`);
+      lines.push(`<li>⏳ No deposit yet — the plan discounts ended ${new Date(e.holdExpired.at).toLocaleDateString()}. Their acceptance link still works.</li>`);
     } else if (dep?.status === 'failed') {
       lines.push(`<li>⚠️ Bank payment for the deposit failed ${new Date(dep.failedAt).toLocaleDateString()} — they can pay again from their acceptance link.</li>`);
     } else if (e.started) {
@@ -1039,10 +1058,11 @@ function decisionBlock(app) {
   if (!d || d.outcome !== 'declined') {
     if (!d) btns.push(`<button class="btn btn--sm btn--primary" id="dec-accept"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Accept</button>`);
     const depositIn = ['paid', 'processing'].includes(app.enrolment?.deposit?.status);
+    if (!depositIn || app.enrolment?.scholarship) btns.push(`<button class="btn btn--sm" id="dec-scholarship" data-on="${app.enrolment?.scholarship ? '0' : '1'}"${!can ? ' disabled' : ''} title="Scholarship students don't see the pay-in-full or two-instalment discounts">${app.enrolment?.scholarship ? 'Remove scholarship' : 'Scholarship'}</button>`);
     if (depositIn && !app.enrolment?.withdrawn && (app.enrolment?.schedule || []).some((p) => ['scheduled', 'failed'].includes(p.status))) btns.push(`<button class="btn btn--sm" id="pay-pause" data-paused="${app.enrolment.paused ? 1 : 0}"${!can ? ' disabled' : ''}>${app.enrolment.paused ? 'Resume automatic payments' : 'Pause automatic payments'}</button>`);
     if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm" id="dec-depositpaid"${!can ? ' disabled' : ''} title="Only if it isn't on the deal's payment fields yet — those are picked up automatically">Mark deposit paid</button>`);
     if (d?.outcome === 'accepted' && !depositIn && !app.enrolment?.prepaid) btns.push(`<button class="btn btn--sm${d.email?.to ? '' : ' btn--primary'}" id="dec-resend"${!can ? ' disabled' : ''}>${d.email?.to ? 'Resend acceptance email' : 'Send acceptance email'}</button>`);
-    if (d?.outcome === 'accepted' && !depositIn) btns.push(`<button class="btn btn--sm" id="dec-extend"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Extend hold</button>`);
+    if (d?.outcome === 'accepted' && !depositIn && discOn && !app.enrolment?.scholarship) btns.push(`<button class="btn btn--sm" id="dec-extend-disc"${!can ? ' disabled' : ''} title="Give this family longer to take the pay-in-full / two-instalment discounts">Extend discounts</button>`);
     if (!depositIn) btns.push(`<button class="btn btn--sm btn--danger" id="dec-decline"${!can ? ' disabled title="Needs the admin or admissions role"' : ''}>Decline</button>`);
   }
   return `<div class="panel" style="padding:12px 14px"><strong>Decision</strong>
@@ -1057,7 +1077,7 @@ function decideDialog(app, outcome) {
     const body = outcome === 'accepted'
       ? `<p>Accept <strong>${esc(app.name)}</strong> for ${esc(app.program || '')} ${esc(app.term || '')}?</p>
          ${app.paidAt ? '' : '<p class="notice">The $250 application fee hasn\'t been paid, so it\'s added to their deposit: <strong>$2,500</strong> instead of $2,250. Fee reminders stop.</p>'}
-         <p class="em">The student and parents are emailed a personal link to confirm their place: they choose how to pay and pay the ${app.paidAt ? '$2,250' : '$2,500'} deposit. The place is held for ${Number(S.draft.settings.acceptance?.holdDays) || 7} days, and the HubSpot deal moves to Interview Complete. The program's HubSpot record needs a start date.</p>
+         <p class="em">The student and parents are emailed a personal link to confirm their place: they choose how to pay and pay the ${app.paidAt ? '$2,250' : '$2,500'} deposit. Their link never expires; the plan discounts are offered for ${Number(S.draft.settings.discounts?.days) || 7} days. The HubSpot deal moves to Interview Complete. The program's HubSpot record needs a start date.</p>
          <div class="field"><label for="dd-msg">Personal message in the email (optional)</label><textarea id="dd-msg" rows="4" maxlength="2000" placeholder="e.g. It was great to talk with you — we can't wait to have you in Peru!"></textarea></div>`
       : `<p>Decline <strong>${esc(app.name)}</strong>? The student and parents are emailed that we can't offer a place.</p>
          ${app.paidAt && /^pi_/.test(app.payment?.reference || '') ? `<label class="check"><input type="checkbox" id="dd-refund"${accepted ? '' : ' checked'}><span>Refund the application fee ($${paid.toFixed(2)})${accepted ? ' <span class="help">— they were accepted, so under the terms the fee is non-refundable</span>' : ''}</span></label>` : app.paidAt ? '<p class="em">The application fee was paid outside the online application, so it isn\'t refunded automatically — refund it yourself if needed.</p>' : ''}
@@ -1163,6 +1183,20 @@ async function showApplication(id) {
     e.currentTarget.disabled = true; e.currentTarget.textContent = 'Sending…';
     try { await api('POST', {}, { action: 'resend-acceptance', id }); toast('Acceptance email sent.'); showApplication(id); renderApps(); }
     catch (err) { toast(esc(err.message), 9000); showApplication(id); }
+  });
+  d.querySelector('#dec-extend-disc')?.addEventListener('click', async (e) => {
+    const days = prompt('Keep the plan discounts open for how many more days (from today)?\n\n(Never past 61 days before the start. Tell the family — they aren\'t emailed automatically.)', '7');
+    if (days == null) return;
+    e.currentTarget.disabled = true;
+    try { const r = await api('POST', {}, { action: 'extend-discounts', id, days: Number(days) }); toast(`Discounts extended until ${new Date(`${r.discountsUntilDay}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'long', timeZone: 'UTC' })}.`, 7000); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
+  });
+  d.querySelector('#dec-scholarship')?.addEventListener('click', async (e) => {
+    const on = e.currentTarget.dataset.on === '1';
+    if (on && !confirm('Mark as a scholarship student?\n\nThey won\'t see the pay-in-full or two-instalment discounts on their acceptance page or in emails.')) return;
+    e.currentTarget.disabled = true;
+    try { await api('POST', {}, { action: 'scholarship', id, on }); toast(on ? 'Marked as a scholarship student — no plan discounts.' : 'Scholarship mark removed — discounts offered again.'); showApplication(id); renderApps(); }
+    catch (err) { toast(esc(err.message), 7000); e.currentTarget.disabled = false; }
   });
   d.querySelector('#dec-extend')?.addEventListener('click', async (e) => {
     const days = prompt('Hold their place for how many more days (from today)?', '7');

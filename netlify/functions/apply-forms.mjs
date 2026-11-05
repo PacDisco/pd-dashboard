@@ -199,6 +199,8 @@ export default async (req, context, deps = {}) => {
       case "withdraw": return await withdraw(body, user);
       case "payment-retry": return await applyService("payment-retry", { id: body.id, item: body.item }, user);
       case "payments-pause": return await applyService("payments-pause", { id: body.id, paused: !!body.paused }, user);
+      case "extend-discounts": return await applyService("extend-discounts", { id: body.id, days: body.days }, user);
+      case "scholarship": return await applyService("scholarship", { id: body.id, on: !!body.on }, user);
       case "hubspot-lookup": return await applyService("hubspot-lookup", { email: body.email }, user);
       case "import": return await applyService("import", { email: body.email, dealId: body.dealId }, user);
       case "deposit-mark-paid": return await applyService("deposit-mark-paid", { id: body.id, amount: body.amount, reference: body.reference }, user);
@@ -381,8 +383,10 @@ function summary(r) {
 
 /** What the dashboard shows about the deposit and payment plan. Pure (tested). */
 export function enrolmentSummary(e) {
-  if (!e || typeof e !== "object" || (!e.offer && !e.deposit)) return null;
+  if (!e || typeof e !== "object" || (!e.offer && !e.deposit && !e.scholarship)) return null;
   return {
+    // marked as a scholarship student: no plan discounts
+    scholarship: e.scholarship || null,
     offer: e.offer || null,
     plan: e.choice?.plan || e.pending?.plan || null,
     method: e.choice?.method || null,

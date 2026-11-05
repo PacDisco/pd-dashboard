@@ -57,7 +57,7 @@ export function buildReport(rows, { today = iso(new Date()), rates = { card: 0.0
         plan: null, planName: choosing ? "Choosing a plan" : "Deposit not paid", method: null,
         tuition, paid: paidSoFar, remaining: r2(Math.max(0, tuition - paidSoFar)), unscheduled: r2(Math.max(0, tuition - paidSoFar - depositDue)),
         next: depositDue > 0 ? { date: iso(holdUntil || today), amount: depositDue, kind: "deposit" } : null,
-        holdUntil, holdPassed, problems: holdPassed && depositDue > 0 ? ["Hold passed, deposit not paid"] : [],
+        holdUntil, holdPassed, problems: holdPassed && depositDue > 0 ? ["Deposit not paid — plan discounts have ended"] : [],
         schedule: [],
       });
       continue;

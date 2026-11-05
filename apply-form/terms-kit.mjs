@@ -276,11 +276,13 @@ DEFAULT_EMAILS.accepted = {
     '',
     '{message}',
     '',
-    'To confirm your place, please complete your payment by **{holdUntil}**. {howToPay}',
+    'To confirm your place, use the button below. {howToPay}',
     '',
     '[Confirm my place]({link})',
     '',
     'Your application fee and deposit both count toward your total tuition of {tuition}.',
+    '',
+    '{insurance}',
     '',
     'Pacific Discovery Admissions',
   ].join('\n'),
@@ -310,13 +312,13 @@ DEFAULT_EMAILS.enrolled = {
   ].join('\n'),
 };
 
-// Accepted but the deposit isn't paid yet (before the hold passes).
+// Accepted but the deposit isn't paid yet (in the days before the plan discounts end).
 DEFAULT_EMAILS.depositReminder = {
   subject: 'Reminder: confirm your place on {program}',
   body: [
     'Hi {firstName},',
     '',
-    'Just a reminder that we\'re holding your place on **{program}** ({term}) until **{holdUntil}**. To confirm it, choose how you\'d like to pay and pay your {deposit} deposit.',
+    'Just a reminder to confirm your place on **{program}** ({term}): choose how you\'d like to pay and pay your {deposit} deposit.',
     '',
     '{savingsLine}',
     '',
@@ -456,7 +458,7 @@ DEFAULT_EMAILS.wireInstructions = {
     '',
     '{wireNote}',
     '',
-    'We\'re holding your place until **{holdUntil}**. Once your transfer arrives we\'ll confirm your place by email — bank transfers can take a few business days, so there\'s no need to worry if it isn\'t instant.',
+    'Once your transfer arrives we\'ll confirm your place by email — bank transfers can take a few business days, so there\'s no need to worry if it isn\'t instant.',
     '',
     '[View my acceptance]({link})',
     '',
@@ -484,6 +486,20 @@ DEFAULT_EMAILS.scheduleUpdated = {
   ].join('\n'),
 };
 
+// 5 days after the deposit: travel insurance, before the Cancel For Any Reason window closes.
+DEFAULT_EMAILS.insuranceReminder = {
+  subject: 'Travel insurance for {program} — Cancel For Any Reason window closes {cfarBy}',
+  body: [
+    'Hi {firstName},',
+    '',
+    'Now that your place on **{program}** ({term}) is confirmed, a quick reminder about travel insurance.',
+    '',
+    '{insurance}',
+    '',
+    'Pacific Discovery Admissions',
+  ].join('\n'),
+};
+
 /** The placeholders each message understands, for the dashboard help text. */
 const REMINDER_PLACEHOLDERS = ['firstName', 'program', 'term', 'fee', 'nextStep', 'link', 'closeDate'];
 export const EMAIL_PLACEHOLDERS = {
@@ -493,7 +509,8 @@ export const EMAIL_PLACEHOLDERS = {
   feeReminder3: REMINDER_PLACEHOLDERS,
   feeReminder4: REMINDER_PLACEHOLDERS,
   declined: ['firstName', 'program', 'term', 'message', 'refund'],
-  accepted: ['firstName', 'program', 'term', 'startDate', 'holdUntil', 'howToPay', 'deposit', 'tuition', 'message', 'link'],
+  accepted: ['firstName', 'program', 'term', 'startDate', 'holdUntil', 'howToPay', 'deposit', 'tuition', 'message', 'insurance', 'link'],
+  insuranceReminder: ['firstName', 'program', 'term', 'insurance', 'cfarBy', 'link'],
   enrolled: ['firstName', 'program', 'term', 'paidToday', 'planName', 'schedule', 'scheduleNote', 'email', 'portalUrl'],
   depositReminder: ['firstName', 'program', 'term', 'holdUntil', 'deposit', 'savingsLine', 'link'],
   paymentUpcoming: ['firstName', 'program', 'term', 'amount', 'method', 'date', 'balanceLine', 'link'],
@@ -519,6 +536,55 @@ export const DEFAULT_WIRE_DETAILS = [
   'SWIFT/BIC (from outside the US): TRWIUS35XXX',
 ].join('\n');
 export const DEFAULT_WIRE_NOTE = 'From a US bank, send a domestic wire or ACH transfer using the routing number. From outside the US, send an international SWIFT transfer in US dollars, and ask your bank to cover the transfer fees so the full amount arrives.';
+
+// ── travel insurance (acceptance email + 5 days after the deposit) ─────────
+// World Nomads affiliate rules: no plan recommendations, no coverage claims
+// about their products, approved copy only in referral emails, and a clear
+// disclosure. Pacific Discovery's own requirement is stated as our policy.
+export const DEFAULT_INSURANCE = {
+  url: 'https://www.kqzyfj.com/click-101918016-17344096',
+  requirement: 'Pacific Discovery requires every student to have travel insurance for their program, with at least $250,000 emergency medical and $700,000 emergency evacuation cover, including the activities on your program.',
+  partner: 'One option is World Nomads — you can get a quote and read exactly what each plan covers on their website.',
+  linkLabel: 'Get a World Nomads quote',
+  disclosure: 'Pacific Discovery is a World Nomads affiliate and may receive a fee if you buy a policy through this link. We aren\'t licensed to give insurance advice — please read the policy wording to check it suits you.',
+};
+/** Lives outside the US (the Country on their application). No country → treated as US. */
+export function isInternationalCountry(country) {
+  const c = String(country || '').trim();
+  return !!c && !/^(united states( of america)?|usa?|u\.s\.a?\.?)$/i.test(c);
+}
+export const isInternationalApp = (app) => isInternationalCountry(app?.answers?.homeCountry || app?.answers?.homeAddress?.country);
+
+/** { enabled, url, requirement, partner, linkLabel, disclosure } from the dashboard (Acceptance & deposit → Travel insurance). */
+export function insuranceSettings(schema) {
+  const s = schema?.settings?.insurance || {};
+  const pick = (k) => String(s[k] || '').trim() || DEFAULT_INSURANCE[k];
+  return { enabled: s.enabled !== false, url: pick('url'), requirement: pick('requirement'), partner: pick('partner'), linkLabel: pick('linkLabel'), disclosure: pick('disclosure') };
+}
+
+/**
+ * The travel insurance section for a family email (markdown), or "" when off.
+ *   cfarBy  the date 7 days after their deposit, if known (day-5 email)
+ */
+export function insuranceBlock(schema, { cfarBy = '' } = {}) {
+  const s = insuranceSettings(schema);
+  if (!s.enabled) return '';
+  return [
+    '**Travel insurance**',
+    '',
+    s.requirement,
+    '',
+    cfarBy
+      ? `**Cancel For Any Reason (CFAR):** if you want this kind of cover, many policies only offer it within a short window after your first trip payment — often 7 days, which for you is **${cfarBy}**. After that it usually can't be added.`
+      : '**Cancel For Any Reason (CFAR):** if you want this kind of cover, many policies only offer it within a short window after your first trip payment — often just 7 days — so it\'s worth arranging your insurance soon after paying your deposit.',
+    '',
+    s.partner,
+    '',
+    `[${s.linkLabel}](${s.url})`,
+    '',
+    `*${s.disclosure}*`,
+  ].join('\n');
+}
 
 /** { lines: [[label, value]], note } or null when switched off in the dashboard. */
 export function wireDetails(schema) {

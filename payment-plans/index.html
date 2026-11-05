@@ -210,7 +210,7 @@ function statusChip(f) {
     case 'onTrack': return `<span class="chip c-ok">✓ On track${f.paused ? ' (paused)' : ''}</span>`;
     case 'paidInFull': return '<span class="chip c-info">Paid in full</span>';
     case 'problem': return '<span class="chip c-bad">⚠ Needs attention</span>';
-    case 'awaitingDeposit': return `<span class="chip ${f.holdPassed ? 'c-bad' : 'c-muted'}">${f.holdPassed ? '⚠ Hold passed' : 'Awaiting deposit'}</span>`;
+    case 'awaitingDeposit': return `<span class="chip ${f.holdPassed ? 'c-bad' : 'c-muted'}">${f.holdPassed ? 'No deposit yet' : 'Awaiting deposit'}</span>`;
     case 'choosing': return '<span class="chip c-warn">Choosing a plan</span>';
     case 'withdrawn': return '<span class="chip c-muted">Withdrawn</span>';
     default: return '';
