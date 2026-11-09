@@ -7,8 +7,9 @@
 // published form schema as `schema.waiver`; DEFAULT_WAIVER is the starting copy.
 //
 // A parent or legal guardian signs — at least one, whatever the student's age.
-// Each part shown is initialled; Part 2 (medical authorisation) only applies to
-// students under 18 on the day of signing.
+// Each part is initialled. Unearthed students are all under 18, so by default
+// every part (including Part 2, the medical authorisation) is signed by every
+// family; a part can still be set to "under 18 only" on the dashboard.
 
 export const DEFAULT_WAIVER = {
   "title": "Permissions packet",
@@ -24,7 +25,7 @@ export const DEFAULT_WAIVER = {
       "key": "part2",
       "title": "Part 2: Parental medical authorisation (for students under 18)",
       "html": "<p>I am the legal parent or guardian of \"my child\" who is less than eighteen (18) years of age at of the start of the program they are joining. If my child needs medical care for which informed consent or my permission may be required, whether on an emergency or urgent basis, and if reasonable attempts to reach me for consultation and informed consent are unsuccessful, then I hereby delegate to the Program Instructor or accompanying staff (teachers) from the partner school, the authority to make on my behalf all medical decisions regarding the care and treatment of my child, including decisions on surgery, transfusions, and the administration of anesthetic, and to give informed consent to such treatment.</p>\n<p>I also consent to and authorise the Program Instructor or accompanying staff (teachers) from the partner school, to arrange for and provide care and treatment (including administering prescribed medication and antibiotics) for my child's routine health needs or conditions, such as colds, ordinary infections and minor injuries. </p>\n<p>I understand and agree that further specific consent may not be obtained at the time the routine care and treatment are provided and that Unearthed Education may not notify me if the Program Instructor or accompanying staff (teachers) from the partner school, deem it unnecessary.</p>",
-      "appliesTo": "under18"
+      "appliesTo": "all"
     }
   ],
   "declaration": "I am the student's parent or legal guardian. I have read and understood this permissions packet, and by signing I agree to it on behalf of my child and myself."

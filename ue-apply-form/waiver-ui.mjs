@@ -110,7 +110,24 @@ export function renderWaiver(root, waiver, { under18 = true, parentName = '', on
     finally { btn.disabled = false; btn.textContent = label; }
   });
 
-  return { showErrors };
+  /** Testing: fill name, relationship, initials, a scribbled signature and the tick. */
+  function fillTest(name = 'Test Parent') {
+    root.querySelector('#wvName').value = name || 'Test Parent';
+    root.querySelector('#wvRel').value = 'Mother';
+    const ini = (name || 'Test Parent').split(/\s+/).map((w) => w[0] || '').join('').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'TP';
+    root.querySelectorAll('[data-initials]').forEach((i) => { i.value = ini; });
+    root.querySelector('#wvAgree').checked = true;
+    const r = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    for (let x = 0; x <= r.width * 0.7; x += 4) {
+      const y = r.height / 2 + Math.sin(x / 9) * 18 + Math.cos(x / 23) * 10;
+      if (x === 0) ctx.moveTo(20 + x, y); else ctx.lineTo(20 + x, y);
+    }
+    ctx.stroke();
+    drawn = true;
+  }
+
+  return { showErrors, fillTest };
 }
 
 export const WAIVER_CSS = `

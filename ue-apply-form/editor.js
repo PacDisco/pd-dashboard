@@ -294,13 +294,16 @@ async function renderTrips() {
   const [{ trips }, { programs }] = await Promise.all([api('GET', { action: 'trips' }), S.programs ? { programs: S.programs } : api('GET', { action: 'programs' })]);
   S.trips = trips; S.programs = programs;
   app.innerHTML = `<div class="page"><div class="panel"><h2>Trips &amp; launch links</h2>
+    <p class="sub"><strong>Preview</strong> clicks through every step with one-click test answers and saves nothing (it shows the published form — Publish first to see edits). <strong>Test run</strong> is a real application with a "Fill test answers" button — you type only the student and parent emails; refund the deposit and mark it withdrawn afterwards.</p>
     <p class="sub">Each school trip gets its own link — put it on that school's launch page. The link decides the trip, so students never pick a program. Deposit and currency come from the trip's payment schedule in HubSpot (payment amount 1, program currency) unless you set them here.</p>
     <div class="acts"><button class="btn btn--primary btn--sm" id="tAdd">+ New trip link</button></div>
     ${trips.length ? `<table class="grid"><tr><th>Link</th><th>Unearthed Program</th><th>Deposit</th><th>Applications</th><th>Status</th><th></th></tr>
       ${trips.map((t) => {
         const p = programs.find((x) => x.id === t.program_id);
         const dep = t.deposit ?? p?.deposit; const cur = t.currency || p?.currency || 'NZD';
-        return `<tr><td><div class="linkbox"><code>${esc(APPLY_SITE.replace('https://', ''))}/${esc(t.slug)}</code><button class="btn btn--sm" data-copy="${esc(t.slug)}">Copy</button></div></td>
+        return `<tr><td><div class="linkbox"><code>${esc(APPLY_SITE.replace('https://', ''))}/${esc(t.slug)}</code><button class="btn btn--sm" data-copy="${esc(t.slug)}">Copy</button>
+            <a class="btn btn--sm" target="_blank" rel="noopener" href="${APPLY_SITE}/${esc(t.slug)}?preview=1" title="Click through every step with test answers — nothing is saved or sent">Preview ↗</a>
+            <a class="btn btn--sm" target="_blank" rel="noopener" href="${APPLY_SITE}/${esc(t.slug)}?test=1" title="A REAL application (HubSpot, Jotform, emails, Stripe) with a Fill test answers button">Test run ↗</a></div></td>
           <td>${esc(t.program_name || p?.name || t.program_id)}${p?.schoolCollecting ? ' <span class="chip chip--warn">school collects payments</span>' : ''}</td>
           <td>${dep ? `${esc(cur)} ${esc(dep)}${t.deposit != null ? ' <span class="em">(set here)</span>' : ''}` : '<span class="chip chip--bad">not set</span>'}</td>
           <td>${t.applications} · ${t.paid} paid${t.capacity ? ` / ${t.capacity}` : ''}</td>

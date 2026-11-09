@@ -9,7 +9,7 @@ export const DEFAULT_EMAILS = {
   },
   signRequest: {
     subject: "Please sign {{studentFirst}}'s permissions packet — {{trip}}",
-    body: "Hi {{parent}},\n\n{{student}} has applied for {{trip}} with Unearthed Education. Before they travel, a parent or legal guardian needs to read and sign the permissions packet (the agreement and, for students under 18, the medical authorisation).\n\nIt takes about 10 minutes:\n\n{{link}}\n\nAny questions, reply to this email or call +64 (3) 288 2393.",
+    body: "Hi {{parent}},\n\n{{student}} has applied for {{trip}} with Unearthed Education. Before they travel, a parent or legal guardian needs to read and sign the permissions packet (the agreement and, for students under 18, the medical authorisation).\n\nIt takes about 10 minutes, and {{studentFirst}}'s place isn't confirmed until it's signed. Once you've signed, the same page takes you to the deposit:\n\n{{link}}\n\nAny questions, reply to this email or call +64 (3) 288 2393.",
   },
   signed: {
     subject: "Signed: permissions packet for {{student}} — {{trip}}",
