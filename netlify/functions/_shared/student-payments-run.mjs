@@ -210,18 +210,25 @@ export async function writeToDeal(row, dealId, method, actor = null) {
   if (!actor && b?.strictPipelines && !b.pipelines.includes(String(deal.pipeline))) {
     return setStatus(row.id, "review", { reason: `Matched ${deal.name || deal.id}, but that deal isn't in the ${b.label} student pipeline. Move it there in HubSpot, then press “Try matching again”`, candidates: [candidateSummary(deal)] });
   }
-  if (deal.currency && deal.currency !== "USD") {
+  const asReceived = !!b?.creditAsReceived;
+  if (!asReceived && deal.currency && deal.currency !== "USD") {
     return setStatus(row.id, "review", { reason: `Deal is in ${deal.currency}, not USD — log it by hand`, candidates: [candidateSummary(deal)] });
   }
+  if (asReceived && deal.currency && row.currency && deal.currency !== row.currency) {
+    return setStatus(row.id, "review", { reason: `Paid in ${row.currency} but the deal is in ${deal.currency} — log it by hand`, candidates: [candidateSummary(deal)] });
+  }
   const amountUsd = await ensureUsd(row);
+  // asReceived (UE): the amount as paid, in its own currency — the number the
+  // deal and the portal's schedule use. Otherwise (PD): converted to USD.
+  const credited = asReceived ? Number(row.amount) : amountUsd;
   const plan = planWrite(deal.props, {
     source: row.source,
     ref: row.external_id,
     altRefs: [row.metadata?.charge_id].filter(Boolean),
-    amountUsd,
+    amountUsd: credited,
     amount: Number(row.amount),
-    currency: row.currency,
-    fxRate: row.fx_rate ? Number(row.fx_rate) : null,
+    currency: asReceived ? (row.currency === "USD" ? "USD" : row.currency) : row.currency,
+    fxRate: asReceived ? null : (row.fx_rate ? Number(row.fx_rate) : null),
     date: new Date(row.received_at).toISOString().slice(0, 10),
   });
   const base = { deal_id: deal.id, deal_name: deal.name, match_method: method, resolved_by: actor };

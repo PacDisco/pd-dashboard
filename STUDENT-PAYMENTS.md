@@ -73,6 +73,7 @@ Same sync, separate dashboard: **Unearthed Student Payments**. What's different:
 | Deal ids from Stripe / references | accepted from any pipeline | only deals in the UE student pipeline; anything else goes to review |
 | Picking a deal by hand | any deal | only UE student deals — a deal in another pipeline has to be moved in HubSpot first |
 | Card fee stripped | `STRIPE_CARD_FEE_RATE`, 3.5% | `UE_STRIPE_CARD_FEE_RATE`, 3%. Portal checkouts send `base_amount`, which is used first |
+| Currency on the deal | converted to USD (ECB rate) | **as received** — an NZD payment is logged as NZD (`1750, pi_…, date, NZD 1750.00`), because UE deals and the portal's payment schedule are in the trip's currency. A payment in a different currency from the deal's goes to review |
 | Go-live date | `STUDENT_PAYMENTS_START` | `UE_STUDENT_PAYMENTS_START` |
 | Mode | live | `UE_STUDENT_PAYMENTS_MODE`: `watch` (default), `live` or `off` |
 | Deal stages | not touched (pd-apply moves PD stages) | moved by the sync — see below |
@@ -86,6 +87,8 @@ Same sync, separate dashboard: **Unearthed Student Payments**. What's different:
 - Only forward. Never out of Closed Won / Closed Lost, never into Closed Lost.
 - Checked whenever a payment is logged to the deal, or found already on it.
 - **Check stages** on the Unearthed dashboard lists open UE deals whose stage is behind what's been paid (e.g. paid by hand before this existed). An admin can then press **Move these deals**.
+
+**From the application site.** Deposits paid at apply.unearthededucation.org carry `hubspot_deal_id` and `base_amount` too, so they log to the right deal without the card fee and move it to Deposit Paid.
 
 **From the UE portal.** Checkouts started in the Unearthed portal now carry `hubspot_deal_id`, so they match the exact deal. If that deal isn't in the UE student pipeline (e.g. a student deal created in "UE School Expeditions"), the payment waits in review rather than being written there.
 

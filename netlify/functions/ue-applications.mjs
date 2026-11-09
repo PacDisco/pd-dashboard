@@ -45,9 +45,8 @@
  *
  *   POST ?action=create-deal   { contactId, dealname, programId? }
  *        -> { id, pipeline, stage }
- *           Creates a deal in the Unearthed pipeline (auto-detected by name,
- *           or UE_DEAL_PIPELINE / UE_DEAL_STAGE env overrides; falls back to
- *           the default pipeline's first stage), associates it to the student
+ *           Creates a deal in the "Unearthed Education" student pipeline
+ *           (836668844; UE_DEAL_PIPELINE / UE_DEAL_STAGE override), first stage, associates it to the student
  *           contact and, when given, to the program record.
  *
  * Env vars:
@@ -395,8 +394,14 @@ async function getDealPipelineStage() {
   if (wantP) {
     pipeline = pipelines.find((p) => p.id === wantP || (p.label || "").toLowerCase() === wantP);
   }
+  // The student pipeline is "Unearthed Education" (836668844). Matching any
+  // label with "Unearthed"/"UE" used to pick "UE School Expeditions" (the
+  // school-level pipeline) because it's listed first — student deals there
+  // never reach the payment sync or the portals' payment schedule.
   if (!pipeline) {
-    pipeline = pipelines.find((p) => /unearthed|\bue\b/i.test(p.label || ""));
+    pipeline = pipelines.find((p) => p.id === "836668844")
+      || pipelines.find((p) => (p.label || "").trim().toLowerCase() === "unearthed education")
+      || pipelines.find((p) => /unearthed|\bue\b/i.test(p.label || "") && !/school expedition/i.test(p.label || ""));
   }
   if (!pipeline) {
     pipeline = pipelines.find((p) => p.id === "default") || pipelines[0];

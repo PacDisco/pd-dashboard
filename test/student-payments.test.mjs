@@ -359,7 +359,7 @@ const ueHub = {
 let ueMode = 'watch';
 const brandsFor = () => [
   { key: 'pd', label: 'Pacific Discovery', mode: 'live', stripeAccounts: [{ label: 'pd', key: 'sk_pd' }], wiseEnv: {}, wiseAlways: true, pipelines: ['74755425'], strictPipelines: false, surchargeRate: 0.035, stages: false, start: '' },
-  { key: 'ue', label: 'Unearthed Education', mode: ueMode, stripeAccounts: [{ label: 'ue', key: 'sk_ue' }], wiseEnv: { WISE_API_TOKEN: 'ue-wise' }, wiseAlways: false, pipelines: [UE_PIPELINE], strictPipelines: true, surchargeRate: 0.03, stages: true, start: '' },
+  { key: 'ue', label: 'Unearthed Education', mode: ueMode, stripeAccounts: [{ label: 'ue', key: 'sk_ue' }], wiseEnv: { WISE_API_TOKEN: 'ue-wise' }, wiseAlways: false, pipelines: [UE_PIPELINE], strictPipelines: true, surchargeRate: 0.03, stages: true, creditAsReceived: true, start: '' },
 ];
 const ueCharges = [
   // Portal checkout: card, $1,750 + 3% — base_amount + hubspot_deal_id in metadata.
@@ -412,6 +412,14 @@ await t('UE live: watch rows processed for real, stages move forward', async () 
   assert.equal(ueDeals.get('800000009').properties.payment_1, undefined);
   const [row] = await sql.query(`SELECT stage_move FROM deal_payments WHERE brand = 'ue' AND external_id = 'pi_UERUBY0001'`);
   assert.match(row.stage_move, /^Application Complete → Deposit Paid/);
+});
+await t('UE: a payment in NZD is credited as NZD, not converted', async () => {
+  ueDeals.set('800000003', { id: '800000003', properties: { dealname: 'Ana Rua — Borneo 2027', amount: '9000', pipeline: UE_PIPELINE, dealstage: 's-app' } });
+  ueCharges.push({ id: 'ch_nzd', status: 'succeeded', paid: true, amount: 180250, currency: 'nzd', created: sec, payment_intent: { id: 'pi_UENZD00001', metadata: { hubspot_deal_id: '800000003', base_amount: '1750' } } });
+  await run.runSync({ budgetMs: 10_000, pdfLimit: 0 });
+  const p = ueDeals.get('800000003').properties;
+  assert.match(p.payment_1, /^1750, pi_UENZD00001, \d{4}-\d{2}-\d{2}, NZD 1750\.00$/);
+  assert.equal(p.total_amount_paid, '1750'); assert.equal(p.dealstage, 's-dep');
 });
 await t('UE: paying the rest closes the deal won', async () => {
   ueCharges.push({ id: 'ch_ue5', status: 'succeeded', paid: true, amount: 175000, currency: 'usd', created: sec, payment_intent: { id: 'pi_UERUBY0002', metadata: { hubspot_deal_id: '800000001', base_amount: '1750' } } });

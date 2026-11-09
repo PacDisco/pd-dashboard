@@ -1,0 +1,9 @@
+{
+  "title": "Unearthed Application Form",
+  "description": "The Unearthed online application (apply.unearthededucation.org): edit the questions, the permissions packet and each school trip's launch link, and follow every applicant from application to signed waiver and deposit. Add students who applied on the old Jotform from HubSpot.",
+  "category": "Unearthed",
+  "icon": "📝",
+  "colors": ["#2d6b74", "#59a1aa"],
+  "allowedRoles": ["admin", "operations", "unearthed"],
+  "order": 21
+}

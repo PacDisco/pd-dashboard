@@ -22,6 +22,9 @@
 //   STUDENT_PAYMENTS_START       → UE_STUDENT_PAYMENTS_START
 //   STRIPE_CARD_FEE_RATE (0.035) → UE_STRIPE_CARD_FEE_RATE (0.03)
 //   —                            → UE_STUDENT_PAYMENTS_MODE  watch (default) | live | off
+//
+// UE payments are credited in the currency they arrive in (no conversion);
+// PD payments are converted to USD.
 
 import { stripeAccounts as pdStripeAccounts } from "./payment-sources.mjs";
 import { pipelines as pdPipelines } from "./hubspot-student.mjs";
@@ -66,6 +69,8 @@ export function brandConfigs(env = process.env, sources = {}) {
     strictPipelines: false,
     surchargeRate: rate(env.STRIPE_CARD_FEE_RATE, 0.035),
     stages: false,
+    // PD deals are kept in USD: other currencies are converted (ECB rate).
+    creditAsReceived: false,
     start: env.STUDENT_PAYMENTS_START || "",
   };
   const ueStripe = env.UE_STUDENT_PAYMENTS_STRIPE_KEYS
@@ -86,6 +91,10 @@ export function brandConfigs(env = process.env, sources = {}) {
     strictPipelines: true,
     surchargeRate: rate(env.UE_STRIPE_CARD_FEE_RATE, 0.03),
     stages: true,
+    // UE deals and the portal's payment schedule are in the trip's own
+    // currency (program_currency, e.g. NZD): a payment is credited as received,
+    // never converted, so "paid" lines up with the schedule the portal shows.
+    creditAsReceived: true,
     start: env.UE_STUDENT_PAYMENTS_START || "",
   };
   return [pd, ue].filter((b) => b.mode !== "off");
