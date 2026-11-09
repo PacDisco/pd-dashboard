@@ -1,5 +1,12 @@
 # Student Payments + Application PDFs
 
+Runs for **Pacific Discovery** and **Unearthed Education**. Each brand has its own Stripe account, its own Wise account, its own deal pipelines and its **own dashboard**:
+
+- **Student Payments** (`/student-payments/`, roles admin · operations · admissions): Pacific Discovery only, plus the application and lead-form PDFs.
+- **Unearthed Student Payments** (`/ue-student-payments/`, roles admin · operations · unearthed): Unearthed only, plus watch mode and deal stages.
+
+A payment is only ever matched to a deal of the brand whose account received it. Each dashboard's API only returns, assigns, ignores or requeues its own brand's payments. Both run on one 10-minute sync. Unearthed's setup is below in **Unearthed Education**.
+
 Every 10 minutes, `student-payments-sync` does three things:
 
 1. **Pulls new payments** from Stripe (succeeded charges) and Wise (incoming bank deposits on every balance) from the last 3 days. Each payment becomes a row in `deal_payments`. If the same payment is read twice, it's only stored once.
@@ -12,7 +19,7 @@ All environment variables go on the **pd-dashboard** Netlify site.
 
 ## Setup
 
-1. Run `MIGRATION-student-payments.sql` in the Neon SQL editor (after `MIGRATION-apply.sql`).
+1. Run `MIGRATION-student-payments.sql` in the Neon SQL editor (after `MIGRATION-apply.sql`), then `MIGRATION-student-payments-brands.sql`.
 2. Environment variables:
 
 | Key | Needed | What |
@@ -52,6 +59,39 @@ Payments are only processed once they're 15 minutes old, so pd-apply has time to
 - **Other currencies** are converted at that day's ECB reference rate (Frankfurter). The slot gets a 4th part, e.g. `…, NZD 4000.00 @ 0.5709`. That's a mid-market rate, not what Wise actually converted at.
 - **Card surcharge:** if a Stripe charge divided by 1.035 comes out to a whole dollar amount, the surcharge is assumed and stripped. So $258.75 is credited as $250 and $2,328.75 as $2,250. Any other amount is credited as charged.
 - **Refunds** aren't written back. A charge refunded in full before it was logged is marked Ignored.
+- **Two equal payments a few days apart** (e.g. two $1,750 instalments) are both logged. The "same amount within 3 days" duplicate check skips slots that name a different Stripe payment (`pi_…`/`ch_…`), so it only catches hand entries made from the bank feed.
+
+## Unearthed Education
+
+Same sync, separate dashboard: **Unearthed Student Payments**. What's different:
+
+| | Pacific Discovery | Unearthed Education |
+| --- | --- | --- |
+| Stripe | `STUDENT_PAYMENTS_STRIPE_KEYS` or `STRIPE_SECRET_KEY` | `UE_STUDENT_PAYMENTS_STRIPE_KEYS`, else `STRIPE_SECRET_KEY_UNEARTHED` (already set for the UE Stripe dashboard) |
+| Wise | `WISE_API_TOKEN` (+ `WISE_PROFILE_ID`) | `UE_WISE_API_TOKEN` (+ `UE_WISE_PROFILE_ID`) — Unearthed's own Wise business account |
+| Deals matched | `STUDENT_PAYMENT_PIPELINES` | `UE_STUDENT_PAYMENT_PIPELINES`, default `836668844` ("Unearthed Education") |
+| Deal ids from Stripe / references | accepted from any pipeline | only deals in the UE student pipeline; anything else goes to review |
+| Picking a deal by hand | any deal | only UE student deals — a deal in another pipeline has to be moved in HubSpot first |
+| Card fee stripped | `STRIPE_CARD_FEE_RATE`, 3.5% | `UE_STRIPE_CARD_FEE_RATE`, 3%. Portal checkouts send `base_amount`, which is used first |
+| Go-live date | `STUDENT_PAYMENTS_START` | `UE_STUDENT_PAYMENTS_START` |
+| Mode | live | `UE_STUDENT_PAYMENTS_MODE`: `watch` (default), `live` or `off` |
+| Deal stages | not touched (pd-apply moves PD stages) | moved by the sync — see below |
+
+**Watch mode.** Until `UE_STUDENT_PAYMENTS_MODE=live`, Unearthed payments are read and matched, and the **Watch mode** tab shows what *would* happen: which deal, which `payment_N`, the new total and any stage move. Nothing is written to HubSpot. Check those against what's been logged by hand, then set the variable to `live` and redeploy. The watch rows are processed for real on the next sync (anything already typed in by hand is recognised and not doubled).
+
+**Stage moves** (pipeline "Unearthed Education": Application Complete → Deposit Paid → Closed Won):
+
+- Total paid ≥ the trip's deposit → **Deposit Paid**. The deposit is `payment_amount_1` on the trip (Portal) record the deal is associated with, else on the global defaults record. If neither is set, any payment counts.
+- Total paid ≥ the deal amount → **Closed Won**. Deals with no amount never close automatically.
+- Only forward. Never out of Closed Won / Closed Lost, never into Closed Lost.
+- Checked whenever a payment is logged to the deal, or found already on it.
+- **Check stages** on the Unearthed dashboard lists open UE deals whose stage is behind what's been paid (e.g. paid by hand before this existed). An admin can then press **Move these deals**.
+
+**From the UE portal.** Checkouts started in the Unearthed portal now carry `hubspot_deal_id`, so they match the exact deal. If that deal isn't in the UE student pipeline (e.g. a student deal created in "UE School Expeditions"), the payment waits in review rather than being written there.
+
+**Schools paying directly** (trips with "school collecting payments" ticked) won't match a student and will land in review. Mark them "Not a student payment".
+
+**Access.** The tile appears under Unearthed for the roles admin, operations and unearthed. Change them in `ue-student-payments/dashboard.json` (and `ALLOWED_ROLES` in `netlify/functions/ue-student-payments.mjs`), or per person in dashboard permissions.
 
 ## Wise and strong customer authentication
 
@@ -61,13 +101,20 @@ Some Wise profiles need a signed request (SCA) to read balance statements. If yo
 
 ```
 MIGRATION-student-payments.sql
-netlify/functions/student-payments.mjs              dashboard API
+netlify/functions/student-payments.mjs              PD dashboard API (locked to brand pd)
+netlify/functions/ue-student-payments.mjs           Unearthed dashboard API (locked to brand ue)
+netlify/functions/_shared/student-payments-api.mjs  the routes both share
 netlify/functions/student-payments-sync.mjs         scheduled every 10 min
-netlify/functions/_shared/student-payments-run.mjs  one sync pass (shared)
+netlify/functions/_shared/student-payments-run.mjs  one sync pass (shared), per brand
+netlify/functions/_shared/payment-brands.mjs        which brands run, and each one's accounts / pipelines
+netlify/functions/_shared/deal-stages.mjs           UE stage rules (pure)
+MIGRATION-student-payments-brands.sql               brand column, watch status, stage_move
 netlify/functions/_shared/deal-payments.mjs         matching + slot rules (pure)
 netlify/functions/_shared/payment-sources.mjs       Stripe / Wise / FX reads
 netlify/functions/_shared/hubspot-student.mjs       HubSpot deals, contacts, files, notes
 netlify/functions/_shared/application-pdf.mjs       application → PDF
-student-payments/index.html, dashboard.json         the dashboard
+student-payments/index.html, dashboard.json         the PD dashboard
+ue-student-payments/index.html, dashboard.json      the Unearthed dashboard
+assets/student-payments.js, .css                    page script + styles both share
 test/student-payments.test.mjs                      npm run test:student-payments
 ```

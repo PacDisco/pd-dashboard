@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Student Payments — Unearthed Education</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/student-payments.css">
+<style>
+/* Unearthed Education — Inter, deep teal #2d6b74, light teal #59a1aa, cream #f9f8f2,
+   near-black #231f20 (same tokens as the Unearthed Field Budget dashboard). */
+:root{--topaz:#59a1aa;--teal:#2d6b74;--teal-dk:#22535a;--green:#5b8f6a;--ink:#231f20;--soft:#eaf3f4;--bg:#f9f8f2}
+body{font-family:Inter,system-ui,sans-serif}
+h1,h2,h3,.serif{font-family:Inter,system-ui,sans-serif;font-weight:600;letter-spacing:-.01em}
+.logo{height:24px;width:auto;display:block}
+</style>
+<script src="/assets/lightbox.js" defer></script>
+</head>
+<body>
+<div class="bar">
+  <a class="crumb" href="/">← Dashboards</a>
+  <img class="logo" src="/assets/unearthed-logo.png" alt="Unearthed Education" width="493" height="120">
+  <h1 class="serif">Student Payments</h1>
+  <span class="spacer"></span>
+  <span class="sync-state" id="syncState">—</span>
+  <button class="btn btn--primary" id="syncBtn">Sync now</button>
+</div>
+<main>
+  <div id="notices"></div>
+  <div class="grid" id="stats"></div>
+
+  <section class="panel">
+    <header>
+      <h2>Payments</h2>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <input class="inp search" id="q" type="search" placeholder="Search payer, reference, deal…" aria-label="Search payments">
+    </header>
+    <div id="list"><div class="empty">Loading…</div></div>
+  </section>
+
+  <section class="panel hidden" id="stagePanel">
+    <header><h2>Deal stages</h2><span class="muted">Application Complete → Deposit Paid → Closed Won, from what's been paid</span>
+      <span class="spacer"></span><button class="btn btn--sm" id="stageCheckBtn">Check stages</button><button class="btn btn--sm btn--primary hidden" id="stageApplyBtn">Move these deals</button></header>
+    <ul class="moves" id="stageList"><li class="muted">Finds open Unearthed deals whose stage is behind what's been paid — e.g. deposit paid but still at Application Complete. Nothing changes until an admin presses “Move these deals”.</li></ul>
+  </section>
+</main>
+
+<script>window.SP_CONFIG = { api: '/api/ue-student-payments' };</script>
+<script src="/assets/student-payments.js"></script>
+</body>
+</html>

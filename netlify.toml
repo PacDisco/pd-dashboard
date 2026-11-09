@@ -60,6 +60,10 @@
 [functions."student-payments"]
   timeout = 26
 
+# Same for "Sync now" on the Unearthed Student Payments dashboard.
+[functions."ue-student-payments"]
+  timeout = 26
+
 # Form attachments: every 5 minutes, attach a PDF of every quiz, referral,
 # step-1-only application and Meta lead form to the HubSpot contact. See
 # FORM-ATTACHMENTS.md.

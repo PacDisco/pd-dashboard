@@ -1,0 +1,16 @@
+{
+  "title": "Unearthed Student Payments",
+  "description": "Stripe and Wise payments into Unearthed Education's accounts, logged against students' HubSpot deals — the queue for payments that couldn't be matched, watch mode, and deal stages moved as payments come in.",
+  "category": "Unearthed",
+  "icon": "💳",
+  "colors": [
+    "#2d6b74",
+    "#59a1aa"
+  ],
+  "allowedRoles": [
+    "admin",
+    "operations",
+    "unearthed"
+  ],
+  "order": 23
+}

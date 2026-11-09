@@ -86,7 +86,10 @@ const dayDiff = (a, b) => Math.abs((Date.parse(a) - Date.parse(b)) / 86_400_000)
  *   1. Any slot mentions the payment's reference (pi_…, ch_…, Wise ref).
  *   2. A slot has the same USD amount (to the cent) dated within 3 days.
  *      Catches hand entries made from the bank feed with a different reference.
+ *      A slot that names a different Stripe payment (pi_/ch_/py_) is a
+ *      different payment, so two equal instalments days apart both get logged.
  */
+const STRIPE_REF = /\b(?:pi|ch|py)_[A-Za-z0-9]{6,}/i;
 export function findExisting(slots, { refs = [], amountUsd, date }) {
   const wanted = refs.map((r) => String(r || "").trim().toLowerCase()).filter((r) => r.length >= 6);
   for (const s of slots) {
@@ -97,6 +100,7 @@ export function findExisting(slots, { refs = [], amountUsd, date }) {
   if (amountUsd != null && date) {
     for (const s of slots) {
       if (s.amount == null || !s.date) continue;
+      if (STRIPE_REF.test(s.raw)) continue; // reference check above already ruled it out
       if (Math.abs(s.amount - amountUsd) < 0.005 && dayDiff(s.date, date) <= 3) return { slot: s.n, why: "amount_and_date" };
     }
   }

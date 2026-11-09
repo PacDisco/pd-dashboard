@@ -11,6 +11,8 @@ import {
 import * as hubStudent from '../netlify/functions/_shared/hubspot-student.mjs';
 import { applicationRows, buildApplicationPdf, pdfText } from '../netlify/functions/_shared/application-pdf.mjs';
 import { stripeAccounts } from '../netlify/functions/_shared/payment-sources.mjs';
+import { brandConfigs, brandConfigured, UE_PIPELINE } from '../netlify/functions/_shared/payment-brands.mjs';
+import { planStageMove, findStage } from '../netlify/functions/_shared/deal-stages.mjs';
 
 let n = 0; const t = async (name, fn) => { await fn(); n++; console.log('  ✓', name); };
 
@@ -34,6 +36,11 @@ await t('planWrite: next free slot, running total, original currency appended', 
   assert.equal(w.action, 'write'); assert.equal(w.prop, 'payment_3');
   assert.equal(w.line, '2283.75, TRANSFER-99887766, 2026-10-20, NZD 4000.00 @ 0.5709');
   assert.equal(w.total, 4783.75);
+});
+await t('planWrite: an equal instalment days later is new when the slot names another Stripe payment', () => {
+  const props = { payment_1: '1750, pi_FIRST000001, 2026-10-01' };
+  assert.equal(planWrite(props, { ref: 'pi_SECOND00001', amountUsd: 1750, currency: 'USD', date: '2026-10-02' }).action, 'write');
+  assert.equal(planWrite({ payment_1: '1750, bank feed, 2026-10-01' }, { ref: 'pi_SECOND00001', amountUsd: 1750, currency: 'USD', date: '2026-10-02' }).action, 'already');
 });
 await t('planWrite: keeps a hand-kept total and adds to it', () => {
   const w = planWrite({ payment_1: '250, x, 2026-01-01', total_amount_paid: '1250' }, { ref: 'pi_newpayment', amountUsd: 500, currency: 'USD', date: '2026-10-01' });
@@ -186,6 +193,38 @@ await t('application PDF builds', () => {
   assert.equal(pdfText('“Hi” — 日本'), '"Hi" - ??');
 });
 
+console.log('brands + stages');
+await t('brands: PD unchanged; UE off until configured, then watch by default', () => {
+  const env = { STRIPE_SECRET_KEY: 'sk_pd', STUDENT_PAYMENT_PIPELINES: '1,2' };
+  let [pd, ue] = brandConfigs(env);
+  assert.equal(pd.mode, 'live'); assert.deepEqual(pd.pipelines, ['1', '2']); assert.equal(pd.surchargeRate, 0.035); assert.equal(pd.stages, false);
+  assert.equal(pd.stripeAccounts[0].key, 'sk_pd');
+  assert.equal(brandConfigured(ue), false); assert.equal(ue.mode, 'watch'); assert.deepEqual(ue.pipelines, [UE_PIPELINE]);
+  [, ue] = brandConfigs({ ...env, STRIPE_SECRET_KEY_UNEARTHED: 'sk_ue', UE_WISE_API_TOKEN: 'w', UE_STUDENT_PAYMENTS_MODE: 'LIVE' });
+  assert.equal(brandConfigured(ue), true); assert.equal(ue.mode, 'live'); assert.equal(ue.surchargeRate, 0.03);
+  assert.deepEqual(ue.stripeAccounts, [{ label: 'ue', key: 'sk_ue' }]); assert.equal(ue.wiseEnv.WISE_API_TOKEN, 'w');
+  assert.equal(ue.strictPipelines, true); assert.equal(ue.stages, true);
+  assert.equal(brandConfigs({ ...env, UE_STUDENT_PAYMENTS_MODE: 'off' }).length, 1);
+  // PD's Stripe accounts can still be injected (tests, multi-account env).
+  assert.equal(brandConfigs(env, { stripeAccounts: () => [{ label: 'x', key: 'k' }] })[0].stripeAccounts[0].label, 'x');
+});
+const UE_PIPE = { id: UE_PIPELINE, stages: [
+  { id: 's-app', label: 'Application Complete', displayOrder: 0 }, { id: 's-dep', label: 'Deposit Paid', displayOrder: 1 },
+  { id: 's-won', label: 'Closed Won', displayOrder: 2 }, { id: 's-lost', label: 'Closed Lost', displayOrder: 3 }] };
+await t('stages: deposit → Deposit Paid, full amount → Closed Won, only forward, never out of closed', () => {
+  assert.equal(findStage(UE_PIPE, 'depositPaid').id, 's-dep');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-app', amount: 12000, paid: 1750 }, 1750).to.id, 's-dep');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-app', amount: 12000, paid: 1000 }, 1750), null, 'below the deposit');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-app', amount: 0, paid: 500 }, null).to.id, 's-dep', 'no deposit set: any payment');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-dep', amount: 12000, paid: 11999.6 }, 1750).to.id, 's-won');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-app', amount: 12000, paid: 12000 }, 1750).to.id, 's-won', 'can skip a stage');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-dep', amount: 12000, paid: 5000 }, 1750), null, 'already there');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-won', amount: 12000, paid: 1750 }, 1750), null, 'never backwards');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-lost', amount: 12000, paid: 12000 }, 1750), null, 'never out of Closed Lost');
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-app', amount: 12000, paid: 0 }, 1750), null);
+  assert.equal(planStageMove(UE_PIPE, { stageId: 's-app', amount: 0, paid: 99999 }, 1750).to.id, 's-dep', 'no amount: never Closed Won');
+});
+
 // ── DB: one pass end to end ─────────────────────────────────────────────────
 let pg; try { pg = (await import('pg')).default; } catch { pg = null; }
 const pool = pg && new pg.Pool({ connectionString: process.env.TEST_PG_URL || 'postgres://postgres@127.0.0.1:55432/apply' });
@@ -198,6 +237,7 @@ if (!dbOk) {
 console.log('sync pass (Postgres)');
 await pool.query(readFileSync(new URL('../MIGRATION-apply.sql', import.meta.url), 'utf8'));
 await pool.query(readFileSync(new URL('../MIGRATION-student-payments.sql', import.meta.url), 'utf8'));
+await pool.query(readFileSync(new URL('../MIGRATION-student-payments-brands.sql', import.meta.url), 'utf8'));
 await pool.query('TRUNCATE deal_payments, apply_files, applications, apply_form_versions, apply_forms CASCADE');
 await pool.query('UPDATE student_payment_state SET lock_until = NULL');
 const sql = async (s, ...v) => (await pool.query(s.reduce((a, x, i) => a + x + (i < v.length ? `$${i + 1}` : ''), ''), v)).rows;
@@ -296,6 +336,130 @@ await t('application PDFs attach once, then relink when the deal appears', async
   assert.equal(r.relinked, 1); assert.equal(r.attached, 0);
   const [a] = await sql.query(`SELECT pdf_deal_id FROM applications WHERE token_hash = 't1'`);
   assert.equal(a.pdf_deal_id, '555');
+});
+
+// ── Unearthed: its own accounts + pipeline, watch mode, then live with stages ──
+console.log('Unearthed (Postgres)');
+const ueDeals = new Map([
+  ['800000001', { id: '800000001', properties: { dealname: 'Ruby Isla Thornburgh — Nepal 2028', amount: '12000', deal_currency_code: 'USD', pipeline: UE_PIPELINE, dealstage: 's-app' } }],
+  ['800000002', { id: '800000002', properties: { dealname: 'Emily Rose Messingham — Nepal 2028', amount: '12000', deal_currency_code: 'USD', pipeline: UE_PIPELINE, dealstage: 's-app', payment_1: '1750, pi_UEHAND00001, 30 Aug 2026', total_amount_paid: '1750' } }],
+  ['800000009', { id: '800000009', properties: { dealname: 'Matthew Winstone — Nepal 2028', amount: '12000', deal_currency_code: 'USD', pipeline: '950207119', dealstage: 'launch' } }],
+]);
+const allDeals = () => new Map([...deals, ...ueDeals]);
+const ueWrites = [];
+const ueHub = {
+  ...fakeHub,
+  getDeal: async (id) => toDeal(allDeals().get(String(id)) || null),
+  updateDeal: async (id, props) => { ueWrites.push({ id, props }); Object.assign(allDeals().get(id).properties, props); },
+  dealsForEmail: async (e, allowed) => [...allDeals().values()].map(toDeal).filter((d) => e === 'parent@thornburgh.nz' && d.id === '800000001' && (!allowed || allowed.includes(d.pipeline))),
+  openStudentDeals: async (allowed) => [...allDeals().values()].map(toDeal).filter((d) => !allowed || allowed.includes(d.pipeline)),
+  dealPipeline: async (id) => (id === UE_PIPELINE ? UE_PIPE : null),
+  ueDepositsForDeals: async (ids) => new Map(ids.map((id) => [String(id), 1750])),
+};
+let ueMode = 'watch';
+const brandsFor = () => [
+  { key: 'pd', label: 'Pacific Discovery', mode: 'live', stripeAccounts: [{ label: 'pd', key: 'sk_pd' }], wiseEnv: {}, wiseAlways: true, pipelines: ['74755425'], strictPipelines: false, surchargeRate: 0.035, stages: false, start: '' },
+  { key: 'ue', label: 'Unearthed Education', mode: ueMode, stripeAccounts: [{ label: 'ue', key: 'sk_ue' }], wiseEnv: { WISE_API_TOKEN: 'ue-wise' }, wiseAlways: false, pipelines: [UE_PIPELINE], strictPipelines: true, surchargeRate: 0.03, stages: true, start: '' },
+];
+const ueCharges = [
+  // Portal checkout: card, $1,750 + 3% — base_amount + hubspot_deal_id in metadata.
+  { id: 'ch_ue1', status: 'succeeded', paid: true, amount: 180250, currency: 'usd', created: sec, payment_intent: { id: 'pi_UERUBY0001', metadata: { hubspot_deal_id: '800000001', base_amount: '1750' } } },
+  // Already typed onto Emily's deal by hand.
+  { id: 'ch_ue2', status: 'succeeded', paid: true, amount: 175000, currency: 'usd', created: sec, payment_intent: { id: 'pi_UEHAND00001', metadata: {} } },
+  // Portal picked the student's deal in the school pipeline — must not be written.
+  { id: 'ch_ue3', status: 'succeeded', paid: true, amount: 175000, currency: 'usd', created: sec, payment_intent: { id: 'pi_UEMATT0001', metadata: { hubspot_deal_id: '800000009' } } },
+  // Someone tries to pay a PD deal id through the UE account.
+  { id: 'ch_ue4', status: 'succeeded', paid: true, amount: 50000, currency: 'usd', created: sec, payment_intent: { id: 'pi_UEPDID0001', metadata: { hubspot_deal_id: '700000001' } } },
+];
+run.__setDeps({
+  hub: ueHub,
+  brands: brandsFor,
+  stripeAccounts: () => [],
+  listStripeCharges: async ({ key }) => (key === 'sk_ue' ? ueCharges : []),
+  listWiseCredits: async ({ env }) => (env?.WISE_API_TOKEN === 'ue-wise' ? [{ balance: { id: 9, currency: 'USD' }, transactions: [
+    // Same reference number as PD's Wise test transfer — different account, so both are kept.
+    { type: 'CREDIT', date: old.toISOString(), amount: { value: 8500, currency: 'USD' }, details: { type: 'DEPOSIT', senderName: 'J THORNBURGH', paymentReference: 'Ruby Thornburgh Nepal' }, referenceNumber: 'TRANSFER-1' },
+  ] }] : []),
+  usdRate: async (cur) => (cur === 'USD' ? 1 : 0.5),
+  buildPdf: () => new Uint8Array([37, 80, 68, 70]),
+});
+
+await t('UE watch mode: matches and previews, writes nothing', async () => {
+  const before = ueWrites.length;
+  const r = await run.runSync({ budgetMs: 10_000, pdfLimit: 0 });
+  assert.equal(r.ingest.byBrand.ue.stripe.added, 4); assert.equal(r.ingest.byBrand.ue.wise.added, 1);
+  assert.equal(ueWrites.length, before, 'no HubSpot writes in watch mode');
+  const rows = Object.fromEntries((await sql.query(`SELECT external_id, status, slot, deal_id, amount_usd, stage_move, reason, account FROM deal_payments WHERE brand = 'ue'`)).map((x) => [x.external_id, x]));
+  assert.equal(rows.pi_UERUBY0001.status, 'watch'); assert.equal(rows.pi_UERUBY0001.slot, 1); assert.equal(Number(rows.pi_UERUBY0001.amount_usd), 1750);
+  assert.match(rows.pi_UERUBY0001.stage_move, /^would move Application Complete → Deposit Paid/);
+  assert.equal(rows.pi_UERUBY0001.account, 'ue');
+  assert.equal(rows.pi_UEHAND00001.status, 'watch'); assert.match(rows.pi_UEHAND00001.reason, /already on the deal/);
+  assert.equal(rows.pi_UEMATT0001.status, 'review'); assert.match(rows.pi_UEMATT0001.reason, /isn't in the Unearthed Education student pipeline/);
+  assert.equal(rows.pi_UEPDID0001.status, 'review');
+  assert.equal(rows['TRANSFER-1'].status, 'watch'); assert.equal(rows['TRANSFER-1'].account, 'ue-wise-USD');
+  const [{ n: both }] = await sql.query(`SELECT count(*)::int AS n FROM deal_payments WHERE external_id = 'TRANSFER-1'`);
+  assert.equal(both, 2, 'same Wise reference kept once per brand');
+});
+await t('UE live: watch rows processed for real, stages move forward', async () => {
+  ueMode = 'live';
+  const r = await run.runSync({ budgetMs: 10_000, pdfLimit: 0 });
+  assert.equal(r.process.logged, 2); assert.equal(r.process.already, 1);
+  const ruby = ueDeals.get('800000001').properties;
+  assert.match(ruby.payment_1, /^1750, pi_UERUBY0001, /); assert.match(ruby.payment_2, /^8500, TRANSFER-1, /);
+  assert.equal(ruby.total_amount_paid, '10250'); assert.equal(ruby.dealstage, 's-dep');
+  const emily = ueDeals.get('800000002').properties;
+  assert.equal(emily.payment_2, undefined, 'hand entry not duplicated'); assert.equal(emily.dealstage, 's-dep', 'stage caught up from the hand entry');
+  assert.equal(ueDeals.get('800000009').properties.payment_1, undefined);
+  const [row] = await sql.query(`SELECT stage_move FROM deal_payments WHERE brand = 'ue' AND external_id = 'pi_UERUBY0001'`);
+  assert.match(row.stage_move, /^Application Complete → Deposit Paid/);
+});
+await t('UE: paying the rest closes the deal won', async () => {
+  ueCharges.push({ id: 'ch_ue5', status: 'succeeded', paid: true, amount: 175000, currency: 'usd', created: sec, payment_intent: { id: 'pi_UERUBY0002', metadata: { hubspot_deal_id: '800000001', base_amount: '1750' } } });
+  await run.runSync({ budgetMs: 10_000, pdfLimit: 0 });
+  assert.equal(ueDeals.get('800000001').properties.total_amount_paid, '12000');
+  assert.equal(ueDeals.get('800000001').properties.dealstage, 's-won');
+});
+const { default: ueHandler } = await import('../netlify/functions/ue-student-payments.mjs');
+const ueDeps = (user) => ({ verifiedUser: async () => user, accessInputs: async () => ({ grants: null, dashboard: { slug: 'ue-student-payments', allowedRoles: ['admin', 'operations', 'unearthed'] } }) });
+const ueCall = async (user, body, qs = '') => {
+  const res = await ueHandler(new Request(`https://d/api/ue-student-payments${qs}`, body ? { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}), {}, ueDeps(user));
+  return { status: res.status, body: await res.json() };
+};
+const ueStaff = { email: 'u@ue.org', name: 'UE Ops', roles: ['unearthed'] };
+await t('API: each dashboard sees and touches only its own brand', async () => {
+  // Access: the UE dashboard's roles, not PD's.
+  assert.equal((await ueCall({ ...ueStaff, roles: ['admissions'] }, null, '?action=summary')).status, 403);
+  const ue = await ueCall(ueStaff, null, '?action=summary');
+  assert.equal(ue.status, 200); assert.equal(ue.body.counts.review, 2); assert.equal(ue.body.brand.key, 'ue'); assert.equal(ue.body.brand.mode, 'live');
+  assert.equal(ue.body.pdfs, undefined, 'no PD application PDFs on the UE dashboard');
+  const pd = await call(ops, null, '?action=summary');
+  assert.equal(pd.body.brand.key, 'pd'); assert.equal(pd.body.counts.review, 0); assert.ok(pd.body.pdfs);
+  const pdAll = (await call(ops, null, '?action=list&status=all')).body.payments;
+  assert.ok(pdAll.length > 0); assert.ok(pdAll.every((p) => !String(p.external_id).startsWith('pi_UE')), 'PD list has no UE payments');
+  const { body: { payments } } = await ueCall(ueStaff, null, '?action=list&status=attention');
+  assert.equal(payments.length, 2);
+  const matt = payments.find((p) => p.external_id === 'pi_UEMATT0001');
+  // The PD dashboard can't act on a UE payment.
+  assert.equal((await call(ops, { action: 'ignore', id: matt.id })).status, 404);
+  assert.equal((await call(ops, { action: 'assign', id: matt.id, dealId: '700000001' })).status, 404);
+  assert.equal((await call(ops, { action: 'stage-check' })).status, 400, 'PD has no stage check');
+  // UE can't log to a deal outside its pipeline — move the deal first, then retry.
+  const bad = await ueCall(ueStaff, { action: 'assign', id: matt.id, dealId: '800000009' });
+  assert.equal(bad.status, 400); assert.match(bad.body.error, /isn't in the Unearthed Education student pipeline/);
+  ueDeals.get('800000009').properties.pipeline = UE_PIPELINE; ueDeals.get('800000009').properties.dealstage = 's-app';
+  assert.equal((await ueCall(ueStaff, { action: 'requeue', id: matt.id })).status, 200);
+  const sync = await ueCall(ueStaff, { action: 'sync' });
+  assert.equal(sync.body.result.pdfs, undefined, 'UE sync does no PD PDF work');
+  assert.equal(ueDeals.get('800000009').properties.payment_1.split(',')[0], '1750');
+  assert.equal(ueDeals.get('800000009').properties.dealstage, 's-dep');
+});
+await t('API: UE stage check (admins apply)', async () => {
+  ueDeals.get('800000002').properties.dealstage = 's-app';
+  const chk = await ueCall(ueStaff, { action: 'stage-check' });
+  assert.deepEqual(chk.body.result.moves.map((m) => m.dealId), ['800000002']); assert.equal(chk.body.result.moves[0].applied, false);
+  assert.equal((await ueCall(ueStaff, { action: 'stage-check', apply: true })).status, 403);
+  const ap = await ueCall({ ...ueStaff, roles: ['admin'] }, { action: 'stage-check', apply: true });
+  assert.equal(ap.status, 200, JSON.stringify(ap.body)); assert.equal(ap.body.result.moves[0].applied, true); assert.equal(ueDeals.get('800000002').properties.dealstage, 's-dep');
 });
 
 await pool.end();

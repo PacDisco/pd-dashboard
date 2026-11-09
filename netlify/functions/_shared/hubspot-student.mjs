@@ -8,6 +8,10 @@
 // which deals name/email matching will consider. Defaults to the five
 // pipelines the Enrollment dashboard shows. A deal id given explicitly (Stripe
 // metadata, a reference) is accepted from any pipeline.
+//
+// Each brand (payment-brands.mjs) passes its own pipeline list as `allowed`,
+// so a Pacific Discovery payment is never matched to an Unearthed deal or the
+// other way round. Leaving `allowed` out means the PD list, as before.
 
 import { SLOT_PROPS, slotsOf, nameVariants, contactFits } from "./deal-payments.mjs";
 
@@ -101,8 +105,7 @@ async function searchAll(object, body, maxPages = 25) {
 const isOpenStudentDeal = (allowed) => (d) => d && !d.closedLost && allowed.includes(String(d.pipeline));
 
 /** Open deals in the student pipelines created in the last 3 years. */
-export async function openStudentDeals() {
-  const allowed = pipelines();
+export async function openStudentDeals(allowed = pipelines()) {
   const since = new Date(Date.now() - 3 * 365 * 86_400_000).toISOString();
   const recs = await searchAll("deals", {
     filterGroups: [{ filters: [
@@ -115,16 +118,16 @@ export async function openStudentDeals() {
   return recs.map(toDeal).filter(isOpenStudentDeal(allowed));
 }
 
-async function dealsOfContacts(contactIds) {
+async function dealsOfContacts(contactIds, allowed = pipelines()) {
   if (!contactIds.length) return [];
   const data = await hs(`/crm/v4/associations/contacts/deals/batch/read`, {
     method: "POST", body: { inputs: contactIds.slice(0, 50).map((id) => ({ id: String(id) })) },
   });
   const dealIds = [...new Set((data?.results || []).flatMap((r) => (r.to || []).map((t) => String(t.toObjectId))))];
-  return (await batchReadDeals(dealIds.slice(0, 100))).filter(isOpenStudentDeal(pipelines()));
+  return (await batchReadDeals(dealIds.slice(0, 100))).filter(isOpenStudentDeal(allowed));
 }
 
-export async function dealsForEmail(email) {
+export async function dealsForEmail(email, allowed = pipelines()) {
   const e = String(email || "").trim().toLowerCase();
   if (!e.includes("@")) return [];
   const recs = await searchAll("contacts", {
@@ -134,7 +137,7 @@ export async function dealsForEmail(email) {
     ],
     properties: ["email"],
   }, 1);
-  return dealsOfContacts(recs.map((r) => r.id));
+  return dealsOfContacts(recs.map((r) => r.id), allowed);
 }
 
 /**
@@ -144,7 +147,7 @@ export async function dealsForEmail(email) {
  * checked word-for-word with contactFits. More than 5 fitting contacts means
  * a common name, which is no evidence of anything.
  */
-export async function dealsForPerson(fullName) {
+export async function dealsForPerson(fullName, allowed = pipelines()) {
   const variants = nameVariants(fullName).slice(0, 4);
   if (!variants.length) return [];
   const recs = await searchAll("contacts", {
@@ -156,7 +159,7 @@ export async function dealsForPerson(fullName) {
   }, 1);
   const fits = recs.filter((r) => contactFits(r.properties, variants));
   if (!fits.length || fits.length > 5) return [];
-  return dealsOfContacts(fits.map((r) => r.id));
+  return dealsOfContacts(fits.map((r) => r.id), allowed);
 }
 
 /** Free-text deal search for the review queue's "pick a deal" box. */
@@ -169,6 +172,69 @@ export async function searchDeals(q) {
     body: { query: text, limit: 20, properties: DEAL_PROPS, sorts: [{ propertyName: "createdate", direction: "DESCENDING" }] },
   });
   return (data?.results || []).map(toDeal);
+}
+
+// ── stages (Unearthed: the sync moves deal stages as money comes in) ───────
+
+const _pipes = new Map();
+/** { id, label, stages: [{ id, label, displayOrder }] } for a deal pipeline, cached per run. */
+export async function dealPipeline(pipelineId) {
+  const id = String(pipelineId || "");
+  if (!id) return null;
+  if (_pipes.has(id)) return _pipes.get(id);
+  const data = await hs(`/crm/v3/pipelines/deals/${encodeURIComponent(id)}`);
+  const pipe = data ? {
+    id: String(data.id), label: data.label || "",
+    stages: (data.stages || []).map((s) => ({ id: String(s.id), label: s.label || "", displayOrder: s.displayOrder ?? 0 })),
+  } : null;
+  _pipes.set(id, pipe);
+  return pipe;
+}
+
+// The UE trip ("Portal") record holds the payment schedule; payment_amount_1
+// is the deposit. Record 50506535214 holds the defaults for unset fields.
+export const UE_PORTAL_OBJECT = process.env.UE_PROGRAM_OBJECT_TYPE || "2-58156993";
+export const UE_GLOBAL_PORTAL_ID = "50506535214";
+const _portalDeposit = new Map();
+
+function parseScheduleAmount(v) {
+  const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+async function portalDeposit(portalId) {
+  if (_portalDeposit.has(portalId)) return _portalDeposit.get(portalId);
+  const rec = await hs(`/crm/v3/objects/${UE_PORTAL_OBJECT}/${portalId}?properties=payment_amount_1`);
+  const v = parseScheduleAmount(rec?.properties?.payment_amount_1);
+  _portalDeposit.set(portalId, v);
+  return v;
+}
+
+/**
+ * The deposit for each UE deal: payment_amount_1 on the trip record the deal
+ * is associated with, else the global default. null when neither is set.
+ * @returns Map<dealId, number|null>
+ */
+export async function ueDepositsForDeals(dealIds) {
+  const out = new Map();
+  const ids = [...new Set(dealIds.map(String))];
+  for (let i = 0; i < ids.length; i += 100) {
+    const data = await hs(`/crm/v4/associations/deals/${UE_PORTAL_OBJECT}/batch/read`, {
+      method: "POST", body: { inputs: ids.slice(i, i + 100).map((id) => ({ id })) },
+    });
+    for (const r of data?.results || []) {
+      const portal = (r.to || [])[0]?.toObjectId;
+      if (portal) out.set(String(r.from?.id), String(portal));
+    }
+  }
+  const fallback = await portalDeposit(UE_GLOBAL_PORTAL_ID).catch(() => null);
+  const res = new Map();
+  for (const id of ids) {
+    const portal = out.get(id);
+    const v = portal ? await portalDeposit(portal).catch(() => null) : null;
+    res.set(id, v ?? fallback ?? null);
+  }
+  return res;
 }
 
 // ── files + notes (application PDFs) ───────────────────────────────────────

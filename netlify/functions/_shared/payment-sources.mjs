@@ -71,18 +71,20 @@ async function wiseGet(path, env, fetchImpl) {
   return body;
 }
 
-let _profileId = null;
+// Keyed by token: each brand has its own Wise account and token.
+const _profileIds = new Map();
 /**
  * The business profile the token belongs to. Wise lists every profile the
  * token can see (personal + business); exactly one business one is expected.
  */
 export async function wiseBusinessProfileId(env = process.env, fetchImpl = fetch) {
-  if (_profileId) return _profileId;
+  const cached = _profileIds.get(env.WISE_API_TOKEN);
+  if (cached) return cached;
   const profiles = await wiseGet(`/v2/profiles`, env, fetchImpl);
   const biz = (profiles || []).filter((p) => String(p.type || "").toLowerCase() === "business");
-  if (biz.length === 1) return (_profileId = String(biz[0].id));
+  if (biz.length === 1) { const id = String(biz[0].id); _profileIds.set(env.WISE_API_TOKEN, id); return id; }
   if (!biz.length) throw new Error("This Wise token can't see a business profile — create the token while signed in to the business account.");
-  throw new Error(`This Wise token can see ${biz.length} business profiles (${biz.map((p) => `${p.id} ${p.businessName || p.details?.name || ""}`.trim()).join(", ")}) — set WISE_PROFILE_ID to the right one.`);
+  throw new Error(`This Wise token can see ${biz.length} business profiles (${biz.map((p) => `${p.id} ${p.businessName || p.details?.name || ""}`.trim()).join(", ")}) — set WISE_PROFILE_ID (UE_WISE_PROFILE_ID for Unearthed) to the right one.`);
 }
 
 /**
