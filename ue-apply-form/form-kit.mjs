@@ -25,7 +25,10 @@
 //   prefill?: "trip:school" | ...,                    (visible, starts filled in)
 //   accept?, maxMb?,                                  (file)
 //   jf?: { name, type, mirror? },
-//   hubspot?: { contact?: "prop" | { first, last }, deal?: "prop" } }
+//   hubspot?: { contact?: "prop" | { first, middle?, last }, deal?: "prop" } }
+// Full-name fields with `middle: true` also ask for middle name(s) (optional).
+// The applicant's own name (`name`) always does unless `middle: false` — on
+// both the student and the teacher & trip leader forms (it must match the passport).
 
 export const KIT_VERSION = 1;
 
@@ -105,11 +108,16 @@ export function isEmptyValue(field, v) {
   }
 }
 
+/** Does this full-name field ask for middle name(s)? */
+export function asksMiddle(field) {
+  return field?.type === 'fullname' && (field.middle === true || (field.key === 'name' && field.middle !== false));
+}
+
 /** A plain-text rendering of a value, for conditions, summaries and HubSpot. */
 export function valueText(field, v) {
   if (v == null) return '';
   switch (field.type) {
-    case 'fullname': return [v.first, v.last].filter(Boolean).map((s) => String(s).trim()).join(' ');
+    case 'fullname': return [v.first, v.middle, v.last].filter(Boolean).map((s) => String(s).trim()).join(' ');
     case 'address': return [...ADDRESS_PARTS.map((k) => v[k]), v.country].filter(Boolean).join(', ');
     case 'phone': return phoneText(v);
     case 'checkbox': return Array.isArray(v) ? v.join(', ') : String(v);
@@ -305,7 +313,7 @@ export function uniquenessErrors(schema, stepKey, values) {
 function normalise(field, v) {
   const s = (x) => String(x ?? '').trim();
   switch (field.type) {
-    case 'fullname': return { first: s(v.first), last: s(v.last) };
+    case 'fullname': return { first: s(v.first), ...(asksMiddle(field) && s(v.middle) ? { middle: s(v.middle) } : {}), last: s(v.last) };
     case 'address': return Object.fromEntries(ADDRESS_PARTS.map((k) => [k, s(v[k])]));
     case 'phone': return { cc: s(v.cc).replace(/\D/g, ''), number: s(v.number) };
     case 'checkbox': return v.map(s);
@@ -721,8 +729,13 @@ export function renderStep(root, schema, stepKey, opts = {}) {
       }
       case 'fullname': {
         const n = v || {};
-        box.innerHTML = `<div class="fk-row"><div class="fk-sub"><input id="${id}" autocomplete="given-name" value="${esc(n.first || '')}" aria-label="First name"${req}${db}><small>First name</small></div><div class="fk-sub"><input id="${id}_last" autocomplete="family-name" value="${esc(n.last || '')}" aria-label="Last name"${req}${db}><small>Last name</small></div></div>`;
-        on('input', 'input', () => set(field, { first: box.querySelector(`#${id}`).value, last: box.querySelector(`#${id}_last`).value }));
+        const mid = asksMiddle(field) ? `<div class="fk-sub"><input id="${id}_middle" autocomplete="additional-name" value="${esc(n.middle || '')}" aria-label="Middle name(s)"${db}><small>Middle name(s), if any</small></div>` : '';
+        box.innerHTML = `<div class="fk-row"><div class="fk-sub"><input id="${id}" autocomplete="given-name" value="${esc(n.first || '')}" aria-label="First name"${req}${db}><small>First name</small></div>${mid}<div class="fk-sub"><input id="${id}_last" autocomplete="family-name" value="${esc(n.last || '')}" aria-label="Last name"${req}${db}><small>Last name</small></div></div>`;
+        on('input', 'input', () => set(field, {
+          first: box.querySelector(`#${id}`).value,
+          ...(asksMiddle(field) ? { middle: box.querySelector(`#${id}_middle`).value } : {}),
+          last: box.querySelector(`#${id}_last`).value,
+        }));
         break;
       }
       case 'address': {

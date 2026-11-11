@@ -139,7 +139,10 @@ function render() {
     $('#firstImport').addEventListener('click', importDialog);
     return;
   }
-  ({ fields: renderFields, waiver: renderWaiverTab, trips: renderTrips, settings: renderSettings, apps: renderApps })[S.tab]();
+  // Tabs that load data show the error instead of spinning forever.
+  Promise.resolve()
+    .then(() => ({ fields: renderFields, waiver: renderWaiverTab, trips: renderTrips, settings: renderSettings, apps: renderApps })[S.tab]())
+    .catch((e) => { app.innerHTML = `<div class="page"><p class="lint lint--error">${esc(e.message)}</p></div>`; });
 }
 
 // ── tab: questions ──────────────────────────────────────────────────────────
@@ -240,6 +243,7 @@ function fieldEditor(box, loc) {
       <div class="field"><label>Width</label><select id="fW"><option value="">Full</option><option value="half"${f.width === 'half' ? ' selected' : ''}>Half</option></select></div></div>
     ${K.FIELD_TYPES[f.type]?.options ? `<div class="field"><label>Options (one per line)</label><textarea id="fO" rows="5">${esc((f.options || []).join('\n'))}</textarea>${fromJf ? '<span class="help">Keep these the same as Jotform\'s, or the portals may not match the answer.</span>' : ''}</div>` : ''}
     <label class="check"><input type="checkbox" id="fR"${f.required ? ' checked' : ''}${f.type === 'hidden' ? ' disabled' : ''}><span>Required</span></label>
+    ${f.type === 'fullname' ? `<label class="check"><input type="checkbox" id="fM"${K.asksMiddle(f) ? ' checked' : ''}><span>Ask for middle name(s) (optional for the applicant)</span></label>` : ''}
     <label class="check"><input type="checkbox" id="fS"${f.sensitive ? ' checked' : ''}><span>Sensitive (medical / passport) — blurred in the Applications list until clicked</span></label>`}
     <label class="check"><input type="checkbox" id="fX"${f.hidden ? ' checked' : ''}${core ? ' disabled' : ''}><span>Hide from applicants (past answers are kept)</span></label>
     <details class="adv"${f.showIf?.rules?.length ? ' open' : ''}><summary>Only show when…</summary>
@@ -266,6 +270,7 @@ function fieldEditor(box, loc) {
   on('#fO', 'input', (t) => { f.options = t.value.split('\n').map((s) => s.trim()).filter(Boolean); });
   on('#fR', 'change', (t) => { f.required = t.checked || undefined; });
   on('#fS', 'change', (t) => { f.sensitive = t.checked || undefined; });
+  on('#fM', 'change', (t) => { f.middle = t.checked; });
   on('#fX', 'change', (t) => { f.hidden = t.checked || undefined; });
   on('#fHs', 'change', (t) => { const v = t.value.trim(); f.hubspot = v ? { ...(f.hubspot || {}), contact: v } : undefined; });
   on('#fQ', 'change', (t) => { const v = t.value.replace(/\D/g, ''); f.qid = v || f.qid; });
@@ -445,7 +450,7 @@ async function renderApps() {
         <td>${a.waiver_status === 'signed' ? '<span class="chip chip--live">Signed</span>' : a.waiver_status === 'sent' ? `<span class="chip chip--warn" title="${esc(a.waiver_sent_to || '')}">Sent to parent</span>` : '—'}</td>
         <td>${a.kind === 'teacher' ? '<span class="em">n/a</span>' : a.deposit_status === 'paid' ? `${esc(a.deposit_currency || '')} ${esc(a.deposit_amount || '')}` : a.deposit_status ? esc(a.deposit_status) : '—'}</td>
         <td class="em">${when(a.updated_at)}</td></tr>`).join('')}</table>` : '<div class="empty">No applications here yet.</div>'}</div>`;
-  $('#fTrip').addEventListener('change', (e) => { f.trip = e.target.value; renderApps(); });
+  $('#fTrip').addEventListener('change', (e) => { f.trip = e.target.value; render(); });
   app.querySelectorAll('[data-st]').forEach((b) => b.addEventListener('click', () => { f.status = b.dataset.st; renderApps(); }));
   app.querySelectorAll('[data-kind-f]').forEach((b) => b.addEventListener('click', () => { f.kind = b.dataset.kindF; renderApps(); }));
   let t; $('#fQ').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { f.q = e.target.value.trim(); renderApps(); }, 350); });

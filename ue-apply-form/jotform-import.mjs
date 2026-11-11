@@ -118,6 +118,9 @@ export function jotformToSchema(questions, properties = {}, formId = '') {
       if (!field.options.length) { field.type = 'text'; report.push(`"${label}" had no options — imported as short text.`); }
     }
     if (field.type === 'file') { field.accept = 'image/*,.pdf,.heic'; field.maxMb = 10; }
+    // The student's name always asks for middle names (it has to match the passport);
+    // other names follow the Jotform question's "Middle Name" setting.
+    if (field.type === 'fullname' && (key === 'name' || yes(q.middle))) field.middle = true;
     if (extra.source) field.source = extra.source;
     if (extra.prefill) field.prefill = extra.prefill;
     if (SENSITIVE.test(label) && field.type !== 'html' && !['name', 'email', 'dob'].includes(key)) field.sensitive = true;

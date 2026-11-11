@@ -31,6 +31,7 @@ await t('"show when" rules copied, including multi-field actions', () => {
   assert.deepEqual(fieldByKey(schema, 'medicalMore').showIf, { match: 'any', rules: [{ field: 'asthma', op: 'equals', value: 'Yes' }] });
   assert.equal(fieldByKey(schema, 'parent2Email').showIf.rules[0].field, 'secondary');
   assert.equal(fieldByKey(schema, 'passportPhoto').showIf.rules[0].field, 'holdPassport');
+  assert.equal(fieldByKey(schema, 'name').middle, true, "the student's name asks for middle names");
 });
 
 let pg; try { pg = (await import('pg')).default; } catch { pg = null; }
