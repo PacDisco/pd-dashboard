@@ -219,6 +219,7 @@ function fieldEditor(box, loc) {
       ${!fromJf && f.type !== 'html' ? `<div class="field"><label>Jotform field ID (after adding the question in Jotform)</label><input id="fQ" value="${String(f.qid || '').startsWith('x') ? '' : esc(f.qid || '')}" placeholder="e.g. 141"></div>` : ''}
     </details>
     <div class="acts"><button class="btn btn--sm" id="mUp">Move up</button><button class="btn btn--sm" id="mDn">Move down</button>
+      ${S.draft.steps.length > 1 ? `<select id="mPg" class="btn btn--sm" title="Move to another page"><option value="">Move to page…</option>${S.draft.steps.filter((s) => s.key !== loc.st.key).map((s) => `<option value="${esc(s.key)}">${esc(s.title || s.key)}</option>`).join('')}</select>` : ''}
       ${core ? '' : fromJf ? '' : '<button class="btn btn--sm btn--danger" id="fDel">Delete</button>'}</div>
     ${core ? '<p class="kv">This question is used by the flow, HubSpot or the portals, so it can be reworded but not removed.</p>' : fromJf ? '<p class="kv">From Jotform — hide it rather than delete it, so older answers stay readable.</p>' : ''}`;
 
@@ -252,6 +253,17 @@ function fieldEditor(box, loc) {
     if (j < 0 || j >= sec.fields.length) return;
     [sec.fields[i], sec.fields[j]] = [sec.fields[j], sec.fields[i]]; changed(); preview();
   };
+  // Move to another page — keeps the key and Jotform field ID, so answers and portals are unaffected.
+  box.querySelector('#mPg')?.addEventListener('change', (ev) => {
+    const to = S.draft.steps.find((s) => s.key === ev.target.value);
+    if (!to) return;
+    const l = locate(f.key);
+    if (!to.sections?.length) to.sections = [{ title: '', fields: [] }];
+    l.sec.fields.splice(l.i, 1);
+    to.sections[to.sections.length - 1].fields.push(f);
+    S.step = to.key; changed(); renderFields(); inspector();
+    toast(`Moved to “${esc(to.title || to.key)}”.`);
+  });
   box.querySelector('#mUp').addEventListener('click', () => move(-1));
   box.querySelector('#mDn').addEventListener('click', () => move(1));
   box.querySelector('#fDel')?.addEventListener('click', () => { if (!confirm('Delete this question?')) return; const l = locate(f.key); l.sec.fields.splice(l.i, 1); S.pick = null; changed(); preview(); inspector(); });
@@ -480,6 +492,8 @@ async function load() {
   const r = await api('GET', { action: 'get' });
   S.form = r.form; S.draft = r.form?.draft ? clone(r.form.draft) : null; S.lint = r.lint || [];
   chrome(); render();
+  // Older drafts gave every added question the same ID (x10000) — renumber and save.
+  if (S.draft && K.repairSyntheticQids(S.draft)) { changed(); toast('Fixed duplicate field IDs on added questions — saved.'); }
 }
 if (/#app=/.test(location.hash)) S.tab = 'apps';
 load().catch((e) => { app.innerHTML = `<div class="page"><p class="lint lint--error">${esc(e.message)}</p></div>`; });

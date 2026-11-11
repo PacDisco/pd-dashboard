@@ -487,10 +487,24 @@ export function lintSchema(schema) {
 export function nextQid(schema) {
   let max = 9999;
   for (const { field } of allFields(schema)) {
-    const n = parseInt(field.qid, 10);
+    // Synthetic IDs are stored as "x10000", "x10001"… — read the number past the "x".
+    const n = parseInt(String(field.qid ?? '').replace(/^x/i, ''), 10);
     if (Number.isFinite(n) && n > max) max = n;
   }
   return String(max + 1);
+}
+
+/** Give every repeated synthetic ("x…") field ID a fresh one. Mutates; returns how many changed. */
+export function repairSyntheticQids(schema) {
+  const seen = new Set();
+  let fixed = 0;
+  for (const { field } of allFields(schema)) {
+    const id = String(field.qid ?? '');
+    if (!/^x/i.test(id)) continue;
+    if (seen.has(id)) { field.qid = `x${nextQid(schema)}`; fixed += 1; }
+    seen.add(String(field.qid));
+  }
+  return fixed;
 }
 
 // ── renderer (browser only) ─────────────────────────────────────────────────
