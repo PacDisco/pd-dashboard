@@ -399,10 +399,16 @@ export function toJotformAnswers(schema, values, { fileUrl = (f) => f.url || '' 
     if (!isInput(field) || !field.qid) continue;
     order += 1;
     const { qid, name } = jfQidFor(field);
-    const type = field.jf?.type || FIELD_TYPES[field.type]?.jf || 'control_textbox';
+    // Uploads made here are always plain uploads, even where the old form had a
+    // widget (the portals read widget answers differently).
+    const type = field.type === 'file' ? 'control_fileupload' : (field.jf?.type || FIELD_TYPES[field.type]?.jf || 'control_textbox');
     const entry = { name, text: field.label || field.key, type, order: String(order) };
     const v = values[field.key];
-    if (v != null && !(typeof v === 'string' && v === '')) entry.answer = jfAnswer(field, v, fileUrl);
+    if (v != null && !(typeof v === 'string' && v === '')) {
+      entry.answer = jfAnswer(field, v, fileUrl);
+      // A value we fill into what is a checkbox on the Jotform form reads back as a ticked list.
+      if (type === 'control_checkbox' && typeof entry.answer === 'string') entry.answer = [entry.answer];
+    }
     if (entry.answer !== undefined) entry.prettyFormat = valueText(field, v);
     answers[qid] = entry;
   }
@@ -411,8 +417,8 @@ export function toJotformAnswers(schema, values, { fileUrl = (f) => f.url || '' 
 
 function jfAnswer(field, v, fileUrl) {
   switch (field.type) {
-    case 'fullname': return { first: v.first || '', last: v.last || '' };
-    case 'address': return Object.fromEntries(ADDRESS_PARTS.map((k) => [k, v[k] || '']));
+    case 'fullname': return { first: v.first || '', ...(v.middle ? { middle: v.middle } : {}), last: v.last || '' };
+    case 'address': return { ...Object.fromEntries(ADDRESS_PARTS.map((k) => [k, v[k] || ''])), ...(v.country ? { country: v.country } : {}) };
     case 'date': { const d = splitDate(v); return d ? { ...d, datetime: `${v} 00:00:00` } : String(v); }
     case 'phone': return { country: String(v.cc || ''), area: '', phone: String(v.number || ''), full: phoneText(v) };
     case 'checkbox': return Array.isArray(v) ? v : [String(v)];
@@ -432,8 +438,8 @@ export function toJotformParams(schema, values, { fileUrl } = {}) {
     const { qid } = jfQidFor(field);
     const k = `submission[${qid}]`;
     switch (field.type) {
-      case 'fullname': params[`${k}[first]`] = v.first || ''; params[`${k}[last]`] = v.last || ''; break;
-      case 'address': for (const p of ADDRESS_PARTS) if (v[p]) params[`${k}[${p}]`] = v[p]; break;
+      case 'fullname': params[`${k}[first]`] = v.first || ''; if (v.middle) params[`${k}[middle]`] = v.middle; params[`${k}[last]`] = v.last || ''; break;
+      case 'address': for (const p of [...ADDRESS_PARTS, 'country']) if (v[p]) params[`${k}[${p}]`] = v[p]; break;
       case 'date': { const d = splitDate(v); if (d) { params[`${k}[day]`] = d.day; params[`${k}[month]`] = d.month; params[`${k}[year]`] = d.year; } break; }
       case 'phone': params[`${k}[country]`] = String(v.cc || ''); params[`${k}[area]`] = ''; params[`${k}[phone]`] = String(v.number || ''); params[`${k}[full]`] = phoneText(v); break;
       case 'checkbox': (Array.isArray(v) ? v : [v]).forEach((x, i) => { params[`${k}[${i}]`] = x; }); break;
