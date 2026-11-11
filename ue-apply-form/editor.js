@@ -6,7 +6,7 @@
 import * as K from './form-kit.mjs';
 import { DEFAULT_WAIVER, waiverOf } from './waiver-kit.mjs';
 import { renderWaiver, WAIVER_CSS } from './waiver-ui.mjs';
-import { DEFAULT_EMAILS } from './emails.mjs';
+import { defaultEmail } from './emails.mjs';
 
 const API = '/api/ue-apply-forms';
 const APPLY_SITE = 'https://apply.unearthededucation.org';
@@ -410,7 +410,8 @@ const TEXTS = [
   ['depositIntro', 'Deposit — intro', 'Your deposit confirms your place…'],
   ['doneNext', 'Done — next steps', 'Next: log in to your Unearthed portal…'],
 ];
-const EMAILS = [['resume', 'Continue-your-application link'], ['signRequest', 'Parent signing request'], ['signed', 'Signed copy to the parent'], ['deposit', 'Deposit received']];
+const EMAILS = [['resume', 'Continue-your-application link'], ['submitted', 'Application received (student, parents copied)'], ['signRequest', 'Parent signing request'], ['signed', 'Signed copy to the parent'], ['deposit', 'Deposit received']];
+const TEACHER_EMAILS = [['resume', 'Continue-your-application link'], ['submitted', 'Application received'], ['signed', 'Signed waiver copy']];
 function renderSettings() {
   const st = S.draft.settings = S.draft.settings || {};
   st.texts = st.texts || {}; st.emails = st.emails || {}; st.jotform = st.jotform || {};
@@ -419,9 +420,9 @@ function renderSettings() {
       <div class="field"><label>Card fee (%)</label><input id="cfr" type="number" step="0.1" value="${esc(((st.cardFeeRate ?? 0.03) * 100).toFixed(1))}"><span class="help">Added to card deposits, not credited to the deal. Same as the portal's 3% by default.</span></div>
       <div class="field"><label>Jotform form the portals read</label><input id="jfid" value="${esc(st.jotform.formId || '')}"><span class="help">Every application is also saved here (same field IDs), so both portals and leader edits keep working.</span></div></div></div>
     <div class="panel"><h2>Wording on each step</h2><p class="sub">Leave blank to use the default.</p>${TEXTS.map(([k, l, ph]) => `<div class="field"><label>${esc(l)}</label><textarea rows="2" data-text="${k}" placeholder="${esc(ph)}">${esc(st.texts[k] || '')}</textarea></div>`).join('')}</div>
-    <div class="panel"><h2>Emails</h2><p class="sub">Placeholders: {{student}} {{studentFirst}} {{parent}} {{trip}} {{school}} {{link}} {{amount}}. Blank = the default shown.</p>
-      ${EMAILS.map(([k, l]) => `<details class="adv"><summary>${esc(l)}</summary><div class="field"><label>Subject</label><input data-email="${k}" data-part="subject" value="${esc(st.emails[k]?.subject || '')}" placeholder="${esc(DEFAULT_EMAILS[k].subject)}"></div>
-        <div class="field"><label>Message</label><textarea rows="7" data-email="${k}" data-part="body" placeholder="${esc(DEFAULT_EMAILS[k].body)}">${esc(st.emails[k]?.body || '')}</textarea></div></details>`).join('')}</div></div>`;
+    <div class="panel"><h2>Emails</h2><p class="sub">Placeholders: ${TEACHER_MODE() ? '{{student}} {{studentFirst}} (the applicant) {{role}} {{trip}} {{school}} {{link}}' : '{{student}} {{studentFirst}} {{parent}} {{trip}} {{school}} {{link}} {{amount}}'}. Blank = the default shown.</p>
+      ${(TEACHER_MODE() ? TEACHER_EMAILS : EMAILS).map(([k, l]) => `<details class="adv"><summary>${esc(l)}</summary><div class="field"><label>Subject</label><input data-email="${k}" data-part="subject" value="${esc(st.emails[k]?.subject || '')}" placeholder="${esc(defaultEmail(k, S.formKind).subject)}"></div>
+        <div class="field"><label>Message</label><textarea rows="7" data-email="${k}" data-part="body" placeholder="${esc(defaultEmail(k, S.formKind).body)}">${esc(st.emails[k]?.body || '')}</textarea></div></details>`).join('')}</div></div>`;
   $('#cfr').addEventListener('input', (e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 0 && v < 20) { st.cardFeeRate = Math.round(v * 10) / 1000; changed(); } });
   $('#jfid').addEventListener('input', (e) => { st.jotform.formId = e.target.value.replace(/\D/g, ''); changed(); });
   app.querySelectorAll('[data-text]').forEach((el) => el.addEventListener('input', () => { if (el.value.trim()) st.texts[el.dataset.text] = el.value; else delete st.texts[el.dataset.text]; changed(); }));
@@ -510,7 +511,7 @@ async function showApp(id) {
     return rows.length ? `<h3>${esc(sec.title || st.title || '')}</h3>${rows.map((f) => `<dt>${esc(f.label)}</dt><dd>${val(f, a.answers[f.key])}</dd>`).join('')}` : '';
   })).join('');
   const sync = a.sync || {};
-  const syncRow = (k, label) => sync[k] ? `<li>${sync[k].ok ? '✅' : '⚠️'} ${label}${sync[k].ok ? '' : ` — <span class="em">${esc(sync[k].error || '')}</span> <button class="btn btn--sm" data-retry="${k}">Retry</button>`}</li>` : '';
+  const syncRow = (k, label, retry = true) => sync[k] ? `<li>${sync[k].ok ? '✅' : '⚠️'} ${label}${sync[k].ok ? '' : ` — <span class="em">${esc(sync[k].error || '')}</span>${retry ? ` <button class="btn btn--sm" data-retry="${k}">Retry</button>` : ''}`}</li>` : '';
   const w = a.waiver || {};
   const nm = [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email;
   const d = openDialog(`<div class="dlg-head"><div><h2 class="serif">${esc(nm)}</h2><div class="em">${esc(a.email)} · ${esc(a.program_name || '')}</div></div><button class="btn btn--sm" data-x>Close</button></div><div class="dlg-body">
@@ -521,7 +522,7 @@ async function showApp(id) {
       <dt>Deposit</dt><dd>${a.deposit ? `${esc(a.deposit.status)} — ${esc(a.deposit.currency || '')} ${esc(a.deposit.amount || '')} by ${esc(a.deposit.method || '')}${a.deposit.paidAt ? `, ${when(a.deposit.paidAt)}` : ''}` : '—'}</dd>
       <dt>HubSpot</dt><dd>${a.hubspot_contact_id ? `<a href="${HS}/0-1/${a.hubspot_contact_id}" target="_blank" rel="noopener">Contact</a>` : 'no contact'}${a.hubspot_deal_id ? ` · <a href="${HS}/0-3/${a.hubspot_deal_id}" target="_blank" rel="noopener">Deal</a>` : ''}</dd>
       <dt>Jotform</dt><dd>${a.jotform_submission_id ? `<a href="https://www.jotform.com/submission/${esc(a.jotform_submission_id)}" target="_blank" rel="noopener">#${esc(a.jotform_submission_id)}</a>` : '—'}</dd></dl>
-    ${Object.keys(sync).length ? `<ul class="sync">${syncRow('contact', 'Student contact')}${syncRow('parents', 'Parent contacts')}${syncRow('deal', 'Deal')}${syncRow('program', 'Linked to the program')}${syncRow('jotform', 'Saved to Jotform (portals)')}${syncRow('waiverPdf', 'Permissions PDF on HubSpot')}${syncRow('signRequest', 'Signing email')}</ul>` : ''}
+    ${Object.keys(sync).length ? `<ul class="sync">${syncRow('contact', 'Student contact')}${syncRow('parents', 'Parent contacts')}${syncRow('deal', 'Deal')}${syncRow('program', 'Linked to the program')}${syncRow('jotform', 'Saved to Jotform (portals)')}${syncRow('waiverPdf', 'Permissions PDF on HubSpot')}${syncRow('signRequest', 'Signing email')}${syncRow('confirmation', `Confirmation email${sync.confirmation?.cc?.length ? ` (parents copied: ${esc(sync.confirmation.cc.join(', '))})` : ''}`, false)}</ul>` : ''}
     <div class="acts">${a.status !== 'imported' && a.step2_at ? '<button class="btn btn--sm" id="reAll">Retry all syncs</button>' : ''}${a.status !== 'withdrawn' ? '<button class="btn btn--sm btn--danger" id="wd">Mark withdrawn</button>' : ''}</div>
     ${files.length ? `<h3>Uploads</h3><p>${files.map((x) => fileLink(x.id, x.name)).join(' · ')}</p>` : ''}
     <dl class="ans">${answers || '<dd class="em">No answers yet.</dd>'}</dl></div>`);
