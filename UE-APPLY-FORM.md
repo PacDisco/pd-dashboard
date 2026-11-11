@@ -12,6 +12,15 @@
 
 Changes autosave as a draft; applicants see them after **Publish** (live within ~30 seconds). Every publish is kept under **Versions**.
 
+## Teachers & trip leaders
+
+The header switch (**Students** / **Teachers & leaders**) picks which form the Questions, Waiver, Wording & emails tabs, Versions and Publish work on. The teacher form is created once with **Create from the student form** (student questions minus parents/guardians, plus one emergency contact), then edited and published on its own.
+
+- Links: `apply.unearthededucation.org/<trip>/teacher` and `…/<trip>/leader` (Trips & links shows both, with Preview / Test run for the teacher form).
+- They sign their own waiver; no deposit, no deal, no Jotform.
+- **Approve** (Applications → open them) adds them to the trip in HubSpot with the Teacher or Trip Leader label — that's what gives leader-portal access. Unapproved ones show under *Needs attention*.
+- Needs `MIGRATION-ue-apply-teachers.sql` in Neon.
+
 ## Setup
 
 1. Run `MIGRATION-ue-apply.sql` in Neon.

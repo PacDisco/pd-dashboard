@@ -5,6 +5,10 @@
 // launch links, and lists the applications it collects. Separate from Pacific
 // Discovery's Apply Form (apply-forms.mjs): own tables, own access.
 //
+// Two forms: the student application (form=student, default) and the teacher
+// application (form=teacher, apply.unearthededucation.org/<trip>/teacher).
+// The form actions below take `form` (query on GET, body on POST).
+//
 // GET  ?action=get                      → { form, lint }
 // GET  ?action=versions                 → { versions }
 // GET  ?action=hubspot                  → { contactProps, dealProps }   (field → property mapping)
@@ -20,6 +24,8 @@
 // POST { action: "trip-save", trip }    { action: "trip-delete", slug }
 // POST { action: "resync", id, only? }  { action: "lookup", email }  { action: "import", email, slug, dealId? }
 // POST { action: "send-waiver", id, email? }  { action: "withdraw", id }
+// POST { action: "create-teacher-form", replace? } → teacher draft from the student form
+// POST { action: "approve-teacher", id }   Teacher label on the trip (→ leader portal)
 //
 // Env: HUBSPOT_TOKEN, JOTFORM_API_KEY (already set), UE_APPLY_SITE_URL
 // (https://apply.unearthededucation.org) and UE_APPLY_SERVICE_KEY (same secret
@@ -27,13 +33,16 @@
 
 import { neon } from "@neondatabase/serverless";
 import { requireDashboard, json } from "./_shared/apply-form-access.mjs";
-import { lintSchema } from "../../ue-apply-form/form-kit.mjs";
+import { lintSchema, teacherSchemaFrom } from "../../ue-apply-form/form-kit.mjs";
 import { jotformToSchema } from "../../ue-apply-form/jotform-import.mjs";
 
 export const DASHBOARD_SLUG = "ue-apply-form";
 // Keep in step with ue-apply-form/dashboard.json → allowedRoles.
 export const ALLOWED_ROLES = ["admin", "operations", "unearthed"];
 export const FORM_ID = "ue-application";
+export const FORM_IDS = { student: "ue-application", teacher: "ue-teacher-application" };
+/** "teacher" → the teacher form's row id; anything else → the student form. */
+export const formIdOf = (f) => (f === "teacher" ? FORM_IDS.teacher : FORM_IDS.student);
 const PROGRAM_OBJECT = process.env.UE_PROGRAM_OBJECT_TYPE || "2-58156993";
 export const MAX_SCHEMA_BYTES = 900 * 1024;
 
@@ -60,8 +69,9 @@ export default async function handler(req, context, deps = {}) {
   try {
     if (req.method === "GET") {
       const a = url.searchParams.get("action") || "get";
-      if (a === "get") return json(await getForm());
-      if (a === "versions") return json({ versions: await q(`SELECT id, kind, rev, note, created_at, created_by FROM ue_apply_form_versions WHERE form_id = $1 ORDER BY id DESC LIMIT 50`, [FORM_ID]) });
+      const fid = formIdOf(url.searchParams.get("form"));
+      if (a === "get") return json(await getForm(fid));
+      if (a === "versions") return json({ versions: await q(`SELECT id, kind, rev, note, created_at, created_by FROM ue_apply_form_versions WHERE form_id = $1 ORDER BY id DESC LIMIT 50`, [fid]) });
       if (a === "hubspot") return json(await hubspotProps());
       if (a === "programs") return json({ programs: await programs() });
       if (a === "trips") return json({ trips: await trips() });
@@ -70,19 +80,22 @@ export default async function handler(req, context, deps = {}) {
       if (a === "file") return await proxy(`/api/file/${encodeURIComponent(url.searchParams.get("id") || "")}`, { method: "GET" });
       if (a === "waiver-pdf") return await proxy(`/api/service`, { method: "POST", body: { action: "waiver-pdf", id: url.searchParams.get("id") } });
       if (a === "version") {
-        const [v] = await q(`SELECT data FROM ue_apply_form_versions WHERE id = $1 AND form_id = $2`, [Number(url.searchParams.get("id")), FORM_ID]);
+        const [v] = await q(`SELECT data FROM ue_apply_form_versions WHERE id = $1 AND form_id = $2`, [Number(url.searchParams.get("id")), fid]);
         return v ? json({ data: v.data }) : json({ error: "Not found" }, 404);
       }
       return json({ error: "Unknown action" }, 400);
     }
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
     const b = await req.json().catch(() => ({}));
+    const fid = formIdOf(b.form);
     switch (b.action) {
-      case "save": return await save(b, user);
-      case "publish": return await publish(b, user);
-      case "discard": return await discard(user);
-      case "restore": return await restore(b, user);
+      case "save": return await save(b, user, fid);
+      case "publish": return await publish(b, user, fid);
+      case "discard": return await discard(user, fid);
+      case "restore": return await restore(b, user, fid);
       case "import-jotform": return await importJotform(b, user);
+      case "create-teacher-form": return await createTeacherForm(b, user);
+      case "approve-teacher": return await proxy(`/api/service`, { method: "POST", body: { action: "approve-teacher", id: b.id, actor: user.actor, role: b.role } });
       case "trip-save": return await tripSave(b.trip, user);
       case "trip-delete": {
         const [{ n }] = await q(`SELECT count(*)::int AS n FROM ue_applications WHERE trip_slug = $1`, [String(b.slug || "")]);
@@ -99,6 +112,7 @@ export default async function handler(req, context, deps = {}) {
     }
   } catch (e) {
     if (e.code === "42P01" || /relation "ue_/.test(e.message || "")) return json({ error: "Run MIGRATION-ue-apply.sql in Neon first." }, 500);
+    if (e.code === "42703" && /kind|approval/.test(e.message || "")) return json({ error: "Run MIGRATION-ue-apply-teachers.sql in Neon first." }, 500);
     console.error("[ue-apply-forms]", e);
     return json({ error: e.message }, e.status && e.status < 500 ? e.status : 500);
   }
@@ -108,13 +122,13 @@ export default async function handler(req, context, deps = {}) {
 
 const shape = (r) => r && ({ draft: r.draft, draftRev: r.draft_rev, published: !!r.published, publishedRev: r.published_rev, publishedAt: r.published_at, publishedBy: r.published_by, updatedAt: r.updated_at, updatedBy: r.updated_by, changed: !!r.published && JSON.stringify(r.draft) !== JSON.stringify(r.published) });
 
-async function loadRow() {
-  const [r] = await q(`SELECT * FROM ue_apply_forms WHERE id = $1`, [FORM_ID]);
+async function loadRow(fid = FORM_ID) {
+  const [r] = await q(`SELECT * FROM ue_apply_forms WHERE id = $1`, [fid]);
   return r || null;
 }
 
-async function getForm() {
-  const r = await loadRow();
+async function getForm(fid = FORM_ID) {
+  const r = await loadRow(fid);
   return { form: shape(r), lint: r?.draft ? lintSchema(r.draft) : [] };
 }
 
@@ -125,40 +139,60 @@ export function checkDraft(d) {
   return null;
 }
 
-async function save(b, user) {
+async function save(b, user, fid = FORM_ID) {
   const err = checkDraft(b.draft);
   if (err) return json({ error: err }, 400);
-  const row = await loadRow();
+  if ((fid === FORM_IDS.teacher) !== (b.draft?.settings?.kind === "teacher")) return json({ error: "That draft belongs to the other form — reload the page." }, 409);
+  const row = await loadRow(fid);
   if (row && Number(b.rev) !== row.draft_rev) return json({ error: "Someone else changed the form since you loaded it — reload to see their changes.", conflict: { rev: row.draft_rev } }, 409);
   const [r] = row
-    ? await q(`UPDATE ue_apply_forms SET draft = $2, draft_rev = draft_rev + 1, updated_at = now(), updated_by = $3 WHERE id = $1 RETURNING *`, [FORM_ID, JSON.stringify(b.draft), user.actor])
-    : await q(`INSERT INTO ue_apply_forms (id, draft, draft_rev, updated_by) VALUES ($1, $2, 1, $3) RETURNING *`, [FORM_ID, JSON.stringify(b.draft), user.actor]);
+    ? await q(`UPDATE ue_apply_forms SET draft = $2, draft_rev = draft_rev + 1, updated_at = now(), updated_by = $3 WHERE id = $1 RETURNING *`, [fid, JSON.stringify(b.draft), user.actor])
+    : await q(`INSERT INTO ue_apply_forms (id, draft, draft_rev, updated_by) VALUES ($1, $2, 1, $3) RETURNING *`, [fid, JSON.stringify(b.draft), user.actor]);
   return json({ form: shape(r), lint: lintSchema(r.draft) });
 }
 
-async function publish(b, user) {
-  const row = await loadRow();
+async function publish(b, user, fid = FORM_ID) {
+  const row = await loadRow(fid);
   if (!row?.draft) return json({ error: "Nothing to publish." }, 404);
   if (Number(b.rev) !== row.draft_rev) return json({ error: "The form changed since you loaded it — reload and try again.", conflict: { rev: row.draft_rev } }, 409);
   const errs = lintSchema(row.draft).filter((x) => x.level === "error");
   if (errs.length) return json({ error: `Fix these first: ${errs.map((e) => e.message).join(" ")}`, lint: errs }, 422);
-  await q(`UPDATE ue_apply_forms SET published = draft, published_rev = draft_rev, published_at = now(), published_by = $2 WHERE id = $1`, [FORM_ID, user.actor]);
-  await q(`INSERT INTO ue_apply_form_versions (form_id, kind, rev, data, note, created_by) VALUES ($1, 'publish', $2, $3, $4, $5)`, [FORM_ID, row.draft_rev, JSON.stringify(row.draft), String(b.note || "").slice(0, 300) || null, user.actor]);
+  await q(`UPDATE ue_apply_forms SET published = draft, published_rev = draft_rev, published_at = now(), published_by = $2 WHERE id = $1`, [fid, user.actor]);
+  await q(`INSERT INTO ue_apply_form_versions (form_id, kind, rev, data, note, created_by) VALUES ($1, 'publish', $2, $3, $4, $5)`, [fid, row.draft_rev, JSON.stringify(row.draft), String(b.note || "").slice(0, 300) || null, user.actor]);
   return json({ publishedRev: row.draft_rev, note: "Live within about 30 seconds." });
 }
 
-async function discard(user) {
-  const [r] = await q(`UPDATE ue_apply_forms SET draft = published, draft_rev = draft_rev + 1, updated_at = now(), updated_by = $2 WHERE id = $1 AND published IS NOT NULL RETURNING *`, [FORM_ID, user.actor]);
+async function discard(user, fid = FORM_ID) {
+  const [r] = await q(`UPDATE ue_apply_forms SET draft = published, draft_rev = draft_rev + 1, updated_at = now(), updated_by = $2 WHERE id = $1 AND published IS NOT NULL RETURNING *`, [fid, user.actor]);
   if (!r) return json({ error: "There is no published version to go back to." }, 409);
   return json({ form: shape(r), lint: lintSchema(r.draft) });
 }
 
-async function restore(b, user) {
-  const [v] = await q(`SELECT data, rev FROM ue_apply_form_versions WHERE id = $1 AND form_id = $2`, [Number(b.versionId), FORM_ID]);
+async function restore(b, user, fid = FORM_ID) {
+  const [v] = await q(`SELECT data, rev FROM ue_apply_form_versions WHERE id = $1 AND form_id = $2`, [Number(b.versionId), fid]);
   if (!v) return json({ error: "Version not found." }, 404);
-  const [r] = await q(`UPDATE ue_apply_forms SET draft = $2, draft_rev = draft_rev + 1, updated_at = now(), updated_by = $3 WHERE id = $1 RETURNING *`, [FORM_ID, JSON.stringify(v.data), user.actor]);
-  await q(`INSERT INTO ue_apply_form_versions (form_id, kind, rev, data, note, created_by) VALUES ($1, 'restore', $2, $3, $4, $5)`, [FORM_ID, r.draft_rev, JSON.stringify(v.data), `Restored rev ${v.rev}`, user.actor]);
+  const [r] = await q(`UPDATE ue_apply_forms SET draft = $2, draft_rev = draft_rev + 1, updated_at = now(), updated_by = $3 WHERE id = $1 RETURNING *`, [fid, JSON.stringify(v.data), user.actor]);
+  await q(`INSERT INTO ue_apply_form_versions (form_id, kind, rev, data, note, created_by) VALUES ($1, 'restore', $2, $3, $4, $5)`, [fid, r.draft_rev, JSON.stringify(v.data), `Restored rev ${v.rev}`, user.actor]);
   return json({ form: shape(r), lint: lintSchema(r.draft) });
+}
+
+/**
+ * The teacher form, started from the student form: the same questions minus
+ * parents / guardians, plus one emergency contact (form-kit teacherSchemaFrom).
+ * Won't overwrite an existing teacher form unless `replace` is set.
+ */
+async function createTeacherForm(b, user) {
+  const existing = await loadRow(FORM_IDS.teacher);
+  if (existing?.draft && !b.replace) return json({ error: "There's already a teacher form. Tick “replace” to start it again from the student form." }, 409);
+  const student = await loadRow(FORM_IDS.student);
+  const base = student?.published || student?.draft;
+  if (!base) return json({ error: "Set up the student form first — the teacher form starts as a copy of it." }, 409);
+  const { schema, removed } = teacherSchemaFrom(base);
+  const [r] = existing
+    ? await q(`UPDATE ue_apply_forms SET draft = $2, draft_rev = draft_rev + 1, updated_at = now(), updated_by = $3 WHERE id = $1 RETURNING *`, [FORM_IDS.teacher, JSON.stringify(schema), user.actor])
+    : await q(`INSERT INTO ue_apply_forms (id, draft, draft_rev, updated_by) VALUES ($1, $2, 1, $3) RETURNING *`, [FORM_IDS.teacher, JSON.stringify(schema), user.actor]);
+  await q(`INSERT INTO ue_apply_form_versions (form_id, kind, rev, data, note, created_by) VALUES ($1, 'import', $2, $3, $4, $5)`, [FORM_IDS.teacher, r.draft_rev, JSON.stringify(schema), "Started from the student form", user.actor]);
+  return json({ form: shape(r), lint: lintSchema(r.draft), removed });
 }
 
 // ── import from the live Jotform form ──────────────────────────────────────
@@ -233,7 +267,8 @@ async function programs() {
 
 async function trips() {
   return q(`SELECT t.*,
-      (SELECT count(*)::int FROM ue_applications a WHERE a.trip_slug = t.slug AND a.status <> 'withdrawn') AS applications,
+      (SELECT count(*)::int FROM ue_applications a WHERE a.trip_slug = t.slug AND a.status <> 'withdrawn' AND a.kind = 'student') AS applications,
+      (SELECT count(*)::int FROM ue_applications a WHERE a.trip_slug = t.slug AND a.status <> 'withdrawn' AND a.kind = 'teacher') AS staff,
       (SELECT count(*)::int FROM ue_applications a WHERE a.trip_slug = t.slug AND a.status = 'paid') AS paid
     FROM ue_apply_trips t ORDER BY t.created_at DESC`);
 }
@@ -281,7 +316,7 @@ async function tripSave(t, user) {
 
 // ── applications ───────────────────────────────────────────────────────────
 
-const LIST_COLS = `id, email, first_name, last_name, trip_slug, program_name, status, step1_at, step2_at, created_at, updated_at,
+const LIST_COLS = `id, kind, role, approval IS NOT NULL AS approved, email, first_name, last_name, trip_slug, program_name, status, step1_at, step2_at, created_at, updated_at,
   hubspot_contact_id, hubspot_deal_id, jotform_submission_id, imported IS NOT NULL AS imported,
   waiver->>'status' AS waiver_status, waiver->>'sentTo' AS waiver_sent_to, waiver->>'signedAt' AS waiver_signed_at,
   deposit->>'status' AS deposit_status, deposit->>'amount' AS deposit_amount, deposit->>'currency' AS deposit_currency,
@@ -292,8 +327,10 @@ async function listApplications(url) {
   const where = [];
   const trip = url.searchParams.get("trip");
   if (trip) { params.push(trip); where.push(`trip_slug = $${params.length}`); }
+  const kind = url.searchParams.get("kind");
+  if (kind === "student" || kind === "teacher") { params.push(kind); where.push(`kind = $${params.length}`); }
   const status = url.searchParams.get("status");
-  if (status === "attention") where.push(`((SELECT count(*) FROM jsonb_each(sync) s WHERE s.value->>'ok' = 'false') > 0 OR (status IN ('applied','signed','paid') AND coalesce(waiver->>'status','') <> 'signed'))`);
+  if (status === "attention") where.push(`((SELECT count(*) FROM jsonb_each(sync) s WHERE s.value->>'ok' = 'false') > 0 OR (status IN ('applied','signed','paid') AND coalesce(waiver->>'status','') <> 'signed') OR (kind = 'teacher' AND step2_at IS NOT NULL AND approval IS NULL AND status <> 'withdrawn'))`);
   else if (status && status !== "all") { params.push(status); where.push(`status = $${params.length}`); }
   else if (!status) where.push(`status <> 'withdrawn'`);
   const text = String(url.searchParams.get("q") || "").trim().toLowerCase();
@@ -305,7 +342,7 @@ async function listApplications(url) {
 
 async function getApplication(id) {
   if (!/^[0-9a-f-]{36}$/i.test(String(id || ""))) return { error: "Not found" };
-  const [app] = await q(`SELECT id, email, first_name, last_name, trip_slug, program_id, program_name, status, answers, form_rev, step1_at, step2_at,
+  const [app] = await q(`SELECT id, kind, role, approval, email, first_name, last_name, trip_slug, program_id, program_name, status, answers, form_rev, step1_at, step2_at,
       waiver - 'signTokenHash' - 'text' AS waiver, (waiver_signature IS NOT NULL) AS has_signature, deposit, hubspot_contact_id, hubspot_parent_ids,
       hubspot_deal_id, jotform_submission_id, sync, imported, attribution, created_at, updated_at
     FROM ue_applications WHERE id = $1`, [id]);

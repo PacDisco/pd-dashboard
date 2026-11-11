@@ -40,6 +40,8 @@ if (!ok) { console.log(`  – API tests skipped (no Postgres)\n${n} passed`); pr
 
 console.log('API (Postgres)');
 await pool.query(readFileSync(new URL('../MIGRATION-ue-apply.sql', import.meta.url), 'utf8'));
+await pool.query(readFileSync(new URL('../MIGRATION-ue-apply-submission-ids.sql', import.meta.url), 'utf8'));
+await pool.query(readFileSync(new URL('../MIGRATION-ue-apply-teachers.sql', import.meta.url), 'utf8'));
 await pool.query('TRUNCATE ue_apply_files, ue_applications, ue_apply_trips, ue_apply_form_versions, ue_apply_forms CASCADE');
 const api = await import('../netlify/functions/ue-apply-forms.mjs');
 api.__setSql({ query: async (text, p = []) => (await pool.query(text, p)).rows });
@@ -112,6 +114,30 @@ await t('applications list + detail; service calls proxied with the key', async 
   assert.ok(proxied.every((p) => p.key === 'svc'));
   assert.deepEqual(proxied.map((p) => p.body?.action), ['resync', 'import', 'waiver-pdf']);
   assert.equal(proxied[1].body.actor, 'UE Ops');
+});
+await t('teacher & trip leader form: its own draft from the student form; approval proxied; lists split by kind', async () => {
+  assert.equal((await call(ue, null, '?action=get&form=teacher')).body.form, null);
+  const c = await call(ue, { action: 'create-teacher-form' });
+  assert.equal(c.status, 200, JSON.stringify(c.body)); assert.ok(c.body.removed.length);
+  const td = c.body.form.draft;
+  assert.equal(td.settings.kind, 'teacher');
+  assert.ok(!JSON.stringify(td).includes('"parent1Email"'));
+  assert.equal((await call(ue, { action: 'create-teacher-form' })).status, 409, 'no accidental overwrite');
+  // The student form is untouched; a student draft can't be saved over the teacher form.
+  const sg = await call(ue, null, '?action=get'); assert.ok(JSON.stringify(sg.body.form.draft).includes('"parent1Email"'));
+  assert.equal((await call(ue, { action: 'save', form: 'teacher', draft: sg.body.form.draft, rev: c.body.form.draftRev })).status, 409);
+  const pub = await call(ue, { action: 'publish', form: 'teacher', rev: c.body.form.draftRev, note: 'teachers' });
+  assert.equal(pub.status, 200, JSON.stringify(pub.body));
+  assert.ok((await call(ue, null, '?action=versions&form=teacher')).body.versions.some((v) => v.note === 'teachers'));
+  assert.ok(!(await call(ue, null, '?action=versions')).body.versions.some((v) => v.note === 'teachers'));
+  await pool.query(`INSERT INTO ue_applications (email, trip_slug, status, first_name, kind, role, step2_at) VALUES ('t@school.nz', 'otago-borneo', 'signed', 'Tina', 'teacher', 'Trip Leader', now())`);
+  const tl = await call(ue, null, '?action=applications&kind=teacher');
+  assert.equal(tl.body.applications.length, 1); assert.equal(tl.body.applications[0].role, 'Trip Leader'); assert.equal(tl.body.applications[0].approved, false);
+  assert.equal((await call(ue, null, '?action=applications&kind=student')).body.applications.length, 1);
+  assert.ok((await call(ue, null, '?action=applications&status=attention')).body.applications.some((a) => a.kind === 'teacher'), 'unapproved teacher needs attention');
+  const trips = await call(ue, null, '?action=trips'); assert.equal(trips.body.trips[0].applications, 1); assert.equal(trips.body.trips[0].staff, 1);
+  await call(ue, { action: 'approve-teacher', id: tl.body.applications[0].id, role: 'Teacher' });
+  assert.deepEqual(proxied.at(-1).body, { action: 'approve-teacher', id: tl.body.applications[0].id, actor: 'UE Ops', role: 'Teacher' });
 });
 await pool.end();
 console.log(`${n} passed`);

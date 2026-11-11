@@ -50,11 +50,12 @@ const clean = (s) => String(s ?? '').trim();
  * (PNG data URL), initials: { [partKey]: "AB" }, agree: true }.
  * Returns { ok, errors: { field: message }, clean }.
  */
-export function validateSignature(waiver, input, { under18 = true } = {}) {
+export function validateSignature(waiver, input, { under18 = true, self = false } = {}) {
   const errors = {};
   const parts = partsFor(waiver, { under18 });
   const name = clean(input?.parentName);
-  const rel = clean(input?.relationship);
+  // `self`: the applicant signs for themselves (teachers) — no relationship to give.
+  const rel = self ? 'Self' : clean(input?.relationship);
   if (name.split(/\s+/).filter(Boolean).length < 2) errors.parentName = 'Please enter your full name (first and last).';
   else if (name.length > 120) errors.parentName = 'That name is too long.';
   if (!rel) errors.relationship = 'Please tell us your relationship to the student.';

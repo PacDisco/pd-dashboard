@@ -6,8 +6,12 @@
 import { partsFor, validateSignature } from './waiver-kit.mjs';
 import { safeHtml, esc } from './form-kit.mjs';
 
-export function renderWaiver(root, waiver, { under18 = true, parentName = '', onSubmit, submitLabel = 'Sign and continue' } = {}) {
+export function renderWaiver(root, waiver, { under18 = true, parentName = '', onSubmit, submitLabel = 'Sign and continue', self = false } = {}) {
   const parts = partsFor(waiver, { under18 });
+  // `self`: the applicant signs for themselves (teachers).
+  const L = self
+    ? { initials: 'Your initials for this part', name: 'Your full name' }
+    : { initials: 'Parent/guardian initials for this part', name: 'Parent or guardian full name' };
   root.innerHTML = `
     <div class="wv">
       ${waiver.intro ? `<div class="wv-intro">${safeHtml(waiver.intro)}</div>` : ''}
@@ -15,7 +19,7 @@ export function renderWaiver(root, waiver, { under18 = true, parentName = '', on
         <section class="wv-part" data-part="${esc(p.key)}">
           <h3>${esc(p.title)}</h3>
           <div class="wv-doc" tabindex="0" aria-label="${esc(p.title)}">${safeHtml(p.html)}</div>
-          <label class="wv-initials"><span>Parent/guardian initials for this part</span>
+          <label class="wv-initials"><span>${esc(L.initials)}</span>
             <input data-initials="${esc(p.key)}" maxlength="4" autocomplete="off" inputmode="text" aria-describedby="err_initials_${esc(p.key)}">
           </label>
           <div class="fk-error" id="err_initials_${esc(p.key)}" role="alert"></div>
@@ -23,8 +27,8 @@ export function renderWaiver(root, waiver, { under18 = true, parentName = '', on
       <section class="wv-sign">
         <h3>Signature</h3>
         <div class="wv-row">
-          <label class="wv-field"><span>Parent or guardian full name</span><input id="wvName" autocomplete="name" value="${esc(parentName)}" aria-describedby="err_parentName"><div class="fk-error" id="err_parentName" role="alert"></div></label>
-          <label class="wv-field"><span>Relationship to the student</span><input id="wvRel" list="wvRelList" aria-describedby="err_relationship"><datalist id="wvRelList"><option>Mother</option><option>Father</option><option>Legal guardian</option></datalist><div class="fk-error" id="err_relationship" role="alert"></div></label>
+          <label class="wv-field"><span>${esc(L.name)}</span><input id="wvName" autocomplete="name" value="${esc(parentName)}" aria-describedby="err_parentName"><div class="fk-error" id="err_parentName" role="alert"></div></label>
+          <label class="wv-field"${self ? ' hidden' : ''}><span>Relationship to the student</span><input id="wvRel" list="wvRelList" aria-describedby="err_relationship"><datalist id="wvRelList"><option>Mother</option><option>Father</option><option>Legal guardian</option></datalist><div class="fk-error" id="err_relationship" role="alert"></div></label>
         </div>
         <div class="wv-pad-wrap">
           <span class="wv-pad-label" id="wvPadLbl">Sign here with your finger, stylus or mouse</span>
@@ -82,7 +86,7 @@ export function renderWaiver(root, waiver, { under18 = true, parentName = '', on
     root.querySelectorAll('[data-initials]').forEach((i) => { initials[i.dataset.initials] = i.value; });
     return {
       parentName: root.querySelector('#wvName').value,
-      relationship: root.querySelector('#wvRel').value,
+      relationship: self ? 'Self' : root.querySelector('#wvRel').value,
       initials,
       signature: signatureData(),
       agree: root.querySelector('#wvAgree').checked,
@@ -101,7 +105,7 @@ export function renderWaiver(root, waiver, { under18 = true, parentName = '', on
 
   root.querySelector('#wvSubmit').addEventListener('click', async (e) => {
     const input = read();
-    const v = validateSignature(waiver, input, { under18 });
+    const v = validateSignature(waiver, input, { under18, self });
     if (!v.ok) { showErrors(v.errors); return; }
     showErrors({});
     const btn = e.currentTarget;
@@ -113,7 +117,7 @@ export function renderWaiver(root, waiver, { under18 = true, parentName = '', on
   /** Testing: fill name, relationship, initials, a scribbled signature and the tick. */
   function fillTest(name = 'Test Parent') {
     root.querySelector('#wvName').value = name || 'Test Parent';
-    root.querySelector('#wvRel').value = 'Mother';
+    root.querySelector('#wvRel').value = self ? 'Self' : 'Mother';
     const ini = (name || 'Test Parent').split(/\s+/).map((w) => w[0] || '').join('').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'TP';
     root.querySelectorAll('[data-initials]').forEach((i) => { i.value = ini; });
     root.querySelector('#wvAgree').checked = true;

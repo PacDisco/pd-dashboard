@@ -1,6 +1,8 @@
 // Unearthed Application Form — editor for the ue-apply site
 // (apply.unearthededucation.org). Tabs: Questions · Permissions packet ·
 // Trips & links · Wording & emails · Applications. API: /api/ue-apply-forms.
+// Two forms, switched in the header: Students, and Teachers & trip leaders
+// (one form for both; /<trip>/teacher and /<trip>/leader).
 import * as K from './form-kit.mjs';
 import { DEFAULT_WAIVER, waiverOf } from './waiver-kit.mjs';
 import { renderWaiver, WAIVER_CSS } from './waiver-ui.mjs';
@@ -12,11 +14,16 @@ const HS = 'https://app.hubspot.com/contacts/3855728/record';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = K.esc;
 const app = $('#app');
-const S = { tab: 'fields', form: null, draft: null, lint: [], step: 'step1', pick: null, hub: null, programs: null, trips: null, apps: null, appFilter: { status: '', trip: '', q: '' }, saving: null };
+const S = { formKind: 'student', schemas: {}, tab: 'fields', form: null, draft: null, lint: [], step: 'step1', pick: null, hub: null, programs: null, trips: null, apps: null, appFilter: { status: '', trip: '', q: '', kind: '' }, saving: null };
 const style = document.createElement('style'); style.textContent = K.FORM_CSS + WAIVER_CSS; document.head.appendChild(style);
 
 // ── api / chrome ────────────────────────────────────────────────────────────
+// Form-specific actions carry which form (students / teachers & leaders).
+const FORM_ACTIONS = new Set(['get', 'versions', 'version', 'save', 'publish', 'discard', 'restore']);
+const TEACHER_MODE = () => S.formKind === 'teacher';
 async function api(method, params = {}, body) {
+  if (FORM_ACTIONS.has(params.action) && TEACHER_MODE()) params = { ...params, form: 'teacher' };
+  if (body && FORM_ACTIONS.has(body.action) && TEACHER_MODE()) body = { ...body, form: 'teacher' };
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`${API}${qs ? `?${qs}` : ''}`, { method, credentials: 'include', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
   let data = null; try { data = await res.json(); } catch { /* binary */ }
@@ -50,6 +57,9 @@ async function save() {
 function setSave(t, err) { const el = $('#save-state'); el.textContent = t; el.classList.toggle('err', !!err); }
 function chrome() {
   const f = S.form;
+  $('#btn-import').classList.toggle('hidden', TEACHER_MODE());
+  document.querySelector('.tabs [data-tab=waiver]').textContent = TEACHER_MODE() ? 'Waiver' : 'Permissions packet';
+  document.querySelectorAll('#formKind [data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === S.formKind)));
   $('#status-chip').innerHTML = !f ? '<span class="chip chip--draft">Not set up</span>' : !f.published ? '<span class="chip chip--draft">Draft — not live yet</span>' : f.changed ? '<span class="chip chip--changes">Unpublished changes</span>' : '<span class="chip chip--live">Live</span>';
   $('#btn-discard').classList.toggle('hidden', !f?.changed);
   $('#btn-publish').disabled = !S.draft;
@@ -98,8 +108,32 @@ function importDialog() {
 
 document.querySelectorAll('.tabs [data-tab]').forEach((b) => b.addEventListener('click', () => { S.tab = b.dataset.tab; render(); }));
 
+document.querySelectorAll('#formKind [data-kind]').forEach((b) => b.addEventListener('click', async () => {
+  if (b.dataset.kind === S.formKind) return;
+  clearTimeout(S.saving); if (S.draft && $('#save-state').textContent === 'Unsaved…') await save();
+  S.formKind = b.dataset.kind; S.pick = null; S.step = 'step1';
+  app.innerHTML = '<div class="page"><div class="loading">Loading…</div></div>';
+  await load();
+}));
+
+function teacherSetup() {
+  app.innerHTML = `<div class="page"><div class="empty"><h2>Set up the teacher &amp; trip leader form</h2>
+    <p>Starts as a copy of the student form with the parent / guardian questions taken out and one emergency contact added. You can then change anything — it's a separate form, so the student form isn't affected.</p>
+    <p class="muted">Teachers apply at <code>${esc(APPLY_SITE.replace('https://', ''))}/&lt;trip&gt;/teacher</code>, trip leaders at <code>…/&lt;trip&gt;/leader</code>. They sign the waiver themselves; there's no deposit and no deal. They only get the leader portal when you approve them under Applications.</p>
+    <button class="btn btn--primary" id="mkTeacher">Create from the student form</button><div id="mkOut"></div></div></div>`;
+  $('#mkTeacher').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try {
+      const r = await api('POST', {}, { action: 'create-teacher-form' });
+      S.form = r.form; S.draft = clone(r.form.draft); S.lint = r.lint; chrome(); S.tab = 'fields'; render();
+      toast(`Created. Left out: ${esc((r.removed || []).join(', ') || 'nothing')}. Check the questions, then Publish.`, 9000);
+    } catch (err) { $('#mkOut').innerHTML = `<p class="lint lint--error">${esc(err.message)}</p>`; e.target.disabled = false; }
+  });
+}
+
 function render() {
   document.querySelectorAll('.tabs [data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
+  if (S.tab !== 'trips' && S.tab !== 'apps' && !S.draft && TEACHER_MODE()) return teacherSetup();
   if (S.tab !== 'trips' && S.tab !== 'apps' && !S.draft) {
     app.innerHTML = `<div class="page"><div class="empty"><h2>Set up the form</h2><p>Start from the live Jotform application — every question, its options and its "show when…" rules are copied, and each keeps its Jotform field ID.</p><button class="btn btn--primary" id="firstImport">Import from Jotform</button></div></div>`;
     $('#firstImport').addEventListener('click', importDialog);
@@ -194,7 +228,7 @@ function addField(sec) {
 function fieldEditor(box, loc) {
   const f = loc.field;
   $('#insp-title').textContent = f.label || f.key;
-  const core = K.CORE_KEYS.includes(f.key);
+  const core = K.coreKeysFor(S.draft).includes(f.key);
   const fromJf = f.qid && !String(f.qid).startsWith('x');
   const others = K.allFields(S.draft).map((x) => x.field).filter((x) => x.key !== f.key && K.isInput(x));
   const hub = S.hub;
@@ -275,7 +309,7 @@ function renderWaiverTab() {
   const w = S.draft.waiver ? S.draft.waiver : clone(DEFAULT_WAIVER);
   const usingDefault = !S.draft.waiver;
   app.innerHTML = `<div class="page"><div class="cols" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start">
-    <div class="panel"><h2>Permissions packet</h2><p class="sub">Signed by a parent or legal guardian in step 3 (on the student's device, or from an emailed link). Each part is initialled; parts marked "under 18 only" are skipped for students who are 18 or over. The signed wording is stored with each signature and sent to HubSpot as a PDF, so editing here never changes what someone already signed.</p>
+    <div class="panel"><h2>${TEACHER_MODE() ? 'Waiver' : 'Permissions packet'}</h2>${TEACHER_MODE() ? '<p class="sub">Signed by the teacher or trip leader themselves after their application (initials on each part, drawn signature). Stored with the exact wording and sent to HubSpot as a PDF. It starts as the student wording — edit it to suit adults.</p>' : ''}<p class="sub"${TEACHER_MODE() ? ' hidden' : ''}>Signed by a parent or legal guardian in step 3 (on the student's device, or from an emailed link). Each part is initialled; parts marked "under 18 only" are skipped for students who are 18 or over. The signed wording is stored with each signature and sent to HubSpot as a PDF, so editing here never changes what someone already signed.</p>
       ${usingDefault ? '<p class="lint lint--warn">Showing the wording from the Jotform waiver. Edit anything to make it this form\'s own.</p>' : ''}
       <div class="field"><label>Title</label><input id="wT" value="${esc(w.title || '')}"></div>
       <div class="field"><label>Intro (HTML)</label><textarea class="code" id="wI">${esc(w.intro || '')}</textarea></div>
@@ -286,10 +320,10 @@ function renderWaiverTab() {
       <button class="btn btn--sm" id="pAdd">+ Add a part</button>
       <div class="field" style="margin-top:14px"><label>Declaration next to the "I agree" tick</label><textarea id="wD" rows="3">${esc(w.declaration || '')}</textarea></div>
       ${usingDefault ? '' : '<button class="btn btn--sm" id="wReset">Reset to the Jotform wording</button>'}</div>
-    <div><div class="seg" style="margin-bottom:10px"><button aria-pressed="true" data-age="u18">Preview: under 18</button><button aria-pressed="false" data-age="adult">18 or over</button></div><div class="wvprev" id="wPrev"></div></div></div></div>`;
+    <div><div class="seg" style="margin-bottom:10px"${TEACHER_MODE() ? ' hidden' : ''}><button aria-pressed="true" data-age="u18">Preview: under 18</button><button aria-pressed="false" data-age="adult">18 or over</button></div><div class="wvprev" id="wPrev"></div></div></div></div>`;
   let under18 = true;
   const own = () => { if (!S.draft.waiver) S.draft.waiver = w; return S.draft.waiver; };
-  const draw = () => renderWaiver($('#wPrev'), S.draft.waiver || w, { under18, onSubmit: async () => {} });
+  const draw = () => renderWaiver($('#wPrev'), S.draft.waiver || w, { under18: TEACHER_MODE() ? false : under18, self: TEACHER_MODE(), onSubmit: async () => {} });
   const bind = (sel, k) => $(sel).addEventListener('input', (e) => { own()[k] = e.target.value; changed(); draw(); });
   bind('#wT', 'title'); bind('#wI', 'intro'); bind('#wD', 'declaration');
   app.querySelectorAll('[data-p]').forEach((el) => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => { own().parts[Number(el.dataset.p)][el.dataset.k] = el.value; changed(); draw(); }));
@@ -315,10 +349,13 @@ async function renderTrips() {
         const dep = t.deposit ?? p?.deposit; const cur = t.currency || p?.currency || 'NZD';
         return `<tr><td><div class="linkbox"><code>${esc(APPLY_SITE.replace('https://', ''))}/${esc(t.slug)}</code><button class="btn btn--sm" data-copy="${esc(t.slug)}">Copy</button>
             <a class="btn btn--sm" target="_blank" rel="noopener" href="${APPLY_SITE}/${esc(t.slug)}?preview=1" title="Click through every step with test answers — nothing is saved or sent">Preview ↗</a>
-            <a class="btn btn--sm" target="_blank" rel="noopener" href="${APPLY_SITE}/${esc(t.slug)}?test=1" title="A REAL application (HubSpot, Jotform, emails, Stripe) with a Fill test answers button">Test run ↗</a></div></td>
+            <a class="btn btn--sm" target="_blank" rel="noopener" href="${APPLY_SITE}/${esc(t.slug)}?test=1" title="A REAL application (HubSpot, Jotform, emails, Stripe) with a Fill test answers button">Test run ↗</a></div>
+            <div class="linkbox em" style="margin-top:4px">Teachers <button class="btn btn--sm" data-copy="${esc(t.slug)}/teacher">Copy</button> · Trip leaders <button class="btn btn--sm" data-copy="${esc(t.slug)}/leader">Copy</button>
+            <a class="btn btn--sm" target="_blank" rel="noopener" href="${APPLY_SITE}/${esc(t.slug)}/teacher?preview=1" title="The teacher &amp; trip leader form — nothing is saved or sent">Preview ↗</a>
+            <a class="btn btn--sm" target="_blank" rel="noopener" href="${APPLY_SITE}/${esc(t.slug)}/teacher?test=1" title="A REAL teacher application (HubSpot contact, emails) with Fill test answers">Test run ↗</a></div></td>
           <td>${esc(t.program_name || p?.name || t.program_id)}${p?.schoolCollecting ? ' <span class="chip chip--warn">school collects payments</span>' : ''}</td>
           <td>${dep ? `${esc(cur)} ${esc(dep)}${t.deposit != null ? ' <span class="em">(set here)</span>' : ''}` : '<span class="chip chip--bad">not set</span>'}</td>
-          <td>${t.applications} · ${t.paid} paid${t.capacity ? ` / ${t.capacity}` : ''}</td>
+          <td>${t.applications}${t.staff ? ` (+${t.staff} staff)` : ''} · ${t.paid} paid${t.capacity ? ` / ${t.capacity}` : ''}</td>
           <td>${t.open ? (t.closes_on ? `Open until ${esc(String(t.closes_on).slice(0, 10))}` : '<span class="chip chip--live">Open</span>') : '<span class="chip chip--draft">Closed</span>'}</td>
           <td><button class="btn btn--sm" data-edit="${esc(t.slug)}">Edit</button></td></tr>`;
       }).join('')}</table>` : '<div class="empty">No trip links yet.</div>'}</div></div>`;
@@ -392,23 +429,25 @@ async function renderApps() {
   app.innerHTML = '<div class="page"><div class="loading">Loading applications…</div></div>';
   if (!S.trips) S.trips = (await api('GET', { action: 'trips' })).trips;
   const f = S.appFilter;
-  const { applications, counts } = await api('GET', { action: 'applications', ...(f.trip ? { trip: f.trip } : {}), ...(f.status ? { status: f.status } : {}), ...(f.q ? { q: f.q } : {}) });
+  const { applications, counts } = await api('GET', { action: 'applications', ...(f.trip ? { trip: f.trip } : {}), ...(f.status ? { status: f.status } : {}), ...(f.q ? { q: f.q } : {}), ...(f.kind ? { kind: f.kind } : {}) });
   S.apps = applications;
   const total = Object.entries(counts).filter(([k]) => k !== 'withdrawn').reduce((a, [, n]) => a + n, 0);
   app.innerHTML = `<div class="page">
     <div class="filters"><select id="fTrip" class="inp" style="max-width:280px"><option value="">All trips</option>${S.trips.map((t) => `<option value="${esc(t.slug)}"${t.slug === f.trip ? ' selected' : ''}>${esc(t.program_name || t.slug)}</option>`).join('')}</select>
       ${[['', `All (${total})`], ['attention', 'Needs attention'], ['started', `Started (${counts.started || 0})`], ['applied', `Applied (${counts.applied || 0})`], ['signed', `Signed (${counts.signed || 0})`], ['paid', `Deposit paid (${counts.paid || 0})`], ['imported', `From Jotform (${counts.imported || 0})`], ['withdrawn', `Withdrawn (${counts.withdrawn || 0})`]].map(([k, l]) => `<button class="chipbtn" data-st="${k}" aria-pressed="${f.status === k}">${l}</button>`).join('')}
+      <span class="seg">${[['', 'Everyone'], ['student', 'Students'], ['teacher', 'Teachers & leaders']].map(([k, l]) => `<button data-kind-f="${k}" aria-pressed="${f.kind === k}">${l}</button>`).join('')}</span>
       <input id="fQ" class="inp" style="max-width:220px" type="search" placeholder="Search name or email" value="${esc(f.q)}">
       <span class="spacer" style="flex:1"></span><button class="btn btn--sm" id="addHs">Add from HubSpot</button></div>
-    ${applications.length ? `<table class="grid apps"><tr><th>Student</th><th>Trip</th><th>Progress</th><th>Permissions</th><th>Deposit</th><th>Updated</th></tr>
-      ${applications.map((a) => `<tr data-id="${a.id}"><td><div class="nm">${esc([a.first_name, a.last_name].filter(Boolean).join(' ') || a.email)}</div><div class="em">${esc(a.email)}</div></td>
+    ${applications.length ? `<table class="grid apps"><tr><th>Applicant</th><th>Trip</th><th>Progress</th><th>Permissions</th><th>Deposit</th><th>Updated</th></tr>
+      ${applications.map((a) => `<tr data-id="${a.id}"><td><div class="nm">${esc([a.first_name, a.last_name].filter(Boolean).join(' ') || a.email)}${a.kind === 'teacher' ? ` <span class="chip ${a.approved ? 'chip--live' : a.step2_at ? 'chip--warn' : 'chip--info'}" title="${a.approved ? 'Approved — on the trip in the leader portal' : 'Not approved yet — no leader-portal access'}">${esc(a.role || 'Teacher')}${a.approved ? '' : a.step2_at ? ' · to approve' : ''}</span>` : ''}</div><div class="em">${esc(a.email)}</div></td>
         <td>${esc(a.program_name || a.trip_slug || '')}</td>
         <td><span class="chip ${a.status === 'paid' ? 'chip--live' : a.status === 'withdrawn' ? 'chip--draft' : 'chip--info'}">${esc(STATUS[a.status] || a.status)}</span>${a.sync_errors ? ' <span class="chip chip--bad" title="A HubSpot or Jotform step failed">sync</span>' : ''}</td>
         <td>${a.waiver_status === 'signed' ? '<span class="chip chip--live">Signed</span>' : a.waiver_status === 'sent' ? `<span class="chip chip--warn" title="${esc(a.waiver_sent_to || '')}">Sent to parent</span>` : '—'}</td>
-        <td>${a.deposit_status === 'paid' ? `${esc(a.deposit_currency || '')} ${esc(a.deposit_amount || '')}` : a.deposit_status ? esc(a.deposit_status) : '—'}</td>
+        <td>${a.kind === 'teacher' ? '<span class="em">n/a</span>' : a.deposit_status === 'paid' ? `${esc(a.deposit_currency || '')} ${esc(a.deposit_amount || '')}` : a.deposit_status ? esc(a.deposit_status) : '—'}</td>
         <td class="em">${when(a.updated_at)}</td></tr>`).join('')}</table>` : '<div class="empty">No applications here yet.</div>'}</div>`;
   $('#fTrip').addEventListener('change', (e) => { f.trip = e.target.value; renderApps(); });
   app.querySelectorAll('[data-st]').forEach((b) => b.addEventListener('click', () => { f.status = b.dataset.st; renderApps(); }));
+  app.querySelectorAll('[data-kind-f]').forEach((b) => b.addEventListener('click', () => { f.kind = b.dataset.kindF; renderApps(); }));
   let t; $('#fQ').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { f.q = e.target.value.trim(); renderApps(); }, 350); });
   app.querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => showApp(tr.dataset.id)));
   $('#addHs').addEventListener('click', addFromHubspot);
@@ -446,7 +485,15 @@ function addFromHubspot() {
 async function showApp(id) {
   const { app: a, files, error } = await api('GET', { action: 'application', id });
   if (error) { toast(esc(error)); return; }
-  const schema = S.draft || {};
+  const teacher = a.kind === 'teacher';
+  // The answers are laid out by the form they applied on.
+  const kind = teacher ? 'teacher' : 'student';
+  if (!S.schemas[kind]) {
+    if (S.formKind === kind && S.draft) S.schemas[kind] = S.draft;
+    else { try { const r = await fetch(`${API}?action=get${teacher ? '&form=teacher' : ''}`, { credentials: 'include' }).then((x) => x.json()); S.schemas[kind] = r.form?.draft || {}; } catch { S.schemas[kind] = {}; } }
+  }
+  const schema = S.schemas[kind] || {};
+  const role = a.role || 'Teacher';
   const fileLink = (fid, name) => `<a href="${API}?action=file&id=${encodeURIComponent(fid)}" target="_blank" rel="noopener">${esc(name)}</a>`;
   const val = (f, v) => {
     if (f.type === 'file') return (Array.isArray(v) ? v : []).map((x) => (x.id ? fileLink(x.id, x.name) : x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a> <span class="em">(Jotform)</span>` : esc(x.name))).join(', ');
@@ -462,9 +509,10 @@ async function showApp(id) {
   const w = a.waiver || {};
   const nm = [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email;
   const d = openDialog(`<div class="dlg-head"><div><h2 class="serif">${esc(nm)}</h2><div class="em">${esc(a.email)} · ${esc(a.program_name || '')}</div></div><button class="btn btn--sm" data-x>Close</button></div><div class="dlg-body">
-    <p><span class="chip chip--info">${esc(STATUS[a.status] || a.status)}</span> ${a.imported ? `<span class="chip chip--draft">Added from HubSpot${a.imported.by ? ` by ${esc(a.imported.by)}` : ''}</span>` : ''}</p>
+    <p>${teacher ? `<span class="chip chip--info">${esc(role)}</span> ` : ''}<span class="chip chip--info">${esc(STATUS[a.status] || a.status)}</span> ${a.imported ? `<span class="chip chip--draft">Added from HubSpot${a.imported.by ? ` by ${esc(a.imported.by)}` : ''}</span>` : ''}</p>
     <dl class="ans"><dt>Started</dt><dd>${when(a.step1_at) || '—'}</dd><dt>Application</dt><dd>${when(a.step2_at) || 'not submitted'}</dd>
-      <dt>Permissions packet</dt><dd>${w.status === 'signed' ? `Signed by ${esc(w.parentName)} (${esc(w.relationship)}) ${when(w.signedAt)} · <a href="${API}?action=waiver-pdf&id=${a.id}" target="_blank" rel="noopener">PDF</a>` : w.status === 'sent' ? `Sent to ${esc(w.sentTo)} ${when(w.sentAt)} · <button class="btn btn--sm" id="reW">Send again</button>` : a.step2_at ? '<button class="btn btn--sm" id="reW">Email the signing link to the parent</button>' : '—'}</dd>
+      ${teacher ? `<dt>Leader portal</dt><dd>${a.approval ? `Approved as ${esc(a.approval.label)}${a.approval.by ? ` by ${esc(a.approval.by)}` : ''} ${when(a.approval.at)}` : a.step2_at ? `<span class="chip chip--warn">Not approved</span> <select id="apRole" class="inp" style="max-width:150px;display:inline-block"><option${role === 'Teacher' ? ' selected' : ''}>Teacher</option><option${role === 'Trip Leader' ? ' selected' : ''}>Trip Leader</option></select> <button class="btn btn--sm btn--primary" id="approve">Approve</button><div class="em">Approving adds them to the trip in HubSpot with this label — that's what opens the leader portal (rosters, medical and passport details).</div>` : '—'}</dd>` : ''}
+      <dt>${teacher ? 'Waiver' : 'Permissions packet'}</dt><dd>${w.status === 'signed' ? `Signed by ${esc(w.parentName)}${teacher ? '' : ` (${esc(w.relationship)})`} ${when(w.signedAt)} · <a href="${API}?action=waiver-pdf&id=${a.id}" target="_blank" rel="noopener">PDF</a>` : w.status === 'sent' ? `Sent to ${esc(w.sentTo)} ${when(w.sentAt)} · <button class="btn btn--sm" id="reW">Send again</button>` : a.step2_at && !teacher ? '<button class="btn btn--sm" id="reW">Email the signing link to the parent</button>' : teacher && a.step2_at ? 'Not signed yet — they sign from their own link' : '—'}</dd>
       <dt>Deposit</dt><dd>${a.deposit ? `${esc(a.deposit.status)} — ${esc(a.deposit.currency || '')} ${esc(a.deposit.amount || '')} by ${esc(a.deposit.method || '')}${a.deposit.paidAt ? `, ${when(a.deposit.paidAt)}` : ''}` : '—'}</dd>
       <dt>HubSpot</dt><dd>${a.hubspot_contact_id ? `<a href="${HS}/0-1/${a.hubspot_contact_id}" target="_blank" rel="noopener">Contact</a>` : 'no contact'}${a.hubspot_deal_id ? ` · <a href="${HS}/0-3/${a.hubspot_deal_id}" target="_blank" rel="noopener">Deal</a>` : ''}</dd>
       <dt>Jotform</dt><dd>${a.jotform_submission_id ? `<a href="https://www.jotform.com/submission/${esc(a.jotform_submission_id)}" target="_blank" rel="noopener">#${esc(a.jotform_submission_id)}</a>` : '—'}</dd></dl>
@@ -476,6 +524,13 @@ async function showApp(id) {
   const resync = async (only) => { try { const r = await api('POST', {}, { action: 'resync', id: a.id, only }); toast(Object.entries(r.result || {}).map(([k, v]) => `${k}: ${v.ok ? 'ok' : esc(v.error)}`).join(' · ') || 'Done', 6000); d.close(); showApp(a.id); } catch (e) { toast(esc(e.message)); } };
   d.querySelectorAll('[data-retry]').forEach((b) => b.addEventListener('click', () => resync([b.dataset.retry])));
   d.querySelector('#reAll')?.addEventListener('click', () => resync(null));
+  d.querySelector('#approve')?.addEventListener('click', async (e) => {
+    const asRole = d.querySelector('#apRole').value;
+    if (!confirm(`Approve ${nm} as ${asRole}? They'll get access to this trip in the leader portal — including students' medical and passport details.`)) return;
+    e.target.disabled = true;
+    try { await api('POST', {}, { action: 'approve-teacher', id: a.id, role: asRole }); toast(`Approved as ${esc(asRole)}`); d.close(); showApp(a.id); renderApps(); }
+    catch (err) { toast(esc(err.message), 8000); e.target.disabled = false; }
+  });
   d.querySelector('#reW')?.addEventListener('click', async () => {
     const email = prompt('Send the signing link to:', w.sentTo || a.answers?.parent1Email || '');
     if (!email) return;
@@ -490,6 +545,7 @@ async function showApp(id) {
 // ── boot ────────────────────────────────────────────────────────────────────
 async function load() {
   const r = await api('GET', { action: 'get' });
+  if (r.form?.draft) S.schemas[S.formKind] = r.form.draft;
   S.form = r.form; S.draft = r.form?.draft ? clone(r.form.draft) : null; S.lint = r.lint || [];
   chrome(); render();
   // Older drafts gave every added question the same ID (x10000) — renumber and save.

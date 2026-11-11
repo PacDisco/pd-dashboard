@@ -291,8 +291,9 @@ export function uniquenessErrors(schema, stepKey, values) {
       if (!ks.length) continue;
       const clash = seen.find((s) => s.ks.some((k) => ks.includes(k)));
       if (clash && inStep.has(key)) {
-        const other = WHO[clash.key] || `"${fieldByKey(schema, clash.key)?.label || clash.key}"`;
-        errors[key] = `This must be different from ${other}'s ${group.what} — each person needs their own.`;
+        const teacherSelf = formKind(schema) === 'teacher' && (clash.key === 'email' || clash.key === 'mobile');
+        const other = teacherSelf ? 'your own' : `${WHO[clash.key] || `"${fieldByKey(schema, clash.key)?.label || clash.key}"`}'s`;
+        errors[key] = `This must be different from ${other} ${group.what} — each person needs their own.`;
       } else {
         seen.push({ key, ks });
       }
@@ -458,6 +459,67 @@ export function toJotformParams(schema, values, { fileUrl } = {}) {
 
 /** Keys the flow, HubSpot and the portals rely on. */
 export const CORE_KEYS = ['name', 'email', 'dob', 'parent1Name', 'parent1Email'];
+/** The teacher form has no guardians: just the teacher's own details. */
+export const TEACHER_CORE_KEYS = ['name', 'email', 'dob'];
+
+/** 'student' (default) or 'teacher'. */
+export const formKind = (schema) => (schema?.settings?.kind === 'teacher' ? 'teacher' : 'student');
+export const coreKeysFor = (schema) => (formKind(schema) === 'teacher' ? TEACHER_CORE_KEYS : CORE_KEYS);
+
+/**
+ * Teacher applications have no Jotform form. The portals' data source
+ * (apply site /api/jotform) serves them under this made-up form ID, so the
+ * leader portal reads a teacher's details exactly like a student's once the ID
+ * is in its JOTFORM_APPLICATION_FORM_ID list.
+ */
+export const TEACHER_FORM_ID = '990000000000001';
+
+const GUARDIAN_SECTION = /emergency|guardian|parent|primary contact|secondary contact|next of kin/i;
+const GUARDIAN_FIELD = /parent|guardian|primary contact|secondary (emergency )?contact|emergency contact|relationship to (the )?student|same as the student/i;
+
+/**
+ * A teacher form from the student form: the same questions minus everything
+ * about parents / guardians, plus ONE emergency contact. Hidden values the
+ * flow fills (program, currency, "signed") are kept. Pure; returns a new schema
+ * and a report of what changed.
+ */
+export function teacherSchemaFrom(student) {
+  const s = JSON.parse(JSON.stringify(student || { steps: [] }));
+  const removed = [];
+  const isGuardianField = (f) => /^parent\d/i.test(f.key) || /^secondary/i.test(f.key) || GUARDIAN_FIELD.test(`${f.label || ''}`);
+  let home = null; // the section the emergency contact goes into
+  for (const st of s.steps || []) {
+    for (const sec of st.sections || []) {
+      const guardianSection = GUARDIAN_SECTION.test(sec.title || '');
+      sec.fields = (sec.fields || []).filter((f) => {
+        const keep = f.type === 'hidden' || (!guardianSection && !isGuardianField(f));
+        if (!keep) removed.push(f.label || f.key);
+        return keep;
+      });
+      if (guardianSection && !home) { home = sec; sec.title = 'Emergency contact'; }
+    }
+    st.sections = (st.sections || []).filter((sec) => sec === home || (sec.fields || []).length);
+  }
+  // "Show when…" rules that pointed at removed questions.
+  const keys = new Set(allFields(s).map(({ field }) => field.key));
+  for (const { field } of allFields(s)) {
+    if (!field.showIf?.rules) continue;
+    field.showIf.rules = field.showIf.rules.filter((r) => keys.has(r.field));
+    if (!field.showIf.rules.length) delete field.showIf;
+  }
+  if (!home) {
+    const last = (s.steps || []).find((st) => st.key === 'step2') || s.steps?.[s.steps.length - 1];
+    home = { title: 'Emergency contact', fields: [] };
+    last?.sections?.push(home);
+  }
+  const add = (f) => { f.qid = `x${nextQid(s)}`; home.fields.splice(home.fields.filter((x) => x.type !== 'hidden').length, 0, f); };
+  add({ key: 'emergencyName', type: 'fullname', label: 'Emergency contact name', required: true });
+  add({ key: 'emergencyRelationship', type: 'text', label: 'Relationship to you', required: true, width: 'half' });
+  add({ key: 'emergencyPhone', type: 'phone', label: 'Emergency contact phone', required: true, width: 'half' });
+  add({ key: 'emergencyEmail', type: 'email', label: 'Emergency contact email', unique: 'email' });
+  s.settings = { ...(s.settings || {}), kind: 'teacher', jotform: { formId: TEACHER_FORM_ID, mirror: false } };
+  return { schema: s, removed };
+}
 
 /** Problems that would break the form. Returns [{ level, message }]. */
 export function lintSchema(schema) {
@@ -480,12 +542,13 @@ export function lintSchema(schema) {
       if (!fieldByKey(schema, r.field)) out.push({ level: 'error', message: `"${field.label}" depends on a field that no longer exists (${r.field}).` });
     }
   }
-  for (const k of CORE_KEYS) {
+  const who = formKind(schema) === 'teacher' ? 'teacher' : 'student';
+  for (const k of coreKeysFor(schema)) {
     if (!seenKeys.has(k)) out.push({ level: 'error', message: `The form must keep the "${k}" field — the flow, HubSpot and the portals rely on it.` });
   }
-  if (seenKeys.get('name') && seenKeys.get('name') !== 'step1') out.push({ level: 'error', message: 'The student\'s name must be on the first page (About you).' });
-  if (seenKeys.get('email') && seenKeys.get('email') !== 'step1') out.push({ level: 'error', message: 'The student\'s email must be on the first page (About you).' });
-  if (!schema?.settings?.jotform?.formId) out.push({ level: 'warn', message: 'No Jotform form ID is set, so applications won\'t reach the portals.' });
+  if (seenKeys.get('name') && seenKeys.get('name') !== 'step1') out.push({ level: 'error', message: `The ${who}'s name must be on the first page (About you).` });
+  if (seenKeys.get('email') && seenKeys.get('email') !== 'step1') out.push({ level: 'error', message: `The ${who}'s email must be on the first page (About you).` });
+  if (who === 'student' && !schema?.settings?.jotform?.formId) out.push({ level: 'warn', message: 'No Jotform form ID is set, so applications won\'t reach the portals.' });
   return out;
 }
 
