@@ -410,7 +410,7 @@ const TEXTS = [
   ['depositIntro', 'Deposit — intro', 'Your deposit confirms your place…'],
   ['doneNext', 'Done — next steps', 'Next: log in to your Unearthed portal…'],
 ];
-const EMAILS = [['resume', 'Continue-your-application link'], ['submitted', 'Application received (student, parents copied)'], ['signRequest', 'Parent signing request'], ['signed', 'Signed copy to the parent'], ['deposit', 'Deposit received']];
+const EMAILS = [['resume', 'Continue-your-application link'], ['submitted', 'Application received (student, parents copied)'], ['signRequest', 'Parent signing request'], ['signed', 'Signed copy to the parent'], ['deposit', 'Deposit received'], ['paymentFailed', 'Payment failed (deposits and portal payments)']];
 const TEACHER_EMAILS = [['resume', 'Continue-your-application link'], ['submitted', 'Application received'], ['signed', 'Signed waiver copy']];
 function renderSettings() {
   const st = S.draft.settings = S.draft.settings || {};
@@ -420,7 +420,7 @@ function renderSettings() {
       <div class="field"><label>Card fee (%)</label><input id="cfr" type="number" step="0.1" value="${esc(((st.cardFeeRate ?? 0.03) * 100).toFixed(1))}"><span class="help">Added to card deposits, not credited to the deal. Same as the portal's 3% by default.</span></div>
       <div class="field"><label>Jotform form the portals read</label><input id="jfid" value="${esc(st.jotform.formId || '')}"><span class="help">Every application is also saved here (same field IDs), so both portals and leader edits keep working.</span></div></div></div>
     <div class="panel"><h2>Wording on each step</h2><p class="sub">Leave blank to use the default.</p>${TEXTS.map(([k, l, ph]) => `<div class="field"><label>${esc(l)}</label><textarea rows="2" data-text="${k}" placeholder="${esc(ph)}">${esc(st.texts[k] || '')}</textarea></div>`).join('')}</div>
-    <div class="panel"><h2>Emails</h2><p class="sub">Placeholders: ${TEACHER_MODE() ? '{{student}} {{studentFirst}} (the applicant) {{role}} {{trip}} {{school}} {{link}}' : '{{student}} {{studentFirst}} {{parent}} {{trip}} {{school}} {{link}} {{amount}}'}. Blank = the default shown.</p>
+    <div class="panel"><h2>Emails</h2><p class="sub">Placeholders: ${TEACHER_MODE() ? '{{student}} {{studentFirst}} (the applicant) {{role}} {{trip}} {{school}} {{link}}' : '{{student}} {{studentFirst}} {{parent}} {{trip}} {{school}} {{link}} {{amount}} — payment failed also has {{reason}} {{what}}'}. Blank = the default shown.</p>
       ${(TEACHER_MODE() ? TEACHER_EMAILS : EMAILS).map(([k, l]) => `<details class="adv"><summary>${esc(l)}</summary><div class="field"><label>Subject</label><input data-email="${k}" data-part="subject" value="${esc(st.emails[k]?.subject || '')}" placeholder="${esc(defaultEmail(k, S.formKind).subject)}"></div>
         <div class="field"><label>Message</label><textarea rows="7" data-email="${k}" data-part="body" placeholder="${esc(defaultEmail(k, S.formKind).body)}">${esc(st.emails[k]?.body || '')}</textarea></div></details>`).join('')}</div></div>`;
   $('#cfr').addEventListener('input', (e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 0 && v < 20) { st.cardFeeRate = Math.round(v * 10) / 1000; changed(); } });

@@ -11,6 +11,10 @@ export const DEFAULT_EMAILS = {
     subject: "Application received — {{student}}, {{trip}}",
     body: "Hi {{studentFirst}},\n\nThank you — we've received your application for {{trip}}.\n\nWhat happens next:\n\n1. A parent or legal guardian signs the permissions packet. If it isn't signed yet, they'll get (or have already got) an email with the link, or you can do it together from your application link.\n2. Pay the deposit to confirm your place — straight after signing, from the same page.\n\nWe'll email a copy of the signed permissions packet and a deposit receipt along the way.\n\nAny questions, reply to this email or call +64 (3) 288 2393.",
   },
+  paymentFailed: {
+    subject: "Your {{what}} didn't go through — {{trip}}",
+    body: "Hi there,\n\nWe tried to process a {{amount}} {{what}} for {{student}} ({{trip}}), but it didn't go through.\n\nReason: {{reason}}\n\nNothing has been taken for this payment. Please try again here:\n\n{{link}}\n\nIf you think this is a mistake, or you'd like to pay another way, reply to this email or call +64 (3) 288 2393.",
+  },
   signRequest: {
     subject: "Please sign {{studentFirst}}'s permissions packet — {{trip}}",
     body: "Hi {{parent}},\n\n{{student}} has applied for {{trip}} with Unearthed Education. Before they travel, a parent or legal guardian needs to read and sign the permissions packet (the agreement and, for students under 18, the medical authorisation).\n\nIt takes about 10 minutes, and {{studentFirst}}'s place isn't confirmed until it's signed. Once you've signed, the same page takes you to the deposit:\n\n{{link}}\n\nAny questions, reply to this email or call +64 (3) 288 2393.",
