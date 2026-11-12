@@ -193,6 +193,190 @@ export function parseWidget(w) {
 // editor runs on the dashboard's origin, so no third-party script runs there).
 const GOOVERSEAS_LOADER = '!function(e,s,r){e.GoOverseas=e.GoOverseas||function(){(e.GoOverseas.q=e.GoOverseas.q||[]).push(arguments)},e.GoOverseas.l=1*new Date;var a=s.createElement(r),n=s.getElementsByTagName(r)[0];a.async=1,a.src="https://www.gooverseas.com/static/0.2.0/main.min.js",n.parentNode.insertBefore(a,n)}(window,document,"script"),GoOverseas("review_widget_embed");';
 
+// ─── info booklet gate ──────────────────────────────────────────────────────
+//
+// settings.bookletUrl is where the booklet itself lives (e.g. a PDF). On the
+// live page every booklet button ("Get the itinerary", "Download full
+// itinerary", the landing pages' booklet buttons) opens a short form instead
+// of linking to it. The form posts to the dashboard (/api/booklet-request),
+// which saves the lead to HubSpot, emails the visitor the link, and answers
+// with the booklet URL; the page then sends the visitor there.
+//
+// The URL is never written into the live HTML: the dashboard looks it up from
+// the PUBLISHED page by slug, so the only way to it is through the form (or
+// the email). Pages still pointing at the old "request a booklet" form page,
+// and pages rendered without a slug (tests, the editor), keep a plain link.
+
+export const BOOKLET_ENDPOINT = 'https://dashboard.pacificdiscovery.org/api/booklet-request';
+export const BOOKLET_ANCHOR = 'get-booklet';
+const LEGACY_BOOKLET_RE = /\/request-program-booklet\/?(?:[?#]|$)/i;
+
+/** A booklet link that can sit behind the form: http(s), and not the old request-form page. */
+export function isGatedBooklet(url) {
+  const s = String(url ?? '').trim();
+  return /^https?:\/\/[^\s/]+\.[^\s]+/i.test(s) && !LEGACY_BOOKLET_RE.test(s);
+}
+
+function bookletDialog(p, c, { landing = false } = {}) {
+  const title = landing ? 'Get the program booklet' : `Get the ${p.name} booklet`;
+  const id = (k) => `pdb-${k}`;
+  const field = (k, label, type, auto, extra = '', required = true) =>
+    `<label class="pdb-field" for="${id(k)}"><span>${esc(label)}${required ? '' : ' <small>(optional)</small>'}</span>` +
+    `<input id="${id(k)}" name="${k}" type="${type}" autocomplete="${auto}"${required ? ' required' : ''}${extra}>` +
+    `<em class="pdb-err" data-err="${k}"></em></label>`;
+  return `<dialog class="pdb" id="${BOOKLET_ANCHOR}" aria-labelledby="pdb-title" data-endpoint="${attr(c.endpoint)}" data-slug="${attr(c.slug)}">` +
+    `<form class="pdb-form" novalidate>` +
+    `<button type="button" class="pdb-x" data-pdb-close aria-label="Close">&times;</button>` +
+    `<div class="pdb-ask">` +
+    `<p class="pdb-eyebrow">Free info booklet</p>` +
+    `<h2 class="pdb-h" id="pdb-title">${esc(title)}</h2>` +
+    `<p class="pdb-lede">Every week of the itinerary, what’s included, costs and dates. Tell us who you are and it opens straight away. We’ll email you the link too.</p>` +
+    `<div class="pdb-row">${field('firstname', 'First name', 'text', 'given-name')}${field('lastname', 'Last name', 'text', 'family-name')}</div>` +
+    `<div class="pdb-row">${field('email', 'Email', 'email', 'email', ' inputmode="email"')}${field('phone', 'Phone', 'tel', 'tel', ' inputmode="tel"')}</div>` +
+    `<fieldset class="pdb-field pdb-role"><legend>I am a…</legend>` +
+    `<label><input type="radio" name="role" value="Student" required> Student</label>` +
+    `<label><input type="radio" name="role" value="Parent"> Parent or guardian</label>` +
+    `<em class="pdb-err" data-err="role"></em></fieldset>` +
+    `<div class="pdb-hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>` +
+    `<p class="pdb-msg" role="alert"></p>` +
+    `<button type="submit" class="pdb-btn">Open the booklet</button>` +
+    `<p class="pdb-small">We’ll only use your details to send you program information. Unsubscribe any time.</p>` +
+    `</div>` +
+    `<div class="pdb-done" hidden>` +
+    `<p class="pdb-eyebrow">On its way</p>` +
+    `<h2 class="pdb-h">Your booklet is opening…</h2>` +
+    `<p class="pdb-lede">We’ve also emailed the link to <strong class="pdb-to"></strong> so you can come back to it.</p>` +
+    `<a class="pdb-btn pdb-open" href="#">Open the booklet</a>` +
+    `</div>` +
+    `</form></dialog>` +
+    `<script>(${bookletClient.toString()})(document.getElementById(${JSON.stringify(BOOKLET_ANCHOR)}));</script>`;
+}
+
+// Runs in the visitor's browser (inlined above as source). Plain ES2017, no
+// imports: it must work inside pacificdiscovery.org's own page.
+function bookletClient(dlg) {
+  if (!dlg || dlg.getAttribute('data-ready')) return;
+  dlg.setAttribute('data-ready', '1');
+  var form = dlg.querySelector('form');
+  var slug = dlg.getAttribute('data-slug');
+  var endpoint = dlg.getAttribute('data-endpoint');
+  var KEY = 'pd_booklet_' + slug;
+  var opened = 0;
+  function push(ev) { try { (window.dataLayer = window.dataLayer || []).push({ event: ev, program: slug }); } catch (e) { /* ignore */ } }
+  function saved() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  function open() {
+    // Already filled it in on this device: straight to the booklet.
+    var url = saved();
+    if (url) { push('pd_booklet_repeat'); location.assign(url); return; }
+    opened = Date.now();
+    if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+    push('pd_booklet_open');
+    var first = form.querySelector('input[name=firstname]');
+    if (first) first.focus();
+  }
+  function close() { if (typeof dlg.close === 'function') dlg.close(); else dlg.removeAttribute('open'); }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('[data-pd-booklet]');
+    if (!a) return;
+    e.preventDefault();
+    open();
+  });
+  dlg.addEventListener('click', function (e) {
+    if (e.target === dlg || (e.target.closest && e.target.closest('[data-pdb-close]'))) close();
+  });
+  if (location.hash === '#' + dlg.id) setTimeout(open, 300);
+
+  var msg = form.querySelector('.pdb-msg');
+  var btn = form.querySelector('button[type=submit]');
+  function errs(map) {
+    var list = form.querySelectorAll('[data-err]');
+    for (var i = 0; i < list.length; i++) list[i].textContent = (map && map[list[i].getAttribute('data-err')]) || '';
+  }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = form.elements;
+    var role = form.querySelector('input[name=role]:checked');
+    var fields = { firstname: f.firstname.value.trim(), lastname: f.lastname.value.trim(), email: f.email.value.trim(), phone: f.phone.value.trim(), role: role ? role.value : '' };
+    var local = {};
+    if (!fields.firstname) local.firstname = 'Please enter your first name.';
+    if (!fields.lastname) local.lastname = 'Please enter your last name.';
+    if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(fields.email)) local.email = 'Please enter a valid email address.';
+    if (!/^[+()\d\s.\-]{6,30}$/.test(fields.phone)) local.phone = fields.phone ? 'Please enter a valid phone number.' : 'Please enter your phone number.';
+    if (!fields.role) local.role = 'Please choose one.';
+    errs(local);
+    msg.textContent = '';
+    if (Object.keys(local).length) return;
+    btn.disabled = true;
+    btn.textContent = 'One moment…';
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: slug, fields: fields, website: f.website.value, t: Date.now() - opened, page: { uri: location.href, title: document.title } }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+    }).then(function (res) {
+      if (!res.ok || !res.j.url) {
+        errs(res.j.errors);
+        msg.textContent = res.j.error || 'Sorry, something went wrong. Please try again.';
+        return;
+      }
+      var url = res.j.url;
+      try { localStorage.setItem(KEY, url); } catch (e2) { /* ignore */ }
+      push('pd_booklet_submit');
+      try { (window._hsq = window._hsq || []).push(['identify', { email: fields.email, firstname: fields.firstname, lastname: fields.lastname, phone: fields.phone }]); } catch (e3) { /* ignore */ }
+      form.querySelector('.pdb-ask').hidden = true;
+      form.querySelector('.pdb-done').hidden = false;
+      form.querySelector('.pdb-to').textContent = fields.email;
+      form.querySelector('.pdb-open').href = url;
+      setTimeout(function () { location.assign(url); }, 900);
+    }).catch(function () {
+      msg.textContent = 'We couldn’t reach our server. Please check your connection and try again.';
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = 'Open the booklet';
+    });
+  });
+}
+
+// Scoped under .pdb; works inside both .pdp (programs) and .pdl (landing).
+const BOOKLET_CSS = `
+.pdb{--pdb-teal:#288195;--pdb-ink:#2f2f2f;--pdb-muted:#5b6166;--pdb-line:#dfe5e8;--pdb-orange:#F15B39;--pdb-orange-dk:#d9472a;
+  width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 24px);margin:auto;padding:0;border:0;border-radius:18px;background:#fff;color:var(--pdb-ink);
+  box-shadow:0 30px 80px rgba(0,0,0,.35);font-family:Poppins,system-ui,sans-serif;font-size:15px;line-height:1.5;text-align:left;overflow:auto}
+.pdb::backdrop{background:rgba(20,30,35,.6)}
+.pdb [hidden]{display:none!important}
+.pdb *,.pdb *::before,.pdb *::after{box-sizing:border-box}
+.pdb :where(h2,p,fieldset,legend,label){margin:0;padding:0;border:0;font-family:inherit;letter-spacing:normal;text-transform:none}
+.pdb-form{position:relative;padding:30px 28px 24px}
+.pdb-x{position:absolute;top:10px;right:12px;width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--pdb-muted);font-size:26px;line-height:1;cursor:pointer}
+.pdb-x:hover{background:#f1f4f5}
+.pdb-eyebrow{font-size:12px;font-weight:600;letter-spacing:.12em!important;text-transform:uppercase!important;color:var(--pdb-orange);margin-bottom:6px}
+.pdb-h{font-family:'DM Serif Display',Georgia,serif!important;font-weight:400;font-size:28px!important;line-height:1.15!important;color:var(--pdb-ink);margin:0 36px 8px 0}
+.pdb-lede{color:var(--pdb-muted);margin-bottom:18px!important}
+.pdb-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pdb-field{display:block;margin-bottom:12px!important}
+.pdb-field>span small{font-weight:400;font-size:12px;color:var(--pdb-muted)}
+.pdb-field>span,.pdb-role legend{display:block;font-size:13px;font-weight:600;color:var(--pdb-ink);margin-bottom:4px}
+.pdb-field input:not([type=radio]){display:block;width:100%;height:46px;padding:0 14px;border:1px solid #c9d2d6;border-radius:10px;background:#fff;color:var(--pdb-ink);font:inherit;font-size:16px;box-shadow:none;margin:0}
+.pdb-field input:not([type=radio]):focus{outline:2px solid var(--pdb-teal);outline-offset:1px;border-color:var(--pdb-teal)}
+.pdb-role{display:flex;flex-wrap:wrap;gap:8px}
+.pdb-role legend{width:100%;float:left}
+.pdb-role label{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid #c9d2d6;border-radius:999px;cursor:pointer;font-size:14px}
+.pdb-role label:has(input:checked){border-color:var(--pdb-teal);background:#eef7f9}
+.pdb-role input{width:18px;height:18px;flex:none;margin:0;padding:0;accent-color:var(--pdb-teal)}
+.pdb-err{display:block;font-style:normal;font-size:13px;color:#c0392b;margin-top:3px;width:100%}
+.pdb-err:empty{display:none}
+.pdb-hp{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+.pdb-msg{color:#c0392b;font-size:14px;margin-bottom:10px!important}
+.pdb-msg:empty{display:none}
+.pdb-btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;padding:12px 20px;border:0;border-radius:999px;background:var(--pdb-orange);color:#fff!important;font:inherit;font-weight:600;font-size:16px;text-decoration:none!important;cursor:pointer}
+.pdb-btn:hover{background:var(--pdb-orange-dk)}
+.pdb-btn:disabled{opacity:.7;cursor:wait}
+.pdb-small{font-size:12px;color:var(--pdb-muted);margin-top:10px!important;text-align:center}
+.pdb-done .pdb-btn{margin-top:6px}
+@media (max-width:480px){.pdb-form{padding:26px 18px 18px}.pdb-row{grid-template-columns:1fr;gap:0}.pdb-h{font-size:24px!important}}
+`;
+
 export const SCHEMA = {
   page: {
     label: 'Page settings',
@@ -202,7 +386,7 @@ export const SCHEMA = {
       { k: 'seo.description', label: 'Search result description', type: 'multiline', help: 'Aim for 140–160 characters.' },
       { k: 'seo.ogImage', label: 'Social share image', type: 'image' },
       { k: 'settings.applyUrl', label: 'Apply link', type: 'url' },
-      { k: 'settings.bookletUrl', label: 'Request booklet / itinerary link', type: 'url' },
+      { k: 'settings.bookletUrl', label: 'Info booklet download link', type: 'url', help: 'The booklet itself, e.g. a PDF link. On the live page, “Get the itinerary” and the other booklet buttons ask for name, email, phone and student/parent first, then open this link and email it to them. The old request-a-booklet page link still works as a plain link.' },
       { k: 'settings.callUrl', label: 'Book a call link', type: 'url' },
       { k: 'settings.whatsappUrl', label: 'WhatsApp link', type: 'url' },
       { k: 'settings.currency', label: 'Currency', type: 'select', options: ['USD', 'NZD', 'AUD'] },
@@ -365,6 +549,11 @@ export function normalizeProgram(p) {
 function ctx(p, opts, schema = SCHEMA) {
   const ed = !!opts.editable;
   const cur = p.settings?.currency || 'USD';
+  // Booklet buttons open the details form instead of linking straight to the booklet.
+  const slug = String(opts.slug || '');
+  const endpoint = String(opts.bookletEndpoint || BOOKLET_ENDPOINT);
+  const gate = !ed && !!slug && isGatedBooklet(p.settings?.bookletUrl);
+  const bookletHref = () => gate ? `href="#${BOOKLET_ANCHOR}" data-pd-booklet` : `href="${attr(safeUrl(p.settings?.bookletUrl))}"`;
 
   // Editable text. In edit mode carries data-f so the editor can make it inline-editable.
   const t = (path, tag = 'span', cls = '', o = {}) => {
@@ -394,7 +583,8 @@ function ctx(p, opts, schema = SCHEMA) {
     const text = getPath(p, textPath);
     if (!ed && !text) return '';
     const d = ed ? ` data-f="${attr(textPath)}"${urlPath ? ` data-url="${attr(urlPath)}"` : ''}` : '';
-    return `<a class="${cls}" href="${attr(safeUrl(url))}"${d}>${esc(text)}</a>`;
+    const href = urlPath === 'settings.bookletUrl' && gate ? bookletHref() : `href="${attr(safeUrl(url))}"`;
+    return `<a class="${cls}" ${href}${d}>${esc(text)}</a>`;
   };
   // A repeatable list. `each(item, path, i)` renders one item's inner HTML.
   const list = (path, tag, cls, each, itemTag = 'div', itemCls = '') => {
@@ -408,7 +598,7 @@ function ctx(p, opts, schema = SCHEMA) {
     const add = ed ? `<button type="button" class="pde-add" data-add="${attr(path)}">+ ${esc(schema.lists[path]?.add || 'Add')}</button>` : '';
     return `<${tag} class="${cls}"${ed ? ` data-list="${attr(path)}"` : ''}>${inner}</${tag}>${add}`;
   };
-  return { ed, cur, t, v, img, link, list };
+  return { ed, cur, t, v, img, link, list, slug, endpoint, gate, bookletHref };
 }
 
 const R = {
@@ -430,7 +620,7 @@ const R = {
   itinerary(p, c) {
     const weeks = p.itinerary.weeks || [];
     const head = `<div class="pdp-head-row"><div><h2 class="pdp-h2">${c.t('itinerary.heading', 'span')}</h2>${c.t('itinerary.intro', 'p', 'pdp-lede', { multiline: true })}</div>` +
-      (p.settings?.bookletUrl ? `<a class="pdp-btn pdp-btn--ghost" href="${attr(safeUrl(p.settings.bookletUrl))}">Download full itinerary</a>` : '') + `</div>`;
+      (p.settings?.bookletUrl ? `<a class="pdp-btn pdp-btn--ghost" ${c.bookletHref()}>Download full itinerary</a>` : '') + `</div>`;
     const body = (it, ip, i) => {
       const tags = String(it.tags || '').split(',').map((s) => s.trim()).filter(Boolean);
       const title = `<span class="pdp-week__num">Week ${i + 1}</span>${c.t(`${ip}.title`, 'span', 'pdp-week__title')}${it.location || c.ed ? c.t(`${ip}.location`, 'span', 'pdp-week__loc', { ph: 'Location' }) : ''}`;
@@ -754,7 +944,7 @@ function renderHero(p, c) {
     `${c.t('hero.headline', 'h1', 'pdp-h1', { multiline: true, keep: true })}` +
     `${c.t('hero.intro', 'p', 'pdp-hero__intro', { multiline: true })}` +
     `<div class="pdp-hero__ctas"><a class="pdp-btn pdp-btn--lg" href="#dates">Check dates &amp; apply</a>` +
-    (p.settings.bookletUrl ? `<a class="pdp-btn pdp-btn--lg pdp-btn--inv-ghost" href="${attr(safeUrl(p.settings.bookletUrl))}">Get the itinerary</a>` : '') + `</div>` +
+    (p.settings.bookletUrl ? `<a class="pdp-btn pdp-btn--lg pdp-btn--inv-ghost" ${c.bookletHref()}>Get the itinerary</a>` : '') + `</div>` +
     renderWidgets(p, c) +
     renderReviews(p, c) +
     `</div></header>` +
@@ -796,7 +986,8 @@ export function renderProgram(program, opts = {}) {
   }).join('');
   const goScript = !c.ed && [...(p.hero.widgets || []), ...(p.reviews.widgets || [])].some((w) => parseWidget(w)?.kind === 'gooverseas')
     ? `<script>${GOOVERSEAS_LOADER}</script>` : '';
-  return `<div class="pdp${c.ed ? ' pdp--edit' : ''}">${renderHero(p, c)}${renderBar(p, c, shown)}${secs}${goScript}</div>`;
+  const booklet = c.gate ? bookletDialog(p, c) : '';
+  return `<div class="pdp${c.ed ? ' pdp--edit' : ''}">${renderHero(p, c)}${renderBar(p, c, shown)}${secs}${goScript}${booklet}</div>`;
 }
 
 export function seoFor(program, { canonicalBase = 'https://www.pacificdiscovery.org/programs/', slug = '' } = {}) {
@@ -840,8 +1031,8 @@ export function jsonLd(program, { slug = '', canonicalBase = 'https://www.pacifi
 }
 
 /** A complete HTML document: the direct /p/<slug> view and the editor preview. */
-export function renderStandalone(program, { slug = '', editable = false, extraHead = '', noindex = true, canonicalBase } = {}) {
-  if (templateOf(program) === 'landing') return renderLandingStandalone(program, { slug, editable, extraHead, noindex, canonicalBase });
+export function renderStandalone(program, { slug = '', editable = false, extraHead = '', noindex = true, canonicalBase, bookletEndpoint } = {}) {
+  if (templateOf(program) === 'landing') return renderLandingStandalone(program, { slug, editable, extraHead, noindex, canonicalBase, bookletEndpoint });
   const s = seoFor(program, { slug });
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
@@ -853,7 +1044,7 @@ export function renderStandalone(program, { slug = '', editable = false, extraHe
     `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
     `<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">` +
     `<style>body{margin:0;background:#fff}${PROGRAM_CSS}</style>${extraHead}</head><body>` +
-    `<div id="pdp-root">${renderProgram(program, { editable })}</div>` +
+    `<div id="pdp-root">${renderProgram(program, { editable, slug, bookletEndpoint })}</div>` +
     (editable ? '' : `<script type="application/ld+json">${jsonLd(program, { slug })}</script>`) +
     `</body></html>`;
 }
@@ -1117,6 +1308,7 @@ a.pdp-rev__src:hover{text-decoration:underline}
   .pdp-next__pill{grid-column:2;grid-row:1/3;align-self:center;font-size:12px;padding:3px 10px}
   .pdp-bar .pdp-btn{min-height:44px;padding:0 16px;font-size:14px}
 }
+${BOOKLET_CSS}
 `;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1187,7 +1379,7 @@ export const LANDING_SCHEMA = {
       { k: 'seo.description', label: 'Search result description', type: 'multiline', help: 'Aim for 140–160 characters.' },
       { k: 'seo.ogImage', label: 'Social share image', type: 'image' },
       { k: 'settings.quizUrl', label: 'Quiz link', type: 'url' },
-      { k: 'settings.bookletUrl', label: 'Request booklet link', type: 'url' },
+      { k: 'settings.bookletUrl', label: 'Info booklet download link', type: 'url', help: 'The booklet itself, e.g. a PDF link. On the live page the booklet buttons ask for name, email, phone and student/parent first, then open this link and email it to them. The old request-a-booklet page link still works as a plain link.' },
       { k: 'settings.advisorUrl', label: 'Talk to an advisor link', type: 'url' },
       { k: 'settings.applyUrl', label: 'Apply link', type: 'url' },
     ],
@@ -1464,7 +1656,8 @@ export function renderLanding(page, opts = {}) {
       waveTop + (full ? inner : `<div class="pdl-wrap">${inner}</div>`) + `</section>`;
   }).join('');
   const first = shownKeys[0];
-  return `<div class="pdl${c.ed ? ' pdp--edit' : ''}">${renderLandingHero(p, c, first ? LSEC[first].bg : '#ffffff')}${secs}</div>`;
+  const booklet = c.gate ? bookletDialog(p, c, { landing: true }) : '';
+  return `<div class="pdl${c.ed ? ' pdp--edit' : ''}">${renderLandingHero(p, c, first ? LSEC[first].bg : '#ffffff')}${secs}${booklet}</div>`;
 }
 
 export function landingSeo(page, { canonicalBase = `https://www.pacificdiscovery.org${LANDING_BASE}`, slug = '' } = {}) {
@@ -1690,6 +1883,7 @@ export const LANDING_CSS = `
 .pdl .pdl-cta__body{color:#f1f1f1;font-size:19px;max-width:620px}
 @media (max-width:620px){.pdl-sec{padding:80px 0 72px}.pdl-sec--wave{padding-top:96px}.pdl-sec--stats{padding:24px 0 36px}.pdl-sec--week{padding-bottom:0}.pdl-week{padding-bottom:80px}.pdl-sec--cta{padding:96px 20px}.pdl-sec--ribbon{padding:12px 0}.pdl .pdl-ribbon__img{height:200px}}
 @media (prefers-reduced-motion:reduce){.pdl *{transition:none!important;scroll-behavior:auto!important}}
+${BOOKLET_CSS}
 `;
 
 // ─── template registry ──────────────────────────────────────────────────────
@@ -1716,7 +1910,7 @@ export function renderPage(doc, opts = {}) {
   return TEMPLATES[templateOf(doc)].render(doc, opts);
 }
 
-function renderLandingStandalone(page, { slug = '', editable = false, extraHead = '', noindex = true, canonicalBase } = {}) {
+function renderLandingStandalone(page, { slug = '', editable = false, extraHead = '', noindex = true, canonicalBase, bookletEndpoint } = {}) {
   const s = landingSeo(page, canonicalBase ? { slug, canonicalBase } : { slug });
   const ld = editable ? '' : landingJsonLd(page);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
@@ -1729,7 +1923,7 @@ function renderLandingStandalone(page, { slug = '', editable = false, extraHead 
     `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
     `<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">` +
     `<style>body{margin:0;background:#fff}${LANDING_CSS}</style>${extraHead}</head><body>` +
-    `<div id="pdp-root">${renderLanding(page, { editable })}</div>` +
+    `<div id="pdp-root">${renderLanding(page, { editable, slug, bookletEndpoint })}</div>` +
     (ld ? `<script type="application/ld+json">${ld}</script>` : '') +
     `</body></html>`;
 }
