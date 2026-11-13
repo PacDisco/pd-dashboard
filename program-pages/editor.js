@@ -720,7 +720,17 @@ function fieldHtml(f, path) {
   }
 }
 
+// Does the template crop this photo (object-fit: cover)? Only then is a focus worth setting.
+// Route maps, award badges and the like are shown whole, so they get no picker.
+function isCropped(path) {
+  const el = S.doc?.querySelector(`img[data-img="${CSS.escape(path)}"]`);
+  if (!el) return false;
+  return (el.ownerDocument.defaultView || window).getComputedStyle(el).objectFit === 'cover';
+}
+
 // Click-to-set focal point for a cropped photo. Stored as "X% Y%".
+// Hero pickers come from SCHEMA (they have f.k) and switch the preview to the matching device.
+// Item pickers (<path>Focus) apply on every screen size.
 function focusPicker(f, path, help) {
   const src = getPath(S.data, f.image);
   const cur = parseFocus(getPath(S.data, path));
@@ -728,7 +738,7 @@ function focusPicker(f, path, help) {
   const lbl = `<span class="lbl">${esc(f.label)}</span>`;
   if (!src) return `<div class="field" data-path="${esc(path)}">${lbl}<span class="help">Add the photo first.</span></div>`;
   return `<div class="field" data-path="${esc(path)}">${lbl}
-    <div class="focus" data-focus="${esc(path)}"${f.mobile ? ' data-focus-mobile="1"' : ''} title="Click to set the focus">
+    <div class="focus" data-focus="${esc(path)}"${f.k ? ' data-focus-device="1"' : ''}${f.mobile ? ' data-focus-mobile="1"' : ''} title="Click to set the focus">
       <img src="${esc(src)}" alt="" draggable="false"><span class="focus__dot" style="left:${x}%;top:${y}%"></span>
     </div>
     <div class="imgacts"><span class="help focus__val">${cur ? `Focus: ${esc(cur)}` : (f.mobile ? 'Using the computer focus' : 'Centred')}</span>
@@ -834,7 +844,10 @@ function renderPanel() {
     } else if (s.kind === 'image') {
       head = 'Photo';
       const focusFields = (SCHEMA.hero.fields || []).filter((f) => f.type === 'focus' && f.image === s.path);
-      body = imageBox(s.path, s.alt) + focusFields.map((f) => fieldHtml(f, f.k)).join('') + (s.parent && s.parent.kind !== 'page'
+      const itemFocus = !focusFields.length && isCropped(s.path)
+        ? focusPicker({ label: 'Photo focus', image: s.path, help: 'Click the part of the photo that should stay in view when it gets cropped.' }, `${s.path}Focus`)
+        : '';
+      body = imageBox(s.path, s.alt) + focusFields.map((f) => fieldHtml(f, f.k)).join('') + itemFocus + (s.parent && s.parent.kind !== 'page'
         ? `<p style="margin-top:14px"><button class="btn btn--sm" type="button" id="img-parent">← Back to ${s.parent.kind === 'item' ? 'item' : 'section'}</button></p>` : '');
     }
   }
@@ -880,6 +893,7 @@ function wirePanel(box) {
   box.querySelectorAll('[data-drive]').forEach((b) => b.onclick = () => openDrive(b.dataset.drive, b.dataset.driveAlt || null));
   box.querySelectorAll('[data-focus]').forEach((el) => el.onclick = (e) => {
     const r = el.querySelector('img').getBoundingClientRect();
+    if (!r.width || !r.height) return; // photo not loaded yet
     const x = Math.round(Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100)));
     const y = Math.round(Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100)));
     setPath(S.data, el.dataset.focus, `${x}% ${y}%`);
@@ -887,8 +901,9 @@ function wirePanel(box) {
     const val = el.parentElement.querySelector('.focus__val');
     if (val) val.textContent = `Focus: ${x}% ${y}%`;
     // Show the result where it matters: phone focus → phone preview.
-    setDevice(!!el.dataset.focusMobile);
+    if (el.dataset.focusDevice) setDevice(!!el.dataset.focusMobile);
     changed();
+    if (!el.parentElement.querySelector('[data-focus-reset]')) renderPanel(); // show Reset after the first click
   });
   box.querySelectorAll('[data-focus-reset]').forEach((b) => b.onclick = () => { setPath(S.data, b.dataset.focusReset, ''); changed(); renderPanel(); });
   box.querySelectorAll('[data-clear]').forEach((b) => b.onclick = () => { setPath(S.data, b.dataset.clear, ''); changed(); renderPanel(); });

@@ -51,6 +51,9 @@ await page.route(`${ORIGIN}/**`, async (route) => {
   if (url.pathname === "/api/program-drive") {
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ clientId: "1-x.apps.googleusercontent.com", apiKey: "test-picker-key-0123456789abcdef", appId: "123456789" }) });
   }
+  if (url.pathname === "/api/program-media" && req.method() === "GET") {
+    return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAACgAAAAeCAIAAADRv8uKAAAAO0lEQVR4Xu3QUQ0AMAyE0K4KK2cSJ2upCe6HZ4CE8+5UQieiyzDG1RhXY1yNcTXG1RhXY1yNcTUmtvoD3iMBzB1BSfMAAAAASUVORK5CYII=", "base64") });
+  }
   if (url.pathname === "/api/program-media" && req.method() === "POST") {
     db.mediaUploads = (db.mediaUploads || 0) + 1;
     return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ key: "drive1.jpg", url: `${ORIGIN}/api/program-media?key=drive1.jpg` }) });
@@ -88,6 +91,7 @@ const S = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__pdp.S.dat
 const frame = () => page.frameLocator("#frame");
 
 await page.goto(`${ORIGIN}/program-pages/`);
+await page.locator("[data-starter]").first().waitFor();
 ok(await page.locator("[data-starter]").count() === 20, "a ready-made starter for every program, plus the landing page");
 await page.getByRole("button", { name: "+ South America Semester Abroad" }).click();
 ok(await page.locator("#new-slug").inputValue() === "south-america-gap-semester", "starter prefills the address");
@@ -140,6 +144,26 @@ await frame().locator('.pde-tools button[data-op="del"]').click();
 ok((await S()).itinerary.weeks.length === 9, "deleted a week");
 await page.locator("#btn-undo").click();
 ok((await S()).itinerary.weeks.length === 10, "undo brings it back");
+
+// Photo focus for item photos: click the week photo, click the picker, saved as imageFocus
+await frame().locator('img[data-img="itinerary.weeks.1.image"]').click();
+ok(await page.locator('.field[data-path="itinerary.weeks.1.imageFocus"] .focus').count() === 1, "week photo shows a focus picker");
+await page.locator("#dev-mobile").click();
+const fb = await page.locator('.field[data-path="itinerary.weeks.1.imageFocus"] .focus img').boundingBox();
+await page.mouse.click(fb.x + fb.width * 0.25, fb.y + fb.height * 0.75);
+await page.waitForTimeout(400);
+ok((await S()).itinerary.weeks[1].imageFocus === "25% 75%", "item focus saved as X% Y%");
+ok(/object-position:\s*25% 75%/.test(await frame().locator('img[data-img="itinerary.weeks.1.image"]').getAttribute("style")), "preview uses the focus");
+ok(await page.evaluate(() => document.getElementById("canvas").classList.contains("mobile")), "item focus leaves the phone preview alone");
+await page.locator("#dev-desktop").click();
+await page.locator('[data-focus-reset="itinerary.weeks.1.imageFocus"]').click();
+ok((await S()).itinerary.weeks[1].imageFocus === "", "focus reset");
+await frame().locator('[data-img="route.mapImage"]').click();
+await page.locator('#f-route_mapImage').fill(`${ORIGIN}/api/program-media?key=map.png`);
+await page.waitForTimeout(800);
+await frame().locator('img[data-img="route.mapImage"]').click();
+await page.waitForTimeout(300);
+ok(await page.locator('.focus').count() === 0, "route map (shown whole) gets no focus picker");
 
 // Add an FAQ from the on-page + button
 const faqBefore = (await S()).faq.items.length;

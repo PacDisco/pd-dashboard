@@ -576,7 +576,10 @@ function ctx(p, opts, schema = SCHEMA) {
     if (!src) {
       return ed ? `<div class="pdp-img pdp-img--empty ${cls}"${d}><span>${esc(label || 'Add a photo')}</span></div>` : '';
     }
-    return `<img class="pdp-img ${cls}" src="${attr(safeUrl(src))}" alt="${attr(alt || '')}" loading="lazy" decoding="async"${d}>`;
+    // Focal point for cropped photos: <path>Focus, e.g. itinerary.weeks.0.imageFocus.
+    // The hero has its own computer/phone focus (set on its wrapper), so it's skipped here.
+    const pos = path === 'hero.image' ? '' : parseFocus(getPath(p, `${path}Focus`));
+    return `<img class="pdp-img ${cls}" src="${attr(safeUrl(src))}" alt="${attr(alt || '')}" loading="lazy" decoding="async"${pos ? ` style="object-position:${pos}"` : ''}${d}>`;
   };
   // Link whose label is editable inline and whose URL is edited in the panel.
   const link = (textPath, url, cls, urlPath) => {
