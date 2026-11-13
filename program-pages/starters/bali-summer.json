@@ -3,7 +3,7 @@
   "name": "Bali Summer Program",
   "seo": {
     "title": "Bali Summer Program | Pacific Discovery",
-    "description": "Bali in 4 weeks: food rescue and a mangrove clean-up in Sanur, Tabanan’s villages, surf camp in Uluwatu, service on Nusa Penida, a yoga retreat in Ubud and a Mount Batur sunrise. Ages 17–22.",
+    "description": "Four weeks in Bali for college-aged travelers: food rescue and a mangrove clean-up in Sanur, Tabanan’s villages, surfing in Uluwatu, conservation on Nusa Penida, a yoga retreat in Ubud and a Mount Batur sunrise.",
     "ogImage": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
   },
   "settings": {
@@ -73,8 +73,8 @@
   ],
   "hero": {
     "eyebrow": "Summer program · Bali",
-    "headline": "Four weeks of service, surf and culture in Bali",
-    "intro": "Rescue food in Sanur, visit Tabanan’s villages and temples, learn to surf in Uluwatu, volunteer on Nusa Penida and finish with a yoga retreat and a sunrise on Mount Batur.",
+    "headline": "Four weeks of service, surf and volcanoes in Bali",
+    "intro": "Discover the Bali beyond the beaches. Give back in Sanur and Tabanan, learn to surf in Uluwatu, join a conservation project on Nusa Penida, reset at a yoga retreat in Ubud and watch the sun rise from Mount Batur, with free days at every stage to explore at your own pace.",
     "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/PacificDiscovery%20-%20Aus_Bali%202.jpg",
     "imageAlt": "Group silhouetted on a leaning palm tree over the water at dusk",
     "imageFocus": "",
@@ -106,26 +106,26 @@
     "heading": "What makes this program different",
     "items": [
       {
-        "title": "A full surf camp",
-        "body": "Several days of lessons with Balumba Surf School in Uluwatu, whether you’re a beginner or have surfed before.",
+        "title": "Service you can put on a résumé",
+        "body": "Food rescue and the Bali Life Centre in Sanur, a mangrove clean-up, food deliveries to Tabanan’s villages and a three-day conservation project on Nusa Penida. You leave with a Certificate of Completed Service Hours.",
         "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/PacificDiscovery%20-%20Aus_Bali%202.jpg",
         "imageAlt": "Group silhouetted on a leaning palm tree over the water at dusk"
       },
       {
-        "title": "Service on land and sea",
-        "body": "A mangrove clean-up and food packaging with SOS in Sanur, village meal distribution in Tabanan and a conservation service project with FNPF on Nusa Penida.",
+        "title": "Free days at every stage",
+        "body": "Built for college-aged travelers. Every stage has a free day to chase waterfalls, keep surfing, snorkel with manta rays off Nusa Penida or explore Ubud your own way.",
         "image": "",
         "imageAlt": ""
       },
       {
-        "title": "Balinese culture and wellbeing",
-        "body": "Temples and trekking in Tabanan, dinner at Tabanan Palace, a cultural day with Five Pillars, batik making and a yoga retreat in Ubud.",
+        "title": "Surf, volcanoes and Balinese culture",
+        "body": "Surf lessons in Uluwatu, temples and trekking in the rice fields of Tabanan, dinner at Tabanan Palace, an eco farm in Ubud and an overnight hike up Mount Batur for sunrise.",
         "image": "https://www.pacificdiscovery.org/library/images/programs/Australia%20%26%20Bali/PacificDiscovery%20-%20Bali.jpg",
         "imageAlt": "Students learning dance moves in an open-air pavilion"
       },
       {
-        "title": "All-inclusive On The Ground",
-        "body": "3 Meals a day, lodging, in-country ground travel, activities, entry fees and guides are included.",
+        "title": "A three-day yoga retreat",
+        "body": "Three days at Dragonfly Village in Ubud with yoga sessions each day and time to rest, reflect and reset before the final stretch.",
         "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/Oz_Bali%201.png",
         "imageAlt": "Two people standing in a stone temple gateway reflected in water"
       }
@@ -137,20 +137,20 @@
     "mapAlt": "Route map from Denpasar to Sanur, Tabanan, Uluwatu, Nusa Penida, Ubud and Mount Batur",
     "phases": [
       {
-        "label": "Week 1",
-        "text": "Orientation in Seminyak, a mangrove clean-up and food rescue in Sanur, then village and temple visits in Tabanan"
+        "label": "Days 1–10",
+        "text": "Service and culture in Sanur and Tabanan: food rescue, the Bali Life Centre, a mangrove clean-up, village food deliveries and dinner at Tabanan Palace"
       },
       {
-        "label": "Week 2",
-        "text": "Agriculture and a palace dinner in Tabanan, then surf camp in Uluwatu"
+        "label": "Days 11–18",
+        "text": "Surf lessons in Uluwatu, then a three-day conservation project and a free day on Nusa Penida"
       },
       {
-        "label": "Week 3",
-        "text": "A conservation service project with FNPF on Nusa Penida, then culture and batik making in Ubud"
+        "label": "Days 19–25",
+        "text": "Culture and wellbeing in Ubud: an eco farm, a free day and a three-day yoga retreat at Dragonfly Village"
       },
       {
-        "label": "Week 4",
-        "text": "A yoga retreat in Ubud, a sunrise climb on Mount Batur and our program wrap"
+        "label": "Days 26–28",
+        "text": "Mount Batur hike and overnight, then our program wrap in Ubud"
       }
     ]
   },
@@ -160,19 +160,19 @@
     "items": [
       {
         "title": "Hotels & hostels",
-        "body": "Harris Hotel Seminyak, Abian Harmony Hotel in Sanur, My Art Hostel on Nusa Penida and Puji Hostel in Ubud.",
+        "body": "Hotels and hostels in Sanur, on Nusa Penida and in Ubud, shared with your group.",
         "image": "",
         "imageAlt": ""
       },
       {
-        "title": "Coliving, surf camp & project stays",
-        "body": "Coliving Bali in Tabanan, My Dream Bali at surf camp in Uluwatu and the FNPF centre on Nusa Penida.",
+        "title": "Coliving & surf stays",
+        "body": "Coliving Bali in Tabanan and a surf stay in Uluwatu.",
         "image": "",
         "imageAlt": ""
       },
       {
         "title": "Yoga village & a night on the volcano",
-        "body": "Dragonfly Village for the yoga retreat in Ubud, and one night in tents on Mount Batur.",
+        "body": "Dragonfly Village for the three-day yoga retreat in Ubud, and one night camping near the summit of Mount Batur.",
         "image": "",
         "imageAlt": ""
       }
@@ -184,33 +184,33 @@
     "note": "This is a guide to what you can expect to do on program. The order in which activities occur might vary. Itineraries are subject to change.",
     "weeks": [
       {
-        "title": "Sanur service & Tabanan villages",
-        "location": "Denpasar → Sanur → Tabanan, Bali",
-        "body": "You’ll meet your Program Instructors in Seminyak, where we spend a day on orientation before moving to the seaside town of Sanur. Here we join a mangrove clean-up, then help package meals with SOS, a food rescue organisation that turns good excess food from hotels and cafes into meals for people in need.\n\nIn Tabanan we stay at Coliving Bali and take meals out to local villages, visiting temples along the way. The next day brings trekking and cultural activities.",
-        "tags": "Orientation, Service, Culture",
+        "title": "Service in Sanur",
+        "location": "Denpasar → Sanur, Bali",
+        "body": "We land in Denpasar and head to Sanur, a relaxed beach town on Bali’s east coast and our base for the first six days. After a day of orientation with our instructors, we get straight into service: a day packaging food with a local food rescue partner, getting surplus food to families who need it, and a day supporting the Bali Life Centre.\n\nA free day lets you explore the seaside boardwalk, night market and beaches, and we finish our time in Sanur with a mangrove clean-up, protecting one of Bali’s most important coastal ecosystems.",
+        "tags": "Orientation, Service, Free day",
         "image": "https://www.pacificdiscovery.org/library/images/programs/Australia%20%26%20Bali/PacificDiscovery%20-%20Bali.jpg",
         "imageAlt": "Students learning dance moves in an open-air pavilion"
       },
       {
-        "title": "Tabanan Palace & surf camp",
-        "location": "Tabanan → Uluwatu → Nusa Penida, Bali",
-        "body": "A morning agriculture activity is followed by dinner at Tabanan Palace, the local royal palace built in 1343. Then we head to Uluwatu for surf camp with Balumba Surf School. Whether you’re a beginner or have surfed before, the instructors guide you through several days of lessons, with a restoration and exploration day in the middle.\n\nAt the end of the week we cross to Nusa Penida and settle in at FNPF, with activities on our first evening.",
-        "tags": "Culture, Surfing, Restoration",
+        "title": "Tabanan villages & Uluwatu surf",
+        "location": "Tabanan → Uluwatu, Bali",
+        "body": "We travel west to Tabanan, the rice bowl of Bali. Here we deliver food to local villages, visit temples that are still at the heart of community life, trek through the countryside and spend a morning working alongside local farmers before an evening dinner at Tabanan Palace. A free day lets you chase waterfalls, visit more temples or head to the beach.\n\nThen we head south to Uluwatu, home to some of Bali’s most famous surf breaks, for surf lessons with a local surf school. A free day follows, with options to keep surfing, watch the Kecak Fire Dance at sunset or explore the cliff-top temples.",
+        "tags": "Service, Culture, Surfing, Free days",
         "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/PacificDiscovery%20-%20Aus_Bali%202.jpg",
         "imageAlt": "Group silhouetted on a leaning palm tree over the water at dusk"
       },
       {
-        "title": "Nusa Penida service & Ubud culture",
+        "title": "Nusa Penida conservation & Ubud",
         "location": "Nusa Penida → Ubud, Bali",
-        "body": "We spend three days on a conservation service project with FNPF on Nusa Penida, then move to My Art Hostel for a free day to explore the island.\n\nBack on the mainland, we settle into Ubud. A day with Five Pillars combines a cultural experience with a visit to an eco farm, and a batik making class follows.",
-        "tags": "Conservation, Culture, Batik",
+        "body": "We cross by fast boat to Nusa Penida, a rugged island off Bali’s southeast coast, for a three-day conservation project with a local environmental foundation, learning how local communities and conservationists work together to protect the island’s wildlife. A free day follows to snorkel, dive or look for manta rays in some of the clearest water in Indonesia.\n\nBack on the mainland we settle into Ubud, Bali’s cultural heart. A day at a local eco farm shows how sustainable farming and Balinese traditions fit together, and a free day lets you try a batik class or silver making, or wander the art markets.",
+        "tags": "Conservation, Culture, Free days",
         "image": "https://www.pacificdiscovery.org/library/images/programs/Bali/Oz_Bali%201.png",
         "imageAlt": "Two people standing in a stone temple gateway reflected in water"
       },
       {
         "title": "Yoga retreat & Mount Batur sunrise",
         "location": "Ubud → Mount Batur → Denpasar, Bali",
-        "body": "After a morning at the markets, we head to Dragonfly Village for our yoga retreat with Sheila Ubud Yoga, starting with an orientation evening and continuing over the next three days.\n\nAfter a final morning of yoga, we head to Mount Batur for a night in tents and a pre-dawn climb to the summit for sunrise. Back in Ubud we wrap up the program together before you fly home from Denpasar.",
+        "body": "We settle into Dragonfly Village for a three-day yoga retreat, with sessions each day and time to rest, reflect and reset. Back in Ubud, a free afternoon lets you visit the Monkey Forest, go river rafting or explore the temples.\n\nOur final days begin with what many students call the highlight of the program: we climb the active Mount Batur, camp near the summit and wake before dawn to watch the sun rise over Lake Batur and Mount Agung. Back in Ubud we reflect on the past four weeks and celebrate together before flying home from Denpasar.",
         "tags": "Yoga, Hiking, Program wrap",
         "image": "",
         "imageAlt": ""
@@ -223,7 +223,7 @@
     "notes": [
       {
         "title": "Free time",
-        "body": "Each week there is some designated free time to catch up on email and laundry, rest and explore with others in the group."
+        "body": "Free days are built into every stage of the program so you can explore at your own pace, alongside time to catch up on laundry and rest."
       },
       {
         "title": "Phones & wifi",
@@ -231,7 +231,7 @@
       },
       {
         "title": "Fitness needed",
-        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect several days of surf lessons, trekking in Tabanan, hands-on service projects and a pre-dawn climb up Mount Batur."
+        "body": "Medium activity level. Anyone with average fitness and enthusiasm for the outdoors will be fine. Expect surf lessons, trekking in Tabanan, hands-on service projects and an overnight hike up Mount Batur."
       }
     ]
   },
@@ -239,8 +239,14 @@
     "heading": "Learn while you travel",
     "items": [
       {
-        "title": "Food rescue in Sanur",
-        "body": "Help SOS package meals made from good excess food rescued from hotels and cafes, then take meals out to villages in Tabanan.",
+        "title": "Service learning",
+        "body": "Food rescue and the Bali Life Centre in Sanur, a mangrove clean-up, village food deliveries in Tabanan and a three-day conservation project on Nusa Penida.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Certificate of Completed Service Hours",
+        "body": "You leave with a certificate documenting your service learning, and real experience to talk about in applications and interviews.",
         "linkText": "",
         "linkUrl": ""
       },
@@ -257,23 +263,35 @@
     "items": [
       {
         "q": "Do I need to know how to surf?",
-        "a": "No. The surf camp with Balumba Surf School in Uluwatu suits beginners as well as students who have surfed before."
+        "a": "No. Surf lessons in Uluwatu are with a local surf school and suit first-timers as well as students who have surfed before."
+      },
+      {
+        "q": "How much free time is there?",
+        "a": "Free days are built into every stage of the trip: in Sanur, Tabanan, Uluwatu, Nusa Penida and Ubud. Use them to keep surfing, snorkel with manta rays, chase waterfalls or explore at your own pace."
       },
       {
         "q": "How fit do I need to be?",
-        "a": "Anyone with average fitness and enthusiasm for the outdoors will be fine. You don’t need experience with any of the activities, but be ready for surf lessons, trekking, service projects and a pre-dawn climb up Mount Batur."
+        "a": "Anyone with average fitness and enthusiasm for the outdoors will be fine. You don’t need experience with any of the activities, but be ready for surf lessons, trekking, service projects and an overnight hike up Mount Batur."
       },
       {
         "q": "Where will I stay?",
-        "a": "Mostly hotels and hostels, plus Coliving Bali in Tabanan, a surf camp stay in Uluwatu, the FNPF centre on Nusa Penida, Dragonfly Village for the yoga retreat and one night in tents on Mount Batur."
+        "a": "Mostly hotels and hostels, plus Coliving Bali in Tabanan, a surf stay in Uluwatu, Dragonfly Village for the yoga retreat and one night camping near the summit of Mount Batur."
       },
       {
         "q": "What is the yoga retreat like?",
-        "a": "A few days at Dragonfly Village in Ubud with Sheila Ubud Yoga, starting with an orientation evening, with yoga sessions each morning."
+        "a": "Three days at Dragonfly Village in Ubud, with yoga sessions each day and time to rest, reflect and reset after three busy weeks."
       },
       {
         "q": "What's included, and what isn't?",
-        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+        "a": "Tuition covers all in-country transport (private minivan and fast boat), accommodation, breakfast every day and many lunches and dinners, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, meals not listed as included, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "What will we eat?",
+        "a": "Meals are fresh, healthy and varied, from nasi goreng, satay and gado-gado to grilled fish and familiar favorites. Vegetarians and special diets are catered for."
+      },
+      {
+        "q": "What's the weather like?",
+        "a": "Bali is tropical year-round and summer falls in the dry season (April to October). Expect days of 80–88°F, nights of 70–75°F and ocean temperatures of 79–82°F."
       },
       {
         "q": "How much spending money should I bring?",
@@ -323,13 +341,13 @@
     "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
     "included": [
       {
-        "text": "All in-program travel and transport"
+        "text": "All in-program travel by private minivan and fast boat"
       },
       {
         "text": "All accommodation"
       },
       {
-        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+        "text": "Breakfast every day and many lunches and dinners"
       },
       {
         "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
@@ -345,6 +363,9 @@
       },
       {
         "text": "Certificate of Program Completion"
+      },
+      {
+        "text": "Certificate of Completed Service Hours"
       }
     ],
     "excluded": [
@@ -356,6 +377,9 @@
       },
       {
         "text": "Travel insurance"
+      },
+      {
+        "text": "Meals not listed as included"
       },
       {
         "text": "Personal spending and snacks"
