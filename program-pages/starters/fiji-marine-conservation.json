@@ -14,20 +14,62 @@
     "currency": "USD"
   },
   "layout": [
-    { "key": "why", "show": true },
-    { "key": "route", "show": true },
-    { "key": "stay", "show": true },
-    { "key": "itinerary", "show": true },
-    { "key": "learning", "show": true },
-    { "key": "safety", "show": true },
-    { "key": "cost", "show": true },
-    { "key": "dates", "show": true },
-    { "key": "reviews", "show": true },
-    { "key": "faq", "show": true },
-    { "key": "cta", "show": true },
-    { "key": "related", "show": true },
-    { "key": "day", "show": false },
-    { "key": "instructors", "show": false }
+    {
+      "key": "why",
+      "show": true
+    },
+    {
+      "key": "route",
+      "show": true
+    },
+    {
+      "key": "stay",
+      "show": true
+    },
+    {
+      "key": "itinerary",
+      "show": true
+    },
+    {
+      "key": "learning",
+      "show": true
+    },
+    {
+      "key": "safety",
+      "show": true
+    },
+    {
+      "key": "cost",
+      "show": true
+    },
+    {
+      "key": "dates",
+      "show": true
+    },
+    {
+      "key": "reviews",
+      "show": true
+    },
+    {
+      "key": "faq",
+      "show": true
+    },
+    {
+      "key": "cta",
+      "show": true
+    },
+    {
+      "key": "related",
+      "show": true
+    },
+    {
+      "key": "day",
+      "show": false
+    },
+    {
+      "key": "instructors",
+      "show": false
+    }
   ],
   "hero": {
     "eyebrow": "College summer program · Fiji",
@@ -63,10 +105,30 @@
   "why": {
     "heading": "What makes this program different",
     "items": [
-      { "title": "Dive certification included", "body": "Non-divers train for the SSI Open Water Diver certification in the first days of the program. Certified divers sharpen their survey skills instead.", "image": "", "imageAlt": "" },
-      { "title": "Real reef science", "body": "Learn the survey methods marine scientists use, from transects and quadrats to data sheets, and put them to work in a no-take marine protected area.", "image": "", "imageAlt": "" },
-      { "title": "Hands-on restoration", "body": "Build coral frames and plant fragments at the coral nursery, join crown-of-thorns removal dives and run a microplastics survey on the island’s beaches.", "image": "", "imageAlt": "" },
-      { "title": "Your own research project", "body": "In week two, small teams choose a research question, collect their own data on research dives and present a reef health report to resort staff and village guests.", "image": "", "imageAlt": "" }
+      {
+        "title": "Dive certification included",
+        "body": "Non-divers train for the SSI Open Water Diver certification in the first days of the program. Certified divers sharpen their survey skills instead.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Real reef science",
+        "body": "Learn the survey methods marine scientists use, from transects and quadrats to data sheets, and put them to work in a no-take marine protected area.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Hands-on restoration",
+        "body": "Build coral frames and plant fragments at the coral nursery, join crown-of-thorns removal dives and run a microplastics survey on the island’s beaches.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Your own research project",
+        "body": "In week two, small teams choose a research question, collect their own data on research dives and present a reef health report to resort staff and village guests.",
+        "image": "",
+        "imageAlt": ""
+      }
     ]
   },
   "route": {
@@ -74,16 +136,32 @@
     "mapImage": "",
     "mapAlt": "Route map from Nadi by boat to Kuata Island in the Yasawa group, Fiji, and back",
     "phases": [
-      { "label": "Week 1", "text": "Arrival in Nadi, then by boat to Kuata Island for dive certification, survey training, reef health surveys, the coral nursery and a crown-of-thorns removal dive" },
-      { "label": "Week 2", "text": "A village visit and school reef education day, team research dives, a microplastics survey, then presentations and a farewell lovo feast before returning to Nadi" }
+      {
+        "label": "Week 1",
+        "text": "Arrival in Nadi, then by boat to Kuata Island for dive certification, survey training, reef health surveys, the coral nursery and a crown-of-thorns removal dive"
+      },
+      {
+        "label": "Week 2",
+        "text": "A village visit and school reef education day, team research dives, a microplastics survey, then presentations and a farewell lovo feast before returning to Nadi"
+      }
     ]
   },
   "stay": {
     "heading": "Where you’ll stay",
     "intro": "",
     "items": [
-      { "title": "Hostel in Nadi", "body": "One night in Nadi on arrival for orientation before we head out to the island.", "image": "", "imageAlt": "" },
-      { "title": "Island eco-resort on Kuata", "body": "Twelve nights at a small island eco-resort with its own dive center and resident marine biologist, right on the reef. Meals are provided by the resort.", "image": "", "imageAlt": "" }
+      {
+        "title": "Hostel in Nadi",
+        "body": "One night in Nadi on arrival for orientation before we head out to the island.",
+        "image": "",
+        "imageAlt": ""
+      },
+      {
+        "title": "Island eco-resort on Kuata",
+        "body": "Twelve nights at a small island eco-resort with its own dive center and resident marine biologist, right on the reef. Meals are provided by the resort.",
+        "image": "",
+        "imageAlt": ""
+      }
     ]
   },
   "itinerary": {
@@ -113,41 +191,107 @@
     "heading": "What a typical day looks like",
     "slots": [],
     "notes": [
-      { "title": "Free time", "body": "There’s a free afternoon in week two to snorkel, kayak, read on the beach or just rest. Evenings on the island are relaxed." },
-      { "title": "Phones & wifi", "body": "We encourage flight mode so you stay present. Wifi on the island is limited." },
-      { "title": "Fitness needed", "body": "Medium activity level. You should be a confident swimmer and comfortable in the water. Expect daily diving or snorkeling and some physical work on the conservation projects." }
+      {
+        "title": "Free time",
+        "body": "There’s a free afternoon in week two to snorkel, kayak, read on the beach or just rest. Evenings on the island are relaxed."
+      },
+      {
+        "title": "Phones & wifi",
+        "body": "We encourage flight mode so you stay present. Wifi on the island is limited."
+      },
+      {
+        "title": "Fitness needed",
+        "body": "Medium activity level. You should be a confident swimmer and comfortable in the water. Expect daily diving or snorkeling and some physical work on the conservation projects."
+      }
     ]
   },
   "learning": {
     "heading": "Learn while you travel",
     "items": [
-      { "title": "Marine science in the field", "body": "Learn reef survey methods from a resident marine biologist and the dive team, then use them to collect real data on reef health.", "linkText": "", "linkUrl": "" },
-      { "title": "Service you can put on your résumé", "body": "Reef surveys, coral restoration and crown-of-thorns removal, plus your own research project and report. You’ll come home with a dive certification and real experience to talk about in college applications, job interviews and scholarship essays.", "linkText": "", "linkUrl": "" },
-      { "title": "Optional college credit", "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.", "linkText": "How college credit works", "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit" }
+      {
+        "title": "Marine science in the field",
+        "body": "Learn reef survey methods from a resident marine biologist and the dive team, then use them to collect real data on reef health.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Service you can put on your résumé",
+        "body": "Reef surveys, coral restoration and crown-of-thorns removal, plus your own research project and report. You’ll come home with a dive certification and real experience to talk about in college applications, job interviews and scholarship essays.",
+        "linkText": "",
+        "linkUrl": ""
+      },
+      {
+        "title": "Optional college credit",
+        "body": "Earn college credit through the University of Montana. 529 education funds can be used to pay for your credits and your Pacific Discovery program tuition.",
+        "linkText": "How college credit works",
+        "linkUrl": "https://www.pacificdiscovery.org/need-to-know/college-credit"
+      }
     ]
   },
   "faq": {
     "heading": "Questions we get about this program",
     "items": [
-      { "q": "Do I need to know how to scuba dive?", "a": "No. You’ll train for the SSI Open Water Diver certification in the first days of the program. If you’re already certified, you’ll work on survey skills instead. You do need to be comfortable swimming." },
-      { "q": "Is the certification PADI?", "a": "The dive center we work with is SSI-affiliated, so you’ll earn the SSI Open Water Diver certification. It’s recognized worldwide, the same way PADI is." },
-      { "q": "How fit do I need to be?", "a": "This program has a medium activity level. Expect daily diving or snorkeling and some physical work on the conservation projects. You should be a confident swimmer." },
-      { "q": "Where will I stay?", "a": "One night in a hostel in Nadi, then twelve nights at a small island eco-resort on Kuata Island, with its own dive center and resident marine biologist." },
-      { "q": "Why is there no diving on the last day?", "a": "Divers shouldn’t fly within about 24 hours of their last dive. We finish diving about 48 hours before flights home to give everyone a safe buffer." },
-      { "q": "How do we get around?", "a": "By minivan around Nadi, and by boat between the mainland and Kuata Island." },
-      { "q": "What's included, and what isn't?", "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities." },
-      { "q": "How much spending money should I bring?", "a": "About $100 a week for snacks, personal shopping and optional activities like the shark dive. It varies from student to student." },
-      { "q": "Can I stay in touch with home?", "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date." },
-      { "q": "Do I need a passport or visa?", "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal." }
+      {
+        "q": "Do I need to know how to scuba dive?",
+        "a": "No. You’ll train for the SSI Open Water Diver certification in the first days of the program. If you’re already certified, you’ll work on survey skills instead. You do need to be comfortable swimming."
+      },
+      {
+        "q": "Is the certification PADI?",
+        "a": "The dive center we work with is SSI-affiliated, so you’ll earn the SSI Open Water Diver certification. It’s recognized worldwide, the same way PADI is."
+      },
+      {
+        "q": "How fit do I need to be?",
+        "a": "This program has a medium activity level. Expect daily diving or snorkeling and some physical work on the conservation projects. You should be a confident swimmer."
+      },
+      {
+        "q": "Where will I stay?",
+        "a": "One night in a hostel in Nadi, then twelve nights at a small island eco-resort on Kuata Island, with its own dive center and resident marine biologist."
+      },
+      {
+        "q": "Why is there no diving on the last day?",
+        "a": "Divers shouldn’t fly within about 24 hours of their last dive. We finish diving about 48 hours before flights home to give everyone a safe buffer."
+      },
+      {
+        "q": "How do we get around?",
+        "a": "By minivan around Nadi, and by boat between the mainland and Kuata Island."
+      },
+      {
+        "q": "What's included, and what isn't?",
+        "a": "Tuition covers all in-country transport, accommodation, meals, and the activities and entry fees in the itinerary. It doesn't cover international flights, visas, travel insurance, spending money, optional college credit or optional activities."
+      },
+      {
+        "q": "How much spending money should I bring?",
+        "a": "About $100 a week for snacks, personal shopping and optional activities like the shark dive. It varies from student to student."
+      },
+      {
+        "q": "Can I stay in touch with home?",
+        "a": "Yes. We encourage keeping phones on flight mode so you stay present, and wifi is available where we stay in cities and towns. There will also be a photo album that students and instructors can upload photos and video to, so parents and caregivers can stay up to date."
+      },
+      {
+        "q": "Do I need a passport or visa?",
+        "a": "Your passport must be valid for more than 6 months after the program ends. All the information you need in regard to visas will be available in your student portal."
+      }
     ]
   },
   "safety": {
     "heading": "For parents: how we keep students safe",
     "items": [
-      { "title": "24/7 Emergency Line", "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone." },
-      { "title": "Wilderness First Aid & Live Risk Assessment", "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management." },
-      { "title": "Accredited Safety Systems", "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety." },
-      { "title": "Insurance & Health", "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication." }
+      {
+        "title": "24/7 Emergency Line",
+        "body": "Parents, students and instructors can reach a real person at any hour. Every call is logged and passed to our on-call staff member by phone."
+      },
+      {
+        "title": "Wilderness First Aid & Live Risk Assessment",
+        "body": "All our instructors hold Wilderness First Aid (WFA) certification and have extensive training in group leadership and risk management."
+      },
+      {
+        "title": "Accredited Safety Systems",
+        "body": "Our safety systems are assessed and accredited by the Gap Year Association (USA), Year Out Group (UK) and OutdoorsMark (NZ). Students on Go Overseas voted us one of the top gap year providers for safety."
+      },
+      {
+        "title": "Insurance & Health",
+        "body": "Comprehensive travel insurance is required, covering medical costs and emergency evacuation. Check vaccinations with your doctor, and pack a first-aid kit and any personal medication. Our instructors can't legally give students any medication."
+      }
     ],
     "linkText": "Read our full safety approach",
     "linkUrl": "https://www.pacificdiscovery.org/safety"
@@ -155,26 +299,57 @@
   "cost": {
     "heading": "What it costs, all in",
     "lines": [
-      { "label": "College credit (optional)", "amount": "[Credit fee]" }
+      {
+        "label": "College credit (optional)",
+        "amount": "[Credit fee]"
+      }
     ],
     "note": "App Fee: $250 · Deposit: $2250 · 529 funds can cover tuition",
     "included": [
-      { "text": "All in-program travel and transport" },
-      { "text": "All accommodation" },
-      { "text": "Breakfast, Lunch & Dinner (not including snacks)" },
-      { "text": "All expeditions, activities, excursions, volunteer projects and entry fees" },
-      { "text": "Experienced Program Instructors and local guides" },
-      { "text": "Informal lectures from resident experts on conservation and eco-tourism" },
-      { "text": "Experiential core curriculum" },
-      { "text": "Certificate of Program Completion" }
+      {
+        "text": "All in-program travel and transport"
+      },
+      {
+        "text": "All accommodation"
+      },
+      {
+        "text": "Breakfast, Lunch & Dinner (not including snacks)"
+      },
+      {
+        "text": "All expeditions, activities, excursions, volunteer projects and entry fees"
+      },
+      {
+        "text": "Experienced Program Instructors and local guides"
+      },
+      {
+        "text": "Informal lectures from resident experts on conservation and eco-tourism"
+      },
+      {
+        "text": "Experiential core curriculum"
+      },
+      {
+        "text": "Certificate of Program Completion"
+      }
     ],
     "excluded": [
-      { "text": "International flights" },
-      { "text": "Visas" },
-      { "text": "Travel insurance" },
-      { "text": "Personal spending and snacks" },
-      { "text": "College credit fee" },
-      { "text": "Optional activities or adventures" }
+      {
+        "text": "International flights"
+      },
+      {
+        "text": "Visas"
+      },
+      {
+        "text": "Travel insurance"
+      },
+      {
+        "text": "Personal spending and snacks"
+      },
+      {
+        "text": "College credit fee"
+      },
+      {
+        "text": "Optional activities or adventures"
+      }
     ]
   },
   "dates": {
@@ -192,13 +367,62 @@
     "heading": "Who you’ll travel with",
     "intro": "",
     "people": [
-      { "name": "[Instructor name]", "role": "Program Instructor", "bio": "[Seasons led · certifications · fun fact]", "photo": "" },
-      { "name": "[Instructor name]", "role": "Program Instructor", "bio": "[Seasons led · certifications · fun fact]", "photo": "" }
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      },
+      {
+        "name": "[Instructor name]",
+        "role": "Program Instructor",
+        "bio": "[Seasons led · certifications · fun fact]",
+        "photo": ""
+      }
     ]
   },
   "related": {
     "heading": "You may also like",
     "items": [
-      { "title": "New Zealand & Fiji Summer Program", "meta": "4 weeks · $7,000", "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer", "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png" },
-      { "title": "Marine Conservation & Reef Monitoring Field Program", "meta": "14 days · $6,500", "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program", "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png" },
-      { "title": "Thailand Summer Program", "meta": "21 days · $6,550", "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program", "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured
+      {
+        "title": "New Zealand & Fiji Summer Program",
+        "meta": "4 weeks · $7,000",
+        "url": "https://www.pacificdiscovery.org/programs/new-zealand-and-fiji-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/new-zealand-fiji-college-summer.png"
+      },
+      {
+        "title": "Marine Conservation & Reef Monitoring Field Program",
+        "meta": "14 days · $6,500",
+        "url": "https://www.pacificdiscovery.org/programs/marine-conservation-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/Hawaii_Expedition.png"
+      },
+      {
+        "title": "Thailand Summer Program",
+        "meta": "21 days · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/thailand-summer-program",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/thailand-high-school-summer.png"
+      },
+      {
+        "title": "Bali Summer Program",
+        "meta": "4 weeks · $6,550",
+        "url": "https://www.pacificdiscovery.org/programs/bali-summer",
+        "image": "https://www.pacificdiscovery.org/library/images/Program%20Featured%20Images/bali-college-summer.png"
+      }
+    ]
+  },
+  "reviews": {
+    "heading": "From past students and parents",
+    "videoUrl": "",
+    "widgets": [],
+    "quotes": [
+      {
+        "quote": "[Real student quote about this program]",
+        "name": "[Name, season]"
+      },
+      {
+        "quote": "[Real parent quote on safety or communication]",
+        "name": "[Parent name]"
+      }
+    ]
+  }
+}
