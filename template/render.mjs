@@ -144,6 +144,51 @@ export function stripQuotes(v) {
 }
 
 export const WIDGET_TYPES = ['GoAbroad', 'GoOverseas', 'Google'];
+export const RELATED_MODES = ['Automatic', 'Manual'];
+export const RELATED_COUNT = 4;
+
+/** summer | mini | semester | other, from the program's name, eyebrow and slug. */
+export function programKind(p, slug = '') {
+  const t = `${p?.name || ''} ${p?.hero?.eyebrow || ''} ${slug}`.toLowerCase();
+  if (/\bmini\b/.test(t)) return 'mini';
+  if (/summer/.test(t)) return 'summer';
+  if (/semester|gap year/.test(t)) return 'semester';
+  return 'other';
+}
+function placeTokens(p) {
+  return new Set(String(p?.facts?.countries || '')
+    .normalize('NFD').replace(/[\u0300-\u036f\u02bb\u2018\u2019']/g, '').toLowerCase()
+    .split(/[·,&/()]|\band\b/).map((x) => x.trim()).filter((x) => x.length > 1));
+}
+/**
+ * "You may also like" in Automatic mode: the most similar OTHER published
+ * program pages. Same kind (summer / mini / semester) first, then shared
+ * countries, then the closest price. `pool` is [{ slug, data }] of every
+ * published program page (landing pages excluded by the caller).
+ */
+export function pickRelated(slug, program, pool, { canonicalBase = 'https://www.pacificdiscovery.org/programs/', count = RELATED_COUNT } = {}) {
+  const kind = programKind(program, slug);
+  const places = placeTokens(program);
+  const price = Number(program?.facts?.tuition) || 0;
+  return (pool || [])
+    .filter((o) => o && o.slug && o.slug !== slug && o.data)
+    .map((o) => {
+      const d = o.data;
+      const shared = [...placeTokens(d)].filter((x) => places.has(x)).length;
+      const op = Number(d?.facts?.tuition) || 0;
+      const priceScore = price && op ? Math.max(0, 3 - Math.abs(price - op) / 2000) : 0;
+      return { o, score: (programKind(d, o.slug) === kind ? 10 : 0) + shared * 4 + priceScore };
+    })
+    .sort((a, b) => b.score - a.score || String(a.o.data.name).localeCompare(String(b.o.data.name)))
+    .slice(0, count)
+    .map(({ o }) => {
+      const d = o.data;
+      const weeks = Number(d?.facts?.weeks) || 0;
+      const tuition = Number(d?.facts?.tuition) || 0;
+      const meta = [weeks ? `${weeks} week${weeks === 1 ? '' : 's'}` : '', tuition ? ((d?.settings?.currency || 'USD') === 'USD' ? `$${tuition.toLocaleString('en-US')}` : money(tuition, d.settings.currency)) : ''].filter(Boolean).join(' · ');
+      return { title: d.name || o.slug, meta, url: `${canonicalBase}${o.slug}`, image: d?.seo?.ogImage || d?.hero?.image || '' };
+    });
+}
 
 // Review wall: each card is a student/parent review or an award.
 export const CARD_KINDS = ['Review', 'Award'];
@@ -436,7 +481,7 @@ export const SCHEMA = {
     dates:       { fields: [{ k: 'dates.heading', label: 'Heading', type: 'text' }, { k: 'dates.help', label: 'Help line', type: 'text' }] },
     faq:         { fields: [{ k: 'faq.heading', label: 'Heading', type: 'text' }] },
     cta:         { fields: [{ k: 'cta.heading', label: 'Heading', type: 'text' }, { k: 'cta.body', label: 'Supporting line', type: 'text' }, { k: 'cta.primaryText', label: 'Main button text', type: 'text' }, { k: 'cta.secondaryText', label: 'Second button text', type: 'text' }] },
-    related:     { fields: [{ k: 'related.heading', label: 'Heading', type: 'text' }] },
+    related:     { fields: [{ k: 'related.heading', label: 'Heading', type: 'text' }, { k: 'related.mode', label: 'Which programs to show', type: 'select', options: RELATED_MODES, repaint: true, help: 'Automatic picks the most similar live program pages every time the site builds, so archived or unpublished programs drop off on their own. Manual shows the cards you add here.' }] },
   },
   // Repeatable items. `blank` is what "+ Add" inserts.
   lists: {
@@ -509,7 +554,7 @@ export function blankProgram(name = 'New program') {
     dates: { heading: 'Pick your start date', help: 'Not sure yet? Talk to an advisor.', sessions: [] },
     faq: { heading: 'Questions we get about this program', items: [] },
     cta: { heading: 'Ready to go?', body: '', primaryText: 'Apply now', secondaryText: 'Talk to an advisor' },
-    related: { heading: 'You may also like', items: [] },
+    related: { heading: 'You may also like', mode: 'Automatic', items: [] },
   };
 }
 
@@ -726,6 +771,12 @@ const R = {
       `</div></div>`;
   },
   related(p, c) {
+    const auto = p.related.mode !== 'Manual';
+    if (auto && c.ed) {
+      return `<h2 class="pdp-h2">${c.t('related.heading', 'span')}</h2>` +
+        `<p class="pdp-muted pde-note">Automatic: when this page is published, this section shows the ${RELATED_COUNT} most similar live program pages (same type of program first, then shared countries, then closest price). Switch to Manual in this section's settings to choose them yourself.</p>`;
+    }
+    if (!c.ed && !(p.related.items || []).length) return '';
     return `<h2 class="pdp-h2">${c.t('related.heading', 'span')}</h2>` +
       c.list('related.items', 'div', 'pdp-grid pdp-grid--3', (it, ip) => {
         const inner = `${c.img(`${ip}.image`, null, 'pdp-card__img')}<div class="pdp-card__body">${c.t(`${ip}.title`, 'h3', 'pdp-h3')}${c.t(`${ip}.meta`, 'p', 'pdp-muted')}</div>`;
@@ -984,6 +1035,7 @@ export function renderProgram(program, opts = {}) {
     const meta = SECTION_BY_KEY[key];
     const hidden = !p.layout.find((l) => l.key === key)?.show;
     const inner = R[key](p, c);
+    if (!inner && !c.ed) return '';
     const tone = key === 'cta' ? ' pdp-sec--flush' : '';
     return `<section id="${meta.anchor}" class="pdp-sec${tone}${hidden ? ' pde-hidden' : ''}"${c.ed ? ` data-sec="${key}" data-label="${attr(meta.label)}"` : ''}><div class="pdp-wrap">${inner}</div></section>`;
   }).join('');
