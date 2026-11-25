@@ -671,15 +671,17 @@ export async function referralHubspotSetup(user, label = DEFAULT_ASSOCIATION_LAB
 // site sends with the submission; everything else is written via the CRM API.
 
 export function hubspotFormPayload(name) {
-  const field = (n, label, fieldType, required) => ({ objectTypeId: "0-1", name: n, label, required, hidden: false, fieldType });
+  const field = (n, label, fieldType, required, extra = {}) => ({ objectTypeId: "0-1", name: n, label, required, hidden: false, fieldType, ...extra });
+  // HubSpot's forms API requires a `validation` block on email fields. Phone is
+  // left off: this form is only submitted by pd-apply (never shown), and the
+  // phone number goes onto the contact through the CRM afterwards.
   return {
     name,
     formType: "hubspot",
     archived: false,
     fieldGroups: [
-      { groupType: "default_group", richTextType: "text", fields: [field("email", "Email", "email", true)] },
+      { groupType: "default_group", richTextType: "text", fields: [field("email", "Email", "email", true, { validation: { blockedEmailDomains: [], useDefaultBlockList: false } })] },
       { groupType: "default_group", richTextType: "text", fields: [field("firstname", "First name", "single_line_text", false), field("lastname", "Last name", "single_line_text", false)] },
-      { groupType: "default_group", richTextType: "text", fields: [field("phone", "Phone number", "phone", false)] },
     ],
     configuration: {
       language: "en", cloneable: true, editable: true, archivable: true, recaptchaEnabled: false,
