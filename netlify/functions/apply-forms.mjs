@@ -675,9 +675,13 @@ export function hubspotFormPayload(name) {
   // HubSpot's forms API requires a `validation` block on email fields. Phone is
   // left off: this form is only submitted by pd-apply (never shown), and the
   // phone number goes onto the contact through the CRM afterwards.
+  // HubSpot's forms API also requires createdAt (and accepts updatedAt) on create.
+  const now = new Date().toISOString();
   return {
     name,
     formType: "hubspot",
+    createdAt: now,
+    updatedAt: now,
     archived: false,
     fieldGroups: [
       { groupType: "default_group", richTextType: "text", fields: [field("email", "Email", "email", true, { validation: { blockedEmailDomains: [], useDefaultBlockList: false } })] },
